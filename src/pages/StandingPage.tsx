@@ -4,7 +4,7 @@ import { TEAMS, MATCHES } from '../shared/lib/mockData';
 import { calculateRankings } from '../features/rankings/utils/rankingEngine';
 
 export default function StandingsPage() {
-  const rankings = useMemo(() => calculateRankings(TEAMS, MATCHES),);
+  const rankings = useMemo(() => calculateRankings(TEAMS, MATCHES), [TEAMS, MATCHES]);
 
   return (
     <div>
