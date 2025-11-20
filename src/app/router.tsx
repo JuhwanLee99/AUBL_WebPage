@@ -4,6 +4,7 @@ import LandingPage from '../pages/LandingPage';
 import StandingsPage from '../pages/StandingPage';
 import IntroPage from '../pages/IntroPage';
 import PredictionPage from '../pages/PredictionPage';
+import RecordPage from '../pages/RecordPage';
 
 export const router = createBrowserRouter([
   {
@@ -25,6 +26,10 @@ export const router = createBrowserRouter([
       {
         path: 'prediction',
         element: <PredictionPage />,
+      },
+      {
+        path: 'records',
+        element: <RecordPage />,
       },
     ],
   },
