@@ -302,11 +302,11 @@ export default function LandingPage() {
         }}
       >
         <div style={{ display: 'grid', gap: '6px', minWidth: '260px' }}>
-          <span style={{ fontSize: '12px', letterSpacing: '0.05em', fontWeight: 800, color: '#111827' }}>FOLLOW</span>
-          <p style={{ margin: 0, fontSize: '20px', fontWeight: 900, color: '#0f172a' }}>
+          <span style={{ fontSize: '12px', letterSpacing: '0.05em', fontWeight: 800, color: '#a4a9b5ff' }}>FOLLOW</span>
+          <p style={{ margin: 0, fontSize: '20px', fontWeight: 900, color: '#a4a9b5ff' }}>
             인스타그램 @aubl_1981 에서 실시간 경기 사진과 이벤트를 확인하세요.
           </p>
-          <span style={{ color: '#0f172a', opacity: 0.8, fontWeight: 600 }}>선수들의 루틴, 경기 비하인드, 팬 굿즈 소식까지 놓치지 마세요.</span>
+          <span style={{ color: '#a4a9b5ff', opacity: 0.8, fontWeight: 600 }}>선수들의 루틴, 경기 비하인드, 팬 굿즈 소식까지 놓치지 마세요.</span>
         </div>
         <a
           href="https://www.instagram.com/aubl_1981/"
