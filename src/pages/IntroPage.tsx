@@ -1,4 +1,6 @@
+import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import gsap from 'gsap';
 import { MATCHES, TEAMS } from '../shared/lib/mockData';
 
 const pillars = [
@@ -45,9 +47,27 @@ export default function IntroPage() {
   const totalTeams = TEAMS.length;
   const finishedMatches = MATCHES.filter((match) => match.isFinished).length;
 
+  const pageRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      const blocks = pageRef.current?.querySelectorAll('.intro-chunk');
+      if (blocks) {
+        gsap.fromTo(
+          blocks,
+          { y: 26, opacity: 0 },
+          { y: 0, opacity: 1, duration: 0.9, stagger: 0.08, ease: 'power2.out' },
+        );
+      }
+    });
+
+    return () => ctx.revert();
+  }, []);
+
   return (
-    <div style={{ display: 'grid', gap: '36px' }}>
+    <div style={{ display: 'grid', gap: '36px' }} ref={pageRef}>
       <section
+        className="intro-chunk"
         style={{
           display: 'grid',
           gap: '18px',
@@ -161,7 +181,7 @@ export default function IntroPage() {
         </div>
       </section>
 
-      <section style={{ display: 'grid', gap: '16px' }}>
+      <section style={{ display: 'grid', gap: '16px' }} className="intro-chunk">
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: '#cbd5e1' }}>
           <div
             style={{
@@ -197,6 +217,7 @@ export default function IntroPage() {
       </section>
 
       <section
+        className="intro-chunk"
         style={{
           borderRadius: '20px',
           padding: '22px',

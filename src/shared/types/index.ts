@@ -29,3 +29,33 @@ export interface TeamRanking {
   eloRating: number;
   btIndex: number; // Bradley-Terry Index
 }
+
+export interface PlayerSeasonStat {
+  id: string;
+  teamId: string;
+  name: string;
+  position: string;
+  year: number;
+  war: number;
+  era?: number;
+  ops?: number;
+  avg?: number;
+  obp?: number;
+  slug?: number;
+  stolenBases?: number;
+  note?: string;
+}
+
+export interface TeamSeasonRecord {
+  teamId: string;
+  year: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  era: number;
+  ops: number;
+  stolenBases: number;
+  keyMoment: string;
+  captains: string[];
+  players: PlayerSeasonStat[];
+}

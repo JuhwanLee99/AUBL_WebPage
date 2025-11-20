@@ -7,6 +7,7 @@ export default function Layout() {
 
   const navItems = [
     { path: '/intro', label: '리그 소개' },
+    { path: '/records', label: '기록' },
     { path: '/standings', label: '순위' },
     { path: '/prediction', label: '승부예측' },
   ];

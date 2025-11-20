@@ -1,10 +1,26 @@
 // **`src/pages/StandingsPage.tsx`**
+import { useEffect, useMemo, useRef } from 'react';
+import { Link } from 'react-router-dom';
+import gsap from 'gsap';
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { TEAMS, MATCHES } from '../shared/lib/mockData';
 import { calculateRankings } from '../features/rankings/utils/rankingEngine';
 
 export default function StandingsPage() {
+  const pageRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      const cards = pageRef.current?.querySelectorAll('.standing-chunk');
+      if (cards) {
+        gsap.fromTo(cards, { y: 26, opacity: 0 }, { y: 0, opacity: 1, duration: 0.9, stagger: 0.08, ease: 'power2.out' });
+      }
+    });
+
+    return () => ctx.revert();
+  }, []);
+
   const enrichedRankings = useMemo(() => {
     const base = calculateRankings(TEAMS, MATCHES);
     return base.map((row) => {
@@ -27,8 +43,9 @@ export default function StandingsPage() {
     enrichedRankings.reduce((sum, item) => sum + item.eloRating, 0) / Math.max(enrichedRankings.length, 1);
 
   return (
-    <div style={{ display: 'grid', gap: '28px' }}>
+    <div style={{ display: 'grid', gap: '28px' }} ref={pageRef}>
       <section
+        className="standing-chunk"
         style={{
           borderRadius: '22px',
           padding: '26px',
@@ -136,7 +153,7 @@ export default function StandingsPage() {
         </div>
       </section>
 
-      <section style={{ display: 'grid', gap: '14px' }}>
+      <section style={{ display: 'grid', gap: '14px' }} className="standing-chunk">
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#cbd5e1' }}>
           <div
             style={{
@@ -195,6 +212,7 @@ export default function StandingsPage() {
       </section>
 
       <section
+        className="standing-chunk"
         style={{
           display: 'grid',
           gap: '14px',
