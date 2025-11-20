@@ -2,6 +2,8 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import gsap from 'gsap';
+import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { TEAMS, MATCHES } from '../shared/lib/mockData';
 import { calculateRankings } from '../features/rankings/utils/rankingEngine';
 
