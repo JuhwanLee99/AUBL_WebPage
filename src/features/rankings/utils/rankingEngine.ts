@@ -1,11 +1,11 @@
 // `src/features/rankings/utils/engine.ts`** (Elo & BT 알고리즘 구현)
-import { MatchResult, TeamRanking, Team } from '../shared/types/index';
+import { MatchResult, TeamRanking, Team } from '../../../shared/types';
 
 // Elo Rating 상수
 const K_FACTOR = 32; 
 const BASE_ELO = 1500;
 
-export const calculateRankings = (teams: Team, matches: MatchResult): TeamRanking => {
+export const calculateRankings = (teams: Team[], matches: MatchResult[]): TeamRanking[] => {
   // 1. 초기화
   const rankingMap = new Map<string, TeamRanking>();
   
