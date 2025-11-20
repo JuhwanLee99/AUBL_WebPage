@@ -4,7 +4,7 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 
 export default function Layout() {
   const location = useLocation();
-  
+
   const navItems = [
     { path: '/intro', label: '리그 소개' },
     { path: '/standings', label: '순위' },
@@ -12,34 +12,68 @@ export default function Layout() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
-      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-200">
-        <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-          <Link to="/" className="text-2xl font-black tracking-tighter text-indigo-700">
-            AUBL<span className="text-orange-500">.</span>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <header
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 50,
+          backdropFilter: 'blur(12px)',
+          background: 'rgba(17, 24, 39, 0.7)',
+          borderBottom: '1px solid rgba(148, 163, 184, 0.2)',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: '1100px',
+            margin: '0 auto',
+            padding: '0 24px',
+            height: '72px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <Link to="/" style={{ fontSize: '24px', fontWeight: 900, letterSpacing: '-0.03em', color: '#c084fc' }}>
+            AUBL<span style={{ color: '#f97316' }}>.</span>
           </Link>
-          <nav className="hidden md:flex space-x-8">
-            {navItems.map((item) => (
-              <Link 
-                key={item.path} 
-                to={item.path}
-                className={`text-sm font-medium transition-colors ${
-                  location.pathname === item.path? 'text-indigo-600' : 'text-gray-500 hover:text-gray-900'
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
+          <nav style={{ display: 'flex', gap: '28px' }}>
+            {navItems.map((item) => {
+              const isActive = location.pathname === item.path;
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  style={{
+                    fontSize: '15px',
+                    fontWeight: 600,
+                    color: isActive ? '#f97316' : '#cbd5e1',
+                    transition: 'color 120ms ease',
+                  }}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
           </nav>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8">
+      <main style={{ flex: 1, maxWidth: '1100px', margin: '0 auto', padding: '40px 24px 72px' }}>
         <Outlet />
       </main>
 
-      <footer className="bg-white border-t border-gray-200 py-8 mt-12">
-        <div className="max-w-5xl mx-auto px-4 text-center text-gray-400 text-sm">
+      <footer
+        style={{
+          marginTop: 'auto',
+          borderTop: '1px solid rgba(148, 163, 184, 0.2)',
+          padding: '32px 0',
+          color: '#94a3b8',
+          fontSize: '14px',
+          textAlign: 'center',
+        }}
+      >
+        <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '0 24px' }}>
           &copy; 2025 Amateur University Baseball League. All rights reserved.
         </div>
       </footer>
