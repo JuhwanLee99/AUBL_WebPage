@@ -27,6 +27,31 @@ const steps = [
   '실시간 경기 이벤트 연동 후 확률 업데이트',
 ];
 
+const upcoming = [
+  {
+    title: '라인업 기반 예측',
+    desc: '투수-타자 매치업, 최근 컨디션, 홈/원정 지표를 반영한 승리 확률 제공 예정',
+    accent: '#f97316',
+  },
+  {
+    title: '모델 실험실',
+    desc: 'Elo + 머신러닝 하이브리드 모델을 비교 테스트하고 예측 정확도를 시각화',
+    accent: '#a855f7',
+  },
+  {
+    title: '실시간 반영',
+    desc: '경기 중 이벤트(득점, 교체) 업데이트 시 즉시 확률을 재산출하여 보여주기',
+    accent: '#60a5fa',
+  },
+];
+
+const steps = [
+  '과거 경기 데이터 적재 · 전처리',
+  'Elo, 최근 폼, 라인업 정보를 피처로 생성',
+  '머신러닝 모델 학습 및 백테스트',
+  '실시간 경기 이벤트 연동 후 확률 업데이트',
+];
+
 export default function PredictionPage() {
   const pageRef = useRef<HTMLDivElement>(null);
 
