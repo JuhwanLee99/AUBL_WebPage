@@ -1,5 +1,5 @@
 // `src/features/rankings/utils/engine.ts`** (Elo & BT 알고리즘 구현)
-import { MatchResult, TeamRanking, Team } from '../../../shared/types';
+import type { MatchResult, TeamRanking, Team } from '../../../shared/types';
 
 // Elo Rating 상수
 const K_FACTOR = 32; 
