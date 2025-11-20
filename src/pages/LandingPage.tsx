@@ -51,38 +51,32 @@ export default function LandingPage() {
 
   useEffect(() => {
     const ctx = gsap.context(() => {
+      const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
+
       const heroElements = heroRef.current?.querySelectorAll('.hero-animate');
       if (heroElements) {
-        gsap.from(heroElements, {
-          y: 26,
-          opacity: 0,
-          duration: 0.9,
-          stagger: 0.08,
-          ease: 'power2.out',
-        });
+        tl.fromTo(
+          heroElements,
+          { y: 36, opacity: 0 },
+          { y: 0, opacity: 1, duration: 1.15, stagger: 0.08 },
+        );
       }
 
       if (featureRefs.current.length) {
-        gsap.from(featureRefs.current, {
-          y: 22,
-          opacity: 0,
-          duration: 0.8,
-          stagger: 0.08,
-          ease: 'power2.out',
-          delay: 0.2,
-        });
+        gsap.fromTo(
+          featureRefs.current,
+          { y: 28, opacity: 0, scale: 0.97 },
+          { y: 0, opacity: 1, scale: 1, duration: 1, stagger: 0.1, ease: 'power2.out', delay: 0.15 },
+        );
       }
 
       const heritageBlocks = heritageRef.current?.querySelectorAll('.heritage-card');
       if (heritageBlocks) {
-        gsap.from(heritageBlocks, {
-          y: 24,
-          opacity: 0,
-          duration: 0.85,
-          stagger: 0.06,
-          ease: 'power3.out',
-          delay: 0.1,
-        });
+        gsap.fromTo(
+          heritageBlocks,
+          { y: 26, opacity: 0 },
+          { y: 0, opacity: 1, duration: 0.95, stagger: 0.06, ease: 'power2.out', delay: 0.1 },
+        );
       }
     });
 
