@@ -1,14 +1,14 @@
 import React from 'react';
-import { Team } from '@/shared/types/aubl';
+import type { TeamRanking } from '../../../shared/types';
 
 interface Props {
-  teams: Team;
+  teams: TeamRanking[];
   groupName: string;
 }
 
 const StandingsTable: React.FC<Props> = ({ teams, groupName }) => {
   // Elo 점수 기준으로 내림차순 정렬
-  const sortedTeams = [...teams].sort((a, b) => b.stats.eloRating - a.stats.eloRating);
+  const sortedTeams = [...teams].sort((a, b) => b.eloRating - a.eloRating);
 
   return (
     <div className="w-full bg-white rounded-lg shadow-md overflow-hidden">
@@ -29,20 +29,19 @@ const StandingsTable: React.FC<Props> = ({ teams, groupName }) => {
           </thead>
           <tbody>
             {sortedTeams.map((team, index) => (
-              <tr key={team.id} className="border-b hover:bg-gray-50">
+              <tr key={team.teamId} className="border-b hover:bg-gray-50">
                 <td className="px-4 py-3 font-medium">{index + 1}</td>
                 <td className="px-4 py-3 flex items-center gap-2">
-                  <img src={team.logoUrl} alt={team.name} className="w-6 h-6 object-contain"/>
-                  <span className="font-semibold text-gray-900">{team.name}</span>
+                  <span className="font-semibold text-gray-900">{team.teamName}</span>
                 </td>
                 <td className="px-4 py-3 text-center">
-                  {team.stats.wins}-{team.stats.draws}-{team.stats.losses}
+                  {team.wins}-{team.draws}-{team.losses}
                 </td>
                 <td className="px-4 py-3 text-right font-bold text-gray-900">
-                  {Math.round(team.stats.eloRating)}
+                  {Math.round(team.eloRating)}
                 </td>
                 <td className="px-4 py-3 text-right">
-                  {Math.round(team.stats.btIndex)}
+                  {Math.round(team.btIndex)}
                 </td>
               </tr>
             ))}
