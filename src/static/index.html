@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AUBL 웹페이지 데모</title>
+    <style>
+      :root {
+        font-family: 'Noto Sans KR', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        color: #0f172a;
+        background: #f8fafc;
+      }
+      body {
+        margin: 0;
+        background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+        min-height: 100vh;
+        color: #0f172a;
+      }
+      header {
+        background: #0b1437;
+        color: #e2e8f0;
+        padding: 16px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        position: sticky;
+        top: 0;
+      }
+      nav a {
+        color: #cbd5e1;
+        text-decoration: none;
+        margin-left: 16px;
+        font-weight: 600;
+      }
+      nav a:hover {
+        color: #ffffff;
+      }
+      .layout {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 24px;
+        align-items: center;
+      }
+      .card {
+        background: #ffffff;
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+        border: 1px solid #e2e8f0;
+      }
+      .section-title {
+        margin: 48px 0 12px;
+        font-size: 20px;
+        color: #0b1437;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 16px;
+      }
+      .list {
+        list-style: none;
+        padding: 0;
+        margin: 12px 0 0;
+      }
+      .list li {
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+        background: #f8fafc;
+        margin-bottom: 8px;
+      }
+      footer {
+        text-align: center;
+        padding: 24px;
+        background: #0b1437;
+        color: #cbd5e1;
+      }
+      .pill {
+        display: inline-block;
+        padding: 6px 12px;
+        border-radius: 9999px;
+        background: #e0e7ff;
+        color: #312e81;
+        font-size: 12px;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div style="display:flex; align-items:center; gap:12px; font-weight:800; letter-spacing:-0.02em;">
+        <span class="pill">AUBL</span>
+        <span>Amateur University Baseball League</span>
+      </div>
+      <nav aria-label="주요 섹션">
+        <a href="#league">리그 소개</a>
+        <a href="#group">조 편성</a>
+        <a href="#team">팀 정보</a>
+        <a href="#progress">진행 상황</a>
+        <a href="#prediction">예측</a>
+      </nav>
+    </header>
+
+    <main class="layout">
+      <section class="hero card" id="league">
+        <div>
+          <p class="pill">리그 베타 미리보기</p>
+          <h1 style="margin:12px 0 8px; font-size:32px;">AUBL 웹페이지 초기 데모</h1>
+          <p style="margin:0; color:#475569;">리그 일정, 조 편성, 팀 로스터를 한눈에 볼 수 있는 간단한 목업입니다.</p>
+        </div>
+        <div class="card" style="background:#0b1437; color:#e2e8f0;">
+          <h2 style="margin-top:0;">주요 정보</h2>
+          <ul class="list">
+            <li>2025년 봄 시즌 준비중</li>
+            <li>6개 대학 참여 (가칭)</li>
+            <li>예선 → 플레이오프 → 결승 진행</li>
+          </ul>
+        </div>
+      </section>
+
+      <h2 class="section-title" id="group">조 편성</h2>
+      <section class="grid">
+        <article class="card">
+          <h3>리그 A</h3>
+          <ul class="list">
+            <li>서울대 블루웨이브</li>
+            <li>연세대 타이탄즈</li>
+            <li>고려대 스칼렛스</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>리그 B</h3>
+          <ul class="list">
+            <li>한양대 라이온즈</li>
+            <li>성균관대 크라운즈</li>
+            <li>서강대 레드윙즈</li>
+          </ul>
+        </article>
+      </section>
+
+      <h2 class="section-title" id="team">팀 정보</h2>
+      <section class="grid">
+        <article class="card">
+          <h4>서울대 블루웨이브</h4>
+          <p style="margin:8px 0; color:#475569;">가상의 선수단 정보와 주요 스탯을 배치할 영역입니다.</p>
+        </article>
+        <article class="card">
+          <h4>연세대 타이탄즈</h4>
+          <p style="margin:8px 0; color:#475569;">팀 소개와 경기 하이라이트 링크를 위한 공간.</p>
+        </article>
+        <article class="card">
+          <h4>고려대 스칼렛스</h4>
+          <p style="margin:8px 0; color:#475569;">선수 라인업과 기록 요약 placeholder.</p>
+        </article>
+      </section>
+
+      <h2 class="section-title" id="progress">리그 진행 상황</h2>
+      <section class="card">
+        <p style="margin:0 0 12px; color:#475569;">현재는 일정이 확정되지 않아 목업 타임라인을 배치했습니다.</p>
+        <div class="list">
+          <div class="list">
+            <div class="list">
+              <div class="list">
+                <div class="list">
+                  <p class="pill">예선 (예정)</p>
+                  <p style="margin:6px 0 0;">3월 둘째 주 시작</p>
+                  <p style="margin:6px 0 0;">각 리그 3팀 풀리그</p>
+                </div>
+                <div class="list">
+                  <p class="pill">플레이오프</p>
+                  <p style="margin:6px 0 0;">상위 2팀 진출</p>
+                </div>
+                <div class="list">
+                  <p class="pill">챔피언 결정전</p>
+                  <p style="margin:6px 0 0;">중립 구장 1전 승부</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <h2 class="section-title" id="prediction">예측 및 데이터</h2>
+      <section class="grid">
+        <article class="card">
+          <h4>경기력 지표</h4>
+          <p style="margin:8px 0; color:#475569;">타율, OPS, ERA 등의 지표를 시각화할 자리입니다.</p>
+        </article>
+        <article class="card">
+          <h4>승률 시뮬레이션</h4>
+          <p style="margin:8px 0; color:#475569;">간단한 확률 표나 차트를 넣을 수 있도록 영역만 확보했습니다.</p>
+        </article>
+      </section>
+    </main>
+
+    <footer>
+      © 2024 AUBL (Amateur University Baseball League). 모든 권리 보유.
+    </footer>
+  </body>
+</html>
