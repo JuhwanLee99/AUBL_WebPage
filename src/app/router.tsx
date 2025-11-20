@@ -1,7 +1,9 @@
 import { createBrowserRouter } from 'react-router-dom';
-import Layout from './Latout';
+import Layout from './Layout';
 import LandingPage from '../pages/LandingPage';
 import StandingsPage from '../pages/StandingPage';
+import IntroPage from '../pages/IntroPage';
+import PredictionPage from '../pages/PredictionPage';
 
 export const router = createBrowserRouter([
   {
@@ -13,8 +15,16 @@ export const router = createBrowserRouter([
         element: <LandingPage />,
       },
       {
+        path: 'intro',
+        element: <IntroPage />,
+      },
+      {
         path: 'standings',
         element: <StandingsPage />,
+      },
+      {
+        path: 'prediction',
+        element: <PredictionPage />,
       },
     ],
   },
