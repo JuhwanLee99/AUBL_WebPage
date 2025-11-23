@@ -1,8 +1,18 @@
-AUBL (Amateur University Baseball League) Web Project
+# AUBL (Amateur University Baseball League) Web Project
 
 대한민국 대학교 아마추어 야구 리그인 AUBL을 소개하고, 경기 데이터를 기반으로 승부를 예측하는 웹 플랫폼입니다.
 
-🛠 기술 스택
+## 📊 승부 예측 모델
+
+본 프로젝트는 사회인 야구의 Low Data 특성을 고려하여 다음 모델들을 혼합하여 사용합니다.
+
+Elo Rating System: 팀 기본 전력 평가
+
+Bradley-Terry Model: 상대 전적 반영
+
+Logistic Regression: 환경 변수(구장, 날씨 등) 반영
+
+## 🛠 기술 스택
 
 Build Tool: Vite
 
@@ -14,7 +24,7 @@ Styling: CSS Modules / Global CSS
 
 Routing: React Router v6
 
-🚀 시작하기 (Getting Started)
+## 🚀 시작하기 (Getting Started)
 
 이 프로젝트를 로컬 환경에서 실행하려면 다음 절차를 따르십시오.
 
@@ -36,7 +46,7 @@ npm run dev
 
 브라우저에서 http://localhost:5173 (포트는 변경될 수 있음)으로 접속하여 확인합니다.
 
-📂 페이지 구성
+## 📂 페이지 구성
 
 /: 랜딩 페이지 (리그 뉴스, 공지)
 
@@ -49,16 +59,6 @@ npm run dev
 /progress: 리그 진행 상황 및 순위표
 
 /prediction: Elo Rating 및 Bradley-Terry 모델 기반 승부 예측
-
-📊 승부 예측 모델
-
-본 프로젝트는 사회인 야구의 Low Data 특성을 고려하여 다음 모델들을 혼합하여 사용합니다.
-
-Elo Rating System: 팀 기본 전력 평가
-
-Bradley-Terry Model: 상대 전적 반영
-
-Logistic Regression: 환경 변수(구장, 날씨 등) 반영
 
 ```bash
 aubl-web-platform/
