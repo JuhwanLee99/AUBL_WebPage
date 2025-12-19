@@ -1,267 +1,342 @@
 import { useMemo } from 'react';
-import { MATCHES, TEAMS } from '../../shared/lib/mockData';
+import { TEAMS } from '../../shared/lib/mockData';
+import { useDemoStore } from '../../shared/state/demoStore';
 
-const realtimeSteps = [
-  { title: 'Hotspot · WebSocket', desc: '경기장 핫스팟 또는 저지연 네트워크에서 <50ms 지연 목표', accent: '#22d3ee' },
-  { title: 'LocalDisplay', desc: '입력 즉시 전광판/태블릿에 반영', accent: '#f97316' },
-];
+const homeLineup = ['박해민', '문성주', '홍창기', '오스틴', '오지환', '문보경', '박동원', '김현수', '신민재'];
+const awayLineup = ['박해민', '문상주', '황창기', '오스틴', '오지환', '문보경', '박동원', '김현수', '신민재'];
 
-const syncSteps = [
-  { title: 'Async Upload', desc: 'REST/Socket로 클라우드 API에 비동기 업로드', accent: '#a855f7' },
-  { title: 'DB + EloEngine', desc: '배치 처리 후 Elo/Bradley-Terry 레이팅 갱신', accent: '#38bdf8' },
-  { title: 'Subscribe', desc: 'PublicWeb·앱에서 실시간 구독 및 반영', accent: '#facc15' },
-];
-
-const mockQueue = [
-  { id: 'ev-1', inning: 'T3', text: '김하늘 2점 적시 2B (R2, R3 득점)', severity: 'info' },
-  { id: 'ev-2', inning: 'B4', text: '최민재 솔로 HR, 비디오 판독 승인', severity: 'success' },
-  { id: 'ev-3', inning: 'T6', text: '투수 교체: 이도현 → 조현우', severity: 'info' },
-  { id: 'ev-4', inning: 'B8', text: '우익수 파울 플라이, 기록 보정 대기', severity: 'warning' },
+const commandButtons = [
+  { label: '볼', color: '#22c55e', action: 'ball' },
+  { label: '스트라이크', color: '#22c55e', action: 'strike' },
+  { label: '파울', color: '#22c55e', action: 'foul' },
+  { label: '1루타', color: '#3b82f6', action: 'single' },
+  { label: '2루타', color: '#3b82f6', action: 'double' },
+  { label: '3루타', color: '#3b82f6', action: 'triple' },
+  { label: '홈런', color: '#f97316', action: 'hr' },
+  { label: '볼넷', color: '#22c55e', action: 'walk' },
+  { label: '사구', color: '#22c55e', action: 'hbp' },
+  { label: '아웃', color: '#ef4444', action: 'out' },
+  { label: '희생플라이', color: '#facc15', action: 'sac' },
+  { label: '도루 성공', color: '#22c55e', action: 'stealSuccess' },
+  { label: '도루 실패', color: '#ef4444', action: 'stealFail' },
+  { label: '카운트 리셋', color: '#94a3b8', action: 'resetCount' },
+  { label: '주자 클리어', color: '#94a3b8', action: 'clearBases' },
+  { label: '이닝 전환', color: '#94a3b8', action: 'nextHalf' },
 ];
 
 export default function ScorekeeperPage() {
-  const currentMatch = useMemo(() => MATCHES[0], []);
-  const homeTeam = TEAMS.find((t) => t.id === currentMatch?.homeTeamId);
-  const awayTeam = TEAMS.find((t) => t.id === currentMatch?.awayTeamId);
+  const { state, actions } = useDemoStore();
+  const homeTeam = useMemo(() => TEAMS.find((t) => t.id === state.homeTeamId), [state.homeTeamId]);
+  const awayTeam = useMemo(() => TEAMS.find((t) => t.id === state.awayTeamId), [state.awayTeamId]);
 
   return (
-    <div style={{ display: 'grid', gap: '18px' }}>
-      <section
+    <div
+      style={{
+        borderRadius: '20px',
+        overflow: 'hidden',
+        border: '1px solid rgba(148, 163, 184, 0.25)',
+        background: '#0b0f1a',
+        color: '#e2e8f0',
+        boxShadow: '0 24px 60px rgba(0,0,0,0.4)',
+      }}
+    >
+      <header
         style={{
-          padding: '26px',
-          borderRadius: '20px',
-          background: 'linear-gradient(135deg, #0f172a 0%, #0b1220 100%)',
-          border: '1px solid rgba(148, 163, 184, 0.25)',
-          color: '#e2e8f0',
-          boxShadow: '0 20px 48px rgba(0,0,0,0.28)',
+          padding: '12px 18px',
+          background: '#111827',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          fontWeight: 800,
+          letterSpacing: '-0.01em',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ padding: '6px 10px', borderRadius: '10px', background: '#f3f4f6', color: '#111827', fontWeight: 900 }}>
+            Dashboard
+          </span>
+          <span style={{ color: '#cbd5e1' }}>
+            {homeTeam?.name ?? 'HOME'} {state.score.home} - {awayTeam?.name ?? 'AWAY'} {state.score.away} |{' '}
+            {state.half === 'top' ? 'Top' : 'Bot'} {state.inning} | B:{state.balls} S:{state.strikes} O:{state.outs}
+          </span>
+        </div>
+        <span style={{ fontSize: '14px', color: '#94a3b8' }}>기록원 컨트롤러 · 데모</span>
+      </header>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '2fr 1fr',
+          gap: '16px',
+          padding: '18px',
+          alignItems: 'start',
+        }}
+      >
+        <FieldView bases={state.bases} />
+
+        <div
+          style={{
+            background: '#111827',
+            borderRadius: '16px',
+            border: '1px solid rgba(148, 163, 184, 0.25)',
+            padding: '14px',
+            display: 'grid',
+            gap: '12px',
+            minHeight: '360px',
+          }}
+        >
+          <LineupBlock title={`${homeTeam?.name ?? 'HOME'} 선발 라인업`} lineup={homeLineup} />
+          <LineupBlock title={`${awayTeam?.name ?? 'AWAY'} 선발 라인업`} lineup={awayLineup} />
+        </div>
+      </div>
+
+      <div
+        style={{
+          padding: '16px',
+          background: '#0f172a',
+          borderTop: '1px solid rgba(148, 163, 184, 0.25)',
           display: 'grid',
           gap: '12px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '12px', fontWeight: 800, letterSpacing: '0.06em', color: '#f97316' }}>RECORDER</span>
-          <span style={{ fontSize: '12px', fontWeight: 800, letterSpacing: '0.06em', color: '#94a3b8' }}>
-            Flutter Host · 웹/앱 동일 서비스
-          </span>
-        </div>
-        <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 900 }}>기록원 컨트롤러 흐름</h1>
-        <p style={{ margin: 0, color: '#cbd5e1', lineHeight: 1.6 }}>
-          경기장에서는 Flutter(모바일/웹) 호스트로 입력해 WebSocket을 통해 전광판(LocalDisplay)에 즉시 반영하고, 동시에
-          API로 비동기 업로드해 클라우드 DB와 EloEngine이 갱신됩니다.
-        </p>
-
-        <div
-          style={{
-            padding: '16px',
-            borderRadius: '16px',
-            border: '1px solid rgba(148, 163, 184, 0.25)',
-            background: 'rgba(255,255,255,0.03)',
-            display: 'grid',
-            gap: '12px',
-            marginTop: '4px',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '12px', fontWeight: 800, color: '#22d3ee' }}>MOCK ENTRY</span>
-            <span style={{ fontSize: '12px', fontWeight: 800, color: '#94a3b8' }}>백엔드 없이 입력 흐름 데모</span>
-          </div>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-              gap: '14px',
-              alignItems: 'stretch',
-            }}
-          >
-            <div
+        <div style={{ textAlign: 'center', fontWeight: 900, color: '#cbd5e1' }}>Command Center</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '10px' }}>
+          {commandButtons.map((btn) => (
+            <button
+              key={btn.label}
+              type="button"
               style={{
-                padding: '16px',
-                borderRadius: '14px',
-                border: '1px solid rgba(148, 163, 184, 0.28)',
-                background: 'rgba(0,0,0,0.25)',
-                display: 'grid',
-                gap: '8px',
+                padding: '14px 12px',
+                borderRadius: '12px',
+                border: 'none',
+                background: btn.color,
+                color: '#0b0f1a',
+                fontWeight: 900,
+                fontSize: '15px',
+                cursor: 'pointer',
+                boxShadow: '0 10px 22px rgba(0,0,0,0.25)',
               }}
+              onClick={() => handleAction(btn.action, actions)}
             >
-              <span style={{ fontSize: '12px', fontWeight: 800, color: '#f97316' }}>현재 경기 (Mock)</span>
-              <div style={{ display: 'grid', gap: '10px' }}>
-                <TeamRow label="AWAY" teamName={awayTeam?.name ?? 'Away'} color={awayTeam?.logoColor ?? '#94a3b8'} />
-                <TeamRow label="HOME" teamName={homeTeam?.name ?? 'Home'} color={homeTeam?.logoColor ?? '#f97316'} />
-              </div>
-              <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>
-                Flutter 입력 → WebSocket 전송 → 로컬 전광판 반영 (mock 데이터)
-              </p>
-            </div>
-
-            <div
-              style={{
-                padding: '16px',
-                borderRadius: '14px',
-                border: '1px solid rgba(148, 163, 184, 0.28)',
-                background: 'rgba(0,0,0,0.25)',
-                display: 'grid',
-                gap: '10px',
-              }}
-            >
-              <span style={{ fontSize: '12px', fontWeight: 800, color: '#facc15' }}>플레이 입력 큐 (Mock)</span>
-              <div style={{ display: 'grid', gap: '8px' }}>
-                {mockQueue.map((item) => (
-                  <div
-                    key={item.id}
-                    style={{
-                      padding: '10px 12px',
-                      borderRadius: '12px',
-                      background: 'rgba(255,255,255,0.03)',
-                      border: '1px solid rgba(148, 163, 184, 0.2)',
-                      display: 'flex',
-                      gap: '10px',
-                      alignItems: 'center',
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: '48px',
-                        textAlign: 'center',
-                        borderRadius: '10px',
-                        padding: '6px 8px',
-                        background: 'rgba(148, 163, 184, 0.15)',
-                        fontWeight: 800,
-                        color: badgeColor(item.severity),
-                        fontSize: '12px',
-                      }}
-                    >
-                      {item.inning}
-                    </span>
-                    <span style={{ color: '#e2e8f0', fontWeight: 600 }}>{item.text}</span>
-                  </div>
-                ))}
-              </div>
-              <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>백엔드 없이 입력 → 큐 → 전송 시뮬레이션</p>
-            </div>
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '14px',
-            marginTop: '6px',
-          }}
-        >
-          {realtimeSteps.map((step) => (
-            <div
-              key={step.title}
-              style={{
-                padding: '16px',
-                borderRadius: '14px',
-                border: '1px solid rgba(148, 163, 184, 0.28)',
-                background: 'rgba(255,255,255,0.02)',
-                display: 'grid',
-                gap: '6px',
-              }}
-            >
-              <span style={{ fontSize: '12px', fontWeight: 800, color: step.accent }}>{step.title}</span>
-              <p style={{ margin: 0, color: '#cbd5e1', lineHeight: 1.5 }}>{step.desc}</p>
-            </div>
+              {btn.label}
+            </button>
           ))}
         </div>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '14px',
-            marginTop: '4px',
-          }}
-        >
-          {syncSteps.map((step) => (
-            <div
-              key={step.title}
-              style={{
-                padding: '16px',
-                borderRadius: '14px',
-                border: '1px dashed rgba(148, 163, 184, 0.3)',
-                background: 'rgba(255,255,255,0.02)',
-                display: 'grid',
-                gap: '6px',
-              }}
-            >
-              <span style={{ fontSize: '12px', fontWeight: 800, color: step.accent }}>{step.title}</span>
-              <p style={{ margin: 0, color: '#cbd5e1', lineHeight: 1.5 }}>{step.desc}</p>
-            </div>
-          ))}
-        </div>
-        <div
-          style={{
-            display: 'grid',
-            gap: '10px',
-            marginTop: '6px',
-            padding: '16px',
-            borderRadius: '14px',
-            border: '1px solid rgba(148, 163, 184, 0.28)',
-            background: 'rgba(255,255,255,0.03)',
-          }}
-        >
-          <span style={{ fontSize: '13px', fontWeight: 800, color: '#facc15' }}>TODO</span>
-          <ul style={{ margin: 0, paddingLeft: '18px', color: '#cbd5e1', lineHeight: 1.6 }}>
-            <li>Flutter WebView/JS bridge 또는 REST/WebSocket 클라이언트 연결</li>
-            <li>플레이 이벤트(득점, 교체, 투구 결과) 입력 폼과 검수 스텝</li>
-            <li>전광판/LocalDisplay로의 즉시 반영 및 재전송 실패 재시도 큐</li>
-          </ul>
-        </div>
-      </section>
+      </div>
     </div>
   );
 }
 
-function TeamRow({ label, teamName, color }: { label: string; teamName: string; color: string }) {
+function handleAction(action: string, actions: ReturnType<typeof useDemoStore>['actions']) {
+  switch (action) {
+    case 'ball':
+      actions.addBall();
+      break;
+    case 'strike':
+      actions.addStrike();
+      break;
+    case 'foul':
+      actions.addFoul();
+      break;
+    case 'single':
+      actions.hitSingle();
+      break;
+    case 'double':
+      actions.hitDouble();
+      break;
+    case 'triple':
+      actions.hitTriple();
+      break;
+    case 'hr':
+      actions.homeRun();
+      break;
+    case 'walk':
+      actions.walk();
+      break;
+    case 'hbp':
+      actions.hbp();
+      break;
+    case 'out':
+      actions.addOut();
+      break;
+    case 'sac':
+      actions.sacFly();
+      break;
+    case 'stealSuccess':
+      actions.stealSuccess();
+      break;
+    case 'stealFail':
+      actions.stealFail();
+      break;
+    case 'resetCount':
+      actions.resetCount();
+      break;
+    case 'clearBases':
+      actions.clearBases();
+      break;
+    case 'nextHalf':
+      actions.nextHalf();
+      break;
+    default:
+      break;
+  }
+}
+
+function FieldView({ bases }: { bases: boolean[] }) {
   return (
     <div
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '10px',
-        borderRadius: '12px',
-        background: 'rgba(255,255,255,0.03)',
-        border: '1px solid rgba(148, 163, 184, 0.2)',
+        position: 'relative',
+        borderRadius: '16px',
+        background: 'radial-gradient(circle at 50% 40%, #0b1220 0%, #0b0f1a 65%)',
+        minHeight: '420px',
+        border: '1px solid rgba(148, 163, 184, 0.25)',
+        overflow: 'hidden',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <div
+        aria-label="필드"
+        style={{
+          position: 'absolute',
+          inset: '30px 30px 90px 30px',
+          background: 'linear-gradient(135deg, #a16207 0%, #b7791f 100%)',
+          clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)',
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          inset: '70px 70px 130px 70px',
+          background: '#22c55e',
+          clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)',
+        }}
+      />
+      <Base marker={bases[1]} label="2" top="70px" left="calc(50% - 14px)" />
+      <Base marker={bases[0]} label="1" top="calc(50% - 8px)" right="70px" />
+      <Base marker={bases[2]} label="3" bottom="130px" left="calc(50% - 14px)" />
+      <HomePlate occupied={false} />
+      <GuideLines />
+    </div>
+  );
+}
+
+function Base({
+  marker,
+  label,
+  top,
+  left,
+  right,
+  bottom,
+}: {
+  marker?: boolean;
+  label?: string;
+  top?: string;
+  left?: string;
+  right?: string;
+  bottom?: string;
+}) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top,
+        left,
+        right,
+        bottom,
+        width: '28px',
+        height: '28px',
+        background: '#f4f4f5',
+        transform: 'rotate(45deg)',
+        borderRadius: '4px',
+        border: '2px solid #e5e7eb',
+        display: 'grid',
+        placeItems: 'center',
+        boxShadow: marker ? '0 0 0 8px rgba(248, 113, 113, 0.2)' : undefined,
+      }}
+    >
+      {marker && (
         <span
           style={{
-            padding: '4px 10px',
-            borderRadius: '10px',
-            background: 'rgba(148, 163, 184, 0.15)',
-            fontWeight: 800,
-            color: '#cbd5e1',
-            fontSize: '12px',
+            transform: 'rotate(-45deg)',
+            fontWeight: 900,
+            color: '#ef4444',
           }}
         >
           {label}
         </span>
-        <span style={{ fontWeight: 800, color: '#e2e8f0' }}>{teamName}</span>
-      </div>
-      <span
-        style={{
-          width: '14px',
-          height: '14px',
-          borderRadius: '50%',
-          backgroundColor: color,
-          boxShadow: `0 0 0 6px ${color}20`,
-        }}
-      />
+      )}
     </div>
   );
 }
 
-function badgeColor(severity: string) {
-  switch (severity) {
-    case 'success':
-      return '#22c55e';
-    case 'warning':
-      return '#facc15';
-    default:
-      return '#60a5fa';
-  }
+function HomePlate({ occupied }: { occupied: boolean }) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        bottom: '52px',
+        left: 'calc(50% - 20px)',
+        width: '40px',
+        height: '32px',
+        background: '#e5e7eb',
+        clipPath: 'polygon(0 0, 100% 0, 100% 60%, 50% 100%, 0 60%)',
+        border: occupied ? '2px solid #f97316' : '2px solid #d1d5db',
+        boxShadow: occupied ? '0 0 0 8px rgba(249, 115, 22, 0.2)' : undefined,
+      }}
+    />
+  );
+}
+
+function GuideLines() {
+  return (
+    <>
+      <div
+        style={{
+          position: 'absolute',
+          top: 'calc(50% - 2px)',
+          left: '30px',
+          right: '30px',
+          height: '2px',
+          background: 'rgba(226, 232, 240, 0.35)',
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          top: '60px',
+          left: 'calc(50% - 1px)',
+          bottom: '120px',
+          width: '2px',
+          background: 'rgba(226, 232, 240, 0.35)',
+        }}
+      />
+    </>
+  );
+}
+
+function LineupBlock({ title, lineup }: { title: string; lineup: string[] }) {
+  return (
+    <div style={{ display: 'grid', gap: '8px' }}>
+      <p style={{ margin: 0, fontWeight: 800, color: '#cbd5e1' }}>{title}</p>
+      <div
+        style={{
+          background: '#0b0f1a',
+          borderRadius: '12px',
+          border: '1px solid rgba(148, 163, 184, 0.25)',
+          padding: '10px 12px',
+          display: 'grid',
+          gap: '6px',
+        }}
+      >
+        {lineup.map((player, idx) => (
+          <div key={player + idx} style={{ display: 'flex', justifyContent: 'space-between', color: '#e2e8f0', fontWeight: 700 }}>
+            <span>
+              {idx + 1}. {player}
+            </span>
+            <span style={{ color: '#94a3b8' }}>CF</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
