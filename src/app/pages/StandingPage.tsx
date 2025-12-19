@@ -1,9 +1,9 @@
-// **`src/pages/StandingsPage.tsx`**
+// **`src/app/pages/StandingsPage.tsx`**
 import { useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import gsap from 'gsap';
-import { TEAMS, MATCHES } from '../shared/lib/mockData';
-import { calculateRankings } from '../features/rankings/utils/rankingEngine';
+import { TEAMS, MATCHES } from '../../shared/lib/mockData';
+import { calculateRankings } from '../../features/rankings/utils/rankingEngine';
 
 export default function StandingsPage() {
   const pageRef = useRef<HTMLDivElement>(null);
