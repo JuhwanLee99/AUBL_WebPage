@@ -7,6 +7,7 @@ import PredictionPage from './pages/PredictionPage';
 import RecordPage from './pages/RecordPage';
 import ScoreboardPage from '../scoreboard/pages/ScoreboardPage';
 import ScorekeeperPage from '../scorekeeper/pages/ScorekeeperPage';
+import RecordRoomPage from './pages/RecordRoomPage';
 
 export const router = createBrowserRouter([
   {
@@ -32,6 +33,10 @@ export const router = createBrowserRouter([
       {
         path: 'records',
         element: <RecordPage />,
+      },
+      {
+        path: 'record-room',
+        element: <RecordRoomPage />,
       },
       {
         path: 'scoreboard',
