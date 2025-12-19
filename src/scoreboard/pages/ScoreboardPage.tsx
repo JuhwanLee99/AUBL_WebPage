@@ -40,7 +40,7 @@ export default function ScoreboardPage() {
           textAlign: 'center',
         }}
       >
-        <ScoreCell label="HOME" value={state.score.home} />
+        <ScoreCell label={state.teamNames.home || homeTeam?.name || 'HOME'} value={state.score.home} />
         <div
           style={{
             background: '#0b1220',
@@ -55,24 +55,24 @@ export default function ScoreboardPage() {
           {inningHalf}
           {inning}
         </div>
-        <ScoreCell label="AWAY" value={state.score.away} />
+        <ScoreCell label={state.teamNames.away || awayTeam?.name || 'AWAY'} value={state.score.away} />
       </div>
 
-      <div
-        style={{
-          marginTop: '16px',
-          background: '#0b1220',
-          borderRadius: '14px',
-          border: '1px solid #1f2937',
-          padding: '16px',
-          display: 'grid',
-          gap: '16px',
-        }}
-      >
+        <div
+          style={{
+            marginTop: '16px',
+            background: '#0b1220',
+            borderRadius: '14px',
+            border: '1px solid #1f2937',
+            padding: '16px',
+            display: 'grid',
+            gap: '16px',
+          }}
+        >
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
           <CountBlock label="B" lights={countLights(ball, 3, '#22c55e')} />
           <CountBlock label="S" lights={countLights(strike, 2, '#facc15')} />
-          <CountBlock label="O" lights={countLights(out, 2, '#ef4444')} />
+          <CountBlock label="O" lights={countLights(out, 3, '#ef4444')} />
           <BasePaths bases={bases} />
         </div>
 
@@ -91,12 +91,12 @@ export default function ScoreboardPage() {
         </div>
       </div>
 
-      <div style={{ marginTop: '18px', display: 'grid', gap: '6px', color: '#94a3b8', fontWeight: 700 }}>
-        <span>
-          HOME: {homeTeam?.name ?? 'HOME'} · AWAY: {awayTeam?.name ?? 'AWAY'}
-        </span>
-        <span style={{ color: '#6ee7b7' }}>이 페이지는 mock 데이터로 동작하며, WebSocket/SSE 연결 없이 데모 가능합니다.</span>
-      </div>
+        <div style={{ marginTop: '18px', display: 'grid', gap: '6px', color: '#94a3b8', fontWeight: 700 }}>
+          <span>
+            HOME: {state.teamNames.home || homeTeam?.name || 'HOME'} · AWAY: {state.teamNames.away || awayTeam?.name || 'AWAY'}
+          </span>
+          <span style={{ color: '#6ee7b7' }}>이 페이지는 mock 데이터로 동작하며, WebSocket/SSE 연결 없이 데모 가능합니다.</span>
+        </div>
     </div>
   );
 }
@@ -154,8 +154,8 @@ function CountBlock({ label, lights }: { label: string; lights: { active: boolea
   );
 }
 
-function BasePaths({ bases }: { bases: boolean[] }) {
-  const [first, second, third] = bases;
+function BasePaths({ bases }: { bases: (string | null)[] }) {
+  const [first, second, third] = bases.map(Boolean);
   return (
     <div style={{ display: 'grid', gap: '10px' }}>
       <span style={{ fontWeight: 900 }}>Bases</span>

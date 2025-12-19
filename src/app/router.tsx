@@ -8,6 +8,7 @@ import RecordPage from './pages/RecordPage';
 import ScoreboardPage from '../scoreboard/pages/ScoreboardPage';
 import ScorekeeperPage from '../scorekeeper/pages/ScorekeeperPage';
 import RecordRoomPage from './pages/RecordRoomPage';
+import PlayerDetailPage from './pages/PlayerDetailPage';
 
 export const router = createBrowserRouter([
   {
@@ -45,6 +46,10 @@ export const router = createBrowserRouter([
       {
         path: 'scorekeeper',
         element: <ScorekeeperPage />,
+      },
+      {
+        path: 'player/:name',
+        element: <PlayerDetailPage />,
       },
     ],
   },
