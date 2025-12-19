@@ -3,18 +3,30 @@ import { MATCHES } from '../lib/mockData';
 
 type Half = 'top' | 'bottom';
 
+type Bases = (string | null)[];
+
+type Side = 'home' | 'away';
+interface PlayerSlot {
+  name: string;
+  pos: string;
+}
+
 interface DemoState {
   inning: number;
   half: Half;
   balls: number;
   strikes: number;
   outs: number;
-  bases: boolean[]; // [1B, 2B, 3B]
+  bases: Bases; // [1B, 2B, 3B] occupant name
   score: { home: number; away: number };
   lastPlay: string;
   feed: string[];
   homeTeamId: string;
   awayTeamId: string;
+  batterIndex: { home: number; away: number };
+  lineups: { home: PlayerSlot[]; away: PlayerSlot[] };
+  benches: { home: PlayerSlot[]; away: PlayerSlot[] };
+  teamNames: { home: string; away: string };
 }
 
 type Action =
@@ -31,9 +43,40 @@ type Action =
   | { type: 'resetCount' }
   | { type: 'clearBases' }
   | { type: 'nextHalf' }
-  | { type: 'setPlay'; message: string };
+  | { type: 'setPlay'; message: string }
+  | { type: 'runnerStealSuccess'; base: 0 | 1 | 2 }
+  | { type: 'runnerCaught'; base: 0 | 1 | 2 }
+  | { type: 'runnerOut'; base: 0 | 1 | 2 }
+  | { type: 'setTeamName'; side: Side; name: string }
+  | { type: 'setLineup'; side: Side; index: number; name: string; pos: string }
+  | { type: 'addBench'; side: Side; name: string; pos: string }
+  | { type: 'substitute'; side: Side; benchIndex: number; lineupIndex: number };
 
 const initialMatch = MATCHES[0];
+const demoLineups: { home: PlayerSlot[]; away: PlayerSlot[] } = {
+  home: [
+    { name: '박해민', pos: 'CF' },
+    { name: '문성주', pos: 'LF' },
+    { name: '홍창기', pos: 'RF' },
+    { name: '오스틴', pos: '1B' },
+    { name: '오지환', pos: 'SS' },
+    { name: '문보경', pos: '3B' },
+    { name: '박동원', pos: 'C' },
+    { name: '김현수', pos: 'DH' },
+    { name: '신민재', pos: '2B' },
+  ],
+  away: [
+    { name: '박해민', pos: 'CF' },
+    { name: '문상주', pos: 'LF' },
+    { name: '황창기', pos: 'RF' },
+    { name: '오스틴', pos: '1B' },
+    { name: '오지환', pos: 'SS' },
+    { name: '문보경', pos: '3B' },
+    { name: '박동원', pos: 'C' },
+    { name: '김현수', pos: 'DH' },
+    { name: '신민재', pos: '2B' },
+  ],
+};
 
 const initialState: DemoState = {
   inning: 1,
@@ -41,12 +84,25 @@ const initialState: DemoState = {
   balls: 0,
   strikes: 0,
   outs: 0,
-  bases: [false, false, false],
+  bases: [null, null, null],
   score: { home: initialMatch?.homeScore ?? 0, away: initialMatch?.awayScore ?? 0 },
   lastPlay: '데모 세션 시작',
   feed: ['데모 세션 시작'],
   homeTeamId: initialMatch?.homeTeamId ?? 'home',
   awayTeamId: initialMatch?.awayTeamId ?? 'away',
+  batterIndex: { home: 0, away: 0 },
+  lineups: demoLineups,
+  benches: {
+    home: [
+      { name: '이재원', pos: 'PH' },
+      { name: '채은성', pos: 'RF' },
+    ],
+    away: [
+      { name: '김호령', pos: 'CF' },
+      { name: '박정우', pos: 'C' },
+    ],
+  },
+  teamNames: { home: 'HOME', away: 'AWAY' },
 };
 
 function reducer(state: DemoState, action: Action): DemoState {
@@ -83,11 +139,31 @@ function reducer(state: DemoState, action: Action): DemoState {
     case 'resetCount':
       return { ...state, balls: 0, strikes: 0, lastPlay: '카운트 리셋', feed: pushFeed(state.feed, '카운트 리셋') };
     case 'clearBases':
-      return { ...state, bases: [false, false, false], lastPlay: '주자 모두 귀환', feed: pushFeed(state.feed, '주자 모두 귀환') };
+      return { ...state, bases: [null, null, null], lastPlay: '주자 모두 귀환', feed: pushFeed(state.feed, '주자 모두 귀환') };
     case 'nextHalf':
       return changeHalf(state, '이닝 전환');
     case 'setPlay':
       return { ...state, lastPlay: action.message, feed: pushFeed(state.feed, action.message) };
+    case 'runnerStealSuccess':
+      return applyRunnerAdvance(state, action.base, 1, '도루 성공');
+    case 'runnerCaught':
+      return applyRunnerOut(state, action.base, '도루자 아웃');
+    case 'runnerOut':
+      return applyRunnerOut(state, action.base, '주루사');
+    case 'setTeamName':
+      return { ...state, teamNames: { ...state.teamNames, [action.side]: action.name } };
+    case 'setLineup':
+      return updateLineup(state, action.side, action.index, action.name, action.pos);
+    case 'addBench':
+      return {
+        ...state,
+        benches: {
+          ...state.benches,
+          [action.side]: [...state.benches[action.side], { name: action.name, pos: action.pos }],
+        },
+      };
+    case 'substitute':
+      return substitutePlayer(state, action.side, action.benchIndex, action.lineupIndex);
     default:
       return state;
   }
@@ -117,56 +193,63 @@ function applyOut(state: DemoState, message: string): DemoState {
 }
 
 function applyHit(state: DemoState, basesToAdvance: 1 | 2 | 3 | 4): DemoState {
-  const { bases, runs } = advanceBases(state.bases, basesToAdvance, true);
+  const { batterName, batterIndex } = nextBatter(state);
+  const { bases, runs } = advanceBases(state.bases, basesToAdvance, batterName);
   const side = hittingSide(state);
-  const score = side === 'home'
-    ? { ...state.score, home: state.score.home + runs }
-    : { ...state.score, away: state.score.away + runs };
-  const message = basesToAdvance === 4 ? '홈런' : `${basesToAdvance}루타`;
+  const score =
+    side === 'home'
+      ? { ...state.score, home: state.score.home + runs }
+      : { ...state.score, away: state.score.away + runs };
+  const message = basesToAdvance === 4 ? `홈런 · ${batterName}` : `${basesToAdvance}루타 · ${batterName}`;
   return {
     ...state,
     bases,
     score,
     balls: 0,
     strikes: 0,
+    batterIndex,
     lastPlay: message,
     feed: pushFeed(state.feed, `${message} · ${runs}득점`),
   };
 }
 
 function applyWalk(state: DemoState, message: string): DemoState {
-  const { bases, runs } = advanceBases(state.bases, 1, true);
+  const { batterName, batterIndex } = nextBatter(state);
+  const { bases, runs } = advanceBases(state.bases, 1, batterName);
   const side = hittingSide(state);
-  const score = side === 'home'
-    ? { ...state.score, home: state.score.home + runs }
-    : { ...state.score, away: state.score.away + runs };
+  const score =
+    side === 'home'
+      ? { ...state.score, home: state.score.home + runs }
+      : { ...state.score, away: state.score.away + runs };
   return {
     ...state,
     bases,
     score,
     balls: 0,
     strikes: 0,
-    lastPlay: message,
+    batterIndex,
+    lastPlay: `${message} · ${batterName}`,
     feed: pushFeed(state.feed, `${message} · ${runs ? `${runs}득점` : '주자 진루'}`),
   };
 }
 
 function applySacrifice(state: DemoState): DemoState {
+  const bases = [...state.bases] as Bases;
   let runs = 0;
-  const bases = [...state.bases];
   if (bases[2]) {
     runs += 1;
-    bases[2] = false;
+    bases[2] = null;
   }
+  const side = hittingSide(state);
+  const score =
+    side === 'home'
+      ? { ...state.score, home: state.score.home + runs }
+      : { ...state.score, away: state.score.away + runs };
   const newState = applyOut(
-    { ...state, bases, score: state.score },
+    { ...state, bases, score },
     runs ? `희생플라이 · ${runs}득점` : '희생플라이',
   );
-  const side = hittingSide(state);
-  const score = side === 'home'
-    ? { ...newState.score, home: newState.score.home + runs }
-    : { ...newState.score, away: newState.score.away + runs };
-  return { ...newState, score };
+  return newState;
 }
 
 function applySteal(state: DemoState, success: boolean): DemoState {
@@ -174,10 +257,10 @@ function applySteal(state: DemoState, success: boolean): DemoState {
     return { ...state, lastPlay: success ? '도루 시도 (주자 없음)' : '도루 실패 (주자 없음)', feed: pushFeed(state.feed, '주자 없음') };
   }
   if (!success) {
-    const bases = [...state.bases];
+    const bases = [...state.bases] as Bases;
     for (let i = 2; i >= 0; i -= 1) {
       if (bases[i]) {
-        bases[i] = false;
+        bases[i] = null;
         break;
       }
     }
@@ -185,23 +268,25 @@ function applySteal(state: DemoState, success: boolean): DemoState {
     return { ...afterOut, lastPlay: '도루 실패 아웃' };
   }
   let runs = 0;
-  const bases = [...state.bases];
+  const bases = [...state.bases] as Bases;
   for (let i = 2; i >= 0; i -= 1) {
     if (bases[i]) {
-      bases[i] = false;
+      const runner = bases[i];
+      bases[i] = null;
       const dest = i + 1;
       if (dest >= 3) {
         runs += 1;
       } else {
-        bases[dest] = true;
+        bases[dest] = runner;
       }
       break;
     }
   }
   const side = hittingSide(state);
-  const score = side === 'home'
-    ? { ...state.score, home: state.score.home + runs }
-    : { ...state.score, away: state.score.away + runs };
+  const score =
+    side === 'home'
+      ? { ...state.score, home: state.score.home + runs }
+      : { ...state.score, away: state.score.away + runs };
   return {
     ...state,
     bases,
@@ -210,6 +295,51 @@ function applySteal(state: DemoState, success: boolean): DemoState {
     strikes: 0,
     lastPlay: runs ? `도루 성공 · ${runs}득점` : '도루 성공',
     feed: pushFeed(state.feed, runs ? `도루 성공 · ${runs}득점` : '도루 성공'),
+  };
+}
+
+function applyRunnerAdvance(state: DemoState, baseIndex: 0 | 1 | 2, steps: number, message: string): DemoState {
+  const bases = [...state.bases] as Bases;
+  const runner = bases[baseIndex];
+  if (!runner) return state;
+  bases[baseIndex] = null;
+  let runs = 0;
+  const dest = baseIndex + steps;
+  if (dest >= 3) {
+    runs = 1;
+  } else {
+    bases[dest] = runner;
+  }
+  const side = hittingSide(state);
+  const score =
+    side === 'home'
+      ? { ...state.score, home: state.score.home + runs }
+      : { ...state.score, away: state.score.away + runs };
+  return {
+    ...state,
+    bases,
+    score,
+    lastPlay: runs ? `${message} · 득점` : message,
+    feed: pushFeed(state.feed, runs ? `${message} · 득점` : message),
+  };
+}
+
+function applyRunnerOut(state: DemoState, baseIndex: 0 | 1 | 2, message: string): DemoState {
+  const bases = [...state.bases] as Bases;
+  if (!bases[baseIndex]) return state;
+  bases[baseIndex] = null;
+  const outs = state.outs + 1;
+  const resetCounts = { balls: 0, strikes: 0 };
+  if (outs >= 3) {
+    return changeHalf({ ...state, bases, outs, ...resetCounts }, `${message} · 3아웃`);
+  }
+  return {
+    ...state,
+    bases,
+    outs,
+    ...resetCounts,
+    lastPlay: message,
+    feed: pushFeed(state.feed, message),
   };
 }
 
@@ -223,42 +353,73 @@ function changeHalf(state: DemoState, message: string): DemoState {
     outs: 0,
     balls: 0,
     strikes: 0,
-    bases: [false, false, false],
+    bases: [null, null, null],
     lastPlay: message,
     feed: pushFeed(state.feed, message),
   };
 }
 
-function advanceBases(currentBases: boolean[], steps: number, includeBatter: boolean) {
+function advanceBases(currentBases: Bases, steps: number, batterName: string) {
   let runs = 0;
-  const bases = [...currentBases];
+  const bases = [...currentBases] as Bases;
 
   for (let i = 2; i >= 0; i -= 1) {
     if (bases[i]) {
-      bases[i] = false;
+      const runner = bases[i];
+      bases[i] = null;
       const dest = i + steps;
       if (dest >= 3) {
         runs += 1;
       } else {
-        bases[dest] = true;
+        bases[dest] = runner;
       }
     }
   }
 
-  if (includeBatter) {
-    if (steps >= 4) {
+  if (steps >= 4) {
+    runs += 1;
+  } else {
+    const dest = steps - 1;
+    if (dest >= 3) {
       runs += 1;
     } else {
-      const dest = steps - 1;
-      if (dest >= 3) {
-        runs += 1;
-      } else {
-        bases[dest] = true;
-      }
+      bases[dest] = batterName;
     }
   }
 
   return { bases, runs };
+}
+
+function nextBatter(state: DemoState) {
+  const side = hittingSide(state);
+  const lineup = state.lineups[side];
+  const idx = state.batterIndex[side] % lineup.length;
+  const batterName = lineup[idx].name;
+  const batterIndex = { ...state.batterIndex, [side]: (idx + 1) % lineup.length };
+  return { batterName, batterIndex };
+}
+
+function updateLineup(state: DemoState, side: Side, index: number, name: string, pos: string): DemoState {
+  const updated = state.lineups[side].map((slot, idx) => (idx === index ? { name, pos } : slot));
+  return { ...state, lineups: { ...state.lineups, [side]: updated } };
+}
+
+function substitutePlayer(state: DemoState, side: Side, benchIndex: number, lineupIndex: number): DemoState {
+  const bench = [...state.benches[side]];
+  const lineup = [...state.lineups[side]];
+  const benchPlayer = bench[benchIndex];
+  if (!benchPlayer) return state;
+  const outgoing = lineup[lineupIndex];
+  lineup[lineupIndex] = benchPlayer;
+  bench.splice(benchIndex, 1);
+  if (outgoing) {
+    bench.push(outgoing);
+  }
+  return {
+    ...state,
+    lineups: { ...state.lineups, [side]: lineup },
+    benches: { ...state.benches, [side]: bench },
+  };
 }
 
 interface DemoStoreValue {
@@ -280,6 +441,13 @@ interface DemoStoreValue {
     resetCount: () => void;
     clearBases: () => void;
     nextHalf: () => void;
+    runnerStealSuccess: (base: 0 | 1 | 2) => void;
+    runnerCaught: (base: 0 | 1 | 2) => void;
+    runnerOut: (base: 0 | 1 | 2) => void;
+    setTeamName: (side: Side, name: string) => void;
+    setLineup: (side: Side, index: number, name: string, pos: string) => void;
+    addBench: (side: Side, name: string, pos: string) => void;
+    substitute: (side: Side, benchIndex: number, lineupIndex: number) => void;
   };
 }
 
@@ -306,6 +474,15 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       resetCount: () => dispatch({ type: 'resetCount' }),
       clearBases: () => dispatch({ type: 'clearBases' }),
       nextHalf: () => dispatch({ type: 'nextHalf' }),
+      runnerStealSuccess: (base: 0 | 1 | 2) => dispatch({ type: 'runnerStealSuccess', base }),
+      runnerCaught: (base: 0 | 1 | 2) => dispatch({ type: 'runnerCaught', base }),
+      runnerOut: (base: 0 | 1 | 2) => dispatch({ type: 'runnerOut', base }),
+      setTeamName: (side: Side, name: string) => dispatch({ type: 'setTeamName', side, name }),
+      setLineup: (side: Side, index: number, name: string, pos: string) =>
+        dispatch({ type: 'setLineup', side, index, name, pos }),
+      addBench: (side: Side, name: string, pos: string) => dispatch({ type: 'addBench', side, name, pos }),
+      substitute: (side: Side, benchIndex: number, lineupIndex: number) =>
+        dispatch({ type: 'substitute', side, benchIndex, lineupIndex }),
     }),
     [],
   );
