@@ -10,6 +10,8 @@ export default function Layout() {
     { path: '/records', label: '기록' },
     { path: '/standings', label: '순위' },
     { path: '/prediction', label: '승부예측' },
+    { path: '/scoreboard', label: '전광판' },
+    { path: '/scorekeeper', label: '기록원' },
   ];
 
   return (

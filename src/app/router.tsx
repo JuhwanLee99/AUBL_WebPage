@@ -5,6 +5,8 @@ import IntroPage from '../front/pages/IntroPage';
 import StandingsPage from './pages/StandingPage';
 import PredictionPage from './pages/PredictionPage';
 import RecordPage from './pages/RecordPage';
+import ScoreboardPage from '../scoreboard/pages/ScoreboardPage';
+import ScorekeeperPage from '../scorekeeper/pages/ScorekeeperPage';
 
 export const router = createBrowserRouter([
   {
@@ -30,6 +32,14 @@ export const router = createBrowserRouter([
       {
         path: 'records',
         element: <RecordPage />,
+      },
+      {
+        path: 'scoreboard',
+        element: <ScoreboardPage />,
+      },
+      {
+        path: 'scorekeeper',
+        element: <ScorekeeperPage />,
       },
     ],
   },
