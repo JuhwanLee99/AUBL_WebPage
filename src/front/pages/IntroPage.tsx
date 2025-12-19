@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import gsap from 'gsap';
-import { MATCHES, TEAMS } from '../shared/lib/mockData';
+import { MATCHES, TEAMS } from '../../shared/lib/mockData';
 
 const pillars = [
   {
