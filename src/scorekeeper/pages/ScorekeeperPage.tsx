@@ -41,6 +41,7 @@ export default function ScorekeeperPage() {
   const defenseLineup = state.lineups[defenseSide];
   const currentBatter =
     activeOffenseLineup[state.batterIndex[hittingSide] % (activeOffenseLineup.length || 1)]?.name ?? '타자';
+  const currentPitcher = defenseLineup.find((slot) => slot.pos.toUpperCase() === 'P')?.name ?? '';
   const [actionModal, setActionModal] = useState<
     | { role: 'runner'; name: string; base: 0 | 1 | 2 }
     | { role: 'batter'; name: string }
@@ -300,6 +301,8 @@ export default function ScorekeeperPage() {
               onSetLineup={actions.setLineup}
               onAddBench={actions.addBench}
               onSubstitute={actions.substitute}
+              highlightBatterName={hittingSide === 'home' ? currentBatter : undefined}
+              highlightPitcherName={defenseSide === 'home' ? currentPitcher : undefined}
             />
             <div
               aria-hidden
@@ -323,6 +326,8 @@ export default function ScorekeeperPage() {
               onSetLineup={actions.setLineup}
               onAddBench={actions.addBench}
               onSubstitute={actions.substitute}
+              highlightBatterName={hittingSide === 'away' ? currentBatter : undefined}
+              highlightPitcherName={defenseSide === 'away' ? currentPitcher : undefined}
             />
           </div>
         </div>
@@ -864,6 +869,8 @@ function TeamEditor({
   onSetLineup,
   onAddBench,
   onSubstitute,
+  highlightBatterName,
+  highlightPitcherName,
 }: {
   label: string;
   defaultName: string;
@@ -877,6 +884,8 @@ function TeamEditor({
   onSetLineup: (side: Side, index: number, updates: { name?: string; pos?: string; number?: string; throws?: string; bats?: string }) => void;
   onAddBench: (side: Side, player: { name: string; pos: string; number: string; throws: string; bats: string }) => void;
   onSubstitute: (side: Side, benchIndex: number, lineupIndex: number) => void;
+  highlightBatterName?: string;
+  highlightPitcherName?: string;
 }) {
   const lineupEntries = lineup.map((slot, idx) => ({ slot, idx }));
   const battingEntries = lineupEntries.filter((entry) => entry.slot.pos.toUpperCase() !== 'P');
@@ -913,7 +922,20 @@ function TeamEditor({
         {battingEntries.map((entry, orderIdx) => (
           <div
             key={entry.slot.name + entry.idx}
-            style={{ display: 'grid', gridTemplateColumns: '24px 85px 55px 50px 70px 70px', gap: '8px', alignItems: 'center' }}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '24px 85px 55px 50px 70px 70px',
+              gap: '8px',
+              alignItems: 'center',
+              padding: '4px',
+              borderRadius: '10px',
+              border: `1px solid ${
+                highlightBatterName && entry.slot.name === highlightBatterName ? 'rgba(56,189,248,0.6)' : 'transparent'
+              }`,
+              background:
+                highlightBatterName && entry.slot.name === highlightBatterName ? 'rgba(56,189,248,0.12)' : 'transparent',
+              boxSizing: 'border-box',
+            }}
           >
             <span style={{ color: '#94a3b8', fontWeight: 800 }}>{orderIdx + 1}.</span>
             <input
@@ -999,7 +1021,22 @@ function TeamEditor({
         >
           <span style={{ fontWeight: 800, color: '#cbd5e1' }}>투수</span>
           {pitcherEntry ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '85px 50px 70px 70px 50px', gap: '8px', alignItems: 'center' }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '85px 50px 70px 70px 50px',
+                gap: '8px',
+                alignItems: 'center',
+                padding: '4px',
+                borderRadius: '10px',
+                border: `1px solid ${
+                  highlightPitcherName && pitcherEntry.slot.name === highlightPitcherName ? 'rgba(244,114,182,0.6)' : 'transparent'
+                }`,
+                background:
+                  highlightPitcherName && pitcherEntry.slot.name === highlightPitcherName ? 'rgba(244,114,182,0.12)' : 'transparent',
+                boxSizing: 'border-box',
+              }}
+            >
               <input
                 value={pitcherEntry.slot.name}
                 onChange={(e) => onSetLineup(side, pitcherEntry.idx, { name: e.target.value, pos: 'P' })}
