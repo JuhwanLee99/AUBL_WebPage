@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useReducer } from 'react';
+import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
 import { MATCHES } from '../lib/mockData';
 
 type Half = 'top' | 'bottom';
@@ -69,7 +69,10 @@ type Action =
   | { type: 'setLineup'; side: Side; index: number; updates: Partial<PlayerSlot> }
   | { type: 'addBench'; side: Side; player: PlayerSlot }
   | { type: 'substitute'; side: Side; benchIndex: number; lineupIndex: number }
-  | { type: 'undo' };
+  | { type: 'undo' }
+  | { type: 'hydrate'; state: DemoState };
+
+const STORAGE_KEY = 'aubl-demo-store';
 
 const initialMatch = MATCHES[0];
 const demoLineups: { home: PlayerSlot[]; away: PlayerSlot[] } = {
@@ -137,16 +140,69 @@ const initialState: DemoState = {
   history: [],
 };
 
+function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }): PlayLog[] {
+  if (!Array.isArray(feed)) return [];
+  return feed.map((entry) => {
+    if (typeof entry === 'string') {
+      return {
+        inning: fallback.inning,
+        half: fallback.half,
+        order: 0,
+        batter: '',
+        pitch: 0,
+        result: entry,
+      };
+    }
+    if (entry && typeof entry === 'object') {
+      const e = entry as Partial<PlayLog>;
+      const half = e.half === 'top' || e.half === 'bottom' ? e.half : fallback.half;
+      return {
+        inning: typeof e.inning === 'number' ? e.inning : fallback.inning,
+        half,
+        order: typeof e.order === 'number' ? e.order : 0,
+        batter: typeof e.batter === 'string' ? e.batter : '',
+        pitch: typeof e.pitch === 'number' ? e.pitch : 0,
+        result: typeof e.result === 'string' ? e.result : '',
+      };
+    }
+    return {
+      inning: fallback.inning,
+      half: fallback.half,
+      order: 0,
+      batter: '',
+      pitch: 0,
+      result: String(entry),
+    };
+  });
+}
+
+function normalizeState(base: DemoState, incoming: DemoState): DemoState {
+  const merged = { ...base, ...incoming } as DemoState;
+  const feed = normalizeFeed(merged.feed, { inning: merged.inning, half: merged.half });
+  const history = Array.isArray(merged.history)
+    ? merged.history.map((snap) => ({
+        ...base,
+        ...snap,
+        pitchCount: typeof snap.pitchCount === 'number' ? snap.pitchCount : 0,
+        feed: normalizeFeed((snap as DemoSnapshot).feed, { inning: snap.inning, half: snap.half }),
+      }))
+    : [];
+  return { ...merged, pitchCount: merged.pitchCount ?? 0, feed, history };
+}
+
 function snapshotState(state: DemoState): DemoSnapshot {
   const { history, ...snapshot } = state;
   return snapshot;
 }
 
 function shouldTrackHistory(actionType: Action['type']) {
-  return !['setTeamName', 'setLineup', 'addBench', 'substitute'].includes(actionType);
+  return !['setTeamName', 'setLineup', 'addBench', 'substitute', 'hydrate'].includes(actionType);
 }
 
 function reducer(state: DemoState, action: Action): DemoState {
+  if (action.type === 'hydrate') {
+    return normalizeState(initialState, action.state);
+  }
   if (action.type === 'undo') {
     if (!state.history.length) return state;
     const previous = state.history[state.history.length - 1];
@@ -627,7 +683,47 @@ interface DemoStoreValue {
 const DemoStoreContext = createContext<DemoStoreValue | null>(null);
 
 export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(reducer, initialState, (init) => {
+    if (typeof window === 'undefined') return init;
+    try {
+      const stored = window.localStorage.getItem(STORAGE_KEY);
+      if (!stored) return init;
+      const parsed = JSON.parse(stored) as DemoState;
+      return normalizeState(init, parsed);
+    } catch {
+      return init;
+    }
+  });
+  const skipSyncRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (skipSyncRef.current) {
+      skipSyncRef.current = false;
+      return;
+    }
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch {
+      // Ignore storage write failures.
+    }
+  }, [state]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== STORAGE_KEY || !event.newValue) return;
+      try {
+        const nextState = JSON.parse(event.newValue) as DemoState;
+        skipSyncRef.current = true;
+        dispatch({ type: 'hydrate', state: nextState });
+      } catch {
+        // Ignore invalid payloads.
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   const actions = useMemo(
     () => ({
