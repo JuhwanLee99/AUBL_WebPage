@@ -9,6 +9,9 @@ type Side = 'home' | 'away';
 interface PlayerSlot {
   name: string;
   pos: string;
+  number: string;
+  throws: string;
+  bats: string;
 }
 
 interface DemoSnapshot {
@@ -53,36 +56,36 @@ type Action =
   | { type: 'runnerCaught'; base: 0 | 1 | 2 }
   | { type: 'runnerOut'; base: 0 | 1 | 2 }
   | { type: 'setTeamName'; side: Side; name: string }
-  | { type: 'setLineup'; side: Side; index: number; name: string; pos: string }
-  | { type: 'addBench'; side: Side; name: string; pos: string }
+  | { type: 'setLineup'; side: Side; index: number; updates: Partial<PlayerSlot> }
+  | { type: 'addBench'; side: Side; player: PlayerSlot }
   | { type: 'substitute'; side: Side; benchIndex: number; lineupIndex: number }
   | { type: 'undo' };
 
 const initialMatch = MATCHES[0];
 const demoLineups: { home: PlayerSlot[]; away: PlayerSlot[] } = {
   home: [
-    { name: '박해민', pos: 'CF' },
-    { name: '문성주', pos: 'LF' },
-    { name: '홍창기', pos: 'RF' },
-    { name: '오스틴', pos: '1B' },
-    { name: '오지환', pos: 'SS' },
-    { name: '문보경', pos: '3B' },
-    { name: '박동원', pos: 'C' },
-    { name: '김현수', pos: 'DH' },
-    { name: '신민재', pos: '2B' },
-    { name: '임찬규', pos: 'P' },
+    { name: '박해민', pos: 'CF', number: '17', throws: 'R', bats: 'L' },
+    { name: '문성주', pos: 'LF', number: '2', throws: 'R', bats: 'L' },
+    { name: '홍창기', pos: 'RF', number: '51', throws: 'R', bats: 'L' },
+    { name: '오스틴', pos: '1B', number: '23', throws: 'R', bats: 'R' },
+    { name: '오지환', pos: 'SS', number: '10', throws: 'R', bats: 'L' },
+    { name: '문보경', pos: '3B', number: '9', throws: 'R', bats: 'L' },
+    { name: '박동원', pos: 'C', number: '27', throws: 'R', bats: 'R' },
+    { name: '김현수', pos: 'DH', number: '22', throws: 'R', bats: 'L' },
+    { name: '신민재', pos: '2B', number: '4', throws: 'R', bats: 'L' },
+    { name: '임찬규', pos: 'P', number: '1', throws: 'R', bats: 'R' },
   ],
   away: [
-    { name: '박해민', pos: 'CF' },
-    { name: '문상주', pos: 'LF' },
-    { name: '황창기', pos: 'RF' },
-    { name: '오스틴', pos: '1B' },
-    { name: '오지환', pos: 'SS' },
-    { name: '문보경', pos: '3B' },
-    { name: '박동원', pos: 'C' },
-    { name: '김현수', pos: 'DH' },
-    { name: '신민재', pos: '2B' },
-    { name: '양현종', pos: 'P' },
+    { name: '박해민', pos: 'CF', number: '17', throws: 'R', bats: 'L' },
+    { name: '문상주', pos: 'LF', number: '12', throws: 'R', bats: 'L' },
+    { name: '황창기', pos: 'RF', number: '52', throws: 'R', bats: 'L' },
+    { name: '오스틴', pos: '1B', number: '23', throws: 'R', bats: 'R' },
+    { name: '오지환', pos: 'SS', number: '10', throws: 'R', bats: 'L' },
+    { name: '문보경', pos: '3B', number: '9', throws: 'R', bats: 'L' },
+    { name: '박동원', pos: 'C', number: '27', throws: 'R', bats: 'R' },
+    { name: '김현수', pos: 'DH', number: '22', throws: 'R', bats: 'L' },
+    { name: '신민재', pos: '2B', number: '4', throws: 'R', bats: 'L' },
+    { name: '양현종', pos: 'P', number: '54', throws: 'L', bats: 'L' },
   ],
 };
 
@@ -102,12 +105,12 @@ const initialState: DemoState = {
   lineups: demoLineups,
   benches: {
     home: [
-      { name: '이재원', pos: 'PH' },
-      { name: '채은성', pos: 'RF' },
+      { name: '이재원', pos: 'PH', number: '33', throws: 'R', bats: 'R' },
+      { name: '채은성', pos: 'RF', number: '32', throws: 'R', bats: 'R' },
     ],
     away: [
-      { name: '김호령', pos: 'CF' },
-      { name: '박정우', pos: 'C' },
+      { name: '김호령', pos: 'CF', number: '25', throws: 'R', bats: 'R' },
+      { name: '박정우', pos: 'C', number: '47', throws: 'R', bats: 'R' },
     ],
   },
   teamNames: { home: 'HOME', away: 'AWAY' },
@@ -199,14 +202,14 @@ function reducer(state: DemoState, action: Action): DemoState {
       nextState = { ...state, teamNames: { ...state.teamNames, [action.side]: action.name } };
       break;
     case 'setLineup':
-      nextState = updateLineup(state, action.side, action.index, action.name, action.pos);
+      nextState = updateLineup(state, action.side, action.index, action.updates);
       break;
     case 'addBench':
       nextState = {
         ...state,
         benches: {
           ...state.benches,
-          [action.side]: [...state.benches[action.side], { name: action.name, pos: action.pos }],
+          [action.side]: [...state.benches[action.side], action.player],
         },
       };
       break;
@@ -455,8 +458,8 @@ function nextBatter(state: DemoState) {
   return { batterName, batterIndex };
 }
 
-function updateLineup(state: DemoState, side: Side, index: number, name: string, pos: string): DemoState {
-  const updated = state.lineups[side].map((slot, idx) => (idx === index ? { name, pos } : slot));
+function updateLineup(state: DemoState, side: Side, index: number, updates: Partial<PlayerSlot>): DemoState {
+  const updated = state.lineups[side].map((slot, idx) => (idx === index ? { ...slot, ...updates } : slot));
   return { ...state, lineups: { ...state.lineups, [side]: updated } };
 }
 
@@ -502,8 +505,8 @@ interface DemoStoreValue {
     runnerCaught: (base: 0 | 1 | 2) => void;
     runnerOut: (base: 0 | 1 | 2) => void;
     setTeamName: (side: Side, name: string) => void;
-    setLineup: (side: Side, index: number, name: string, pos: string) => void;
-    addBench: (side: Side, name: string, pos: string) => void;
+    setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) => void;
+    addBench: (side: Side, player: PlayerSlot) => void;
     substitute: (side: Side, benchIndex: number, lineupIndex: number) => void;
     setPlay: (message: string) => void;
     undo: () => void;
@@ -538,9 +541,9 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       runnerCaught: (base: 0 | 1 | 2) => dispatch({ type: 'runnerCaught', base }),
       runnerOut: (base: 0 | 1 | 2) => dispatch({ type: 'runnerOut', base }),
       setTeamName: (side: Side, name: string) => dispatch({ type: 'setTeamName', side, name }),
-      setLineup: (side: Side, index: number, name: string, pos: string) =>
-        dispatch({ type: 'setLineup', side, index, name, pos }),
-      addBench: (side: Side, name: string, pos: string) => dispatch({ type: 'addBench', side, name, pos }),
+      setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) =>
+        dispatch({ type: 'setLineup', side, index, updates }),
+      addBench: (side: Side, player: PlayerSlot) => dispatch({ type: 'addBench', side, player }),
       substitute: (side: Side, benchIndex: number, lineupIndex: number) =>
         dispatch({ type: 'substitute', side, benchIndex, lineupIndex }),
       setPlay: (message: string) => dispatch({ type: 'setPlay', message }),

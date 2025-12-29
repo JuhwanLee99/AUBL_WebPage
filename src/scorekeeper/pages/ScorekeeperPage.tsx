@@ -47,9 +47,9 @@ export default function ScorekeeperPage() {
     | { role: 'fielder'; name: string; pos: string }
     | null
   >(null);
-  const [benchInput, setBenchInput] = useState<{ [K in Side]: { name: string; pos: string } }>({
-    home: { name: '', pos: '' },
-    away: { name: '', pos: '' },
+  const [benchInput, setBenchInput] = useState<{ [K in Side]: { name: string; pos: string; number: string; throws: string; bats: string } }>({
+    home: { name: '', pos: '', number: '', throws: 'R', bats: 'R' },
+    away: { name: '', pos: '', number: '', throws: 'R', bats: 'R' },
   });
   const [showHitOptions, setShowHitOptions] = useState(false);
   const canUndo = state.history.length > 0;
@@ -869,13 +869,13 @@ function TeamEditor({
   defaultName: string;
   side: Side;
   teamName: string;
-  lineup: { name: string; pos: string }[];
-  bench: { name: string; pos: string }[];
-  benchInput: { name: string; pos: string };
-  onChangeBenchInput: (val: { name: string; pos: string }) => void;
+  lineup: { name: string; pos: string; number: string; throws: string; bats: string }[];
+  bench: { name: string; pos: string; number: string; throws: string; bats: string }[];
+  benchInput: { name: string; pos: string; number: string; throws: string; bats: string };
+  onChangeBenchInput: (val: { name: string; pos: string; number: string; throws: string; bats: string }) => void;
   onSetTeamName: (side: Side, name: string) => void;
-  onSetLineup: (side: Side, index: number, name: string, pos: string) => void;
-  onAddBench: (side: Side, name: string, pos: string) => void;
+  onSetLineup: (side: Side, index: number, updates: { name?: string; pos?: string; number?: string; throws?: string; bats?: string }) => void;
+  onAddBench: (side: Side, player: { name: string; pos: string; number: string; throws: string; bats: string }) => void;
   onSubstitute: (side: Side, benchIndex: number, lineupIndex: number) => void;
 }) {
   const lineupEntries = lineup.map((slot, idx) => ({ slot, idx }));
@@ -913,12 +913,25 @@ function TeamEditor({
         {battingEntries.map((entry, orderIdx) => (
           <div
             key={entry.slot.name + entry.idx}
-            style={{ display: 'grid', gridTemplateColumns: '24px 1fr 120px', gap: '8px', alignItems: 'center' }}
+            style={{ display: 'grid', gridTemplateColumns: '24px 85px 55px 50px 70px 70px', gap: '8px', alignItems: 'center' }}
           >
             <span style={{ color: '#94a3b8', fontWeight: 800 }}>{orderIdx + 1}.</span>
             <input
               value={entry.slot.name}
-              onChange={(e) => onSetLineup(side, entry.idx, e.target.value, entry.slot.pos)}
+              onChange={(e) => onSetLineup(side, entry.idx, { name: e.target.value })}
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(148, 163, 184, 0.25)',
+                borderRadius: '10px',
+                padding: '8px 10px',
+                color: '#e2e8f0',
+                fontWeight: 800,
+                width: '100%',
+              }}
+            />
+            <input
+              value={entry.slot.pos}
+              onChange={(e) => onSetLineup(side, entry.idx, { pos: e.target.value })}
               style={{
                 background: 'rgba(255,255,255,0.04)',
                 border: '1px solid rgba(148, 163, 184, 0.25)',
@@ -929,8 +942,9 @@ function TeamEditor({
               }}
             />
             <input
-              value={entry.slot.pos}
-              onChange={(e) => onSetLineup(side, entry.idx, entry.slot.name, e.target.value)}
+              value={entry.slot.number}
+              onChange={(e) => onSetLineup(side, entry.idx, { number: e.target.value })}
+              placeholder="#"
               style={{
                 background: 'rgba(255,255,255,0.04)',
                 border: '1px solid rgba(148, 163, 184, 0.25)',
@@ -940,6 +954,36 @@ function TeamEditor({
                 fontWeight: 800,
               }}
             />
+            <select
+              value={entry.slot.throws}
+              onChange={(e) => onSetLineup(side, entry.idx, { throws: e.target.value })}
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(148, 163, 184, 0.25)',
+                borderRadius: '10px',
+                padding: '8px 10px',
+                color: '#e2e8f0',
+                fontWeight: 800,
+              }}
+            >
+              <option value="R">투 R</option>
+              <option value="L">투 L</option>
+            </select>
+            <select
+              value={entry.slot.bats}
+              onChange={(e) => onSetLineup(side, entry.idx, { bats: e.target.value })}
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(148, 163, 184, 0.25)',
+                borderRadius: '10px',
+                padding: '8px 10px',
+                color: '#e2e8f0',
+                fontWeight: 800,
+              }}
+            >
+              <option value="R">타 R</option>
+              <option value="L">타 L</option>
+            </select>
           </div>
         ))}
         <div
@@ -955,10 +999,10 @@ function TeamEditor({
         >
           <span style={{ fontWeight: 800, color: '#cbd5e1' }}>투수</span>
           {pitcherEntry ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: '8px', alignItems: 'center' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '85px 50px 70px 70px 50px', gap: '8px', alignItems: 'center' }}>
               <input
                 value={pitcherEntry.slot.name}
-                onChange={(e) => onSetLineup(side, pitcherEntry.idx, e.target.value, 'P')}
+                onChange={(e) => onSetLineup(side, pitcherEntry.idx, { name: e.target.value, pos: 'P' })}
                 style={{
                   background: 'rgba(255,255,255,0.04)',
                   border: '1px solid rgba(148, 163, 184, 0.25)',
@@ -968,6 +1012,49 @@ function TeamEditor({
                   fontWeight: 800,
                 }}
               />
+              <input
+                value={pitcherEntry.slot.number}
+                onChange={(e) => onSetLineup(side, pitcherEntry.idx, { number: e.target.value })}
+                placeholder="#"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(148, 163, 184, 0.25)',
+                  borderRadius: '10px',
+                  padding: '8px 10px',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                }}
+              />
+              <select
+                value={pitcherEntry.slot.throws}
+                onChange={(e) => onSetLineup(side, pitcherEntry.idx, { throws: e.target.value })}
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(148, 163, 184, 0.25)',
+                  borderRadius: '10px',
+                  padding: '8px 10px',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                }}
+              >
+                <option value="R">투 R</option>
+                <option value="L">투 L</option>
+              </select>
+              <select
+                value={pitcherEntry.slot.bats}
+                onChange={(e) => onSetLineup(side, pitcherEntry.idx, { bats: e.target.value })}
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(148, 163, 184, 0.25)',
+                  borderRadius: '10px',
+                  padding: '8px 10px',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                }}
+              >
+                <option value="R">타 R</option>
+                <option value="L">타 L</option>
+              </select>
               <input
                 value="P"
                 readOnly
@@ -1014,11 +1101,11 @@ function TeamEditor({
             }}
           />
           <input
-            value={benchInput.pos}
-            placeholder="포지션"
-            onChange={(e) => onChangeBenchInput({ ...benchInput, pos: e.target.value })}
+            value={benchInput.number}
+            placeholder="등번호"
+            onChange={(e) => onChangeBenchInput({ ...benchInput, number: e.target.value })}
             style={{
-              width: '120px',
+              width: '70px',
               background: '#0b0f1a',
               border: '1px solid rgba(148, 163, 184, 0.3)',
               borderRadius: '10px',
@@ -1027,12 +1114,64 @@ function TeamEditor({
               fontWeight: 800,
             }}
           />
+          <input
+            value={benchInput.pos}
+            placeholder="포지션"
+            onChange={(e) => onChangeBenchInput({ ...benchInput, pos: e.target.value })}
+            style={{
+              width: '90px',
+              background: '#0b0f1a',
+              border: '1px solid rgba(148, 163, 184, 0.3)',
+              borderRadius: '10px',
+              padding: '8px 10px',
+              color: '#e2e8f0',
+              fontWeight: 800,
+            }}
+          />
+          <select
+            value={benchInput.throws}
+            onChange={(e) => onChangeBenchInput({ ...benchInput, throws: e.target.value })}
+            style={{
+              width: '100px',
+              background: '#0b0f1a',
+              border: '1px solid rgba(148, 163, 184, 0.3)',
+              borderRadius: '10px',
+              padding: '8px 10px',
+              color: '#e2e8f0',
+              fontWeight: 800,
+            }}
+          >
+            <option value="R">투 R</option>
+            <option value="L">투 L</option>
+          </select>
+          <select
+            value={benchInput.bats}
+            onChange={(e) => onChangeBenchInput({ ...benchInput, bats: e.target.value })}
+            style={{
+              width: '100px',
+              background: '#0b0f1a',
+              border: '1px solid rgba(148, 163, 184, 0.3)',
+              borderRadius: '10px',
+              padding: '8px 10px',
+              color: '#e2e8f0',
+              fontWeight: 800,
+                }}
+              >
+                <option value="R">타 R</option>
+                <option value="L">타 L</option>
+              </select>
           <button
             type="button"
             onClick={() => {
               if (!benchInput.name.trim()) return;
-              onAddBench(side, benchInput.name, benchInput.pos || 'PH');
-              onChangeBenchInput({ name: '', pos: '' });
+              onAddBench(side, {
+                name: benchInput.name,
+                pos: benchInput.pos || 'PH',
+                number: benchInput.number,
+                throws: benchInput.throws,
+                bats: benchInput.bats,
+              });
+              onChangeBenchInput({ name: '', pos: '', number: '', throws: 'R', bats: 'R' });
             }}
             style={{
               padding: '10px 12px',
@@ -1064,7 +1203,9 @@ function TeamEditor({
             >
               <div style={{ display: 'grid', gap: '2px' }}>
                 <span style={{ fontWeight: 800 }}>{player.name}</span>
-                <span style={{ color: '#94a3b8', fontWeight: 700 }}>{player.pos}</span>
+                <span style={{ color: '#94a3b8', fontWeight: 700 }}>
+                  #{player.number || '--'} · {player.pos} · 투 {player.throws} / 타 {player.bats}
+                </span>
               </div>
               <span style={{ color: '#94a3b8', fontSize: '12px', textAlign: 'center' }}>→ 라인업 투입</span>
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
