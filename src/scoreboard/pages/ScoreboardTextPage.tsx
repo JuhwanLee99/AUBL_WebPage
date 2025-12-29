@@ -6,6 +6,15 @@ export default function ScoreboardTextPage() {
   const { state } = useDemoStore();
   const feed = useMemo(() => state.feed, [state.feed]);
 
+  const formatEntry = (entry: (typeof feed)[number]) => {
+    const halfLabel = entry.half === 'top' ? '초' : '말';
+    const inningLabel = `${entry.inning}회${halfLabel}`;
+    const batterLabel = entry.batter ? `${entry.order}번 ${entry.batter} 타석` : '';
+    const pitchLabel = entry.pitch > 0 ? `${entry.pitch}구째` : '';
+    const parts = [inningLabel, batterLabel, pitchLabel].filter(Boolean).join(' ');
+    return parts ? `${parts} ${entry.result}` : entry.result;
+  };
+
   return (
     <div
       style={{
@@ -58,25 +67,33 @@ export default function ScoreboardTextPage() {
             style={{
               overflowY: 'auto',
               paddingRight: '6px',
-              display: 'grid',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
               gap: '10px',
               minHeight: 0,
             }}
           >
             {feed.map((entry, idx) => (
               <div
-                key={`${entry}-${idx}`}
+                key={`${entry.inning}-${entry.half}-${entry.order}-${entry.pitch}-${idx}`}
                 style={{
                   padding: '10px 12px',
                   borderRadius: '12px',
                   border: '1px solid rgba(148, 163, 184, 0.2)',
                   background: idx % 2 === 0 ? 'rgba(15, 23, 42, 0.65)' : 'rgba(15, 23, 42, 0.35)',
                   fontSize: '14px',
-                  lineHeight: 1.4,
+                  lineHeight: 1.5,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  width: 'max-content',
+                  maxWidth: '100%',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'keep-all',
+                  overflowWrap: 'anywhere',
                 }}
               >
-                <span style={{ color: '#38bdf8', fontWeight: 800, marginRight: '8px' }}>#{feed.length - idx}</span>
-                {entry}
+                {formatEntry(entry)}
               </div>
             ))}
           </div>
