@@ -233,16 +233,18 @@ function hittingSide(state: DemoState) {
   return state.half === 'top' ? 'away' : 'home';
 }
 
-function applyOut(state: DemoState, message: string): DemoState {
+function applyOut(state: DemoState, message: string, advanceBatter = true): DemoState {
   const outs = state.outs + 1;
   const resetCounts = { balls: 0, strikes: 0 };
+  const batterIndex = advanceBatter ? nextBatter(state).batterIndex : state.batterIndex;
   if (outs >= 3) {
-    return changeHalf(state, `${message} · 3아웃`);
+    return changeHalf({ ...state, batterIndex }, `${message} · 3아웃`);
   }
   return {
     ...state,
     outs,
     ...resetCounts,
+    batterIndex,
     lastPlay: message,
     feed: pushFeed(state.feed, `${message} (${outs} 아웃)`),
   };
@@ -320,7 +322,7 @@ function applySteal(state: DemoState, success: boolean): DemoState {
         break;
       }
     }
-    const afterOut = applyOut({ ...state, bases }, '도루 실패 아웃');
+    const afterOut = applyOut({ ...state, bases }, '도루 실패 아웃', false);
     return { ...afterOut, lastPlay: '도루 실패 아웃' };
   }
   let runs = 0;
