@@ -29,7 +29,7 @@ export default function Layout() {
       >
         <div
           style={{
-            maxWidth: '1100px',
+            maxWidth: '1600px',
             margin: '0 auto',
             padding: '0 24px',
             height: '72px',
@@ -63,7 +63,7 @@ export default function Layout() {
         </div>
       </header>
 
-      <main style={{ flex: 1, maxWidth: '1100px', margin: '0 auto', padding: '40px 24px 72px' }}>
+      <main style={{ flex: 1, maxWidth: '1600px', margin: '0 auto', padding: '40px 24px 72px' }}>
         <Outlet />
       </main>
 
@@ -77,7 +77,7 @@ export default function Layout() {
           textAlign: 'center',
         }}
       >
-        <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '0 24px' }}>
+        <div style={{ maxWidth: '1600px', margin: '0 auto', padding: '0 24px' }}>
           &copy; 2025 Amateur University Baseball League. All rights reserved.
         </div>
       </footer>

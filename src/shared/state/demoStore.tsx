@@ -11,7 +11,7 @@ interface PlayerSlot {
   pos: string;
 }
 
-interface DemoState {
+interface DemoSnapshot {
   inning: number;
   half: Half;
   balls: number;
@@ -29,10 +29,15 @@ interface DemoState {
   teamNames: { home: string; away: string };
 }
 
+interface DemoState extends DemoSnapshot {
+  history: DemoSnapshot[];
+}
+
 type Action =
   | { type: 'ball' }
   | { type: 'strike' }
   | { type: 'foul' }
+  | { type: 'strikeOut' }
   | { type: 'out' }
   | { type: 'hit'; bases: 1 | 2 | 3 | 4 }
   | { type: 'walk' }
@@ -50,7 +55,8 @@ type Action =
   | { type: 'setTeamName'; side: Side; name: string }
   | { type: 'setLineup'; side: Side; index: number; name: string; pos: string }
   | { type: 'addBench'; side: Side; name: string; pos: string }
-  | { type: 'substitute'; side: Side; benchIndex: number; lineupIndex: number };
+  | { type: 'substitute'; side: Side; benchIndex: number; lineupIndex: number }
+  | { type: 'undo' };
 
 const initialMatch = MATCHES[0];
 const demoLineups: { home: PlayerSlot[]; away: PlayerSlot[] } = {
@@ -64,6 +70,7 @@ const demoLineups: { home: PlayerSlot[]; away: PlayerSlot[] } = {
     { name: '박동원', pos: 'C' },
     { name: '김현수', pos: 'DH' },
     { name: '신민재', pos: '2B' },
+    { name: '임찬규', pos: 'P' },
   ],
   away: [
     { name: '박해민', pos: 'CF' },
@@ -75,6 +82,7 @@ const demoLineups: { home: PlayerSlot[]; away: PlayerSlot[] } = {
     { name: '박동원', pos: 'C' },
     { name: '김현수', pos: 'DH' },
     { name: '신민재', pos: '2B' },
+    { name: '양현종', pos: 'P' },
   ],
 };
 
@@ -103,70 +111,115 @@ const initialState: DemoState = {
     ],
   },
   teamNames: { home: 'HOME', away: 'AWAY' },
+  history: [],
 };
 
+function snapshotState(state: DemoState): DemoSnapshot {
+  const { history, ...snapshot } = state;
+  return snapshot;
+}
+
+function shouldTrackHistory(actionType: Action['type']) {
+  return !['setTeamName', 'setLineup', 'addBench', 'substitute'].includes(actionType);
+}
+
 function reducer(state: DemoState, action: Action): DemoState {
+  if (action.type === 'undo') {
+    if (!state.history.length) return state;
+    const previous = state.history[state.history.length - 1];
+    return { ...previous, history: state.history.slice(0, -1) };
+  }
+
+  const snapshot = snapshotState(state);
+  let nextState = state;
+
   switch (action.type) {
     case 'ball':
-      if (state.balls >= 3) {
-        return applyWalk(state, '볼넷');
-      }
-      return { ...state, balls: state.balls + 1, lastPlay: '볼', feed: pushFeed(state.feed, '볼') };
+      nextState =
+        state.balls >= 3 ? applyWalk(state, '볼넷') : { ...state, balls: state.balls + 1, lastPlay: '볼', feed: pushFeed(state.feed, '볼') };
+      break;
     case 'strike':
-      if (state.strikes >= 2) {
-        return applyOut(state, '삼진');
-      }
-      return { ...state, strikes: state.strikes + 1, lastPlay: '스트라이크', feed: pushFeed(state.feed, '스트라이크') };
+      nextState =
+        state.strikes >= 2
+          ? applyOut(state, '삼진')
+          : { ...state, strikes: state.strikes + 1, lastPlay: '스트라이크', feed: pushFeed(state.feed, '스트라이크') };
+      break;
     case 'foul':
-      if (state.strikes >= 2) {
-        return { ...state, lastPlay: '파울', feed: pushFeed(state.feed, '파울') };
-      }
-      return { ...state, strikes: state.strikes + 1, lastPlay: '파울', feed: pushFeed(state.feed, '파울') };
+      nextState =
+        state.strikes >= 2
+          ? { ...state, lastPlay: '파울', feed: pushFeed(state.feed, '파울') }
+          : { ...state, strikes: state.strikes + 1, lastPlay: '파울', feed: pushFeed(state.feed, '파울') };
+      break;
+    case 'strikeOut':
+      nextState = applyOut(state, '삼진');
+      break;
     case 'out':
-      return applyOut(state, '아웃');
+      nextState = applyOut(state, '아웃');
+      break;
     case 'hit':
-      return applyHit(state, action.bases);
+      nextState = applyHit(state, action.bases);
+      break;
     case 'walk':
-      return applyWalk(state, '볼넷');
+      nextState = applyWalk(state, '볼넷');
+      break;
     case 'hbp':
-      return applyWalk(state, '몸에 맞는 공');
+      nextState = applyWalk(state, '몸에 맞는 공');
+      break;
     case 'sac':
-      return applySacrifice(state);
+      nextState = applySacrifice(state);
+      break;
     case 'stealSuccess':
-      return applySteal(state, true);
+      nextState = applySteal(state, true);
+      break;
     case 'stealFail':
-      return applySteal(state, false);
+      nextState = applySteal(state, false);
+      break;
     case 'resetCount':
-      return { ...state, balls: 0, strikes: 0, lastPlay: '카운트 리셋', feed: pushFeed(state.feed, '카운트 리셋') };
+      nextState = { ...state, balls: 0, strikes: 0, lastPlay: '카운트 리셋', feed: pushFeed(state.feed, '카운트 리셋') };
+      break;
     case 'clearBases':
-      return { ...state, bases: [null, null, null], lastPlay: '주자 모두 귀환', feed: pushFeed(state.feed, '주자 모두 귀환') };
+      nextState = { ...state, bases: [null, null, null], lastPlay: '주자 모두 귀환', feed: pushFeed(state.feed, '주자 모두 귀환') };
+      break;
     case 'nextHalf':
-      return changeHalf(state, '이닝 전환');
+      nextState = changeHalf(state, '이닝 전환');
+      break;
     case 'setPlay':
-      return { ...state, lastPlay: action.message, feed: pushFeed(state.feed, action.message) };
+      nextState = { ...state, lastPlay: action.message, feed: pushFeed(state.feed, action.message) };
+      break;
     case 'runnerStealSuccess':
-      return applyRunnerAdvance(state, action.base, 1, '도루 성공');
+      nextState = applyRunnerAdvance(state, action.base, 1, '도루 성공');
+      break;
     case 'runnerCaught':
-      return applyRunnerOut(state, action.base, '도루자 아웃');
+      nextState = applyRunnerOut(state, action.base, '도루자 아웃');
+      break;
     case 'runnerOut':
-      return applyRunnerOut(state, action.base, '주루사');
+      nextState = applyRunnerOut(state, action.base, '주루사');
+      break;
     case 'setTeamName':
-      return { ...state, teamNames: { ...state.teamNames, [action.side]: action.name } };
+      nextState = { ...state, teamNames: { ...state.teamNames, [action.side]: action.name } };
+      break;
     case 'setLineup':
-      return updateLineup(state, action.side, action.index, action.name, action.pos);
+      nextState = updateLineup(state, action.side, action.index, action.name, action.pos);
+      break;
     case 'addBench':
-      return {
+      nextState = {
         ...state,
         benches: {
           ...state.benches,
           [action.side]: [...state.benches[action.side], { name: action.name, pos: action.pos }],
         },
       };
+      break;
     case 'substitute':
-      return substitutePlayer(state, action.side, action.benchIndex, action.lineupIndex);
+      nextState = substitutePlayer(state, action.side, action.benchIndex, action.lineupIndex);
+      break;
     default:
-      return state;
+      nextState = state;
   }
+
+  if (nextState === state) return state;
+  if (!shouldTrackHistory(action.type)) return nextState;
+  return { ...nextState, history: [...state.history, snapshot] };
 }
 
 function pushFeed(feed: string[], message: string) {
@@ -393,9 +446,12 @@ function advanceBases(currentBases: Bases, steps: number, batterName: string) {
 function nextBatter(state: DemoState) {
   const side = hittingSide(state);
   const lineup = state.lineups[side];
-  const idx = state.batterIndex[side] % lineup.length;
-  const batterName = lineup[idx].name;
-  const batterIndex = { ...state.batterIndex, [side]: (idx + 1) % lineup.length };
+  const battingLineup = lineup.filter((slot) => slot.pos.toUpperCase() !== 'P');
+  const activeLineup = battingLineup.length ? battingLineup : lineup;
+  const safeLength = activeLineup.length || 1;
+  const idx = state.batterIndex[side] % safeLength;
+  const batterName = activeLineup[idx]?.name ?? '타자';
+  const batterIndex = { ...state.batterIndex, [side]: (idx + 1) % safeLength };
   return { batterName, batterIndex };
 }
 
@@ -428,6 +484,7 @@ interface DemoStoreValue {
     addBall: () => void;
     addStrike: () => void;
     addFoul: () => void;
+    strikeOut: () => void;
     addOut: () => void;
     hitSingle: () => void;
     hitDouble: () => void;
@@ -448,6 +505,8 @@ interface DemoStoreValue {
     setLineup: (side: Side, index: number, name: string, pos: string) => void;
     addBench: (side: Side, name: string, pos: string) => void;
     substitute: (side: Side, benchIndex: number, lineupIndex: number) => void;
+    setPlay: (message: string) => void;
+    undo: () => void;
   };
 }
 
@@ -461,6 +520,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       addBall: () => dispatch({ type: 'ball' }),
       addStrike: () => dispatch({ type: 'strike' }),
       addFoul: () => dispatch({ type: 'foul' }),
+      strikeOut: () => dispatch({ type: 'strikeOut' }),
       addOut: () => dispatch({ type: 'out' }),
       hitSingle: () => dispatch({ type: 'hit', bases: 1 }),
       hitDouble: () => dispatch({ type: 'hit', bases: 2 }),
@@ -483,6 +543,8 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       addBench: (side: Side, name: string, pos: string) => dispatch({ type: 'addBench', side, name, pos }),
       substitute: (side: Side, benchIndex: number, lineupIndex: number) =>
         dispatch({ type: 'substitute', side, benchIndex, lineupIndex }),
+      setPlay: (message: string) => dispatch({ type: 'setPlay', message }),
+      undo: () => dispatch({ type: 'undo' }),
     }),
     [],
   );
