@@ -6,6 +6,7 @@ import StandingsPage from './pages/StandingPage';
 import PredictionPage from './pages/PredictionPage';
 import RecordPage from './pages/RecordPage';
 import ScoreboardPage from '../scoreboard/pages/ScoreboardPage';
+import ScoreboardTextPage from '../scoreboard/pages/ScoreboardTextPage';
 import ScorekeeperPage from '../scorekeeper/pages/ScorekeeperPage';
 import RecordRoomPage from './pages/RecordRoomPage';
 import PlayerDetailPage from './pages/PlayerDetailPage';
@@ -42,6 +43,10 @@ export const router = createBrowserRouter([
       {
         path: 'scoreboard',
         element: <ScoreboardPage />,
+      },
+      {
+        path: 'scoreboard-text',
+        element: <ScoreboardTextPage />,
       },
       {
         path: 'scorekeeper',

@@ -12,6 +12,7 @@ export default function Layout() {
     { path: '/standings', label: '순위' },
     { path: '/prediction', label: '승부예측' },
     { path: '/scoreboard', label: '전광판' },
+    { path: '/scoreboard-text', label: '문자중계' },
     { path: '/scorekeeper', label: '기록원' },
   ];
 

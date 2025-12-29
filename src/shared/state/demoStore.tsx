@@ -226,7 +226,7 @@ function reducer(state: DemoState, action: Action): DemoState {
 }
 
 function pushFeed(feed: string[], message: string) {
-  return [message, ...feed].slice(0, 8);
+  return [message, ...feed];
 }
 
 function hittingSide(state: DemoState) {
