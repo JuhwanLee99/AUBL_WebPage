@@ -411,6 +411,7 @@ function classifyPitch(result: string) {
     normalized.includes('삼진') ||
     normalized.includes('아웃') ||
     normalized.includes('타') ||
+    normalized.includes('홈런') ||
     normalized.includes('희생') ||
     normalized.includes('몸에맞는공');
   const isBall = normalized.includes('볼') || normalized.includes('볼넷') || normalized.includes('몸에맞는공');
@@ -419,6 +420,7 @@ function classifyPitch(result: string) {
     normalized.includes('파울') ||
     normalized.includes('삼진') ||
     normalized.includes('타') ||
+    normalized.includes('홈런') ||
     normalized.includes('아웃');
   return { pitch: hasPitch, ball: isBall, strike: isStrike };
 }
