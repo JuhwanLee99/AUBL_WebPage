@@ -72,6 +72,7 @@ type Action =
   | { type: 'addBench'; side: Side; player: PlayerSlot }
   | { type: 'substitute'; side: Side; benchIndex: number; lineupIndex: number }
   | { type: 'endGame'; endedAt: string }
+  | { type: 'resetGame' }
   | { type: 'undo' }
   | { type: 'hydrate'; state: DemoState };
 
@@ -259,8 +260,14 @@ function snapshotState(state: DemoState): DemoSnapshot {
   return snapshot;
 }
 
+function leadOffName(lineup: PlayerSlot[]) {
+  const batting = lineup.filter((slot) => slot.pos.toUpperCase() !== 'P');
+  const active = batting.length ? batting : lineup;
+  return active[0]?.name ?? '타자';
+}
+
 function shouldTrackHistory(actionType: Action['type']) {
-  return !['setTeamName', 'setLineup', 'addBench', 'substitute', 'hydrate'].includes(actionType);
+  return !['setTeamName', 'setLineup', 'addBench', 'substitute', 'hydrate', 'resetGame'].includes(actionType);
 }
 
 function reducer(state: DemoState, action: Action): DemoState {
@@ -402,6 +409,9 @@ function reducer(state: DemoState, action: Action): DemoState {
       break;
     case 'endGame':
       nextState = applyEndGame(state, action.endedAt);
+      break;
+    case 'resetGame':
+      nextState = createNewGame(state);
       break;
     default:
       nextState = state;
@@ -649,6 +659,46 @@ function applyEndGame(state: DemoState, endedAt: string): DemoState {
   };
 }
 
+function createNewGame(state: DemoState): DemoState {
+  const awayBatter = leadOffName(state.lineups.away);
+  return {
+    inning: 1,
+    half: 'top',
+    balls: 0,
+    strikes: 0,
+    outs: 0,
+    pitchCount: 0,
+    bases: [null, null, null],
+    score: { home: 0, away: 0 },
+    lastPlay: '새 경기 시작',
+    feed: [
+      {
+        inning: 1,
+        half: 'top',
+        order: 1,
+        batter: awayBatter,
+        pitch: 0,
+        result: '새 경기 시작',
+      },
+    ],
+    homeTeamId: state.homeTeamId,
+    awayTeamId: state.awayTeamId,
+    batterIndex: { home: 0, away: 0 },
+    lineups: {
+      home: state.lineups.home.map((p) => ({ ...p })),
+      away: state.lineups.away.map((p) => ({ ...p })),
+    },
+    benches: {
+      home: state.benches.home.map((p) => ({ ...p })),
+      away: state.benches.away.map((p) => ({ ...p })),
+    },
+    teamNames: { ...state.teamNames },
+    gameOver: false,
+    endedAt: null,
+    history: [],
+  };
+}
+
 function changeHalf(state: DemoState, message: string, pitchNumber = 0): DemoState {
   const nextHalf: Half = state.half === 'top' ? 'bottom' : 'top';
   const nextInning = nextHalf === 'top' ? state.inning + 1 : state.inning;
@@ -761,6 +811,7 @@ interface DemoStoreValue {
     substitute: (side: Side, benchIndex: number, lineupIndex: number) => void;
     setPlay: (message: string) => void;
     endGame: (endedAt: string) => void;
+    resetGame: () => void;
     undo: () => void;
   };
 }
@@ -840,6 +891,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'substitute', side, benchIndex, lineupIndex }),
       setPlay: (message: string) => dispatch({ type: 'setPlay', message }),
       endGame: (endedAt: string) => dispatch({ type: 'endGame', endedAt }),
+      resetGame: () => dispatch({ type: 'resetGame' }),
       undo: () => dispatch({ type: 'undo' }),
     }),
     [],

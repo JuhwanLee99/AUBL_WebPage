@@ -246,6 +246,13 @@ export default function ScorekeeperPage() {
     actions.endGame(endedAt);
   };
 
+  const handleNewGame = () => {
+    setPendingExportId(null);
+    setShowHitOptions(false);
+    setActionModal(null);
+    actions.resetGame();
+  };
+
   return (
     <div
       style={{
@@ -468,6 +475,26 @@ export default function ScorekeeperPage() {
                   </span>
                   <span>{formatDateTimeLabel(state.endedAt)}</span>
                 </div>
+              ) : null}
+              {isGameOver ? (
+                <button
+                  type="button"
+                  onClick={handleNewGame}
+                  style={{
+                    marginTop: '4px',
+                    padding: '12px 14px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(74, 222, 128, 0.4)',
+                    background: 'linear-gradient(90deg, #16a34a, #15803d)',
+                    color: '#f8fafc',
+                    fontWeight: 900,
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    boxShadow: '0 12px 24px rgba(22, 163, 74, 0.35)',
+                  }}
+                >
+                  새 경기 시작 (기록 초기화)
+                </button>
               ) : null}
             </div>
           </div>
