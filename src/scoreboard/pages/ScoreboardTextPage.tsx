@@ -30,6 +30,12 @@ type PitcherLine = {
   balls: number;
 };
 
+type DisplayItem =
+  | { type: 'marker'; text: string; color: string; key: string }
+  | { type: 'batter'; text: string; key: string }
+  | { type: 'pitcher'; text: string; key: string }
+  | { type: 'log'; text: string; key: string; chip: string };
+
 export default function ScoreboardTextPage() {
   const { state } = useDemoStore();
   const feed = useMemo(() => state.feed, [state.feed]);
@@ -42,15 +48,11 @@ export default function ScoreboardTextPage() {
 
   const batterToday = useMemo(() => computeBatterLine(feed, hittingSide, currentBatter), [feed, hittingSide, currentBatter]);
   const pitcherToday = useMemo(() => computePitcherLine(feed, defenseSide, currentPitcher), [feed, defenseSide, currentPitcher]);
-
-  const formatEntry = (entry: (typeof feed)[number]) => {
-    const halfLabel = entry.half === 'top' ? '초' : '말';
-    const inningLabel = `${entry.inning}회${halfLabel}`;
-    const batterLabel = entry.batter ? `${entry.order}번 ${entry.batter} 타석` : '';
-    const pitchLabel = entry.pitch > 0 ? `${entry.pitch}구째` : '';
-    const parts = [inningLabel, batterLabel, pitchLabel].filter(Boolean).join(' ');
-    return parts ? `${parts} ${entry.result}` : entry.result;
-  };
+  const jerseyMap = useMemo(() => buildJerseyMap(state.lineups), [state.lineups]);
+  const displayItems = useMemo(
+    () => buildDisplayItems(feed, jerseyMap),
+    [feed, jerseyMap],
+  );
 
   return (
     <div
@@ -121,28 +123,49 @@ export default function ScoreboardTextPage() {
               minHeight: 0,
             }}
           >
-            {feed.map((entry, idx) => (
-              <div
-                key={`${entry.inning}-${entry.half}-${entry.order}-${entry.pitch}-${idx}`}
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: '12px',
-                  border: '1px solid rgba(148, 163, 184, 0.2)',
-                  background: idx % 2 === 0 ? 'rgba(15, 23, 42, 0.65)' : 'rgba(15, 23, 42, 0.35)',
-                  fontSize: '14px',
-                  lineHeight: 1.5,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  width: 'max-content',
-                  maxWidth: '100%',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'keep-all',
-                  overflowWrap: 'anywhere',
-                }}
-              >
-                {formatEntry(entry)}
-              </div>
-            ))}
+            {displayItems.map((item, idx) => {
+              if (item.type === 'marker') {
+                return (
+                  <div key={item.key} style={{ color: item.color, fontWeight: 900, fontSize: '14px', padding: '2px 0' }}>
+                    {item.text}
+                  </div>
+                );
+              }
+              if (item.type === 'batter' || item.type === 'pitcher') {
+                return (
+                  <div key={item.key} style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '13px', padding: '2px 0' }}>
+                    {item.text}
+                  </div>
+                );
+              }
+              return (
+                <div
+                  key={item.key}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(148, 163, 184, 0.2)',
+                    background: idx % 2 === 0 ? 'rgba(15, 23, 42, 0.65)' : 'rgba(15, 23, 42, 0.35)',
+                    fontSize: '14px',
+                    lineHeight: 1.5,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    width: 'max-content',
+                    maxWidth: '100%',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'keep-all',
+                    overflowWrap: 'anywhere',
+                    color: '#e2e8f0',
+                  }}
+                >
+                  {colorizeText(item.text).map((part) => (
+                    <span key={part.key} style={{ color: part.color ?? '#e2e8f0', fontWeight: part.color ? 900 : 800 }}>
+                      {part.text}
+                    </span>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -409,4 +432,139 @@ function computePitcherLine(feed: ReturnType<typeof useDemoStore>['state']['feed
     }
   });
   return base;
+}
+
+function buildJerseyMap(lineups: ReturnType<typeof useDemoStore>['state']['lineups']) {
+  return {
+    home: new Map(lineups.home.map((p) => [p.name, { number: p.number, pos: p.pos }])),
+    away: new Map(lineups.away.map((p) => [p.name, { number: p.number, pos: p.pos }])),
+  };
+}
+
+function formatEntry(entry: ReturnType<typeof useDemoStore>['state']['feed'][number]) {
+  const halfLabel = entry.half === 'top' ? '초' : '말';
+  const inningLabel = `${entry.inning}회${halfLabel}`;
+  const batterLabel = entry.batter ? `${entry.order}번 ${entry.batter} 타석` : '';
+  const pitchLabel = entry.pitch > 0 ? `${entry.pitch}구째` : '';
+  const parts = [inningLabel, batterLabel, pitchLabel].filter(Boolean).join(' ');
+  return parts ? `${parts} ${entry.result}` : entry.result;
+}
+
+function buildDisplayItems(
+  feed: ReturnType<typeof useDemoStore>['state']['feed'],
+  jerseyMap: { home: Map<string, { number: string; pos: string }>; away: Map<string, { number: string; pos: string }> },
+): DisplayItem[] {
+  const chronological = [...feed].reverse();
+  const items: DisplayItem[] = [];
+
+  const markerText = (inning: number, half: Half, type: 'start' | 'end') => {
+    const halfLabel = half === 'top' ? '초' : '말';
+    return `${inning}회${halfLabel} ${type === 'start' ? '시작' : '종료'}`;
+  };
+
+  let prevHalf: Half | null = null;
+  let prevInning: number | null = null;
+  let prevBatter: string | null = null;
+  let prevPitcher: string | null = null;
+
+  chronological.forEach((entry, idx) => {
+    const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
+    const defenseSide: 'home' | 'away' = offenseSide === 'home' ? 'away' : 'home';
+
+    if (idx === 0) {
+      items.push({ type: 'marker', text: markerText(entry.inning, entry.half, 'start'), color: '#22c55e', key: `start-${entry.inning}-${entry.half}-init` });
+    } else if (entry.inning !== prevInning || entry.half !== prevHalf) {
+      if (prevInning && prevHalf) {
+        items.push({ type: 'marker', text: markerText(prevInning, prevHalf, 'end'), color: '#f87171', key: `end-${prevInning}-${prevHalf}-${idx}` });
+      }
+      items.push({ type: 'marker', text: markerText(entry.inning, entry.half, 'start'), color: '#22c55e', key: `start-${entry.inning}-${entry.half}-${idx}` });
+      prevBatter = null;
+      prevPitcher = null;
+    }
+
+    if (entry.batter) {
+      const jersey = jerseyMap[offenseSide].get(entry.batter)?.number;
+      const batterText = `${entry.order}번 ${entry.batter}${jersey ? `(${jersey})` : ''} 타석`;
+      if (entry.batter !== prevBatter) {
+        items.push({ type: 'batter', text: batterText, key: `batter-${entry.inning}-${entry.half}-${entry.batter}-${idx}` });
+        prevBatter = entry.batter;
+      }
+    }
+
+    const defensePitcherName = (() => {
+      const lookup = jerseyMap[defenseSide];
+      const pitcherEntry = [...lookup.entries()].find(([, meta]) => meta.pos.toUpperCase() === 'P');
+      if (!pitcherEntry) return '';
+      return pitcherEntry[0];
+    })();
+    if (defensePitcherName) {
+      const jersey = jerseyMap[defenseSide].get(defensePitcherName)?.number;
+      if (defensePitcherName !== prevPitcher) {
+        items.push({
+          type: 'pitcher',
+          text: prevPitcher
+            ? `${prevPitcher} → ${defensePitcherName}${jersey ? `(${jersey})` : ''} 투수 교체`
+            : `${defensePitcherName}${jersey ? `(${jersey})` : ''} 투수`,
+          key: `pitcher-${entry.inning}-${entry.half}-${idx}`,
+        });
+        prevPitcher = defensePitcherName;
+      }
+    }
+
+    items.push({
+      type: 'log',
+      text: formatEntry(entry),
+      key: `log-${entry.inning}-${entry.half}-${entry.order}-${entry.pitch}-${idx}`,
+      chip: `${entry.inning}-${entry.half}-${entry.order}-${entry.pitch}`,
+    });
+
+    prevHalf = entry.half;
+    prevInning = entry.inning;
+  });
+
+  return items.reverse();
+}
+
+function colorizeText(text: string) {
+  const pattern = /(\d+\s*안타|\d+\s*아웃|득점|점수|도루|안타|2루타|3루타|루타|홈런|볼넷|아웃|삼진)/g;
+  const colorMap: Record<string, string> = {
+    득점: '#facc15',
+    점수: '#facc15',
+    도루: '#38bdf8',
+    안타: '#38bdf8',
+    '1안타': '#38bdf8',
+    '2안타': '#38bdf8',
+    '3안타': '#38bdf8',
+    '4안타': '#38bdf8',
+    '5안타': '#38bdf8',
+    '6안타': '#38bdf8',
+    '7안타': '#38bdf8',
+    '8안타': '#38bdf8',
+    '9안타': '#38bdf8',
+    '2루타': '#38bdf8',
+    '3루타': '#38bdf8',
+    루타: '#38bdf8',
+    홈런: '#38bdf8',
+    볼넷: '#38bdf8',
+    아웃: '#f87171',
+    '1아웃': '#f87171',
+    '2아웃': '#f87171',
+    '3아웃': '#f87171',
+    삼진: '#f87171',
+  };
+  const parts: Array<{ text: string; color?: string; key: string }> = [];
+  let lastIndex = 0;
+  text.replace(pattern, (match, _p1, offset) => {
+    const key = match.replace(/\s+/g, '');
+    if (lastIndex < offset) {
+      parts.push({ text: text.slice(lastIndex, offset), key: `${lastIndex}-${offset}` });
+    }
+    parts.push({ text: match, color: colorMap[key], key: `${offset}-${offset + match.length}` });
+    lastIndex = offset + match.length;
+    return match;
+  });
+  if (lastIndex < text.length) {
+    parts.push({ text: text.slice(lastIndex), key: `${lastIndex}-${text.length}` });
+  }
+  return parts;
 }
