@@ -472,6 +472,17 @@ function createLogEntry(state: DemoState, result: string, pitch: number): PlayLo
   };
 }
 
+function createLogEntryForBaserunning(state: DemoState, result: string, pitch: number): PlayLog {
+  return {
+    inning: state.inning,
+    half: state.half,
+    order: 0,
+    batter: '',
+    pitch,
+    result,
+  };
+}
+
 function hittingSide(state: DemoState) {
   return state.half === 'top' ? 'away' : 'home';
 }
@@ -590,7 +601,8 @@ function applySteal(state: DemoState, success: boolean): DemoState {
     }
     const detail = formatRunnerMove(runner, foundIndex ?? 0, foundIndex ?? 0, false, '도루 실패 아웃', state.outs + 1);
     const afterOut = applyOut({ ...state, bases }, detail.feedText, { advanceBatter: false, pitchNumber: 0 });
-    return { ...afterOut, lastPlay: detail.lastPlay };
+    const feedEntry = createLogEntryForBaserunning(state, detail.feedText, state.pitchCount);
+    return { ...afterOut, lastPlay: detail.lastPlay, feed: pushFeed(afterOut.feed, feedEntry) };
   }
   let runs = 0;
   const bases = [...state.bases] as Bases;
@@ -615,6 +627,7 @@ function applySteal(state: DemoState, success: boolean): DemoState {
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
   const detail = moved ? formatRunnerMove(moved.name, moved.from, moved.to, moved.scored, '도루 성공') : null;
+  const feedEntry = detail ? createLogEntryForBaserunning(state, detail.feedText, state.pitchCount + 1) : null;
   return {
     ...state,
     bases,
@@ -623,7 +636,10 @@ function applySteal(state: DemoState, success: boolean): DemoState {
     strikes: 0,
     pitchCount: 0,
     lastPlay: detail?.lastPlay ?? (runs ? `도루 성공 · ${runs}득점` : '도루 성공'),
-    feed: pushFeed(state.feed, createLogEntry(state, detail?.feedText ?? (runs ? `도루 성공 · ${runs}득점` : '도루 성공'), 0)),
+    feed: pushFeed(
+      state.feed,
+      feedEntry ?? createLogEntry(state, detail?.feedText ?? (runs ? `도루 성공 · ${runs}득점` : '도루 성공'), 0),
+    ),
   };
 }
 
@@ -661,9 +677,11 @@ function applyRunnerOut(state: DemoState, baseIndex: 0 | 1 | 2, message: string)
   bases[baseIndex] = null;
   const outs = state.outs + 1;
   const detail = formatRunnerMove(runner ?? '주자', baseIndex, baseIndex, false, `${message}`, outs);
+  const feedEntry = createLogEntryForBaserunning(state, detail.feedText, state.pitchCount);
   if (outs >= 3) {
     const finalMessage = `${detail.lastPlay} · 이닝 종료`;
-    return changeHalf({ ...state, bases, outs }, finalMessage, state.pitchCount, state);
+    const afterHalf = changeHalf({ ...state, bases, outs }, finalMessage, state.pitchCount, state);
+    return { ...afterHalf, feed: pushFeed(afterHalf.feed, feedEntry) };
   }
   return {
     ...state,
@@ -671,7 +689,7 @@ function applyRunnerOut(state: DemoState, baseIndex: 0 | 1 | 2, message: string)
     outs,
     lastPlay: detail.lastPlay,
     pitchCount: state.pitchCount,
-    feed: pushFeed(state.feed, createLogEntry(state, detail.feedText, 0)),
+    feed: pushFeed(state.feed, feedEntry),
   };
 }
 
@@ -736,6 +754,8 @@ function changeHalf(state: DemoState, message: string, pitchNumber = 0, logState
   const nextHalf: Half = state.half === 'top' ? 'bottom' : 'top';
   const nextInning = nextHalf === 'top' ? state.inning + 1 : state.inning;
   const logSource = logState ?? state;
+  const inningLabel = `${state.inning}회${state.half === 'top' ? '초' : '말'}`;
+  const endMarker = `${message} · ${inningLabel} 종료`;
   return {
     ...state,
     inning: nextInning,
@@ -746,7 +766,7 @@ function changeHalf(state: DemoState, message: string, pitchNumber = 0, logState
     pitchCount: 0,
     bases: [null, null, null],
     lastPlay: message,
-    feed: pushFeed(state.feed, createLogEntry(logSource, message, pitchNumber)),
+    feed: pushFeed(state.feed, createLogEntry(logSource, endMarker, pitchNumber)),
   };
 }
 
