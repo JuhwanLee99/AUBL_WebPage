@@ -490,7 +490,7 @@ function applyOut(
   const logResult = `${message} (${outs} 아웃)`;
   if (outs >= 3) {
     const finalMessage = `${message} · 3아웃 · 이닝 종료`;
-    return changeHalf({ ...state, batterIndex, pitchCount }, finalMessage, advanceBatter ? pitchNumber : 0);
+    return changeHalf({ ...state, batterIndex, pitchCount }, finalMessage, advanceBatter ? pitchNumber : 0, state);
   }
   return {
     ...state,
@@ -663,7 +663,7 @@ function applyRunnerOut(state: DemoState, baseIndex: 0 | 1 | 2, message: string)
   const detail = formatRunnerMove(runner ?? '주자', baseIndex, baseIndex, false, `${message}`, outs);
   if (outs >= 3) {
     const finalMessage = `${detail.lastPlay} · 이닝 종료`;
-    return changeHalf({ ...state, bases, outs }, finalMessage, state.pitchCount);
+    return changeHalf({ ...state, bases, outs }, finalMessage, state.pitchCount, state);
   }
   return {
     ...state,
@@ -732,9 +732,10 @@ function createNewGame(state: DemoState): DemoState {
   };
 }
 
-function changeHalf(state: DemoState, message: string, pitchNumber = 0): DemoState {
+function changeHalf(state: DemoState, message: string, pitchNumber = 0, logState?: DemoState): DemoState {
   const nextHalf: Half = state.half === 'top' ? 'bottom' : 'top';
   const nextInning = nextHalf === 'top' ? state.inning + 1 : state.inning;
+  const logSource = logState ?? state;
   return {
     ...state,
     inning: nextInning,
@@ -745,7 +746,7 @@ function changeHalf(state: DemoState, message: string, pitchNumber = 0): DemoSta
     pitchCount: 0,
     bases: [null, null, null],
     lastPlay: message,
-    feed: pushFeed(state.feed, createLogEntry(state, message, pitchNumber)),
+    feed: pushFeed(state.feed, createLogEntry(logSource, message, pitchNumber)),
   };
 }
 
