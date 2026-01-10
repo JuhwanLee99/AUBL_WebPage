@@ -458,6 +458,7 @@ export default function ScorekeeperPage() {
   });
   const [showHitOptions, setShowHitOptions] = useState(false);
   const [showOutOptions, setShowOutOptions] = useState(false);
+  const [manualBroadcast, setManualBroadcast] = useState('');
   const recordPayload = useMemo(() => buildGameRecord(state), [state]);
   const [pendingExportId, setPendingExportId] = useState<string | null>(null);
   const isGameOver = state.gameOver;
@@ -571,6 +572,13 @@ export default function ScorekeeperPage() {
 
     setShowHitOptions(false);
     setShowOutOptions(false);
+  };
+
+  const handleManualSubmit = () => {
+    const text = manualBroadcast.trim();
+    if (!text) return;
+    actions.addManualLog(text);
+    setManualBroadcast('');
   };
 
   const handleEndGame = () => {
@@ -783,6 +791,70 @@ export default function ScorekeeperPage() {
                   {btn.label}
                 </button>
               ))}
+            </div>
+            <div
+              style={{
+                padding: '12px',
+                borderRadius: '12px',
+                border: '1px solid rgba(148, 163, 184, 0.3)',
+                background: 'rgba(15,23,42,0.5)',
+                display: 'grid',
+                gap: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontWeight: 900, color: '#e2e8f0' }}>기록원 수기 문자 중계</span>
+                <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 800 }}>경기 전·후에도 전송 가능</span>
+              </div>
+              <textarea
+                value={manualBroadcast}
+                onChange={(e) => setManualBroadcast(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') return;
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleManualSubmit();
+                  }
+                }}
+                rows={3}
+                placeholder="예) 오늘은 비로 인해 경기 시작이 10분 지연됩니다."
+                style={{
+                  width: '100%',
+                  resize: 'vertical',
+                  minHeight: '72px',
+                  padding: '10px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={handleManualSubmit}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(59,130,246,0.4)',
+                    background: 'linear-gradient(90deg, #2563eb, #1d4ed8)',
+                    color: '#f8fafc',
+                    fontWeight: 900,
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    boxShadow: '0 10px 20px rgba(37,99,235,0.25)',
+                    opacity: manualBroadcast.trim() ? 1 : 0.7,
+                  }}
+                  disabled={!manualBroadcast.trim()}
+                >
+                  문자 중계 전송
+                </button>
+              </div>
+              <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
+                문자중계 페이지에 "*기록원* - 내용"으로 바로 반영됩니다. Enter 키로 전송, 줄바꿈은 Ctrl/Cmd+Enter.
+              </span>
             </div>
             <div
               style={{
