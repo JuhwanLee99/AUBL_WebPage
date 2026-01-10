@@ -178,6 +178,9 @@ type PitcherStat = {
   name: string;
   pos?: string;
   bf: number;
+  pitches: number;
+  strikes: number;
+  balls: number;
   outs: number;
   h: number;
   hr: number;
@@ -191,6 +194,9 @@ function ensurePitcherStat(name: string, pos?: string): PitcherStat {
     name,
     pos,
     bf: 0,
+    pitches: 0,
+    strikes: 0,
+    balls: 0,
     outs: 0,
     h: 0,
     hr: 0,
@@ -198,6 +204,27 @@ function ensurePitcherStat(name: string, pos?: string): PitcherStat {
     hbp: 0,
     so: 0,
   };
+}
+
+function classifyPitch(result: string) {
+  const normalized = result.replace(/\s+/g, '');
+  const hasPitch =
+    normalized.includes('볼') ||
+    normalized.includes('스트라이크') ||
+    normalized.includes('파울') ||
+    normalized.includes('삼진') ||
+    normalized.includes('아웃') ||
+    normalized.includes('타') ||
+    normalized.includes('희생') ||
+    normalized.includes('몸에맞는공');
+  const isBall = normalized.includes('볼') || normalized.includes('볼넷') || normalized.includes('몸에맞는공');
+  const isStrike =
+    normalized.includes('스트라이크') ||
+    normalized.includes('파울') ||
+    normalized.includes('삼진') ||
+    normalized.includes('타') ||
+    normalized.includes('아웃');
+  return { pitch: hasPitch, ball: isBall, strike: isStrike };
 }
 
 function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
@@ -247,14 +274,20 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     if (!name) return;
     const side = rosterHome.has(name) ? 'home' : rosterAway.has(name) ? 'away' : null;
     if (!side) return;
-    const kind = classifyResult(entry.result);
-    if (!kind) return;
     const defenseSide = side === 'home' ? 'away' : 'home';
     const pitcherName = pitcherOfSide(defenseSide);
     let pitcherStat: PitcherStat | null = null;
     if (pitcherName) {
       pitcherStat = addPitch(defenseSide, pitcherName);
     }
+    const pitchInfo = classifyPitch(entry.result);
+    if (pitcherStat && pitchInfo.pitch) {
+      pitcherStat.pitches += 1;
+      if (pitchInfo.strike) pitcherStat.strikes += 1;
+      if (pitchInfo.ball) pitcherStat.balls += 1;
+    }
+    const kind = classifyResult(entry.result);
+    if (!kind) return;
     const stat = addStat(side, name);
     switch (kind) {
       case 'single':
@@ -1835,6 +1868,7 @@ function StatsTable({
     : [
         { key: 'name', label: '선수', width: '90px' },
         { key: 'bf', label: '타자상대' },
+        { key: 'pitchCombo', label: '투구수(S/B)' },
         { key: 'outs', label: '이닝' },
         { key: 'h', label: '피안타' },
         { key: 'hr', label: '피홈런' },
@@ -1853,7 +1887,7 @@ function StatsTable({
       })
     : (stats as PitcherStat[]).map((stat) => {
         const ip = `${Math.floor(stat.outs / 3)}.${stat.outs % 3}`;
-        return { ...stat, outsIp: ip };
+        return { ...stat, outsIp: ip, pitchCombo: `${stat.pitches} (${stat.strikes}/${stat.balls})` };
       });
 
   return (
@@ -1884,7 +1918,7 @@ function StatsTable({
             borderCollapse: 'collapse',
             color: '#e2e8f0',
             fontSize: '12px',
-            minWidth: isBatter ? '560px' : '460px',
+            minWidth: isBatter ? '560px' : '540px',
           }}
         >
           <thead style={{ background: 'rgba(255,255,255,0.04)' }}>
