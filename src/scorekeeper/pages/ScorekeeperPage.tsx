@@ -24,10 +24,20 @@ const secondaryButtons = [
   { label: '볼넷', color: '#22c55e', action: 'walk' },
   { label: '사구', color: '#22c55e', action: 'hbp' },
   { label: '희생플라이', color: '#facc15', action: 'sac' },
-  { label: '아웃', color: '#ef4444', action: 'out' },
+  { label: '아웃', color: '#ef4444', action: 'outMenu' },
   { label: '카운트 리셋', color: '#94a3b8', action: 'resetCount' },
   { label: '주자 클리어', color: '#94a3b8', action: 'clearBases' },
   { label: '이닝 전환', color: '#94a3b8', action: 'nextHalf' },
+];
+
+const outButtons = [
+  { label: '땅볼 아웃', action: 'out_ground' },
+  { label: '뜬공 아웃', action: 'out_fly' },
+  { label: '라인드라이브', action: 'out_line' },
+  { label: '병살타', action: 'out_dp' },
+  { label: '내야 플라이', action: 'out_infield_fly' },
+  { label: '외야 플라이', action: 'out_outfield_fly' },
+  { label: '기타 아웃', action: 'out_other' },
 ];
 
 function downloadCsv(content: string, filenamePrefix: string) {
@@ -446,6 +456,7 @@ export default function ScorekeeperPage() {
     away: { name: '', pos: '', number: '', throws: 'R', bats: 'R' },
   });
   const [showHitOptions, setShowHitOptions] = useState(false);
+  const [showOutOptions, setShowOutOptions] = useState(false);
   const recordPayload = useMemo(() => buildGameRecord(state), [state]);
   const [pendingExportId, setPendingExportId] = useState<string | null>(null);
   const isGameOver = state.gameOver;
@@ -456,6 +467,7 @@ export default function ScorekeeperPage() {
   useEffect(() => {
     if (state.gameOver) {
       setShowHitOptions(false);
+      setShowOutOptions(false);
     }
   }, [state.gameOver]);
 
@@ -473,6 +485,12 @@ export default function ScorekeeperPage() {
     if (isGameOver) return;
     if (action === 'hitMenu') {
       setShowHitOptions((prev) => !prev);
+      setShowOutOptions(false);
+      return;
+    }
+    if (action === 'outMenu') {
+      setShowOutOptions((prev) => !prev);
+      setShowHitOptions(false);
       return;
     }
 
@@ -507,8 +525,26 @@ export default function ScorekeeperPage() {
       case 'strikeOut':
         actions.strikeOut();
         break;
-      case 'out':
-        actions.addOut();
+      case 'out_ground':
+        actions.addOutWithMessage('땅볼 아웃');
+        break;
+      case 'out_fly':
+        actions.addOutWithMessage('뜬공 아웃');
+        break;
+      case 'out_line':
+        actions.addOutWithMessage('라인드라이브 아웃');
+        break;
+      case 'out_dp':
+        actions.addOutWithMessage('병살타');
+        break;
+      case 'out_infield_fly':
+        actions.addOutWithMessage('내야 플라이 아웃');
+        break;
+      case 'out_outfield_fly':
+        actions.addOutWithMessage('외야 플라이 아웃');
+        break;
+      case 'out_other':
+        actions.addOutWithMessage('기타 아웃');
         break;
       case 'sac':
         actions.sacFly();
@@ -530,6 +566,7 @@ export default function ScorekeeperPage() {
     }
 
     setShowHitOptions(false);
+    setShowOutOptions(false);
   };
 
   const handleEndGame = () => {
@@ -683,6 +720,31 @@ export default function ScorekeeperPage() {
                       border: '1px solid rgba(15,23,42,0.4)',
                       background: 'rgba(255,255,255,0.08)',
                       color: btn.color,
+                      fontWeight: 800,
+                      fontSize: '13px',
+                      cursor: isGameOver ? 'not-allowed' : 'pointer',
+                      opacity: isGameOver ? 0.6 : 1,
+                    }}
+                    onClick={() => handleAction(btn.action)}
+                  >
+                    {btn.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {showOutOptions ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
+                {outButtons.map((btn) => (
+                  <button
+                    key={btn.label}
+                    type="button"
+                    disabled={isGameOver}
+                    style={{
+                      padding: '10px 10px',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(15,23,42,0.4)',
+                      background: 'rgba(255,255,255,0.08)',
+                      color: '#fca5a5',
                       fontWeight: 800,
                       fontSize: '13px',
                       cursor: isGameOver ? 'not-allowed' : 'pointer',
