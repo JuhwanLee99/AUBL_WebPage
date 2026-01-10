@@ -489,7 +489,8 @@ function applyOut(
   const pitchCount = advanceBatter ? 0 : state.pitchCount;
   const logResult = `${message} (${outs} 아웃)`;
   if (outs >= 3) {
-    return changeHalf({ ...state, batterIndex, pitchCount }, `${message} · 3아웃`, advanceBatter ? pitchNumber : 0);
+    const finalMessage = `${message} · 3아웃 · 이닝 종료`;
+    return changeHalf({ ...state, batterIndex, pitchCount }, finalMessage, advanceBatter ? pitchNumber : 0);
   }
   return {
     ...state,
@@ -661,7 +662,8 @@ function applyRunnerOut(state: DemoState, baseIndex: 0 | 1 | 2, message: string)
   const outs = state.outs + 1;
   const detail = formatRunnerMove(runner ?? '주자', baseIndex, baseIndex, false, `${message}`, outs);
   if (outs >= 3) {
-    return changeHalf({ ...state, bases, outs }, `${detail.lastPlay} · 3아웃`, state.pitchCount);
+    const finalMessage = `${detail.lastPlay} · 이닝 종료`;
+    return changeHalf({ ...state, bases, outs }, finalMessage, state.pitchCount);
   }
   return {
     ...state,
