@@ -56,7 +56,7 @@ export default function ScoreboardTextPage() {
   const collapsedMap = useMemo(() => {
     const map: Record<number, boolean> = {};
     sections.forEach((section) => {
-      map[section.inning] = section.inning !== currentInning;
+      map[section.inning] = section.inning < currentInning;
     });
     return map;
   }, [sections, currentInning]);
