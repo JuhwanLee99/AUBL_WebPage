@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { TEAMS } from '../../shared/lib/mockData';
-import { useDemoStore } from '../../shared/state/demoStore';
+import { buildGameRecord, useDemoStore } from '../../shared/state/demoStore';
 
 type Side = 'home' | 'away';
 
@@ -30,6 +30,33 @@ const secondaryButtons = [
   { label: '이닝 전환', color: '#94a3b8', action: 'nextHalf' },
 ];
 
+function downloadJson(payload: unknown, filenamePrefix: string) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${filenamePrefix}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function buildDownloadName(prefix: string, endedAt?: string | null) {
+  const stamp = (endedAt ? new Date(endedAt) : new Date()).toISOString().replace(/[:.]/g, '-');
+  return `${prefix}-${stamp}`;
+}
+
+function formatDateTimeLabel(value: string | null) {
+  if (!value) return '';
+  try {
+    return new Date(value).toLocaleString('ko-KR');
+  } catch {
+    return value;
+  }
+}
+
 export default function ScorekeeperPage() {
   const { state, actions } = useDemoStore();
   const homeTeam = useMemo(() => TEAMS.find((t) => t.id === state.homeTeamId), [state.homeTeamId]);
@@ -53,9 +80,29 @@ export default function ScorekeeperPage() {
     away: { name: '', pos: '', number: '', throws: 'R', bats: 'R' },
   });
   const [showHitOptions, setShowHitOptions] = useState(false);
+  const recordPayload = useMemo(() => buildGameRecord(state), [state]);
+  const [pendingExportId, setPendingExportId] = useState<string | null>(null);
+  const isGameOver = state.gameOver;
+  const isExporting = Boolean(pendingExportId);
   const canUndo = state.history.length > 0;
 
+  useEffect(() => {
+    if (state.gameOver) {
+      setShowHitOptions(false);
+    }
+  }, [state.gameOver]);
+
+  useEffect(() => {
+    if (!pendingExportId) return;
+    if (state.gameOver && state.endedAt === pendingExportId) {
+      const filename = buildDownloadName('scorecard', state.endedAt);
+      downloadJson(recordPayload, filename);
+      setPendingExportId(null);
+    }
+  }, [pendingExportId, recordPayload, state.endedAt, state.gameOver]);
+
   const handleAction = (action: string) => {
+    if (isGameOver) return;
     if (action === 'hitMenu') {
       setShowHitOptions((prev) => !prev);
       return;
@@ -115,6 +162,17 @@ export default function ScorekeeperPage() {
     }
 
     setShowHitOptions(false);
+  };
+
+  const handleEndGame = () => {
+    if (state.gameOver) {
+      const filename = buildDownloadName('scorecard', state.endedAt);
+      downloadJson(recordPayload, filename);
+      return;
+    }
+    const endedAt = new Date().toISOString();
+    setPendingExportId(endedAt);
+    actions.endGame(endedAt);
   };
 
   return (
@@ -185,13 +243,28 @@ export default function ScorekeeperPage() {
               minHeight: '220px',
             }}
           >
-            <div style={{ textAlign: 'center', fontWeight: 900, color: '#cbd5e1' }}>Command Center</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#cbd5e1' }}>
+              <span style={{ fontWeight: 900 }}>Command Center</span>
+              <span
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  color: isGameOver ? '#fca5a5' : '#67e8f9',
+                  background: isGameOver ? 'rgba(248,113,113,0.12)' : 'rgba(56,189,248,0.12)',
+                  border: `1px solid ${isGameOver ? 'rgba(248,113,113,0.4)' : 'rgba(56,189,248,0.35)'}`,
+                  borderRadius: '999px',
+                  padding: '6px 10px',
+                }}
+              >
+                {isGameOver ? '경기 종료됨 · 기록 잠금' : '실시간 입력 가능'}
+              </span>
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '10px' }}>
               {mainButtons.map((btn) => {
                 const isUndo = btn.action === 'undo';
                 const isHitMenu = btn.action === 'hitMenu';
                 const isActive = isHitMenu && showHitOptions;
-                const isDisabled = isUndo && !canUndo;
+                const isDisabled = isGameOver || (isUndo && !canUndo);
                 return (
                   <button
                     key={btn.label}
@@ -227,6 +300,7 @@ export default function ScorekeeperPage() {
                   <button
                     key={btn.label}
                     type="button"
+                    disabled={isGameOver}
                     style={{
                       padding: '12px 10px',
                       borderRadius: '10px',
@@ -235,7 +309,8 @@ export default function ScorekeeperPage() {
                       color: btn.color,
                       fontWeight: 800,
                       fontSize: '13px',
-                      cursor: 'pointer',
+                      cursor: isGameOver ? 'not-allowed' : 'pointer',
+                      opacity: isGameOver ? 0.6 : 1,
                     }}
                     onClick={() => handleAction(btn.action)}
                   >
@@ -249,6 +324,7 @@ export default function ScorekeeperPage() {
                 <button
                   key={btn.label}
                   type="button"
+                  disabled={isGameOver}
                   style={{
                     padding: '10px 10px',
                     borderRadius: '10px',
@@ -257,13 +333,71 @@ export default function ScorekeeperPage() {
                     color: btn.color,
                     fontWeight: 800,
                     fontSize: '12px',
-                    cursor: 'pointer',
+                    cursor: isGameOver ? 'not-allowed' : 'pointer',
+                    opacity: isGameOver ? 0.6 : 1,
                   }}
                   onClick={() => handleAction(btn.action)}
                 >
                   {btn.label}
                 </button>
               ))}
+            </div>
+            <div
+              style={{
+                marginTop: '4px',
+                padding: '12px',
+                borderRadius: '12px',
+                border: '1px dashed rgba(148, 163, 184, 0.3)',
+                background: 'rgba(15,23,42,0.45)',
+                display: 'grid',
+                gap: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: 900, color: '#e2e8f0' }}>경기 종료 및 기록 저장</span>
+                <span style={{ fontSize: '12px', fontWeight: 800, color: '#94a3b8' }}>JSON 기록지 다운로드</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px', alignItems: 'center' }}>
+                <p style={{ margin: 0, color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>
+                  버튼을 누르면 기록 입력이 잠기고 기록지를 파일로 내려받습니다. 종료 후에도 다시 다운로드할 수 있습니다.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleEndGame}
+                  disabled={isExporting}
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(59, 130, 246, 0.35)',
+                    background: isGameOver ? 'linear-gradient(90deg, #0f172a, #111827)' : 'linear-gradient(90deg, #2563eb, #1d4ed8)',
+                    color: '#e2e8f0',
+                    fontWeight: 900,
+                    fontSize: '14px',
+                    cursor: isExporting ? 'not-allowed' : 'pointer',
+                    boxShadow: isGameOver ? 'none' : '0 10px 22px rgba(37, 99, 235, 0.35)',
+                    opacity: isExporting ? 0.6 : 1,
+                  }}
+                >
+                  {isExporting ? '기록 저장 중...' : isGameOver ? '기록지 다시 받기' : '경기 종료 & 다운로드'}
+                </button>
+              </div>
+              {state.endedAt ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#cbd5e1', fontWeight: 800, fontSize: '12px' }}>
+                  <span
+                    style={{
+                      padding: '6px 8px',
+                      borderRadius: '10px',
+                      background: 'rgba(16,185,129,0.12)',
+                      border: '1px solid rgba(16,185,129,0.35)',
+                      color: '#34d399',
+                      fontWeight: 900,
+                    }}
+                  >
+                    종료 시각
+                  </span>
+                  <span>{formatDateTimeLabel(state.endedAt)}</span>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>

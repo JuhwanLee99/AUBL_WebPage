@@ -14,7 +14,7 @@ interface PlayerSlot {
   bats: string;
 }
 
-interface PlayLog {
+export interface PlayLog {
   inning: number;
   half: Half;
   order: number;
@@ -40,6 +40,8 @@ interface DemoSnapshot {
   lineups: { home: PlayerSlot[]; away: PlayerSlot[] };
   benches: { home: PlayerSlot[]; away: PlayerSlot[] };
   teamNames: { home: string; away: string };
+  gameOver: boolean;
+  endedAt: string | null;
 }
 
 interface DemoState extends DemoSnapshot {
@@ -69,6 +71,7 @@ type Action =
   | { type: 'setLineup'; side: Side; index: number; updates: Partial<PlayerSlot> }
   | { type: 'addBench'; side: Side; player: PlayerSlot }
   | { type: 'substitute'; side: Side; benchIndex: number; lineupIndex: number }
+  | { type: 'endGame'; endedAt: string }
   | { type: 'undo' }
   | { type: 'hydrate'; state: DemoState };
 
@@ -137,6 +140,8 @@ const initialState: DemoState = {
     ],
   },
   teamNames: { home: '삼성 라이온즈', away: '두산 베어스' },
+  gameOver: false,
+  endedAt: null,
   history: [],
 };
 
@@ -185,9 +190,68 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
         ...snap,
         pitchCount: typeof snap.pitchCount === 'number' ? snap.pitchCount : 0,
         feed: normalizeFeed((snap as DemoSnapshot).feed, { inning: snap.inning, half: snap.half }),
+        gameOver: Boolean((snap as DemoSnapshot).gameOver),
+        endedAt: typeof (snap as DemoSnapshot).endedAt === 'string' ? (snap as DemoSnapshot).endedAt : null,
       }))
     : [];
-  return { ...merged, pitchCount: merged.pitchCount ?? 0, feed, history };
+  return {
+    ...merged,
+    pitchCount: merged.pitchCount ?? 0,
+    feed,
+    history,
+    gameOver: Boolean(merged.gameOver),
+    endedAt: typeof merged.endedAt === 'string' ? merged.endedAt : null,
+  };
+}
+
+export interface GameRecord {
+  meta: {
+    homeTeamId: string;
+    awayTeamId: string;
+    homeTeamName: string;
+    awayTeamName: string;
+    inning: number;
+    half: Half;
+    gameOver: boolean;
+    endedAt: string | null;
+  };
+  score: DemoState['score'];
+  counts: { balls: number; strikes: number; outs: number; pitchCount: number };
+  bases: Bases;
+  batterIndex: DemoState['batterIndex'];
+  lineups: DemoState['lineups'];
+  benches: DemoState['benches'];
+  feed: PlayLog[];
+  lastPlay: string;
+}
+
+export function buildGameRecord(state: DemoState): GameRecord {
+  return {
+    meta: {
+      homeTeamId: state.homeTeamId,
+      awayTeamId: state.awayTeamId,
+      homeTeamName: state.teamNames.home,
+      awayTeamName: state.teamNames.away,
+      inning: state.inning,
+      half: state.half,
+      gameOver: state.gameOver,
+      endedAt: state.endedAt,
+    },
+    score: { ...state.score },
+    counts: { balls: state.balls, strikes: state.strikes, outs: state.outs, pitchCount: state.pitchCount },
+    bases: [...state.bases],
+    batterIndex: { ...state.batterIndex },
+    lineups: {
+      home: state.lineups.home.map((player) => ({ ...player })),
+      away: state.lineups.away.map((player) => ({ ...player })),
+    },
+    benches: {
+      home: state.benches.home.map((player) => ({ ...player })),
+      away: state.benches.away.map((player) => ({ ...player })),
+    },
+    feed: state.feed.map((entry) => ({ ...entry })),
+    lastPlay: state.lastPlay,
+  };
 }
 
 function snapshotState(state: DemoState): DemoSnapshot {
@@ -335,6 +399,9 @@ function reducer(state: DemoState, action: Action): DemoState {
       break;
     case 'substitute':
       nextState = substitutePlayer(state, action.side, action.benchIndex, action.lineupIndex);
+      break;
+    case 'endGame':
+      nextState = applyEndGame(state, action.endedAt);
       break;
     default:
       nextState = state;
@@ -565,6 +632,23 @@ function applyRunnerOut(state: DemoState, baseIndex: 0 | 1 | 2, message: string)
   };
 }
 
+function applyEndGame(state: DemoState, endedAt: string): DemoState {
+  if (state.gameOver) return state;
+  const message = '경기 종료';
+  const feedEntry = createLogEntry(state, message, state.pitchCount);
+  return {
+    ...state,
+    balls: 0,
+    strikes: 0,
+    pitchCount: 0,
+    bases: [null, null, null],
+    gameOver: true,
+    endedAt,
+    lastPlay: message,
+    feed: pushFeed(state.feed, feedEntry),
+  };
+}
+
 function changeHalf(state: DemoState, message: string, pitchNumber = 0): DemoState {
   const nextHalf: Half = state.half === 'top' ? 'bottom' : 'top';
   const nextInning = nextHalf === 'top' ? state.inning + 1 : state.inning;
@@ -676,6 +760,7 @@ interface DemoStoreValue {
     addBench: (side: Side, player: PlayerSlot) => void;
     substitute: (side: Side, benchIndex: number, lineupIndex: number) => void;
     setPlay: (message: string) => void;
+    endGame: (endedAt: string) => void;
     undo: () => void;
   };
 }
@@ -754,6 +839,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       substitute: (side: Side, benchIndex: number, lineupIndex: number) =>
         dispatch({ type: 'substitute', side, benchIndex, lineupIndex }),
       setPlay: (message: string) => dispatch({ type: 'setPlay', message }),
+      endGame: (endedAt: string) => dispatch({ type: 'endGame', endedAt }),
       undo: () => dispatch({ type: 'undo' }),
     }),
     [],
