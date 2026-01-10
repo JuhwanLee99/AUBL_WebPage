@@ -585,6 +585,21 @@ function buildDisplayItems(
     const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
     const defenseSide: 'home' | 'away' = offenseSide === 'home' ? 'away' : 'home';
 
+    const isEndMarker = entry.result.includes('종료');
+    if (isEndMarker) {
+      items.push({
+        type: 'marker',
+        text: entry.result,
+        color: '#f87171',
+        key: `end-${entry.inning}-${entry.half}-${idx}`,
+        inning: entry.inning,
+        half: entry.half,
+      });
+      prevHalf = entry.half;
+      prevInning = entry.inning;
+      return;
+    }
+
     if (idx === 0) {
       items.push({
         type: 'marker',
