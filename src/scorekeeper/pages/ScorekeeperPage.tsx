@@ -126,6 +126,262 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   return lines.join('\n');
 }
 
+type PlayerStat = {
+  name: string;
+  pos?: string;
+  pa: number;
+  ab: number;
+  h: number;
+  singles: number;
+  doubles: number;
+  triples: number;
+  hr: number;
+  bb: number;
+  hbp: number;
+  so: number;
+  sac: number;
+};
+
+function ensurePlayerStat(name: string, pos?: string): PlayerStat {
+  return {
+    name,
+    pos,
+    pa: 0,
+    ab: 0,
+    h: 0,
+    singles: 0,
+    doubles: 0,
+    triples: 0,
+    hr: 0,
+    bb: 0,
+    hbp: 0,
+    so: 0,
+    sac: 0,
+  };
+}
+
+function classifyResult(result: string) {
+  const normalized = result.replace(/\s+/g, '');
+  if (normalized.includes('홈런')) return 'hr' as const;
+  if (normalized.includes('3루타')) return 'triple' as const;
+  if (normalized.includes('2루타')) return 'double' as const;
+  if (normalized.includes('1루타')) return 'single' as const;
+  if (normalized.includes('볼넷')) return 'bb' as const;
+  if (normalized.includes('몸에맞는공')) return 'hbp' as const;
+  if (normalized.includes('희생플라이')) return 'sac' as const;
+  if (normalized.includes('삼진')) return 'so' as const;
+  if (normalized.includes('아웃') && !normalized.includes('도루')) return 'out' as const;
+  return null;
+}
+
+type PitcherStat = {
+  name: string;
+  pos?: string;
+  bf: number;
+  outs: number;
+  h: number;
+  hr: number;
+  bb: number;
+  hbp: number;
+  so: number;
+};
+
+function ensurePitcherStat(name: string, pos?: string): PitcherStat {
+  return {
+    name,
+    pos,
+    bf: 0,
+    outs: 0,
+    h: 0,
+    hr: 0,
+    bb: 0,
+    hbp: 0,
+    so: 0,
+  };
+}
+
+function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
+  const rosterHome = new Map<string, { pos?: string; order: number }>();
+  const rosterAway = new Map<string, { pos?: string; order: number }>();
+  record.lineups.home.forEach((p, idx) => rosterHome.set(p.name, { pos: p.pos, order: idx }));
+  record.lineups.away.forEach((p, idx) => rosterAway.set(p.name, { pos: p.pos, order: idx }));
+  record.benches.home.forEach((p, idx) => {
+    if (!rosterHome.has(p.name)) rosterHome.set(p.name, { pos: p.pos, order: 100 + idx });
+  });
+  record.benches.away.forEach((p, idx) => {
+    if (!rosterAway.has(p.name)) rosterAway.set(p.name, { pos: p.pos, order: 100 + idx });
+  });
+
+  const statsHome = new Map<string, PlayerStat>();
+  const statsAway = new Map<string, PlayerStat>();
+  const pitchHome = new Map<string, PitcherStat>();
+  const pitchAway = new Map<string, PitcherStat>();
+
+  const addStat = (side: 'home' | 'away', name: string) => {
+    const roster = side === 'home' ? rosterHome : rosterAway;
+    const pos = roster.get(name)?.pos;
+    const store = side === 'home' ? statsHome : statsAway;
+    if (!store.has(name)) {
+      store.set(name, ensurePlayerStat(name, pos));
+    }
+    return store.get(name)!;
+  };
+
+  const addPitch = (side: 'home' | 'away', name: string) => {
+    const roster = side === 'home' ? rosterHome : rosterAway;
+    const pos = roster.get(name)?.pos;
+    const store = side === 'home' ? pitchHome : pitchAway;
+    if (!store.has(name)) {
+      store.set(name, ensurePitcherStat(name, pos));
+    }
+    return store.get(name)!;
+  };
+
+  const pitcherOfSide = (side: 'home' | 'away') => {
+    const lineup = side === 'home' ? record.lineups.home : record.lineups.away;
+    return lineup.find((p) => p.pos.toUpperCase() === 'P')?.name;
+  };
+
+  [...record.feed].reverse().forEach((entry) => {
+    const name = entry.batter?.trim();
+    if (!name) return;
+    const side = rosterHome.has(name) ? 'home' : rosterAway.has(name) ? 'away' : null;
+    if (!side) return;
+    const kind = classifyResult(entry.result);
+    if (!kind) return;
+    const defenseSide = side === 'home' ? 'away' : 'home';
+    const pitcherName = pitcherOfSide(defenseSide);
+    let pitcherStat: PitcherStat | null = null;
+    if (pitcherName) {
+      pitcherStat = addPitch(defenseSide, pitcherName);
+    }
+    const stat = addStat(side, name);
+    switch (kind) {
+      case 'single':
+        stat.pa += 1;
+        stat.ab += 1;
+        stat.h += 1;
+        stat.singles += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.h += 1;
+        }
+        break;
+      case 'double':
+        stat.pa += 1;
+        stat.ab += 1;
+        stat.h += 1;
+        stat.doubles += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.h += 1;
+        }
+        break;
+      case 'triple':
+        stat.pa += 1;
+        stat.ab += 1;
+        stat.h += 1;
+        stat.triples += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.h += 1;
+        }
+        break;
+      case 'hr':
+        stat.pa += 1;
+        stat.ab += 1;
+        stat.h += 1;
+        stat.hr += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.h += 1;
+          pitcherStat.hr += 1;
+        }
+        break;
+      case 'bb':
+        stat.pa += 1;
+        stat.bb += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.bb += 1;
+        }
+        break;
+      case 'hbp':
+        stat.pa += 1;
+        stat.hbp += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.hbp += 1;
+        }
+        break;
+      case 'so':
+        stat.pa += 1;
+        stat.ab += 1;
+        stat.so += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.outs += 1;
+          pitcherStat.so += 1;
+        }
+        break;
+      case 'out':
+        stat.pa += 1;
+        stat.ab += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.outs += 1;
+        }
+        break;
+      case 'sac':
+        stat.pa += 1;
+        stat.sac += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.outs += 1;
+        }
+        break;
+      default:
+        break;
+    }
+  });
+
+  const toArray = (roster: Map<string, { pos?: string; order: number }>, store: Map<string, PlayerStat>) => {
+    const names = [...roster.entries()].sort((a, b) => a[1].order - b[1].order).map(([name]) => name);
+    const fromRoster = names.map((name) => {
+      const base = ensurePlayerStat(name, roster.get(name)?.pos);
+      const stat = store.get(name);
+      return stat ? { ...base, ...stat, pos: stat.pos ?? base.pos } : base;
+    });
+    const extra = [...store.values()].filter((s) => !roster.has(s.name));
+    return [...fromRoster, ...extra];
+  };
+
+  const toPitcherArray = (roster: Map<string, { pos?: string; order: number }>, store: Map<string, PitcherStat>) => {
+    const names = [...roster.entries()]
+      .filter(([, meta]) => (meta.pos ?? '').toUpperCase() === 'P')
+      .sort((a, b) => a[1].order - b[1].order)
+      .map(([name]) => name);
+    const baseList = names.map((name) => {
+      const base = ensurePitcherStat(name, roster.get(name)?.pos);
+      const stat = store.get(name);
+      return stat ? { ...base, ...stat, pos: stat.pos ?? base.pos } : base;
+    });
+    const extra = [...store.values()].filter((s) => !roster.has(s.name));
+    return [...baseList, ...extra];
+  };
+
+  return {
+    hitters: {
+      home: toArray(rosterHome, statsHome),
+      away: toArray(rosterAway, statsAway),
+    },
+    pitchers: {
+      home: toPitcherArray(rosterHome, pitchHome),
+      away: toPitcherArray(rosterAway, pitchAway),
+    },
+  };
+}
+
 export default function ScorekeeperPage() {
   const { state, actions } = useDemoStore();
   const homeTeam = useMemo(() => TEAMS.find((t) => t.id === state.homeTeamId), [state.homeTeamId]);
@@ -154,6 +410,7 @@ export default function ScorekeeperPage() {
   const isGameOver = state.gameOver;
   const isExporting = Boolean(pendingExportId);
   const canUndo = state.history.length > 0;
+  const playerStats = useMemo(() => buildPlayerStats(recordPayload), [recordPayload]);
 
   useEffect(() => {
     if (state.gameOver) {
@@ -562,6 +819,24 @@ export default function ScorekeeperPage() {
               highlightPitcherName={defenseSide === 'away' ? currentPitcher : undefined}
             />
           </div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          padding: '0 18px 18px',
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '14px',
+        }}
+      >
+        <div style={{ display: 'grid', gap: '10px' }}>
+          <StatsTable title={`${state.teamNames.home} 타자 기록`} stats={playerStats.hitters.home} variant="batter" />
+          <StatsTable title={`${state.teamNames.home} 투수 기록`} stats={playerStats.pitchers.home} variant="pitcher" />
+        </div>
+        <div style={{ display: 'grid', gap: '10px' }}>
+          <StatsTable title={`${state.teamNames.away} 타자 기록`} stats={playerStats.hitters.away} variant="batter" />
+          <StatsTable title={`${state.teamNames.away} 투수 기록`} stats={playerStats.pitchers.away} variant="pitcher" />
         </div>
       </div>
 
@@ -1519,6 +1794,155 @@ function TeamEditor({
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function StatsTable({
+  title,
+  stats,
+  variant,
+}: {
+  title: string;
+  stats: PlayerStat[] | PitcherStat[];
+  variant: 'batter' | 'pitcher';
+}) {
+  const isBatter = variant === 'batter';
+  const columns = isBatter
+    ? [
+        { key: 'name', label: '선수', width: '90px' },
+        { key: 'pa', label: '타석' },
+        { key: 'ab', label: '타수' },
+        { key: 'h', label: '안타' },
+        { key: 'singles', label: '1루타' },
+        { key: 'doubles', label: '2루타' },
+        { key: 'triples', label: '3루타' },
+        { key: 'hr', label: '홈런' },
+        { key: 'bb', label: '볼넷' },
+        { key: 'hbp', label: '사구' },
+        { key: 'so', label: '삼진' },
+        { key: 'sac', label: '희생플라이' },
+        { key: 'avg', label: '타율' },
+        { key: 'obp', label: '출루율' },
+      ]
+    : [
+        { key: 'name', label: '선수', width: '90px' },
+        { key: 'bf', label: '타자상대' },
+        { key: 'outs', label: '이닝' },
+        { key: 'h', label: '피안타' },
+        { key: 'hr', label: '피홈런' },
+        { key: 'bb', label: '볼넷' },
+        { key: 'hbp', label: '사구' },
+        { key: 'so', label: '탈삼진' },
+      ];
+
+  const rows = isBatter
+    ? (stats as PlayerStat[]).map((stat) => {
+        const avg = stat.ab > 0 ? stat.h / stat.ab : 0;
+        const obpDen = stat.ab + stat.bb + stat.hbp + stat.sac;
+        const obp = obpDen > 0 ? (stat.h + stat.bb + stat.hbp) / obpDen : 0;
+        const fmt = (val: number) => (Number.isFinite(val) ? val.toFixed(3).replace(/^0/, '') : '-');
+        return { ...stat, avg: stat.ab > 0 ? fmt(avg) : '-', obp: obpDen > 0 ? fmt(obp) : '-' };
+      })
+    : (stats as PitcherStat[]).map((stat) => {
+        const ip = `${Math.floor(stat.outs / 3)}.${stat.outs % 3}`;
+        return { ...stat, outsIp: ip };
+      });
+
+  return (
+    <div
+      style={{
+        background: '#0b0f1a',
+        border: '1px solid rgba(148, 163, 184, 0.2)',
+        borderRadius: '14px',
+        padding: '12px',
+        display: 'grid',
+        gap: '10px',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontWeight: 900, color: '#e2e8f0' }}>{title}</span>
+        <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>실시간 자동 집계 (타석 기준)</span>
+      </div>
+      <div
+        style={{
+          overflowX: 'auto',
+          borderRadius: '10px',
+          border: '1px solid rgba(148, 163, 184, 0.15)',
+        }}
+      >
+        <table
+          style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            color: '#e2e8f0',
+            fontSize: '12px',
+            minWidth: isBatter ? '560px' : '460px',
+          }}
+        >
+          <thead style={{ background: 'rgba(255,255,255,0.04)' }}>
+            <tr>
+              {columns.map((col) => (
+                <th
+                  key={col.key}
+                  style={{
+                    textAlign: col.key === 'name' ? 'left' : 'center',
+                    padding: '6px 4px',
+                    borderBottom: '1px solid rgba(148, 163, 184, 0.2)',
+                    minWidth: col.width ?? '50px',
+                    fontWeight: 800,
+                    color: '#cbd5e1',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {col.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, idx) => (
+              <tr
+                key={row.name + idx}
+                style={{
+                  background: idx % 2 === 0 ? 'rgba(15, 23, 42, 0.5)' : 'rgba(15, 23, 42, 0.3)',
+                }}
+              >
+                {columns.map((col) => (
+                  <td
+                    key={col.key}
+                    style={{
+                      padding: '6px 4px',
+                      textAlign: col.key === 'name' ? 'left' : 'center',
+                      borderBottom: '1px solid rgba(148, 163, 184, 0.08)',
+                      fontWeight: col.key === 'name' ? 800 : 700,
+                      color: col.key === 'name' ? '#e2e8f0' : '#cbd5e1',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {col.key === 'name' ? (
+                      <span>
+                        {row.name}
+                        {row.pos ? (
+                          <span style={{ color: '#94a3b8', marginLeft: '4px', fontWeight: 700 }}>({row.pos.toUpperCase()})</span>
+                        ) : null}
+                      </span>
+                    ) : (
+                      (() => {
+                        const value =
+                          col.key === 'outs' && !isBatter
+                            ? (row as PitcherStat & { outsIp?: string }).outsIp ?? (row as PitcherStat).outs
+                            : (row as Record<string, string | number | undefined>)[col.key];
+                        return value ?? '-';
+                      })()
+                    )}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
