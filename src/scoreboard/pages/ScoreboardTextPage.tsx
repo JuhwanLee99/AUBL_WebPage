@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import ScoreboardPanel from '../components/ScoreboardPanel';
-import { useDemoStore } from '../../shared/state/demoStore';
+import { useDemoStore, buildGameRecord } from '../../shared/state/demoStore';
 
 type Half = 'top' | 'bottom';
 
@@ -46,11 +46,11 @@ export default function ScoreboardTextPage() {
   const currentBatter = activeOffense[state.batterIndex[hittingSide] % (activeOffense.length || 1)]?.name ?? '타자';
   const currentPitcher = state.lineups[defenseSide].find((slot) => slot.pos.toUpperCase() === 'P')?.name ?? '투수';
   const currentInning = state.inning;
-  const currentHalf = state.half;
 
   const batterToday = useMemo(() => computeBatterLine(feed, hittingSide, currentBatter), [feed, hittingSide, currentBatter]);
   const pitcherToday = useMemo(() => computePitcherLine(feed, defenseSide, currentPitcher), [feed, defenseSide, currentPitcher]);
   const jerseyMap = useMemo(() => buildJerseyMap(state.lineups), [state.lineups]);
+  const playerStats = useMemo(() => buildPlayerStats(buildGameRecord(state)), [state]);
   const displayItems = useMemo(() => buildDisplayItems(feed, jerseyMap), [feed, jerseyMap]);
   const sections = useMemo(() => groupByInning(displayItems), [displayItems]);
   const collapsedMap = useMemo(() => {
@@ -86,7 +86,7 @@ export default function ScoreboardTextPage() {
               aspectRatio: '4 / 3',
             }}
           />
-          <div style={{ marginTop: '-270px' }}>
+          <div style={{ marginTop: '20px' }}>
             <NowPlayingCard
               batter={currentBatter}
               pitcher={currentPitcher}
@@ -108,7 +108,7 @@ export default function ScoreboardTextPage() {
         background: '#0b0f1a',
         color: '#e2e8f0',
         minHeight: 0,
-        height: 'min(90vh, 940px)',
+        height: 'min(90vh, 925px)',
         overflow: 'hidden',
       }}
     >
@@ -124,6 +124,24 @@ export default function ScoreboardTextPage() {
             <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>총 {feed.length}건</span>
           </div>
           <LiveFeed sections={sections} collapsedMap={collapsedMap} />
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '12px',
+          padding: '0 2px',
+        }}
+      >
+        <div style={{ display: 'grid', gap: '8px' }}>
+          <StatsTable title={`${state.teamNames.home} 타자 기록`} stats={playerStats.hitters.home} variant="batter" />
+          <StatsTable title={`${state.teamNames.home} 투수 기록`} stats={playerStats.pitchers.home} variant="pitcher" />
+        </div>
+        <div style={{ display: 'grid', gap: '8px' }}>
+          <StatsTable title={`${state.teamNames.away} 타자 기록`} stats={playerStats.hitters.away} variant="batter" />
+          <StatsTable title={`${state.teamNames.away} 투수 기록`} stats={playerStats.pitchers.away} variant="pitcher" />
         </div>
       </div>
     </div>
@@ -243,8 +261,8 @@ function LiveFeed({ sections, collapsedMap }: { sections: ReturnType<typeof grou
     <div
       style={{
         overflowY: 'auto',
-        maxHeight: '870px',
-        height: 'min(75vh, 870px)',
+        maxHeight: '855px',
+        height: 'min(75vh, 855px)',
         paddingRight: '6px',
         display: 'flex',
         flexDirection: 'column',
@@ -655,4 +673,403 @@ function colorizeText(text: string) {
     parts.push({ text: text.slice(lastIndex), key: `${lastIndex}-${text.length}` });
   }
   return parts;
+}
+
+type PlayerStat = {
+  name: string;
+  pos?: string;
+  pa: number;
+  ab: number;
+  h: number;
+  singles: number;
+  doubles: number;
+  triples: number;
+  hr: number;
+  bb: number;
+  hbp: number;
+  so: number;
+  sac: number;
+};
+
+type PitcherStatExt = {
+  name: string;
+  pos?: string;
+  bf: number;
+  pitches: number;
+  strikes: number;
+  balls: number;
+  outs: number;
+  h: number;
+  hr: number;
+  bb: number;
+  hbp: number;
+  so: number;
+};
+
+function ensurePlayerStat(name: string, pos?: string): PlayerStat {
+  return {
+    name,
+    pos,
+    pa: 0,
+    ab: 0,
+    h: 0,
+    singles: 0,
+    doubles: 0,
+    triples: 0,
+    hr: 0,
+    bb: 0,
+    hbp: 0,
+    so: 0,
+    sac: 0,
+  };
+}
+
+function ensurePitcherStat(name: string, pos?: string): PitcherStatExt {
+  return {
+    name,
+    pos,
+    bf: 0,
+    pitches: 0,
+    strikes: 0,
+    balls: 0,
+    outs: 0,
+    h: 0,
+    hr: 0,
+    bb: 0,
+    hbp: 0,
+    so: 0,
+  };
+}
+
+function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
+  const rosterHome = new Map<string, { pos?: string; order: number }>();
+  const rosterAway = new Map<string, { pos?: string; order: number }>();
+  record.lineups.home.forEach((p, idx) => rosterHome.set(p.name, { pos: p.pos, order: idx }));
+  record.lineups.away.forEach((p, idx) => rosterAway.set(p.name, { pos: p.pos, order: idx }));
+  record.benches.home.forEach((p, idx) => {
+    if (!rosterHome.has(p.name)) rosterHome.set(p.name, { pos: p.pos, order: 100 + idx });
+  });
+  record.benches.away.forEach((p, idx) => {
+    if (!rosterAway.has(p.name)) rosterAway.set(p.name, { pos: p.pos, order: 100 + idx });
+  });
+
+  const statsHome = new Map<string, PlayerStat>();
+  const statsAway = new Map<string, PlayerStat>();
+  const pitchHome = new Map<string, PitcherStatExt>();
+  const pitchAway = new Map<string, PitcherStatExt>();
+
+  const addStat = (side: 'home' | 'away', name: string) => {
+    const roster = side === 'home' ? rosterHome : rosterAway;
+    const pos = roster.get(name)?.pos;
+    const store = side === 'home' ? statsHome : statsAway;
+    if (!store.has(name)) {
+      store.set(name, ensurePlayerStat(name, pos));
+    }
+    return store.get(name)!;
+  };
+
+  const addPitch = (side: 'home' | 'away', name: string) => {
+    const roster = side === 'home' ? rosterHome : rosterAway;
+    const pos = roster.get(name)?.pos;
+    const store = side === 'home' ? pitchHome : pitchAway;
+    if (!store.has(name)) {
+      store.set(name, ensurePitcherStat(name, pos));
+    }
+    return store.get(name)!;
+  };
+
+  const pitcherOfSide = (side: 'home' | 'away') => {
+    const lineup = side === 'home' ? record.lineups.home : record.lineups.away;
+    return lineup.find((p) => p.pos.toUpperCase() === 'P')?.name;
+  };
+
+  [...record.feed].reverse().forEach((entry) => {
+    const name = entry.batter?.trim();
+    if (!name) return;
+    const side = rosterHome.has(name) ? 'home' : rosterAway.has(name) ? 'away' : null;
+    if (!side) return;
+    const pitchSide = side === 'home' ? 'away' : 'home';
+    const pitcherName = pitcherOfSide(pitchSide);
+    const pitcherStat = pitcherName ? addPitch(pitchSide, pitcherName) : null;
+    const pitchInfo = classifyPitch(entry.result);
+    if (pitcherStat && pitchInfo.pitch) {
+      pitcherStat.pitches += 1;
+      if (pitchInfo.strike) pitcherStat.strikes += 1;
+      if (pitchInfo.ball) pitcherStat.balls += 1;
+    }
+    const kind = classifyResult(entry.result);
+    if (!kind) return;
+    const stat = addStat(side, name);
+    switch (kind) {
+      case 'single':
+        stat.pa += 1;
+        stat.ab += 1;
+        stat.h += 1;
+        stat.singles += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.h += 1;
+        }
+        break;
+      case 'double':
+        stat.pa += 1;
+        stat.ab += 1;
+        stat.h += 1;
+        stat.doubles += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.h += 1;
+        }
+        break;
+      case 'triple':
+        stat.pa += 1;
+        stat.ab += 1;
+        stat.h += 1;
+        stat.triples += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.h += 1;
+        }
+        break;
+      case 'hr':
+        stat.pa += 1;
+        stat.ab += 1;
+        stat.h += 1;
+        stat.hr += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.h += 1;
+          pitcherStat.hr += 1;
+        }
+        break;
+      case 'bb':
+        stat.pa += 1;
+        stat.bb += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.bb += 1;
+        }
+        break;
+      case 'hbp':
+        stat.pa += 1;
+        stat.hbp += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.hbp += 1;
+        }
+        break;
+      case 'so':
+        stat.pa += 1;
+        stat.ab += 1;
+        stat.so += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.outs += 1;
+          pitcherStat.so += 1;
+        }
+        break;
+      case 'out':
+        stat.pa += 1;
+        stat.ab += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.outs += 1;
+        }
+        break;
+      case 'sac':
+        stat.pa += 1;
+        stat.sac += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.outs += 1;
+        }
+        break;
+      default:
+        break;
+    }
+  });
+
+  const toArray = (roster: Map<string, { pos?: string; order: number }>, store: Map<string, PlayerStat>) => {
+    const names = [...roster.entries()].sort((a, b) => a[1].order - b[1].order).map(([name]) => name);
+    const fromRoster = names
+      .map((name) => {
+        const meta = roster.get(name);
+        const isPitcher = (meta?.pos ?? '').toUpperCase() === 'P';
+        const stat = store.get(name);
+        if (isPitcher && !stat) return null;
+        const base = ensurePlayerStat(name, meta?.pos);
+        return stat ? { ...base, ...stat, pos: stat.pos ?? base.pos } : base;
+      })
+      .filter(Boolean) as PlayerStat[];
+    const extra = [...store.values()].filter((s) => !roster.has(s.name));
+    return [...fromRoster, ...extra];
+  };
+
+  const toPitcherArray = (roster: Map<string, { pos?: string; order: number }>, store: Map<string, PitcherStatExt>) => {
+    const names = [...roster.entries()]
+      .filter(([, meta]) => (meta.pos ?? '').toUpperCase() === 'P')
+      .sort((a, b) => a[1].order - b[1].order)
+      .map(([name]) => name);
+    const fromRoster = names.map((name) => {
+      const base = ensurePitcherStat(name, roster.get(name)?.pos);
+      const stat = store.get(name);
+      return stat ? { ...base, ...stat, pos: stat.pos ?? base.pos } : base;
+    });
+    const extra = [...store.values()].filter((s) => !roster.has(s.name));
+    return [...fromRoster, ...extra];
+  };
+
+  return {
+    hitters: {
+      home: toArray(rosterHome, statsHome),
+      away: toArray(rosterAway, statsAway),
+    },
+    pitchers: {
+      home: toPitcherArray(rosterHome, pitchHome),
+      away: toPitcherArray(rosterAway, pitchAway),
+    },
+  };
+}
+
+function StatsTable({ title, stats, variant }: { title: string; stats: PlayerStat[] | PitcherStatExt[]; variant: 'batter' | 'pitcher' }) {
+  const isBatter = variant === 'batter';
+  const columns = isBatter
+    ? [
+        { key: 'name', label: '선수', width: '100px' },
+        { key: 'pa', label: '타석' },
+        { key: 'ab', label: '타수' },
+        { key: 'h', label: '안타' },
+        { key: 'singles', label: '1루타' },
+        { key: 'doubles', label: '2루타' },
+        { key: 'triples', label: '3루타' },
+        { key: 'hr', label: '홈런' },
+        { key: 'bb', label: '볼넷' },
+        { key: 'hbp', label: '사구' },
+        { key: 'so', label: '삼진' },
+        { key: 'sac', label: '희생' },
+        { key: 'avg', label: '타율' },
+        { key: 'obp', label: '출루율' },
+      ]
+    : [
+        { key: 'name', label: '선수', width: '100px' },
+        { key: 'bf', label: '타자상대' },
+        { key: 'pitchCombo', label: '투구수(S/B)' },
+        { key: 'outs', label: '이닝' },
+        { key: 'h', label: '피안타' },
+        { key: 'hr', label: '피홈런' },
+        { key: 'bb', label: '볼넷' },
+        { key: 'hbp', label: '사구' },
+        { key: 'so', label: '탈삼진' },
+      ];
+
+  const rows = isBatter
+    ? (stats as PlayerStat[]).map((stat) => {
+        const avg = stat.ab > 0 ? stat.h / stat.ab : 0;
+        const obpDen = stat.ab + stat.bb + stat.hbp + stat.sac;
+        const obp = obpDen > 0 ? (stat.h + stat.bb + stat.hbp) / obpDen : 0;
+        const fmt = (val: number) => (Number.isFinite(val) ? val.toFixed(3).replace(/^0/, '') : '-');
+        return { ...stat, avg: stat.ab > 0 ? fmt(avg) : '-', obp: obpDen > 0 ? fmt(obp) : '-' };
+      })
+    : (stats as PitcherStatExt[]).map((stat) => {
+        const ip = `${Math.floor(stat.outs / 3)}.${stat.outs % 3}`;
+        return { ...stat, outsIp: ip, pitchCombo: `${stat.pitches} (${stat.strikes}/${stat.balls})` };
+      });
+
+  return (
+    <div
+      style={{
+        background: '#0b0f1a',
+        border: '1px solid rgba(148, 163, 184, 0.2)',
+        borderRadius: '12px',
+        padding: '10px',
+        display: 'grid',
+        gap: '8px',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontWeight: 900, color: '#e2e8f0', fontSize: '14px' }}>{title}</span>
+        <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '11px' }}>실시간 자동 집계</span>
+      </div>
+      <div
+        style={{
+          overflowX: 'auto',
+          borderRadius: '8px',
+          border: '1px solid rgba(148, 163, 184, 0.15)',
+        }}
+      >
+        <table
+          style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            color: '#e2e8f0',
+            fontSize: '11px',
+            minWidth: isBatter ? '560px' : '520px',
+          }}
+        >
+          <thead style={{ background: 'rgba(255,255,255,0.04)' }}>
+            <tr>
+              {columns.map((col) => (
+                <th
+                  key={col.key}
+                  style={{
+                    textAlign: col.key === 'name' ? 'left' : 'center',
+                    padding: '6px 5px',
+                    borderBottom: '1px solid rgba(148, 163, 184, 0.2)',
+                    minWidth: col.width ?? '50px',
+                    fontWeight: 800,
+                    color: '#cbd5e1',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {col.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, idx) => (
+              <tr
+                key={row.name + idx}
+                style={{
+                  background: idx % 2 === 0 ? 'rgba(15, 23, 42, 0.5)' : 'rgba(15, 23, 42, 0.3)',
+                }}
+              >
+                {columns.map((col) => (
+                  <td
+                    key={col.key}
+                    style={{
+                      padding: '6px 5px',
+                      textAlign: col.key === 'name' ? 'left' : 'center',
+                      borderBottom: '1px solid rgba(148, 163, 184, 0.08)',
+                      fontWeight: col.key === 'name' ? 800 : 700,
+                      color: col.key === 'name' ? '#e2e8f0' : '#cbd5e1',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {col.key === 'name' ? (
+                      <span>
+                        {row.name}
+                        {(row as any).pos ? (
+                          <span style={{ color: '#94a3b8', marginLeft: '4px', fontWeight: 700 }}>
+                            ({(row as any).pos.toUpperCase()})
+                          </span>
+                        ) : null}
+                      </span>
+                    ) : (
+                      (() => {
+                        if (!isBatter && col.key === 'outs') {
+                          return (row as any).outsIp ?? (row as any).outs;
+                        }
+                        return (row as any)[col.key] ?? '-';
+                      })()
+                    )}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
