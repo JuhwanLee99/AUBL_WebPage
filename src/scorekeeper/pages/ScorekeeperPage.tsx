@@ -1288,6 +1288,7 @@ function ActionModal({
         <>
           <RunnerActionButton label="도루 성공" color="#22c55e" onClick={() => actions.runnerStealSuccess(data.base)} />
           <RunnerActionButton label="도루자 아웃" color="#ef4444" onClick={() => actions.runnerCaught(data.base)} />
+          <RunnerActionButton label="견제사" color="#ef4444" onClick={() => actions.runnerPickoff(data.base)} />
           <RunnerActionButton label="주루사" color="#ef4444" onClick={() => actions.runnerOut(data.base)} />
         </>
       );
