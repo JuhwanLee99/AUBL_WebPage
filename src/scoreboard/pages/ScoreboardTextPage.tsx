@@ -33,7 +33,6 @@ type PitcherLine = {
 type DisplayItem =
   | { type: 'marker'; text: string; color: string; key: string; inning: number; half: Half }
   | { type: 'batter'; text: string; key: string; inning: number; half: Half }
-  | { type: 'pitcher'; text: string; key: string; inning: number; half: Half }
   | { type: 'log'; text: string; key: string; chip: string; inning: number; half: Half };
 
 export default function ScoreboardTextPage() {
@@ -338,10 +337,24 @@ function LiveFeed({
                       </div>
                     );
                   }
-                  if (item.type === 'batter' || item.type === 'pitcher') {
+                  if (item.type === 'batter') {
                     return (
                       <div key={item.key} style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '13px', padding: '2px 0' }}>
                         {item.text}
+                      </div>
+                    );
+                  }
+                  if (
+                    item.type === 'log' &&
+                    (item.text.includes('투수 교체') || item.text.trim().endsWith('투수'))
+                  ) {
+                    return (
+                      <div key={item.key} style={{ color: '#e2e8f0', fontWeight: 900, fontSize: '13px', padding: '2px 0' }}>
+                        {colorizeText(item.text).map((part) => (
+                          <span key={part.key} style={{ color: part.color ?? '#e2e8f0', fontWeight: part.color ? 900 : 800 }}>
+                            {part.text}
+                          </span>
+                        ))}
                       </div>
                     );
                   }
@@ -579,12 +592,10 @@ function buildDisplayItems(
   let prevHalf: Half | null = null;
   let prevInning: number | null = null;
   let prevBatter: string | null = null;
-  let prevPitcher: string | null = null;
   const endedInnings = new Set<string>();
 
   chronological.forEach((entry, idx) => {
     const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
-    const defenseSide: 'home' | 'away' = offenseSide === 'home' ? 'away' : 'home';
 
     const isEndMarker = entry.result.includes('종료');
     if (isEndMarker) {
@@ -608,26 +619,17 @@ function buildDisplayItems(
       return;
     }
 
-    if (idx === 0) {
+    const isNewHalf = idx === 0 || entry.inning !== prevInning || entry.half !== prevHalf;
+    if (isNewHalf) {
       items.push({
         type: 'marker',
         text: markerText(entry.inning, entry.half, 'start'),
         color: '#22c55e',
-        key: `start-${entry.inning}-${entry.half}-init`,
-        inning: entry.inning,
-        half: entry.half,
-      });
-    } else if (entry.inning !== prevInning || entry.half !== prevHalf) {
-      items.push({
-        type: 'marker',
-        text: markerText(entry.inning, entry.half, 'start'),
-        color: '#22c55e',
-        key: `start-${entry.inning}-${entry.half}-${idx}`,
+        key: `start-${entry.inning}-${entry.half}-${idx === 0 ? 'init' : idx}`,
         inning: entry.inning,
         half: entry.half,
       });
       prevBatter = null;
-      prevPitcher = null;
     }
 
     if (entry.batter) {
@@ -636,28 +638,6 @@ function buildDisplayItems(
       if (entry.batter !== prevBatter) {
         items.push({ type: 'batter', text: batterText, key: `batter-${entry.inning}-${entry.half}-${entry.batter}-${idx}`, inning: entry.inning, half: entry.half });
         prevBatter = entry.batter;
-      }
-    }
-
-    const defensePitcherName = (() => {
-      const lookup = jerseyMap[defenseSide];
-      const pitcherEntry = [...lookup.entries()].find(([, meta]) => meta.pos.toUpperCase() === 'P');
-      if (!pitcherEntry) return '';
-      return pitcherEntry[0];
-    })();
-    if (defensePitcherName) {
-      const jersey = jerseyMap[defenseSide].get(defensePitcherName)?.number;
-      if (defensePitcherName !== prevPitcher) {
-        items.push({
-          type: 'pitcher',
-          text: prevPitcher
-            ? `${prevPitcher} → ${defensePitcherName}${jersey ? `(${jersey})` : ''} 투수 교체`
-            : `${defensePitcherName}${jersey ? `(${jersey})` : ''} 투수`,
-          key: `pitcher-${entry.inning}-${entry.half}-${idx}`,
-          inning: entry.inning,
-          half: entry.half,
-        });
-        prevPitcher = defensePitcherName;
       }
     }
 
