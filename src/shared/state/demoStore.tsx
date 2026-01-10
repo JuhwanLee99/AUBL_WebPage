@@ -298,7 +298,7 @@ function reducer(state: DemoState, action: Action): DemoState {
           balls: state.balls + 1,
           pitchCount,
           lastPlay: '볼',
-          feed: pushFeed(state.feed, createLogEntry(state, '볼', pitchCount)),
+          feed: pushPlayFeed(state, createLogEntry(state, '볼', pitchCount)),
         };
       }
       break;
@@ -312,7 +312,7 @@ function reducer(state: DemoState, action: Action): DemoState {
           strikes: state.strikes + 1,
           pitchCount,
           lastPlay: '스트라이크',
-          feed: pushFeed(state.feed, createLogEntry(state, '스트라이크', pitchCount)),
+          feed: pushPlayFeed(state, createLogEntry(state, '스트라이크', pitchCount)),
         };
       }
       break;
@@ -323,7 +323,7 @@ function reducer(state: DemoState, action: Action): DemoState {
           ...state,
           pitchCount,
           lastPlay: '파울',
-          feed: pushFeed(state.feed, createLogEntry(state, '파울', pitchCount)),
+          feed: pushPlayFeed(state, createLogEntry(state, '파울', pitchCount)),
         };
       } else {
         const pitchCount = state.pitchCount + 1;
@@ -332,7 +332,7 @@ function reducer(state: DemoState, action: Action): DemoState {
           strikes: state.strikes + 1,
           pitchCount,
           lastPlay: '파울',
-          feed: pushFeed(state.feed, createLogEntry(state, '파울', pitchCount)),
+          feed: pushPlayFeed(state, createLogEntry(state, '파울', pitchCount)),
         };
       }
       break;
@@ -376,7 +376,7 @@ function reducer(state: DemoState, action: Action): DemoState {
         strikes: 0,
         pitchCount: 0,
         lastPlay: '카운트 리셋',
-        feed: pushFeed(state.feed, createLogEntry(state, '카운트 리셋', 0)),
+        feed: pushPlayFeed(state, createLogEntry(state, '카운트 리셋', 0)),
       };
       break;
     case 'clearBases':
@@ -391,7 +391,7 @@ function reducer(state: DemoState, action: Action): DemoState {
       nextState = changeHalf(state, '이닝 전환');
       break;
     case 'setPlay':
-      nextState = { ...state, lastPlay: action.message, feed: pushFeed(state.feed, createLogEntry(state, action.message, 0)) };
+      nextState = { ...state, lastPlay: action.message, feed: pushPlayFeed(state, createLogEntry(state, action.message, 0)) };
       break;
     case 'runnerStealSuccess':
       nextState = applyRunnerAdvance(state, action.base, 1, '도루 성공');
@@ -440,6 +440,30 @@ function reducer(state: DemoState, action: Action): DemoState {
 
 function pushFeed(feed: PlayLog[], entry: PlayLog) {
   return [entry, ...feed];
+}
+
+function ensureHalfPitcherLogged(state: DemoState, feed: PlayLog[]) {
+  const exists = feed.some(
+    (entry) => entry.inning === state.inning && entry.half === state.half && entry.result.endsWith('투수'),
+  );
+  if (exists) return feed;
+  const defenseSide: Side = state.half === 'top' ? 'home' : 'away';
+  const pitcher = state.lineups[defenseSide].find((slot) => slot.pos.toUpperCase() === 'P');
+  if (!pitcher) return feed;
+  const pitcherEntry: PlayLog = {
+    inning: state.inning,
+    half: state.half,
+    order: 0,
+    batter: '',
+    pitch: 0,
+    result: `${pitcher.name}${pitcher.number ? `(${pitcher.number})` : ''} 투수`,
+  };
+  return pushFeed(feed, pitcherEntry);
+}
+
+function pushPlayFeed(state: DemoState, entry: PlayLog, baseFeed?: PlayLog[]) {
+  const withPitcher = ensureHalfPitcherLogged(state, baseFeed ?? state.feed);
+  return pushFeed(withPitcher, entry);
 }
 
 function baseLabel(idx: number) {
@@ -509,7 +533,7 @@ function applyOut(
   const logResult = `${message} (${outs} 아웃)`;
   if (outs >= 3) {
     const finalMessage = `${message} · 3아웃 · 이닝 종료`;
-    const feedWithPlay = pushFeed(state.feed, createLogEntry(state, logResult, advanceBatter ? pitchNumber : 0));
+    const feedWithPlay = pushPlayFeed(state, createLogEntry(state, logResult, advanceBatter ? pitchNumber : 0));
     return changeHalf({ ...state, batterIndex, pitchCount, feed: feedWithPlay }, finalMessage, advanceBatter ? pitchNumber : 0, state);
   }
   return {
@@ -519,7 +543,7 @@ function applyOut(
     batterIndex,
     pitchCount,
     lastPlay: message,
-    feed: pushFeed(state.feed, createLogEntry(state, logResult, advanceBatter ? pitchNumber : 0)),
+    feed: pushPlayFeed(state, createLogEntry(state, logResult, advanceBatter ? pitchNumber : 0)),
   };
 }
 
@@ -542,7 +566,7 @@ function applyHit(state: DemoState, basesToAdvance: 1 | 2 | 3 | 4, pitchNumber: 
     pitchCount: 0,
     batterIndex,
     lastPlay: message,
-    feed: pushFeed(state.feed, createLogEntry(state, runs ? `${result} · ${runs}득점` : result, pitchNumber)),
+    feed: pushPlayFeed(state, createLogEntry(state, runs ? `${result} · ${runs}득점` : result, pitchNumber)),
   };
 }
 
@@ -563,7 +587,7 @@ function applyWalk(state: DemoState, message: string, pitchNumber: number): Demo
     pitchCount: 0,
     batterIndex,
     lastPlay: `${message} · ${batterName}`,
-    feed: pushFeed(state.feed, createLogEntry(state, runs ? `${message} · ${runs}득점` : message, pitchNumber)),
+    feed: pushPlayFeed(state, createLogEntry(state, runs ? `${message} · ${runs}득점` : message, pitchNumber)),
   };
 }
 
@@ -737,7 +761,7 @@ function applyDoublePlay(state: DemoState, outsToAdd: 2 | 3, label: string): Dem
     pitchCount: 0,
     batterIndex,
     lastPlay,
-    feed: pushFeed(state.feed, createLogEntry(state, feedText, Math.max(1, state.pitchCount + 1))),
+    feed: pushPlayFeed(state, createLogEntry(state, feedText, Math.max(1, state.pitchCount + 1))),
   };
 
   if (outs >= 3) {
@@ -765,6 +789,16 @@ function applyEndGame(state: DemoState, endedAt: string): DemoState {
 
 function createNewGame(state: DemoState): DemoState {
   const awayBatter = leadOffName(state.lineups.away);
+  const initialFeed: PlayLog[] = [
+    {
+      inning: 1,
+      half: 'top',
+      order: 1,
+      batter: awayBatter,
+      pitch: 0,
+      result: '새 경기 시작',
+    },
+  ];
   return {
     inning: 1,
     half: 'top',
@@ -775,16 +809,7 @@ function createNewGame(state: DemoState): DemoState {
     bases: [null, null, null],
     score: { home: 0, away: 0 },
     lastPlay: '새 경기 시작',
-    feed: [
-      {
-        inning: 1,
-        half: 'top',
-        order: 1,
-        batter: awayBatter,
-        pitch: 0,
-        result: '새 경기 시작',
-      },
-    ],
+    feed: initialFeed,
     homeTeamId: state.homeTeamId,
     awayTeamId: state.awayTeamId,
     batterIndex: { home: 0, away: 0 },
@@ -809,12 +834,10 @@ function changeHalf(state: DemoState, message: string, pitchNumber = 0, logState
   const logSource = logState ?? state;
   const inningLabel = `${state.inning}회${state.half === 'top' ? '초' : '말'}`;
   const endMarker = `${inningLabel} 종료`;
-  const shouldAddEndMarker = !(
-    state.feed[0] &&
-    state.feed[0].inning === state.inning &&
-    state.feed[0].half === state.half &&
-    state.feed[0].result.includes('종료')
+  const hasEndMarker = state.feed.some(
+    (entry) => entry.inning === state.inning && entry.half === state.half && entry.result.includes('종료'),
   );
+  const shouldAddEndMarker = !hasEndMarker;
   const feed = shouldAddEndMarker ? pushFeed(state.feed, createLogEntry(logSource, endMarker, pitchNumber)) : state.feed;
   return {
     ...state,
@@ -889,10 +912,22 @@ function substitutePlayer(state: DemoState, side: Side, benchIndex: number, line
   if (outgoing) {
     bench.push(outgoing);
   }
+  const incomingIsP = benchPlayer.pos.toUpperCase() === 'P';
+  const outgoingIsP = outgoing?.pos?.toUpperCase() === 'P';
+  const isPitcherChange = incomingIsP || outgoingIsP;
+  const formatPlayer = (player?: PlayerSlot) => {
+    if (!player) return '미정';
+    const num = player.number ? `(${player.number})` : '';
+    return `${player.name}${num}`;
+  };
+  const changeText = isPitcherChange ? `투수 교체 · ${formatPlayer(outgoing)} → ${formatPlayer(benchPlayer)}` : null;
+  const feed = changeText ? pushFeed(state.feed, createLogEntryForBaserunning(state, changeText, 0)) : state.feed;
   return {
     ...state,
     lineups: { ...state.lineups, [side]: lineup },
     benches: { ...state.benches, [side]: bench },
+    lastPlay: changeText ?? state.lastPlay,
+    feed,
   };
 }
 
