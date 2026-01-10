@@ -673,13 +673,14 @@ function groupByInning(items: DisplayItem[]) {
 }
 
 function colorizeText(text: string) {
-  const pattern = /(\d+\s*안타|\d+\s*아웃|득점|점수|도루\s*성공|도루\s*실패|도루|안타|2루타|3루타|루타|홈런|볼넷|아웃|삼진)/g;
+  const pattern =
+    /(\d+\s*안타|\d+\s*아웃|득점|점수|도루\s*성공|도루\s*실패|도루|안타|2루타|3루타|루타|홈런|볼넷|아웃|삼진|견제사)/g;
   const colorMap: Record<string, string> = {
     득점: '#facc15',
     점수: '#facc15',
-    '도루성공': '#38bdf8',
+    도루성공: '#38bdf8',
     '도루 성공': '#38bdf8',
-    '도루실패': '#f87171',
+    도루실패: '#f87171',
     '도루 실패': '#f87171',
     도루: '#38bdf8',
     안타: '#38bdf8',
@@ -702,6 +703,7 @@ function colorizeText(text: string) {
     '2아웃': '#f87171',
     '3아웃': '#f87171',
     삼진: '#f87171',
+    견제사: '#f87171',
   };
   const parts: Array<{ text: string; color?: string; key: string }> = [];
   let lastIndex = 0;

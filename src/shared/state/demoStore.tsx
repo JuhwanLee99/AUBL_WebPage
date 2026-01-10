@@ -66,6 +66,7 @@ type Action =
   | { type: 'setPlay'; message: string }
   | { type: 'runnerStealSuccess'; base: 0 | 1 | 2 }
   | { type: 'runnerCaught'; base: 0 | 1 | 2 }
+  | { type: 'runnerPickoff'; base: 0 | 1 | 2 }
   | { type: 'runnerOut'; base: 0 | 1 | 2 }
   | { type: 'setTeamName'; side: Side; name: string }
   | { type: 'setLineup'; side: Side; index: number; updates: Partial<PlayerSlot> }
@@ -386,6 +387,9 @@ function reducer(state: DemoState, action: Action): DemoState {
     case 'runnerCaught':
       nextState = applyRunnerOut(state, action.base, '도루자 아웃');
       break;
+    case 'runnerPickoff':
+      nextState = applyRunnerOut(state, action.base, '견제사');
+      break;
     case 'runnerOut':
       nextState = applyRunnerOut(state, action.base, '주루사');
       break;
@@ -430,11 +434,13 @@ function baseLabel(idx: number) {
   return idx >= 3 ? '홈' : `${idx + 1}루`;
 }
 
-function formatRunnerMove(runner: string, from: number, to: number, scored: boolean, baseMessage: string) {
+function formatRunnerMove(runner: string, from: number, to: number, scored: boolean, baseMessage: string, outsCount?: number) {
   const move = `${baseLabel(from)}→${baseLabel(to)}`;
   const scoredText = scored ? ' · 득점' : '';
   const feedText = `${baseMessage} · ${runner} ${move}${scoredText}`;
-  return { feedText, lastPlay: feedText };
+  const outText = outsCount && baseMessage.includes('아웃') ? ` · ${outsCount}아웃` : '';
+  const lastPlay = `${feedText}${outText}`;
+  return { feedText, lastPlay };
 }
 
 function currentBatterInfo(state: DemoState) {
@@ -577,7 +583,7 @@ function applySteal(state: DemoState, success: boolean): DemoState {
         break;
       }
     }
-    const detail = formatRunnerMove(runner, foundIndex ?? 0, foundIndex ?? 0, false, '도루 실패 아웃');
+    const detail = formatRunnerMove(runner, foundIndex ?? 0, foundIndex ?? 0, false, '도루 실패 아웃', state.outs + 1);
     const afterOut = applyOut({ ...state, bases }, detail.feedText, { advanceBatter: false, pitchNumber: 0 });
     return { ...afterOut, lastPlay: detail.lastPlay };
   }
@@ -650,7 +656,7 @@ function applyRunnerOut(state: DemoState, baseIndex: 0 | 1 | 2, message: string)
   bases[baseIndex] = null;
   const outs = state.outs + 1;
   const resetCounts = { balls: 0, strikes: 0 };
-  const detail = formatRunnerMove(runner ?? '주자', baseIndex, baseIndex, false, `${message}`);
+  const detail = formatRunnerMove(runner ?? '주자', baseIndex, baseIndex, false, `${message}`, outs);
   if (outs >= 3) {
     return changeHalf({ ...state, bases, outs, ...resetCounts }, `${detail.lastPlay} · 3아웃`);
   }
@@ -827,6 +833,7 @@ interface DemoStoreValue {
     nextHalf: () => void;
     runnerStealSuccess: (base: 0 | 1 | 2) => void;
     runnerCaught: (base: 0 | 1 | 2) => void;
+    runnerPickoff: (base: 0 | 1 | 2) => void;
     runnerOut: (base: 0 | 1 | 2) => void;
     setTeamName: (side: Side, name: string) => void;
     setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) => void;
@@ -905,6 +912,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       nextHalf: () => dispatch({ type: 'nextHalf' }),
       runnerStealSuccess: (base: 0 | 1 | 2) => dispatch({ type: 'runnerStealSuccess', base }),
       runnerCaught: (base: 0 | 1 | 2) => dispatch({ type: 'runnerCaught', base }),
+      runnerPickoff: (base: 0 | 1 | 2) => dispatch({ type: 'runnerPickoff', base }),
       runnerOut: (base: 0 | 1 | 2) => dispatch({ type: 'runnerOut', base }),
       setTeamName: (side: Side, name: string) => dispatch({ type: 'setTeamName', side, name }),
       setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) =>
