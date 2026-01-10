@@ -55,6 +55,8 @@ type Action =
   | { type: 'strikeOut' }
   | { type: 'out' }
   | { type: 'outWithMessage'; note: string }
+  | { type: 'doublePlay' }
+  | { type: 'triplePlay' }
   | { type: 'hit'; bases: 1 | 2 | 3 | 4 }
   | { type: 'walk' }
   | { type: 'hbp' }
@@ -342,6 +344,12 @@ function reducer(state: DemoState, action: Action): DemoState {
       break;
     case 'outWithMessage':
       nextState = applyOut(state, action.note, { pitchNumber: state.pitchCount + 1 });
+      break;
+    case 'doublePlay':
+      nextState = applyDoublePlay(state, 2, '병살타');
+      break;
+    case 'triplePlay':
+      nextState = applyDoublePlay(state, 3, '삼중살');
       break;
     case 'hit':
       nextState = applyHit(state, action.bases, state.pitchCount + 1);
@@ -693,6 +701,50 @@ function applyRunnerOut(state: DemoState, baseIndex: 0 | 1 | 2, message: string)
   };
 }
 
+function applyDoublePlay(state: DemoState, outsToAdd: 2 | 3, label: string): DemoState {
+  const bases = [...state.bases] as Bases;
+  const current = currentBatterInfo(state);
+  const batterName = current.batter;
+  const batterIndex = nextBatter(state).batterIndex;
+  const runnersOut: { name: string; base: number }[] = [];
+  const outs = Math.min(3, state.outs + outsToAdd);
+
+  // Batter out
+  runnersOut.push({ name: batterName, base: -1 });
+
+  // Remove lead runners
+  for (let i = 2; i >= 0 && runnersOut.length < outsToAdd; i -= 1) {
+    if (bases[i]) {
+      runnersOut.push({ name: bases[i] as string, base: i });
+      bases[i] = null;
+    }
+  }
+
+  const runnerDesc = runnersOut
+    .filter((r) => r.base >= 0)
+    .map((r) => `${r.name} ${baseLabel(r.base)}`)
+    .join(', ');
+  const feedText = runnerDesc ? `${label} · ${batterName} 아웃 / ${runnerDesc} 아웃` : `${label} · ${batterName} 아웃`;
+  const lastPlay = outs >= 3 ? `${feedText} · 이닝 종료` : feedText;
+
+  const nextState = {
+    ...state,
+    bases,
+    outs,
+    balls: 0,
+    strikes: 0,
+    pitchCount: 0,
+    batterIndex,
+    lastPlay,
+    feed: pushFeed(state.feed, createLogEntry(state, feedText, Math.max(1, state.pitchCount + 1))),
+  };
+
+  if (outs >= 3) {
+    return changeHalf(nextState, lastPlay, state.pitchCount + 1, state);
+  }
+  return nextState;
+}
+
 function applyEndGame(state: DemoState, endedAt: string): DemoState {
   if (state.gameOver) return state;
   const message = '경기 종료';
@@ -869,6 +921,8 @@ interface DemoStoreValue {
     resetGame: () => void;
     undo: () => void;
     addOutWithMessage: (note: string) => void;
+    doublePlay: () => void;
+    triplePlay: () => void;
   };
 }
 
@@ -941,6 +995,8 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       runnerPickoff: (base: 0 | 1 | 2) => dispatch({ type: 'runnerPickoff', base }),
       runnerOut: (base: 0 | 1 | 2) => dispatch({ type: 'runnerOut', base }),
       addOutWithMessage: (note: string) => dispatch({ type: 'outWithMessage', note }),
+      doublePlay: () => dispatch({ type: 'doublePlay' }),
+      triplePlay: () => dispatch({ type: 'triplePlay' }),
       setTeamName: (side: Side, name: string) => dispatch({ type: 'setTeamName', side, name }),
       setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) =>
         dispatch({ type: 'setLineup', side, index, updates }),

@@ -34,7 +34,8 @@ const outButtons = [
   { label: '땅볼 아웃', action: 'out_ground' },
   { label: '뜬공 아웃', action: 'out_fly' },
   { label: '라인드라이브', action: 'out_line' },
-  { label: '병살타', action: 'out_dp' },
+  { label: '병살타(2아웃)', action: 'out_dp2' },
+  { label: '삼중살(3아웃)', action: 'out_tp3' },
   { label: '내야 플라이', action: 'out_infield_fly' },
   { label: '외야 플라이', action: 'out_outfield_fly' },
   { label: '기타 아웃', action: 'out_other' },
@@ -534,8 +535,11 @@ export default function ScorekeeperPage() {
       case 'out_line':
         actions.addOutWithMessage('라인드라이브 아웃');
         break;
-      case 'out_dp':
-        actions.addOutWithMessage('병살타');
+      case 'out_dp2':
+        actions.doublePlay();
+        break;
+      case 'out_tp3':
+        actions.triplePlay();
         break;
       case 'out_infield_fly':
         actions.addOutWithMessage('내야 플라이 아웃');
