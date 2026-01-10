@@ -60,6 +60,22 @@ export default function ScoreboardTextPage() {
     });
     return map;
   }, [sections, currentInning]);
+  const gameOverInfo = useMemo(() => {
+    if (!state.gameOver) return null;
+    const home = state.teamNames.home;
+    const away = state.teamNames.away;
+    const scoreText = `${home} ${state.score.home} - ${away} ${state.score.away}`;
+    let resultText = `무승부 (${scoreText})`;
+    if (state.score.home > state.score.away) {
+      resultText = `${home} 승리 (${scoreText})`;
+    } else if (state.score.away > state.score.home) {
+      resultText = `${away} 승리 (${scoreText})`;
+    }
+    return {
+      endText: '경기 종료',
+      resultText,
+    };
+  }, [state.gameOver, state.score.away, state.score.home, state.teamNames.away, state.teamNames.home]);
 
   return (
     <div
@@ -123,7 +139,7 @@ export default function ScoreboardTextPage() {
             <span style={{ fontWeight: 900, fontSize: '18px' }}>문자 중계</span>
             <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>총 {feed.length}건</span>
           </div>
-          <LiveFeed sections={sections} collapsedMap={collapsedMap} />
+          <LiveFeed sections={sections} collapsedMap={collapsedMap} gameOverInfo={gameOverInfo} />
         </div>
       </div>
 
@@ -251,7 +267,15 @@ function NowPlayingCard({
   );
 }
 
-function LiveFeed({ sections, collapsedMap }: { sections: ReturnType<typeof groupByInning>; collapsedMap: Record<number, boolean> }) {
+function LiveFeed({
+  sections,
+  collapsedMap,
+  gameOverInfo,
+}: {
+  sections: ReturnType<typeof groupByInning>;
+  collapsedMap: Record<number, boolean>;
+  gameOverInfo: { endText: string; resultText: string } | null;
+}) {
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>(collapsedMap);
 
   useEffect(() => {
@@ -343,6 +367,12 @@ function LiveFeed({ sections, collapsedMap }: { sections: ReturnType<typeof grou
           </div>
         );
       })}
+      {gameOverInfo ? (
+        <div style={{ display: 'grid', gap: '4px', padding: '4px 0' }}>
+          <div style={{ color: '#f87171', fontWeight: 900, fontSize: '15px' }}>{gameOverInfo.endText}</div>
+          <div style={{ color: '#f87171', fontWeight: 900, fontSize: '14px' }}>{gameOverInfo.resultText}</div>
+        </div>
+      ) : null}
     </div>
   );
 }
