@@ -30,13 +30,13 @@ const secondaryButtons = [
   { label: '이닝 전환', color: '#94a3b8', action: 'nextHalf' },
 ];
 
-function downloadJson(payload: unknown, filenamePrefix: string) {
+function downloadCsv(content: string, filenamePrefix: string) {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `${filenamePrefix}.json`;
+  link.download = `${filenamePrefix}.csv`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -55,6 +55,75 @@ function formatDateTimeLabel(value: string | null) {
   } catch {
     return value;
   }
+}
+
+function escapeCsvCell(value: unknown) {
+  if (value === null || value === undefined) return '""';
+  const str = String(value);
+  const escaped = str.replace(/"/g, '""');
+  return `"${escaped}"`;
+}
+
+function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
+  const lines: string[] = [];
+  const add = (...cells: (string | number | boolean | null | undefined)[]) => {
+    lines.push(cells.map((cell) => escapeCsvCell(cell)).join(','));
+  };
+  const addBlank = () => lines.push('');
+  const halfLabel = (half: 'top' | 'bottom') => (half === 'top' ? '초' : '말');
+
+  add('게임 정보');
+  add('항목', '값');
+  add('홈 팀', record.meta.homeTeamName || record.meta.homeTeamId);
+  add('원정 팀', record.meta.awayTeamName || record.meta.awayTeamId);
+  add('최종 점수', `${record.meta.homeTeamName} ${record.score.home} - ${record.meta.awayTeamName} ${record.score.away}`);
+  add('이닝', `${record.meta.inning}회 ${halfLabel(record.meta.half)}`);
+  add('종료 여부', record.meta.gameOver ? '예' : '아니오');
+  add('종료 시각', record.meta.endedAt ? formatDateTimeLabel(record.meta.endedAt) : '-');
+  add('최종 볼카운트', `B${record.counts.balls} / S${record.counts.strikes} / O${record.counts.outs}`);
+  add('주자 상황', record.bases.map((runner, idx) => `${idx + 1}루:${runner ?? '-'}`).join(' | '));
+
+  const writeLineup = (side: 'home' | 'away', label: string) => {
+    addBlank();
+    add(`라인업 - ${label}`);
+    add('타순', '이름', '포지션', '등번호', '투', '타');
+    const batting = record.lineups[side].filter((slot) => slot.pos.toUpperCase() !== 'P');
+    batting.forEach((slot, idx) => add(idx + 1, slot.name, slot.pos, slot.number, slot.throws, slot.bats));
+    const pitcher = record.lineups[side].find((slot) => slot.pos.toUpperCase() === 'P');
+    if (pitcher) {
+      add('P', pitcher.name, pitcher.pos, pitcher.number, pitcher.throws, pitcher.bats);
+    }
+  };
+
+  const writeBench = (side: 'home' | 'away', label: string) => {
+    addBlank();
+    add(`벤치 - ${label}`);
+    add('이름', '포지션', '등번호', '투', '타');
+    if (!record.benches[side].length) {
+      add('-', '-', '-', '-', '-');
+      return;
+    }
+    record.benches[side].forEach((slot) => add(slot.name, slot.pos, slot.number, slot.throws, slot.bats));
+  };
+
+  writeLineup('home', record.meta.homeTeamName);
+  writeLineup('away', record.meta.awayTeamName);
+  writeBench('home', record.meta.homeTeamName);
+  writeBench('away', record.meta.awayTeamName);
+
+  const feed = [...record.feed].reverse();
+  addBlank();
+  add('플레이 로그');
+  if (feed.length) {
+    add('이닝', '공/말', '타순', '타자', '구수', '결과');
+    feed.forEach((entry) => {
+      add(entry.inning, halfLabel(entry.half), entry.order, entry.batter || '-', entry.pitch, entry.result);
+    });
+  } else {
+    add('-', '기록 없음');
+  }
+
+  return lines.join('\n');
 }
 
 export default function ScorekeeperPage() {
@@ -96,7 +165,8 @@ export default function ScorekeeperPage() {
     if (!pendingExportId) return;
     if (state.gameOver && state.endedAt === pendingExportId) {
       const filename = buildDownloadName('scorecard', state.endedAt);
-      downloadJson(recordPayload, filename);
+      const csv = buildCsvRecord(recordPayload);
+      downloadCsv(csv, filename);
       setPendingExportId(null);
     }
   }, [pendingExportId, recordPayload, state.endedAt, state.gameOver]);
@@ -167,7 +237,8 @@ export default function ScorekeeperPage() {
   const handleEndGame = () => {
     if (state.gameOver) {
       const filename = buildDownloadName('scorecard', state.endedAt);
-      downloadJson(recordPayload, filename);
+      const csv = buildCsvRecord(recordPayload);
+      downloadCsv(csv, filename);
       return;
     }
     const endedAt = new Date().toISOString();
@@ -355,11 +426,11 @@ export default function ScorekeeperPage() {
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontWeight: 900, color: '#e2e8f0' }}>경기 종료 및 기록 저장</span>
-                <span style={{ fontSize: '12px', fontWeight: 800, color: '#94a3b8' }}>JSON 기록지 다운로드</span>
+                <span style={{ fontSize: '12px', fontWeight: 800, color: '#94a3b8' }}>CSV 기록지 다운로드</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px', alignItems: 'center' }}>
                 <p style={{ margin: 0, color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>
-                  버튼을 누르면 기록 입력이 잠기고 기록지를 파일로 내려받습니다. 종료 후에도 다시 다운로드할 수 있습니다.
+                  버튼을 누르면 기록 입력이 잠기고 실제 야구 기록지 형태의 CSV 파일을 내려받습니다. 종료 후에도 다시 다운로드할 수 있습니다.
                 </p>
                 <button
                   type="button"
@@ -378,7 +449,7 @@ export default function ScorekeeperPage() {
                     opacity: isExporting ? 0.6 : 1,
                   }}
                 >
-                  {isExporting ? '기록 저장 중...' : isGameOver ? '기록지 다시 받기' : '경기 종료 & 다운로드'}
+                  {isExporting ? '기록 저장 중...' : isGameOver ? 'CSV 기록지 다시 받기' : '경기 종료 & CSV 다운로드'}
                 </button>
               </div>
               {state.endedAt ? (
