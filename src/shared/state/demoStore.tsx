@@ -71,6 +71,7 @@ type Action =
   | { type: 'runnerCaught'; base: 0 | 1 | 2 }
   | { type: 'runnerPickoff'; base: 0 | 1 | 2 }
   | { type: 'runnerOut'; base: 0 | 1 | 2 }
+  | { type: 'manualLog'; message: string }
   | { type: 'setTeamName'; side: Side; name: string }
   | { type: 'setLineup'; side: Side; index: number; updates: Partial<PlayerSlot> }
   | { type: 'addBench'; side: Side; player: PlayerSlot }
@@ -387,6 +388,17 @@ function reducer(state: DemoState, action: Action): DemoState {
         feed: pushFeed(state.feed, createLogEntry(state, '주자 모두 귀환', 0)),
       };
       break;
+    case 'manualLog': {
+      const text = action.message.trim();
+      if (!text) return state;
+      const payload = `*기록원* - ${text}`;
+      nextState = {
+        ...state,
+        lastPlay: payload,
+        feed: pushFeed(state.feed, createLogEntryForBaserunning(state, payload, 0)),
+      };
+      break;
+    }
     case 'nextHalf':
       nextState = changeHalf(state, '이닝 전환');
       break;
@@ -955,6 +967,7 @@ interface DemoStoreValue {
     runnerCaught: (base: 0 | 1 | 2) => void;
     runnerPickoff: (base: 0 | 1 | 2) => void;
     runnerOut: (base: 0 | 1 | 2) => void;
+    addManualLog: (message: string) => void;
     setTeamName: (side: Side, name: string) => void;
     setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) => void;
     addBench: (side: Side, player: PlayerSlot) => void;
@@ -1037,6 +1050,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       runnerCaught: (base: 0 | 1 | 2) => dispatch({ type: 'runnerCaught', base }),
       runnerPickoff: (base: 0 | 1 | 2) => dispatch({ type: 'runnerPickoff', base }),
       runnerOut: (base: 0 | 1 | 2) => dispatch({ type: 'runnerOut', base }),
+      addManualLog: (message: string) => dispatch({ type: 'manualLog', message }),
       addOutWithMessage: (note: string) => dispatch({ type: 'outWithMessage', note }),
       doublePlay: () => dispatch({ type: 'doublePlay' }),
       triplePlay: () => dispatch({ type: 'triplePlay' }),
