@@ -655,18 +655,16 @@ function applyRunnerOut(state: DemoState, baseIndex: 0 | 1 | 2, message: string)
   const runner = bases[baseIndex];
   bases[baseIndex] = null;
   const outs = state.outs + 1;
-  const resetCounts = { balls: 0, strikes: 0 };
   const detail = formatRunnerMove(runner ?? '주자', baseIndex, baseIndex, false, `${message}`, outs);
   if (outs >= 3) {
-    return changeHalf({ ...state, bases, outs, ...resetCounts }, `${detail.lastPlay} · 3아웃`);
+    return changeHalf({ ...state, bases, outs }, `${detail.lastPlay} · 3아웃`, state.pitchCount);
   }
   return {
     ...state,
     bases,
     outs,
-    ...resetCounts,
     lastPlay: detail.lastPlay,
-    pitchCount: 0,
+    pitchCount: state.pitchCount,
     feed: pushFeed(state.feed, createLogEntry(state, detail.feedText, 0)),
   };
 }
