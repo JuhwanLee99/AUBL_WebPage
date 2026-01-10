@@ -426,6 +426,17 @@ function pushFeed(feed: PlayLog[], entry: PlayLog) {
   return [entry, ...feed];
 }
 
+function baseLabel(idx: number) {
+  return idx >= 3 ? '홈' : `${idx + 1}루`;
+}
+
+function formatRunnerMove(runner: string, from: number, to: number, scored: boolean, baseMessage: string) {
+  const move = `${baseLabel(from)}→${baseLabel(to)}`;
+  const scoredText = scored ? ' · 득점' : '';
+  const feedText = `${baseMessage} · ${runner} ${move}${scoredText}`;
+  return { feedText, lastPlay: feedText };
+}
+
 function currentBatterInfo(state: DemoState) {
   const side = hittingSide(state);
   const lineup = state.lineups[side];
@@ -555,17 +566,24 @@ function applySteal(state: DemoState, success: boolean): DemoState {
   }
   if (!success) {
     const bases = [...state.bases] as Bases;
+    let foundIndex: number | null = null;
+    const runner = bases.find((r, idx) => {
+      if (r) foundIndex = idx;
+      return Boolean(r);
+    }) ?? '주자';
     for (let i = 2; i >= 0; i -= 1) {
       if (bases[i]) {
         bases[i] = null;
         break;
       }
     }
-    const afterOut = applyOut({ ...state, bases }, '도루 실패 아웃', { advanceBatter: false, pitchNumber: 0 });
-    return { ...afterOut, lastPlay: '도루 실패 아웃' };
+    const detail = formatRunnerMove(runner, foundIndex ?? 0, foundIndex ?? 0, false, '도루 실패 아웃');
+    const afterOut = applyOut({ ...state, bases }, detail.feedText, { advanceBatter: false, pitchNumber: 0 });
+    return { ...afterOut, lastPlay: detail.lastPlay };
   }
   let runs = 0;
   const bases = [...state.bases] as Bases;
+  let moved: { name: string; from: number; to: number; scored: boolean } | null = null;
   for (let i = 2; i >= 0; i -= 1) {
     if (bases[i]) {
       const runner = bases[i];
@@ -576,6 +594,7 @@ function applySteal(state: DemoState, success: boolean): DemoState {
       } else {
         bases[dest] = runner;
       }
+      moved = { name: runner, from: i, to: dest, scored: dest >= 3 };
       break;
     }
   }
@@ -584,6 +603,7 @@ function applySteal(state: DemoState, success: boolean): DemoState {
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
+  const detail = moved ? formatRunnerMove(moved.name, moved.from, moved.to, moved.scored, '도루 성공') : null;
   return {
     ...state,
     bases,
@@ -591,8 +611,8 @@ function applySteal(state: DemoState, success: boolean): DemoState {
     balls: 0,
     strikes: 0,
     pitchCount: 0,
-    lastPlay: runs ? `도루 성공 · ${runs}득점` : '도루 성공',
-    feed: pushFeed(state.feed, createLogEntry(state, runs ? `도루 성공 · ${runs}득점` : '도루 성공', 0)),
+    lastPlay: detail?.lastPlay ?? (runs ? `도루 성공 · ${runs}득점` : '도루 성공'),
+    feed: pushFeed(state.feed, createLogEntry(state, detail?.feedText ?? (runs ? `도루 성공 · ${runs}득점` : '도루 성공'), 0)),
   };
 }
 
@@ -613,32 +633,35 @@ function applyRunnerAdvance(state: DemoState, baseIndex: 0 | 1 | 2, steps: numbe
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
+  const detail = formatRunnerMove(runner, baseIndex, dest, runs > 0, message);
   return {
     ...state,
     bases,
     score,
-    lastPlay: runs ? `${message} · 득점` : message,
-    feed: pushFeed(state.feed, createLogEntry(state, runs ? `${message} · 득점` : message, 0)),
+    lastPlay: detail.lastPlay,
+    feed: pushFeed(state.feed, createLogEntry(state, detail.feedText, 0)),
   };
 }
 
 function applyRunnerOut(state: DemoState, baseIndex: 0 | 1 | 2, message: string): DemoState {
   const bases = [...state.bases] as Bases;
   if (!bases[baseIndex]) return state;
+  const runner = bases[baseIndex];
   bases[baseIndex] = null;
   const outs = state.outs + 1;
   const resetCounts = { balls: 0, strikes: 0 };
+  const detail = formatRunnerMove(runner ?? '주자', baseIndex, baseIndex, false, `${message}`);
   if (outs >= 3) {
-    return changeHalf({ ...state, bases, outs, ...resetCounts }, `${message} · 3아웃`);
+    return changeHalf({ ...state, bases, outs, ...resetCounts }, `${detail.lastPlay} · 3아웃`);
   }
   return {
     ...state,
     bases,
     outs,
     ...resetCounts,
-    lastPlay: message,
+    lastPlay: detail.lastPlay,
     pitchCount: 0,
-    feed: pushFeed(state.feed, createLogEntry(state, message, 0)),
+    feed: pushFeed(state.feed, createLogEntry(state, detail.feedText, 0)),
   };
 }
 
