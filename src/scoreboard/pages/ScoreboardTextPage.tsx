@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import ScoreboardPanel from '../components/ScoreboardPanel';
 import { useDemoStore, buildGameRecord } from '../../shared/state/demoStore';
 
@@ -277,10 +277,20 @@ function LiveFeed({
   gameOverInfo: { endText: string; resultText: string } | null;
 }) {
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>(collapsedMap);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setCollapsed((prev) => ({ ...collapsedMap, ...prev }));
   }, [collapsedMap]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    });
+  }, [sections, collapsed]);
+
   return (
     <div
       style={{
@@ -294,6 +304,7 @@ function LiveFeed({
         gap: '10px',
         minHeight: 0,
       }}
+      ref={containerRef}
     >
       {sections.map((section) => {
         const isCollapsed = collapsed[section.inning];
