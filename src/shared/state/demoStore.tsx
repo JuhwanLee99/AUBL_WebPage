@@ -54,6 +54,7 @@ type Action =
   | { type: 'foul' }
   | { type: 'strikeOut' }
   | { type: 'out' }
+  | { type: 'outWithMessage'; note: string }
   | { type: 'hit'; bases: 1 | 2 | 3 | 4 }
   | { type: 'walk' }
   | { type: 'hbp' }
@@ -338,6 +339,9 @@ function reducer(state: DemoState, action: Action): DemoState {
       break;
     case 'out':
       nextState = applyOut(state, '아웃', { pitchNumber: state.pitchCount + 1 });
+      break;
+    case 'outWithMessage':
+      nextState = applyOut(state, action.note, { pitchNumber: state.pitchCount + 1 });
       break;
     case 'hit':
       nextState = applyHit(state, action.bases, state.pitchCount + 1);
@@ -841,6 +845,7 @@ interface DemoStoreValue {
     endGame: (endedAt: string) => void;
     resetGame: () => void;
     undo: () => void;
+    addOutWithMessage: (note: string) => void;
   };
 }
 
@@ -912,6 +917,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       runnerCaught: (base: 0 | 1 | 2) => dispatch({ type: 'runnerCaught', base }),
       runnerPickoff: (base: 0 | 1 | 2) => dispatch({ type: 'runnerPickoff', base }),
       runnerOut: (base: 0 | 1 | 2) => dispatch({ type: 'runnerOut', base }),
+      addOutWithMessage: (note: string) => dispatch({ type: 'outWithMessage', note }),
       setTeamName: (side: Side, name: string) => dispatch({ type: 'setTeamName', side, name }),
       setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) =>
         dispatch({ type: 'setLineup', side, index, updates }),
