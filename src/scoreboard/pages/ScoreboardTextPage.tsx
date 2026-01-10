@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import ScoreboardPanel from '../components/ScoreboardPanel';
 import { useDemoStore } from '../../shared/state/demoStore';
 
@@ -31,10 +31,10 @@ type PitcherLine = {
 };
 
 type DisplayItem =
-  | { type: 'marker'; text: string; color: string; key: string }
-  | { type: 'batter'; text: string; key: string }
-  | { type: 'pitcher'; text: string; key: string }
-  | { type: 'log'; text: string; key: string; chip: string };
+  | { type: 'marker'; text: string; color: string; key: string; inning: number; half: Half }
+  | { type: 'batter'; text: string; key: string; inning: number; half: Half }
+  | { type: 'pitcher'; text: string; key: string; inning: number; half: Half }
+  | { type: 'log'; text: string; key: string; chip: string; inning: number; half: Half };
 
 export default function ScoreboardTextPage() {
   const { state } = useDemoStore();
@@ -45,20 +45,29 @@ export default function ScoreboardTextPage() {
   const activeOffense = offenseLineup.length ? offenseLineup : state.lineups[hittingSide];
   const currentBatter = activeOffense[state.batterIndex[hittingSide] % (activeOffense.length || 1)]?.name ?? '타자';
   const currentPitcher = state.lineups[defenseSide].find((slot) => slot.pos.toUpperCase() === 'P')?.name ?? '투수';
+  const currentInning = state.inning;
+  const currentHalf = state.half;
 
   const batterToday = useMemo(() => computeBatterLine(feed, hittingSide, currentBatter), [feed, hittingSide, currentBatter]);
   const pitcherToday = useMemo(() => computePitcherLine(feed, defenseSide, currentPitcher), [feed, defenseSide, currentPitcher]);
   const jerseyMap = useMemo(() => buildJerseyMap(state.lineups), [state.lineups]);
-  const displayItems = useMemo(
-    () => buildDisplayItems(feed, jerseyMap),
-    [feed, jerseyMap],
-  );
+  const displayItems = useMemo(() => buildDisplayItems(feed, jerseyMap), [feed, jerseyMap]);
+  const sections = useMemo(() => groupByInning(displayItems), [displayItems]);
+  const collapsedMap = useMemo(() => {
+    const map: Record<number, boolean> = {};
+    sections.forEach((section) => {
+      map[section.inning] = section.inning !== currentInning;
+    });
+    return map;
+  }, [sections, currentInning]);
 
   return (
     <div
       style={{
         display: 'grid',
-        gap: 'clamp(16px, 2vw, 24px)',
+        gap: 'clamp(12px, 1.6vw, 18px)',
+        minHeight: '100vh',
+        overflow: 'hidden',
       }}
     >
       <div
@@ -77,7 +86,7 @@ export default function ScoreboardTextPage() {
               aspectRatio: '4 / 3',
             }}
           />
-          <div style={{ marginTop: '-530px' }}>
+          <div style={{ marginTop: '-270px' }}>
             <NowPlayingCard
               batter={currentBatter}
               pitcher={currentPitcher}
@@ -90,17 +99,19 @@ export default function ScoreboardTextPage() {
         </div>
         <div
           style={{
-            display: 'grid',
-            gridTemplateRows: 'auto 1fr',
-            gap: '12px',
-            padding: '16px',
-            borderRadius: '16px',
+        display: 'grid',
+        gridTemplateRows: 'auto 1fr',
+        gap: '12px',
+        padding: '16px',
+        borderRadius: '16px',
             border: '1px solid rgba(148, 163, 184, 0.25)',
-            background: '#0b0f1a',
-            color: '#e2e8f0',
-            minHeight: 0,
-          }}
-        >
+        background: '#0b0f1a',
+        color: '#e2e8f0',
+        minHeight: 0,
+        height: 'min(90vh, 940px)',
+        overflow: 'hidden',
+      }}
+    >
           <div
             style={{
               display: 'flex',
@@ -112,61 +123,7 @@ export default function ScoreboardTextPage() {
             <span style={{ fontWeight: 900, fontSize: '18px' }}>문자 중계</span>
             <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>총 {feed.length}건</span>
           </div>
-          <div
-            style={{
-              overflowY: 'auto',
-              paddingRight: '6px',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'flex-start',
-              gap: '10px',
-              minHeight: 0,
-            }}
-          >
-            {displayItems.map((item, idx) => {
-              if (item.type === 'marker') {
-                return (
-                  <div key={item.key} style={{ color: item.color, fontWeight: 900, fontSize: '14px', padding: '2px 0' }}>
-                    {item.text}
-                  </div>
-                );
-              }
-              if (item.type === 'batter' || item.type === 'pitcher') {
-                return (
-                  <div key={item.key} style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '13px', padding: '2px 0' }}>
-                    {item.text}
-                  </div>
-                );
-              }
-              return (
-                <div
-                  key={item.key}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(148, 163, 184, 0.2)',
-                    background: idx % 2 === 0 ? 'rgba(15, 23, 42, 0.65)' : 'rgba(15, 23, 42, 0.35)',
-                    fontSize: '14px',
-                    lineHeight: 1.5,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    width: 'max-content',
-                    maxWidth: '100%',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'keep-all',
-                    overflowWrap: 'anywhere',
-                    color: '#e2e8f0',
-                  }}
-                >
-                  {colorizeText(item.text).map((part) => (
-                    <span key={part.key} style={{ color: part.color ?? '#e2e8f0', fontWeight: part.color ? 900 : 800 }}>
-                      {part.text}
-                    </span>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
+          <LiveFeed sections={sections} collapsedMap={collapsedMap} />
         </div>
       </div>
     </div>
@@ -272,6 +229,102 @@ function NowPlayingCard({
           <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>오늘 기록</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+function LiveFeed({ sections, collapsedMap }: { sections: ReturnType<typeof groupByInning>; collapsedMap: Record<number, boolean> }) {
+  const [collapsed, setCollapsed] = useState<Record<number, boolean>>(collapsedMap);
+
+  useEffect(() => {
+    setCollapsed((prev) => ({ ...collapsedMap, ...prev }));
+  }, [collapsedMap]);
+  return (
+    <div
+      style={{
+        overflowY: 'auto',
+        maxHeight: '870px',
+        height: 'min(75vh, 870px)',
+        paddingRight: '6px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: '10px',
+        minHeight: 0,
+      }}
+    >
+      {sections.map((section) => {
+        const isCollapsed = collapsed[section.inning];
+        return (
+          <div key={section.inning} style={{ width: '100%', display: 'grid', gap: '6px' }}>
+            <button
+              type="button"
+              onClick={() => setCollapsed((prev) => ({ ...prev, [section.inning]: !isCollapsed }))}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'transparent',
+                border: 'none',
+                color: '#e2e8f0',
+                fontWeight: 900,
+                cursor: 'pointer',
+                padding: '2px 0',
+              }}
+            >
+              <span style={{ color: isCollapsed ? '#94a3b8' : '#22c55e' }}>{isCollapsed ? '▶' : '▼'}</span>
+              <span>{section.inning}회 전체</span>
+            </button>
+            {!isCollapsed ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {section.items.map((item, idx) => {
+                  if (item.type === 'marker') {
+                    return (
+                      <div key={item.key} style={{ color: item.color, fontWeight: 900, fontSize: '14px', padding: '2px 0' }}>
+                        {item.text}
+                      </div>
+                    );
+                  }
+                  if (item.type === 'batter' || item.type === 'pitcher') {
+                    return (
+                      <div key={item.key} style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '13px', padding: '2px 0' }}>
+                        {item.text}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div
+                      key={item.key}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '12px',
+                        border: '1px solid rgba(148, 163, 184, 0.2)',
+                        background: idx % 2 === 0 ? 'rgba(15, 23, 42, 0.65)' : 'rgba(15, 23, 42, 0.35)',
+                        fontSize: '14px',
+                        lineHeight: 1.5,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        width: 'max-content',
+                        maxWidth: '100%',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'keep-all',
+                        overflowWrap: 'anywhere',
+                        color: '#e2e8f0',
+                      }}
+                    >
+                      {colorizeText(item.text).map((part) => (
+                        <span key={part.key} style={{ color: part.color ?? '#e2e8f0', fontWeight: part.color ? 900 : 800 }}>
+                          {part.text}
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -472,12 +525,33 @@ function buildDisplayItems(
     const defenseSide: 'home' | 'away' = offenseSide === 'home' ? 'away' : 'home';
 
     if (idx === 0) {
-      items.push({ type: 'marker', text: markerText(entry.inning, entry.half, 'start'), color: '#22c55e', key: `start-${entry.inning}-${entry.half}-init` });
+      items.push({
+        type: 'marker',
+        text: markerText(entry.inning, entry.half, 'start'),
+        color: '#22c55e',
+        key: `start-${entry.inning}-${entry.half}-init`,
+        inning: entry.inning,
+        half: entry.half,
+      });
     } else if (entry.inning !== prevInning || entry.half !== prevHalf) {
       if (prevInning && prevHalf) {
-        items.push({ type: 'marker', text: markerText(prevInning, prevHalf, 'end'), color: '#f87171', key: `end-${prevInning}-${prevHalf}-${idx}` });
+        items.push({
+          type: 'marker',
+          text: markerText(prevInning, prevHalf, 'end'),
+          color: '#f87171',
+          key: `end-${prevInning}-${prevHalf}-${idx}`,
+          inning: prevInning,
+          half: prevHalf,
+        });
       }
-      items.push({ type: 'marker', text: markerText(entry.inning, entry.half, 'start'), color: '#22c55e', key: `start-${entry.inning}-${entry.half}-${idx}` });
+      items.push({
+        type: 'marker',
+        text: markerText(entry.inning, entry.half, 'start'),
+        color: '#22c55e',
+        key: `start-${entry.inning}-${entry.half}-${idx}`,
+        inning: entry.inning,
+        half: entry.half,
+      });
       prevBatter = null;
       prevPitcher = null;
     }
@@ -486,7 +560,7 @@ function buildDisplayItems(
       const jersey = jerseyMap[offenseSide].get(entry.batter)?.number;
       const batterText = `${entry.order}번 ${entry.batter}${jersey ? `(${jersey})` : ''} 타석`;
       if (entry.batter !== prevBatter) {
-        items.push({ type: 'batter', text: batterText, key: `batter-${entry.inning}-${entry.half}-${entry.batter}-${idx}` });
+        items.push({ type: 'batter', text: batterText, key: `batter-${entry.inning}-${entry.half}-${entry.batter}-${idx}`, inning: entry.inning, half: entry.half });
         prevBatter = entry.batter;
       }
     }
@@ -506,6 +580,8 @@ function buildDisplayItems(
             ? `${prevPitcher} → ${defensePitcherName}${jersey ? `(${jersey})` : ''} 투수 교체`
             : `${defensePitcherName}${jersey ? `(${jersey})` : ''} 투수`,
           key: `pitcher-${entry.inning}-${entry.half}-${idx}`,
+          inning: entry.inning,
+          half: entry.half,
         });
         prevPitcher = defensePitcherName;
       }
@@ -516,13 +592,25 @@ function buildDisplayItems(
       text: formatEntry(entry),
       key: `log-${entry.inning}-${entry.half}-${entry.order}-${entry.pitch}-${idx}`,
       chip: `${entry.inning}-${entry.half}-${entry.order}-${entry.pitch}`,
+      inning: entry.inning,
+      half: entry.half,
     });
 
     prevHalf = entry.half;
     prevInning = entry.inning;
   });
 
-  return items.reverse();
+  return items;
+}
+
+function groupByInning(items: DisplayItem[]) {
+  const map = new Map<number, { inning: number; items: DisplayItem[] }>();
+  items.forEach((item) => {
+    const section = map.get(item.inning) ?? { inning: item.inning, items: [] };
+    section.items.push(item);
+    map.set(item.inning, section);
+  });
+  return [...map.values()].sort((a, b) => a.inning - b.inning);
 }
 
 function colorizeText(text: string) {
