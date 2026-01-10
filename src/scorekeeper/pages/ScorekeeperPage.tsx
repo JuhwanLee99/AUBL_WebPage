@@ -122,6 +122,63 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   writeBench('home', record.meta.homeTeamName);
   writeBench('away', record.meta.awayTeamName);
 
+  const stats = buildPlayerStats(record);
+  const fmt3 = (val: number) => (Number.isFinite(val) ? val.toFixed(3).replace(/^0/, '') : '-');
+  const writeHitterStats = (side: 'home' | 'away', label: string) => {
+    addBlank();
+    add(`실시간 타자 기록 - ${label}`);
+    add('선수', '포지션', '타석', '타수', '안타', '1루타', '2루타', '3루타', '홈런', '볼넷', '사구', '삼진', '희생', '타율', '출루율');
+    stats.hitters[side].forEach((s) => {
+      const obpDen = s.ab + s.bb + s.hbp + s.sac;
+      const avg = s.ab > 0 ? s.h / s.ab : 0;
+      const obp = obpDen > 0 ? (s.h + s.bb + s.hbp) / obpDen : 0;
+      add(
+        s.name,
+        s.pos,
+        s.pa,
+        s.ab,
+        s.h,
+        s.singles,
+        s.doubles,
+        s.triples,
+        s.hr,
+        s.bb,
+        s.hbp,
+        s.so,
+        s.sac,
+        s.ab > 0 ? fmt3(avg) : '-',
+        obpDen > 0 ? fmt3(obp) : '-',
+      );
+    });
+  };
+
+  const writePitcherStats = (side: 'home' | 'away', label: string) => {
+    addBlank();
+    add(`실시간 투수 기록 - ${label}`);
+    add('선수', '포지션', '타자상대', '투구수', '투구수(S/B)', '이닝', '피안타', '피홈런', '볼넷', '사구', '탈삼진');
+    stats.pitchers[side].forEach((s) => {
+      const ip = `${Math.floor(s.outs / 3)}.${s.outs % 3}`;
+      add(
+        s.name,
+        s.pos,
+        s.bf,
+        s.pitches,
+        `${s.pitches} (${s.strikes}/${s.balls})`,
+        ip,
+        s.h,
+        s.hr,
+        s.bb,
+        s.hbp,
+        s.so,
+      );
+    });
+  };
+
+  writeHitterStats('home', record.meta.homeTeamName);
+  writeHitterStats('away', record.meta.awayTeamName);
+  writePitcherStats('home', record.meta.homeTeamName);
+  writePitcherStats('away', record.meta.awayTeamName);
+
   const feed = [...record.feed].reverse();
   addBlank();
   add('플레이 로그');
