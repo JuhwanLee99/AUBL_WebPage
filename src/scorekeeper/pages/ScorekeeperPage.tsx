@@ -347,11 +347,17 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
 
   const toArray = (roster: Map<string, { pos?: string; order: number }>, store: Map<string, PlayerStat>) => {
     const names = [...roster.entries()].sort((a, b) => a[1].order - b[1].order).map(([name]) => name);
-    const fromRoster = names.map((name) => {
-      const base = ensurePlayerStat(name, roster.get(name)?.pos);
-      const stat = store.get(name);
-      return stat ? { ...base, ...stat, pos: stat.pos ?? base.pos } : base;
-    });
+    const fromRoster = names
+      .map((name) => {
+        const meta = roster.get(name);
+        const isPitcher = (meta?.pos ?? '').toUpperCase() === 'P';
+        const stat = store.get(name);
+        // 지명타자 경기에서는 투수를 기본 타자 목록에서 제외하고, 타석 기록이 있는 경우에만 표시
+        if (isPitcher && !stat) return null;
+        const base = ensurePlayerStat(name, meta?.pos);
+        return stat ? { ...base, ...stat, pos: stat.pos ?? base.pos } : base;
+      })
+      .filter(Boolean) as PlayerStat[];
     const extra = [...store.values()].filter((s) => !roster.has(s.name));
     return [...fromRoster, ...extra];
   };
