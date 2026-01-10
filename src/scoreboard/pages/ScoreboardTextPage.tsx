@@ -580,6 +580,7 @@ function buildDisplayItems(
   let prevInning: number | null = null;
   let prevBatter: string | null = null;
   let prevPitcher: string | null = null;
+  const endedInnings = new Set<string>();
 
   chronological.forEach((entry, idx) => {
     const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
@@ -587,6 +588,12 @@ function buildDisplayItems(
 
     const isEndMarker = entry.result.includes('종료');
     if (isEndMarker) {
+      const label = `${entry.inning}-${entry.half}`;
+      if (endedInnings.has(label)) {
+        prevHalf = entry.half;
+        prevInning = entry.inning;
+        return;
+      }
       items.push({
         type: 'marker',
         text: entry.result,
@@ -595,6 +602,7 @@ function buildDisplayItems(
         inning: entry.inning,
         half: entry.half,
       });
+      endedInnings.add(label);
       prevHalf = entry.half;
       prevInning = entry.inning;
       return;
@@ -610,16 +618,6 @@ function buildDisplayItems(
         half: entry.half,
       });
     } else if (entry.inning !== prevInning || entry.half !== prevHalf) {
-      if (prevInning && prevHalf) {
-        items.push({
-          type: 'marker',
-          text: markerText(prevInning, prevHalf, 'end'),
-          color: '#f87171',
-          key: `end-${prevInning}-${prevHalf}-${idx}`,
-          inning: prevInning,
-          half: prevHalf,
-        });
-      }
       items.push({
         type: 'marker',
         text: markerText(entry.inning, entry.half, 'start'),
