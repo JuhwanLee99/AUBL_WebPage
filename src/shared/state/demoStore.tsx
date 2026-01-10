@@ -509,7 +509,8 @@ function applyOut(
   const logResult = `${message} (${outs} 아웃)`;
   if (outs >= 3) {
     const finalMessage = `${message} · 3아웃 · 이닝 종료`;
-    return changeHalf({ ...state, batterIndex, pitchCount }, finalMessage, advanceBatter ? pitchNumber : 0, state);
+    const feedWithPlay = pushFeed(state.feed, createLogEntry(state, logResult, advanceBatter ? pitchNumber : 0));
+    return changeHalf({ ...state, batterIndex, pitchCount, feed: feedWithPlay }, finalMessage, advanceBatter ? pitchNumber : 0, state);
   }
   return {
     ...state,
@@ -688,8 +689,8 @@ function applyRunnerOut(state: DemoState, baseIndex: 0 | 1 | 2, message: string)
   const feedEntry = createLogEntryForBaserunning(state, detail.feedText, state.pitchCount);
   if (outs >= 3) {
     const finalMessage = `${detail.lastPlay} · 이닝 종료`;
-    const afterHalf = changeHalf({ ...state, bases, outs }, finalMessage, state.pitchCount, state);
-    return { ...afterHalf, feed: pushFeed(afterHalf.feed, feedEntry) };
+    const afterHalf = changeHalf({ ...state, bases, outs, feed: pushFeed(state.feed, feedEntry) }, finalMessage, state.pitchCount, state);
+    return afterHalf;
   }
   return {
     ...state,
@@ -725,7 +726,7 @@ function applyDoublePlay(state: DemoState, outsToAdd: 2 | 3, label: string): Dem
     .map((r) => `${r.name} ${baseLabel(r.base)}`)
     .join(', ');
   const feedText = runnerDesc ? `${label} · ${batterName} 아웃 / ${runnerDesc} 아웃` : `${label} · ${batterName} 아웃`;
-  const lastPlay = outs >= 3 ? `${feedText} · 이닝 종료` : feedText;
+  const lastPlay = feedText;
 
   const nextState = {
     ...state,
@@ -807,7 +808,14 @@ function changeHalf(state: DemoState, message: string, pitchNumber = 0, logState
   const nextInning = nextHalf === 'top' ? state.inning + 1 : state.inning;
   const logSource = logState ?? state;
   const inningLabel = `${state.inning}회${state.half === 'top' ? '초' : '말'}`;
-  const endMarker = `${message} · ${inningLabel} 종료`;
+  const endMarker = `${inningLabel} 종료`;
+  const shouldAddEndMarker = !(
+    state.feed[0] &&
+    state.feed[0].inning === state.inning &&
+    state.feed[0].half === state.half &&
+    state.feed[0].result.includes('종료')
+  );
+  const feed = shouldAddEndMarker ? pushFeed(state.feed, createLogEntry(logSource, endMarker, pitchNumber)) : state.feed;
   return {
     ...state,
     inning: nextInning,
@@ -818,7 +826,7 @@ function changeHalf(state: DemoState, message: string, pitchNumber = 0, logState
     pitchCount: 0,
     bases: [null, null, null],
     lastPlay: message,
-    feed: pushFeed(state.feed, createLogEntry(logSource, endMarker, pitchNumber)),
+    feed,
   };
 }
 
