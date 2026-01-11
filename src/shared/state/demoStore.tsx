@@ -944,13 +944,14 @@ function substitutePlayer(state: DemoState, side: Side, benchIndex: number, line
     const num = player.number ? `(${player.number})` : '';
     return `${player.name}${num}`;
   };
-  const changeText = isPitcherChange ? `투수 교체 · ${formatPlayer(outgoing)} → ${formatPlayer(benchPlayer)}` : null;
-  const feed = changeText ? pushFeed(state.feed, createLogEntryForBaserunning(state, changeText, 0)) : state.feed;
+  const changeLabel = isPitcherChange ? '투수 교체' : '타자 교체';
+  const changeText = `${changeLabel} · ${formatPlayer(outgoing)} → ${formatPlayer(benchPlayer)}`;
+  const feed = pushFeed(state.feed, createLogEntryForBaserunning(state, changeText, 0));
   return {
     ...state,
     lineups: { ...state.lineups, [side]: lineup },
     benches: { ...state.benches, [side]: bench },
-    lastPlay: changeText ?? state.lastPlay,
+    lastPlay: changeText,
     feed,
   };
 }
