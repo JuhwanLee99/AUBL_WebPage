@@ -313,6 +313,8 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   const statsAway = new Map<string, PlayerStat>();
   const pitchHome = new Map<string, PitcherStat>();
   const pitchAway = new Map<string, PitcherStat>();
+  const pitcherAppearance: Record<'home' | 'away', Map<string, number>> = { home: new Map(), away: new Map() };
+  const nextAppearance: Record<'home' | 'away', number> = { home: 0, away: 0 };
 
   const ensureRosterEntry = (side: 'home' | 'away', name: string) => {
     const roster = side === 'home' ? rosterHome : rosterAway;
@@ -338,6 +340,10 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
 
   const addPitch = (side: 'home' | 'away', name: string) => {
     ensureRosterEntry(side, name);
+    if (!pitcherAppearance[side].has(name)) {
+      pitcherAppearance[side].set(name, nextAppearance[side]);
+      nextAppearance[side] += 1;
+    }
     const roster = side === 'home' ? rosterHome : rosterAway;
     const pos = roster.get(name)?.pos;
     const store = side === 'home' ? pitchHome : pitchAway;
@@ -351,6 +357,12 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   const currentPitcher: Record<'home' | 'away', string | null> = { home: null, away: null };
   const cleanName = (raw: string) => raw.replace(/\([^)]*\)/g, '').replace(/투수/g, '').replace(/·/g, '').trim();
 
+  const inferPitcherSide = (name: string): 'home' | 'away' | null => {
+    if (rosterHome.has(name) || benchMetaHome.has(name)) return 'home';
+    if (rosterAway.has(name) || benchMetaAway.has(name)) return 'away';
+    return null;
+  };
+
   chronological.forEach((entry) => {
     const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
     const defenseSide: 'home' | 'away' = offenseSide === 'home' ? 'away' : 'home';
@@ -358,9 +370,17 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
 
     if (result.includes('투수 교체')) {
       const incoming = result.split('→')[1];
-      if (incoming) currentPitcher[defenseSide] = cleanName(incoming);
+      if (incoming) {
+        const cleaned = cleanName(incoming);
+        const inferred = inferPitcherSide(cleaned) ?? defenseSide;
+        currentPitcher[inferred] = cleaned;
+        addPitch(inferred, cleaned);
+      }
     } else if (result.endsWith('투수')) {
-      currentPitcher[defenseSide] = cleanName(result.replace('투수', ''));
+      const cleaned = cleanName(result.replace('투수', ''));
+      const inferred = inferPitcherSide(cleaned) ?? defenseSide;
+      currentPitcher[inferred] = cleaned;
+      addPitch(inferred, cleaned);
     }
 
     const name = entry.batter?.trim();
@@ -486,18 +506,37 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     return [...fromRoster, ...extra];
   };
 
-  const toPitcherArray = (roster: Map<string, { pos?: string; order: number }>, store: Map<string, PitcherStat>) => {
-    const names = [...roster.entries()]
-      .filter(([, meta]) => (meta.pos ?? '').toUpperCase() === 'P')
-      .sort((a, b) => a[1].order - b[1].order)
-      .map(([name]) => name);
-    const baseList = names.map((name) => {
-      const base = ensurePitcherStat(name, roster.get(name)?.pos);
-      const stat = store.get(name);
-      return stat ? { ...base, ...stat, pos: stat.pos ?? base.pos } : base;
+  const toPitcherArray = (
+    roster: Map<string, { pos?: string; order: number }>,
+    store: Map<string, PitcherStat>,
+    appearance: Map<string, number>,
+  ) => {
+    const names = new Set<string>();
+    roster.forEach((meta, name) => {
+      if ((meta.pos ?? '').toUpperCase() === 'P') names.add(name);
     });
-    const extra = [...store.values()].filter((s) => !roster.has(s.name));
-    return [...baseList, ...extra];
+    store.forEach((_stat, name) => names.add(name));
+
+    const combined = [...names].map((name) => {
+      const meta = roster.get(name);
+      const base = ensurePitcherStat(name, meta?.pos);
+      const stat = store.get(name);
+      const appearanceOrder = appearance.get(name);
+      return {
+        ...(stat ? { ...base, ...stat, pos: stat.pos ?? base.pos } : base),
+        appearanceOrder,
+        appearanceLabel:
+          appearanceOrder === 0
+            ? '선발'
+            : Number.isFinite(appearanceOrder)
+              ? `계투(${appearanceOrder})`
+              : undefined,
+      };
+    });
+
+    const norm = (n: number | null | undefined) => (Number.isFinite(n) ? (n as number) : Number.MAX_SAFE_INTEGER);
+    combined.sort((a, b) => norm(a.appearanceOrder) - norm(b.appearanceOrder) || a.name.localeCompare(b.name, 'ko-KR'));
+    return combined;
   };
 
   return {
@@ -506,8 +545,8 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
       away: toArray(rosterAway, statsAway),
     },
     pitchers: {
-      home: toPitcherArray(rosterHome, pitchHome),
-      away: toPitcherArray(rosterAway, pitchAway),
+      home: toPitcherArray(rosterHome, pitchHome, pitcherAppearance.home),
+      away: toPitcherArray(rosterAway, pitchAway, pitcherAppearance.away),
     },
   };
 }
@@ -2093,7 +2132,7 @@ function StatsTable({
   variant,
 }: {
   title: string;
-  stats: PlayerStat[] | PitcherStat[];
+  stats: PlayerStat[] | (PitcherStat & { appearanceOrder?: number | null; appearanceLabel?: string })[];
   variant: 'batter' | 'pitcher';
 }) {
   const isBatter = variant === 'batter';
@@ -2115,6 +2154,7 @@ function StatsTable({
         { key: 'obp', label: '출루율' },
       ]
     : [
+        { key: 'appearanceLabel', label: '등판', width: '60px' },
         { key: 'name', label: '선수', width: '90px' },
         { key: 'bf', label: '타자상대' },
         { key: 'pitchCombo', label: '투구수(S/B)' },
@@ -2134,9 +2174,14 @@ function StatsTable({
         const fmt = (val: number) => (Number.isFinite(val) ? val.toFixed(3).replace(/^0/, '') : '-');
         return { ...stat, avg: stat.ab > 0 ? fmt(avg) : '-', obp: obpDen > 0 ? fmt(obp) : '-' };
       })
-    : (stats as PitcherStat[]).map((stat) => {
+    : (stats as (PitcherStat & { appearanceOrder?: number | null; appearanceLabel?: string })[]).map((stat) => {
         const ip = `${Math.floor(stat.outs / 3)}.${stat.outs % 3}`;
-        return { ...stat, outsIp: ip, pitchCombo: `${stat.pitches} (${stat.strikes}/${stat.balls})` };
+        return {
+          ...stat,
+          outsIp: ip,
+          pitchCombo: `${stat.pitches} (${stat.strikes}/${stat.balls})`,
+          appearanceLabel: stat.appearanceLabel ?? (stat.appearanceOrder === 0 ? '선발' : stat.appearanceOrder ? `계투(${stat.appearanceOrder})` : '-'),
+        };
       });
 
   return (
