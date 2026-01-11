@@ -616,10 +616,32 @@ export default function ScorekeeperPage() {
   const [manualBroadcast, setManualBroadcast] = useState('');
   const recordPayload = useMemo(() => buildGameRecord(state), [state]);
   const [pendingExportId, setPendingExportId] = useState<string | null>(null);
+  const isGameStarted = state.gameStarted;
   const isGameOver = state.gameOver;
+  const controlsDisabled = isGameOver || !isGameStarted;
   const isExporting = Boolean(pendingExportId);
   const canUndo = state.history.length > 0;
   const playerStats = useMemo(() => buildPlayerStats(recordPayload), [recordPayload]);
+  const statusBadge = isGameOver
+    ? {
+        text: '경기 종료됨 · 기록 잠금',
+        color: '#fca5a5',
+        background: 'rgba(248,113,113,0.12)',
+        border: 'rgba(248,113,113,0.4)',
+      }
+    : !isGameStarted
+      ? {
+          text: '대기 중 · 경기 시작 필요',
+          color: '#e2e8f0',
+          background: 'rgba(148,163,184,0.16)',
+          border: 'rgba(148,163,184,0.35)',
+        }
+      : {
+          text: '실시간 입력 가능',
+          color: '#67e8f9',
+          background: 'rgba(56,189,248,0.12)',
+          border: 'rgba(56,189,248,0.35)',
+        };
 
   useEffect(() => {
     if (state.gameOver) {
@@ -639,7 +661,7 @@ export default function ScorekeeperPage() {
   }, [pendingExportId, recordPayload, state.endedAt, state.gameOver]);
 
   const handleAction = (action: string) => {
-    if (isGameOver) return;
+    if (isGameOver || !isGameStarted) return;
     if (action === 'hitMenu') {
       setShowHitOptions((prev) => !prev);
       setShowOutOptions(false);
@@ -736,7 +758,16 @@ export default function ScorekeeperPage() {
     setManualBroadcast('');
   };
 
+  const handleStartGame = () => {
+    if (isGameStarted || isGameOver) return;
+    setShowHitOptions(false);
+    setShowOutOptions(false);
+    setActionModal(null);
+    actions.startGame();
+  };
+
   const handleEndGame = () => {
+    if (!isGameStarted && !state.gameOver) return;
     if (state.gameOver) {
       const filename = buildDownloadName('scorecard', state.endedAt);
       const csv = buildCsvRecord(recordPayload);
@@ -807,9 +838,18 @@ export default function ScorekeeperPage() {
             strikes={state.strikes}
             batterName={currentBatter}
             defenseAssignments={getDefenseAssignments(defenseLineup)}
-            onSelectRunner={(payload) => setActionModal({ role: 'runner', ...payload })}
-            onSelectBatter={() => setActionModal({ role: 'batter', name: currentBatter })}
-            onSelectFielder={(payload) => setActionModal({ role: 'fielder', ...payload })}
+            onSelectRunner={(payload) => {
+              if (controlsDisabled) return;
+              setActionModal({ role: 'runner', ...payload });
+            }}
+            onSelectBatter={() => {
+              if (controlsDisabled) return;
+              setActionModal({ role: 'batter', name: currentBatter });
+            }}
+            onSelectFielder={(payload) => {
+              if (controlsDisabled) return;
+              setActionModal({ role: 'fielder', ...payload });
+            }}
           />
           <div
             style={{
@@ -822,28 +862,60 @@ export default function ScorekeeperPage() {
               minHeight: '220px',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#cbd5e1' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                color: '#cbd5e1',
+                gap: '8px',
+                flexWrap: 'wrap',
+              }}
+            >
               <span style={{ fontWeight: 900 }}>Command Center</span>
-              <span
-                style={{
-                  fontSize: '12px',
-                  fontWeight: 800,
-                  color: isGameOver ? '#fca5a5' : '#67e8f9',
-                  background: isGameOver ? 'rgba(248,113,113,0.12)' : 'rgba(56,189,248,0.12)',
-                  border: `1px solid ${isGameOver ? 'rgba(248,113,113,0.4)' : 'rgba(56,189,248,0.35)'}`,
-                  borderRadius: '999px',
-                  padding: '6px 10px',
-                }}
-              >
-                {isGameOver ? '경기 종료됨 · 기록 잠금' : '실시간 입력 가능'}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <span
+                  style={{
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    color: statusBadge.color,
+                    background: statusBadge.background,
+                    border: `1px solid ${statusBadge.border}`,
+                    borderRadius: '999px',
+                    padding: '6px 10px',
+                  }}
+                >
+                  {statusBadge.text}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleStartGame}
+                  disabled={isGameOver || isGameStarted}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(16,185,129,0.5)',
+                    background: isGameStarted
+                      ? 'rgba(148,163,184,0.16)'
+                      : 'linear-gradient(90deg, #10b981, #0ea5e9)',
+                    color: isGameStarted ? '#cbd5e1' : '#0b0f1a',
+                    fontWeight: 900,
+                    fontSize: '13px',
+                    cursor: isGameOver || isGameStarted ? 'not-allowed' : 'pointer',
+                    opacity: isGameOver ? 0.6 : 1,
+                    boxShadow: isGameStarted ? 'none' : '0 10px 20px rgba(16,185,129,0.22)',
+                  }}
+                >
+                  {isGameStarted ? '경기 진행 중' : '경기 시작'}
+                </button>
+              </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '10px' }}>
               {mainButtons.map((btn) => {
                 const isUndo = btn.action === 'undo';
                 const isHitMenu = btn.action === 'hitMenu';
                 const isActive = isHitMenu && showHitOptions;
-                const isDisabled = isGameOver || (isUndo && !canUndo);
+                const isDisabled = controlsDisabled || (isUndo && !canUndo);
                 return (
                   <button
                     key={btn.label}
@@ -879,7 +951,7 @@ export default function ScorekeeperPage() {
                   <button
                     key={btn.label}
                     type="button"
-                    disabled={isGameOver}
+                    disabled={controlsDisabled}
                     style={{
                       padding: '12px 10px',
                       borderRadius: '10px',
@@ -888,8 +960,8 @@ export default function ScorekeeperPage() {
                       color: btn.color,
                       fontWeight: 800,
                       fontSize: '13px',
-                      cursor: isGameOver ? 'not-allowed' : 'pointer',
-                      opacity: isGameOver ? 0.6 : 1,
+                      cursor: controlsDisabled ? 'not-allowed' : 'pointer',
+                      opacity: controlsDisabled ? 0.6 : 1,
                     }}
                     onClick={() => handleAction(btn.action)}
                   >
@@ -904,7 +976,7 @@ export default function ScorekeeperPage() {
                   <button
                     key={btn.label}
                     type="button"
-                    disabled={isGameOver}
+                    disabled={controlsDisabled}
                     style={{
                       padding: '10px 10px',
                       borderRadius: '10px',
@@ -913,8 +985,8 @@ export default function ScorekeeperPage() {
                       color: '#fca5a5',
                       fontWeight: 800,
                       fontSize: '13px',
-                      cursor: isGameOver ? 'not-allowed' : 'pointer',
-                      opacity: isGameOver ? 0.6 : 1,
+                      cursor: controlsDisabled ? 'not-allowed' : 'pointer',
+                      opacity: controlsDisabled ? 0.6 : 1,
                     }}
                     onClick={() => handleAction(btn.action)}
                   >
@@ -928,7 +1000,7 @@ export default function ScorekeeperPage() {
                 <button
                   key={btn.label}
                   type="button"
-                  disabled={isGameOver}
+                  disabled={controlsDisabled}
                   style={{
                     padding: '10px 10px',
                     borderRadius: '10px',
@@ -937,8 +1009,8 @@ export default function ScorekeeperPage() {
                     color: btn.color,
                     fontWeight: 800,
                     fontSize: '12px',
-                    cursor: isGameOver ? 'not-allowed' : 'pointer',
-                    opacity: isGameOver ? 0.6 : 1,
+                    cursor: controlsDisabled ? 'not-allowed' : 'pointer',
+                    opacity: controlsDisabled ? 0.6 : 1,
                   }}
                   onClick={() => handleAction(btn.action)}
                 >

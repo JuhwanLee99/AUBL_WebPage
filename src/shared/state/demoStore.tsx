@@ -42,6 +42,7 @@ interface DemoSnapshot {
   benches: { home: PlayerSlot[]; away: PlayerSlot[] };
   removed: { home: PlayerSlot[]; away: PlayerSlot[] };
   teamNames: { home: string; away: string };
+  gameStarted: boolean;
   gameOver: boolean;
   endedAt: string | null;
 }
@@ -79,6 +80,7 @@ type Action =
   | { type: 'addBench'; side: Side; player: PlayerSlot }
   | { type: 'removeBench'; side: Side; benchIndex: number }
   | { type: 'substitute'; side: Side; benchIndex: number; lineupIndex: number }
+  | { type: 'startGame' }
   | { type: 'endGame'; endedAt: string }
   | { type: 'resetGame' }
   | { type: 'undo' }
@@ -122,18 +124,9 @@ const initialState: DemoState = {
   outs: 0,
   pitchCount: 0,
   bases: [null, null, null],
-  score: { home: initialMatch?.homeScore ?? 0, away: initialMatch?.awayScore ?? 0 },
-  lastPlay: '데모 세션 시작',
-  feed: [
-    {
-      inning: 1,
-      half: 'top',
-      order: 1,
-      batter: demoLineups.away[0]?.name ?? '타자',
-      pitch: 0,
-      result: '데모 세션 시작',
-    },
-  ],
+  score: { home: 0, away: 0 },
+  lastPlay: '경기 대기 중',
+  feed: [],
   homeTeamId: initialMatch?.homeTeamId ?? 'home',
   awayTeamId: initialMatch?.awayTeamId ?? 'away',
   batterIndex: { home: 0, away: 0 },
@@ -150,6 +143,7 @@ const initialState: DemoState = {
   },
   removed: { home: [], away: [] },
   teamNames: { home: '삼성 라이온즈', away: '두산 베어스' },
+  gameStarted: false,
   gameOver: false,
   endedAt: null,
   history: [],
@@ -195,15 +189,24 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
   const merged = { ...base, ...incoming } as DemoState;
   const feed = normalizeFeed(merged.feed, { inning: merged.inning, half: merged.half });
   const history = Array.isArray(merged.history)
-    ? merged.history.map((snap) => ({
-        ...base,
-        ...snap,
-        pitchCount: typeof snap.pitchCount === 'number' ? snap.pitchCount : 0,
-        feed: normalizeFeed((snap as DemoSnapshot).feed, { inning: snap.inning, half: snap.half }),
-        gameOver: Boolean((snap as DemoSnapshot).gameOver),
-        endedAt: typeof (snap as DemoSnapshot).endedAt === 'string' ? (snap as DemoSnapshot).endedAt : null,
-      }))
+    ? merged.history.map((snap) => {
+        const normalizedHistoryFeed = normalizeFeed((snap as DemoSnapshot).feed, { inning: snap.inning, half: snap.half });
+        const normalizedGameStarted =
+          typeof (snap as DemoSnapshot).gameStarted === 'boolean'
+            ? (snap as DemoSnapshot).gameStarted
+            : normalizedHistoryFeed.length > 0;
+        return {
+          ...base,
+          ...snap,
+          pitchCount: typeof snap.pitchCount === 'number' ? snap.pitchCount : 0,
+          feed: normalizedHistoryFeed,
+          gameOver: Boolean((snap as DemoSnapshot).gameOver),
+          endedAt: typeof (snap as DemoSnapshot).endedAt === 'string' ? (snap as DemoSnapshot).endedAt : null,
+          gameStarted: normalizedGameStarted,
+        };
+      })
     : [];
+  const gameStarted = typeof incoming.gameStarted === 'boolean' ? incoming.gameStarted : feed.length > 0;
   return {
     ...merged,
     pitchCount: merged.pitchCount ?? 0,
@@ -212,6 +215,7 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
     gameOver: Boolean(merged.gameOver),
     endedAt: typeof merged.endedAt === 'string' ? merged.endedAt : null,
     removed: merged.removed ?? base.removed,
+    gameStarted,
   };
 }
 
@@ -223,6 +227,7 @@ export interface GameRecord {
     awayTeamName: string;
     inning: number;
     half: Half;
+    gameStarted: boolean;
     gameOver: boolean;
     endedAt: string | null;
   };
@@ -246,6 +251,7 @@ export function buildGameRecord(state: DemoState): GameRecord {
       awayTeamName: state.teamNames.away,
       inning: state.inning,
       half: state.half,
+      gameStarted: state.gameStarted,
       gameOver: state.gameOver,
       endedAt: state.endedAt,
     },
@@ -275,14 +281,10 @@ function snapshotState(state: DemoState): DemoSnapshot {
   return snapshot;
 }
 
-function leadOffName(lineup: PlayerSlot[]) {
-  const batting = lineup.filter((slot) => slot.pos.toUpperCase() !== 'P');
-  const active = batting.length ? batting : lineup;
-  return active[0]?.name ?? '타자';
-}
-
 function shouldTrackHistory(actionType: Action['type']) {
-  return !['setTeamName', 'setLineup', 'addBench', 'removeBench', 'substitute', 'hydrate', 'resetGame'].includes(actionType);
+  return !['setTeamName', 'setLineup', 'addBench', 'removeBench', 'substitute', 'hydrate', 'resetGame', 'startGame'].includes(
+    actionType,
+  );
 }
 
 function reducer(state: DemoState, action: Action): DemoState {
@@ -293,6 +295,19 @@ function reducer(state: DemoState, action: Action): DemoState {
     if (!state.history.length) return state;
     const previous = state.history[state.history.length - 1];
     return { ...previous, history: state.history.slice(0, -1) };
+  }
+  const setupActions: Action['type'][] = [
+    'setTeamName',
+    'setLineup',
+    'addBench',
+    'removeBench',
+    'substitute',
+    'manualLog',
+    'resetGame',
+    'startGame',
+  ];
+  if (!state.gameStarted && !setupActions.includes(action.type)) {
+    return state;
   }
 
   const snapshot = snapshotState(state);
@@ -398,6 +413,32 @@ function reducer(state: DemoState, action: Action): DemoState {
         feed: pushFeed(state.feed, createLogEntry(state, '주자 모두 귀환', 0)),
       };
       break;
+    case 'startGame': {
+      if (state.gameStarted || state.gameOver) return state;
+      const startLabel = '경기 시작';
+      const broadcast = `*기록원* - ${startLabel}`;
+      const feed = pushFeed(state.feed, createLogEntryForBaserunning(state, broadcast, 0));
+      nextState = {
+        ...state,
+        inning: 1,
+        half: 'top',
+        balls: 0,
+        strikes: 0,
+        outs: 0,
+        pitchCount: 0,
+        bases: [null, null, null],
+        score: { home: 0, away: 0 },
+        batterIndex: { home: 0, away: 0 },
+        lastPlay: startLabel,
+        gameStarted: true,
+        gameOver: false,
+        endedAt: null,
+        feed,
+        history: [],
+        removed: { ...state.removed },
+      };
+      break;
+    }
     case 'manualLog': {
       const text = action.message.trim();
       if (!text) return state;
@@ -821,17 +862,6 @@ function applyEndGame(state: DemoState, endedAt: string): DemoState {
 }
 
 function createNewGame(state: DemoState): DemoState {
-  const awayBatter = leadOffName(state.lineups.away);
-  const initialFeed: PlayLog[] = [
-    {
-      inning: 1,
-      half: 'top',
-      order: 1,
-      batter: awayBatter,
-      pitch: 0,
-      result: '새 경기 시작',
-    },
-  ];
   return {
     inning: 1,
     half: 'top',
@@ -841,8 +871,8 @@ function createNewGame(state: DemoState): DemoState {
     pitchCount: 0,
     bases: [null, null, null],
     score: { home: 0, away: 0 },
-    lastPlay: '새 경기 시작',
-    feed: initialFeed,
+    lastPlay: '경기 대기 중',
+    feed: [],
     homeTeamId: state.homeTeamId,
     awayTeamId: state.awayTeamId,
     batterIndex: { home: 0, away: 0 },
@@ -855,6 +885,7 @@ function createNewGame(state: DemoState): DemoState {
       away: state.benches.away.map((p) => ({ ...p })),
     },
     teamNames: { ...state.teamNames },
+    gameStarted: false,
     gameOver: false,
     endedAt: null,
     history: [],
@@ -1016,6 +1047,7 @@ interface DemoStoreValue {
     removeBench: (side: Side, benchIndex: number) => void;
     substitute: (side: Side, benchIndex: number, lineupIndex: number) => void;
     setPlay: (message: string) => void;
+    startGame: () => void;
     endGame: (endedAt: string) => void;
     resetGame: () => void;
     undo: () => void;
@@ -1105,6 +1137,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       substitute: (side: Side, benchIndex: number, lineupIndex: number) =>
         dispatch({ type: 'substitute', side, benchIndex, lineupIndex }),
       setPlay: (message: string) => dispatch({ type: 'setPlay', message }),
+      startGame: () => dispatch({ type: 'startGame' }),
       endGame: (endedAt: string) => dispatch({ type: 'endGame', endedAt }),
       resetGame: () => dispatch({ type: 'resetGame' }),
       undo: () => dispatch({ type: 'undo' }),
