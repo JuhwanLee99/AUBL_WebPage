@@ -82,7 +82,6 @@ export default function ScoreboardTextPage() {
         display: 'grid',
         gap: 'clamp(12px, 1.6vw, 18px)',
         minHeight: '100vh',
-        overflow: 'hidden',
       }}
     >
       <div
@@ -800,19 +799,31 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   const rosterAway = new Map<string, { pos?: string; order: number }>();
   record.lineups.home.forEach((p, idx) => rosterHome.set(p.name, { pos: p.pos, order: idx }));
   record.lineups.away.forEach((p, idx) => rosterAway.set(p.name, { pos: p.pos, order: idx }));
-  record.benches.home.forEach((p, idx) => {
-    if (!rosterHome.has(p.name)) rosterHome.set(p.name, { pos: p.pos, order: 100 + idx });
-  });
-  record.benches.away.forEach((p, idx) => {
-    if (!rosterAway.has(p.name)) rosterAway.set(p.name, { pos: p.pos, order: 100 + idx });
-  });
+
+  const benchMetaHome = new Map<string, { pos?: string; order: number }>();
+  const benchMetaAway = new Map<string, { pos?: string; order: number }>();
+  record.benches.home.forEach((p, idx) => benchMetaHome.set(p.name, { pos: p.pos, order: 100 + idx }));
+  record.benches.away.forEach((p, idx) => benchMetaAway.set(p.name, { pos: p.pos, order: 100 + idx }));
+  const extraOrder: Record<'home' | 'away', number> = { home: 100, away: 100 };
 
   const statsHome = new Map<string, PlayerStat>();
   const statsAway = new Map<string, PlayerStat>();
   const pitchHome = new Map<string, PitcherStatExt>();
   const pitchAway = new Map<string, PitcherStatExt>();
 
+  const ensureRosterEntry = (side: 'home' | 'away', name: string) => {
+    const roster = side === 'home' ? rosterHome : rosterAway;
+    if (roster.has(name)) return roster.get(name)!;
+    const benchMeta = side === 'home' ? benchMetaHome : benchMetaAway;
+    const meta = benchMeta.get(name);
+    const entry = { pos: meta?.pos, order: meta?.order ?? extraOrder[side] };
+    extraOrder[side] += 1;
+    roster.set(name, entry);
+    return entry;
+  };
+
   const addStat = (side: 'home' | 'away', name: string) => {
+    ensureRosterEntry(side, name);
     const roster = side === 'home' ? rosterHome : rosterAway;
     const pos = roster.get(name)?.pos;
     const store = side === 'home' ? statsHome : statsAway;
@@ -823,6 +834,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   };
 
   const addPitch = (side: 'home' | 'away', name: string) => {
+    ensureRosterEntry(side, name);
     const roster = side === 'home' ? rosterHome : rosterAway;
     const pos = roster.get(name)?.pos;
     const store = side === 'home' ? pitchHome : pitchAway;
@@ -850,8 +862,8 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
 
     const name = entry.batter?.trim();
     if (!name) return;
-    const side = rosterHome.has(name) ? 'home' : rosterAway.has(name) ? 'away' : null;
-    if (!side) return;
+    const side = offenseSide;
+    ensureRosterEntry(side, name);
 
     const pitchSide = side === 'home' ? 'away' : 'home';
     const pitcherName = currentPitcher[pitchSide];
