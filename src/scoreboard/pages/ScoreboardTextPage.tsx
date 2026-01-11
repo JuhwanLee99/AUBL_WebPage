@@ -58,7 +58,7 @@ export default function ScoreboardTextPage() {
 
   const batterToday = useMemo(() => computeBatterLine(feed, hittingSide, currentBatter), [feed, hittingSide, currentBatter]);
   const pitcherToday = useMemo(() => computePitcherLine(feed, currentPitcher), [feed, currentPitcher]);
-  const jerseyMap = useMemo(() => buildJerseyMap(state.lineups, state.benches), [state.lineups, state.benches]);
+  const jerseyMap = useMemo(() => buildJerseyMap(state.lineups, state.benches, state.removed), [state.lineups, state.benches, state.removed]);
   const playerStats = useMemo(() => buildPlayerStats(buildGameRecord(state)), [state]);
   const displayItems = useMemo(() => buildDisplayItems(feed, jerseyMap), [feed, jerseyMap]);
   const sections = useMemo(() => groupByInning(displayItems), [displayItems]);
@@ -167,6 +167,18 @@ export default function ScoreboardTextPage() {
           <StatsTable title={`${state.teamNames.away} 타자 기록`} stats={playerStats.hitters.away} variant="batter" />
           <StatsTable title={`${state.teamNames.away} 투수 기록`} stats={playerStats.pitchers.away} variant="pitcher" />
         </div>
+      </div>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '12px',
+          padding: '0 2px 12px',
+        }}
+      >
+        <RemovedPlayersPanel title="교체 out (HOME)" players={state.removed.home} />
+        <RemovedPlayersPanel title="교체 out (AWAY)" players={state.removed.away} />
       </div>
     </div>
   );
@@ -588,12 +600,16 @@ function computePitcherLine(feed: ReturnType<typeof useDemoStore>['state']['feed
 function buildJerseyMap(
   lineups: ReturnType<typeof useDemoStore>['state']['lineups'],
   benches?: ReturnType<typeof useDemoStore>['state']['benches'],
+  removed?: ReturnType<typeof useDemoStore>['state']['removed'],
 ) {
-  const merge = (lineup: { name: string; pos: string; number: string }[], bench?: { name: string; pos: string; number: string }[]) =>
-    [...lineup, ...(bench ?? [])];
+  const merge = (
+    lineup: { name: string; pos: string; number: string }[],
+    bench?: { name: string; pos: string; number: string }[],
+    gone?: { name: string; pos: string; number: string }[],
+  ) => [...lineup, ...(bench ?? []), ...(gone ?? [])];
   return {
-    home: new Map(merge(lineups.home, benches?.home).map((p) => [p.name, { number: p.number, pos: p.pos }])),
-    away: new Map(merge(lineups.away, benches?.away).map((p) => [p.name, { number: p.number, pos: p.pos }])),
+    home: new Map(merge(lineups.home, benches?.home, removed?.home).map((p) => [p.name, { number: p.number, pos: p.pos }])),
+    away: new Map(merge(lineups.away, benches?.away, removed?.away).map((p) => [p.name, { number: p.number, pos: p.pos }])),
   };
 }
 
@@ -868,6 +884,19 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   };
   seedBattingOrders('home');
   seedBattingOrders('away');
+  const addRemovedOrders = (side: 'home' | 'away') => {
+    (record.removed?.[side] ?? []).forEach((p) => {
+      const ord = typeof p.order === 'number' && p.order > 0 ? p.order : null;
+      if (!ord) return;
+      const list = battingOrders[side].get(ord) ?? [];
+      if (!list.includes(p.name)) {
+        list.unshift(p.name);
+      }
+      battingOrders[side].set(ord, list);
+    });
+  };
+  addRemovedOrders('home');
+  addRemovedOrders('away');
 
   const statsHome = new Map<string, PlayerStat>();
   const statsAway = new Map<string, PlayerStat>();
@@ -960,9 +989,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     ensureRosterEntry(side, name);
     if (orderNum) {
       const list = battingOrders[side].get(orderNum) ?? [];
-      if (!list.length) {
-        list.push(name);
-      } else if (list[list.length - 1] !== name) {
+      if (!list.includes(name)) {
         list.push(name);
       }
       battingOrders[side].set(orderNum, list);
@@ -1305,6 +1332,54 @@ function StatsTable({ title, stats, variant }: { title: string; stats: PlayerSta
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function RemovedPlayersPanel({ title, players }: { title: string; players: PlayerStat[] | { name: string; pos: string; number: string }[] }) {
+  return (
+    <div
+      style={{
+        background: '#0b0f1a',
+        border: '1px solid rgba(148, 163, 184, 0.2)',
+        borderRadius: '12px',
+        padding: '10px',
+        display: 'grid',
+        gap: '8px',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontWeight: 900, color: '#e2e8f0', fontSize: '14px' }}>{title}</span>
+        <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '11px' }}>{players.length}명</span>
+      </div>
+      {players.length ? (
+        <div style={{ display: 'grid', gap: '6px' }}>
+          {players.map((p, idx) => (
+            <div
+              key={`${p.name}-${idx}`}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '8px 10px',
+                borderRadius: '10px',
+                background: idx % 2 === 0 ? 'rgba(15, 23, 42, 0.5)' : 'rgba(15, 23, 42, 0.35)',
+                border: '1px solid rgba(148, 163, 184, 0.15)',
+                color: '#e2e8f0',
+                fontWeight: 800,
+                fontSize: '12px',
+              }}
+            >
+              <span>{p.name}</span>
+              <span style={{ color: '#94a3b8', fontWeight: 700 }}>
+                #{(p as any).number || '--'} · {(p as any).pos?.toUpperCase?.() ?? '-'}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>퇴장 선수 없음</span>
+      )}
     </div>
   );
 }
