@@ -12,6 +12,7 @@ interface PlayerSlot {
   number: string;
   throws: string;
   bats: string;
+  order?: number | null;
 }
 
 export interface PlayLog {
@@ -39,6 +40,7 @@ interface DemoSnapshot {
   batterIndex: { home: number; away: number };
   lineups: { home: PlayerSlot[]; away: PlayerSlot[] };
   benches: { home: PlayerSlot[]; away: PlayerSlot[] };
+  removed: { home: PlayerSlot[]; away: PlayerSlot[] };
   teamNames: { home: string; away: string };
   gameOver: boolean;
   endedAt: string | null;
@@ -146,6 +148,7 @@ const initialState: DemoState = {
       { name: '이유찬', pos: 'SS', number: '6', throws: 'R', bats: 'R' },
     ],
   },
+  removed: { home: [], away: [] },
   teamNames: { home: '삼성 라이온즈', away: '두산 베어스' },
   gameOver: false,
   endedAt: null,
@@ -208,6 +211,7 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
     history,
     gameOver: Boolean(merged.gameOver),
     endedAt: typeof merged.endedAt === 'string' ? merged.endedAt : null,
+    removed: merged.removed ?? base.removed,
   };
 }
 
@@ -228,6 +232,7 @@ export interface GameRecord {
   batterIndex: DemoState['batterIndex'];
   lineups: DemoState['lineups'];
   benches: DemoState['benches'];
+  removed: DemoState['removed'];
   feed: PlayLog[];
   lastPlay: string;
 }
@@ -255,6 +260,10 @@ export function buildGameRecord(state: DemoState): GameRecord {
     benches: {
       home: state.benches.home.map((player) => ({ ...player })),
       away: state.benches.away.map((player) => ({ ...player })),
+    },
+    removed: {
+      home: state.removed.home.map((player) => ({ ...player })),
+      away: state.removed.away.map((player) => ({ ...player })),
     },
     feed: state.feed.map((entry) => ({ ...entry })),
     lastPlay: state.lastPlay,
@@ -849,6 +858,7 @@ function createNewGame(state: DemoState): DemoState {
     gameOver: false,
     endedAt: null,
     history: [],
+    removed: { home: [], away: [] },
   };
 }
 
@@ -931,11 +941,16 @@ function substitutePlayer(state: DemoState, side: Side, benchIndex: number, line
   const benchPlayer = bench[benchIndex];
   if (!benchPlayer) return state;
   const outgoing = lineup[lineupIndex];
+  const battingOrder = getBattingOrder(state.lineups[side], lineupIndex);
   lineup[lineupIndex] = benchPlayer;
   bench.splice(benchIndex, 1);
-  if (outgoing) {
-    bench.push(outgoing);
-  }
+  const removed = {
+    ...state.removed,
+    [side]:
+      outgoing && !state.removed[side].some((p) => p.name === outgoing.name)
+        ? [...state.removed[side], { ...outgoing, order: battingOrder }]
+        : [...state.removed[side]],
+  };
   const incomingIsP = benchPlayer.pos.toUpperCase() === 'P';
   const outgoingIsP = outgoing?.pos?.toUpperCase() === 'P';
   const isPitcherChange = incomingIsP || outgoingIsP;
@@ -951,9 +966,23 @@ function substitutePlayer(state: DemoState, side: Side, benchIndex: number, line
     ...state,
     lineups: { ...state.lineups, [side]: lineup },
     benches: { ...state.benches, [side]: bench },
+    removed,
     lastPlay: changeText,
     feed,
   };
+}
+
+function getBattingOrder(lineup: PlayerSlot[], lineupIndex: number) {
+  const slot = lineup[lineupIndex];
+  if (!slot || slot.pos.toUpperCase() === 'P') return null;
+  let order = 0;
+  for (let i = 0; i < lineup.length; i += 1) {
+    const player = lineup[i];
+    if (player.pos.toUpperCase() === 'P') continue;
+    order += 1;
+    if (i === lineupIndex) return order;
+  }
+  return order || null;
 }
 
 interface DemoStoreValue {
