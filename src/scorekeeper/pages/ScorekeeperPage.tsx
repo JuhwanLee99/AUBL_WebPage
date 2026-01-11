@@ -197,6 +197,8 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
 type PlayerStat = {
   name: string;
   pos?: string;
+  order?: number | null;
+  status?: 'out';
   pa: number;
   ab: number;
   h: number;
@@ -214,6 +216,7 @@ function ensurePlayerStat(name: string, pos?: string): PlayerStat {
   return {
     name,
     pos,
+    order: null,
     pa: 0,
     ab: 0,
     h: 0,
@@ -308,6 +311,14 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   record.benches.home.forEach((p, idx) => benchMetaHome.set(p.name, { pos: p.pos, order: 100 + idx }));
   record.benches.away.forEach((p, idx) => benchMetaAway.set(p.name, { pos: p.pos, order: 100 + idx }));
   const extraOrder: Record<'home' | 'away', number> = { home: 100, away: 100 };
+  const battingOrders: Record<'home' | 'away', Map<number, string[]>> = { home: new Map(), away: new Map() };
+
+  const seedBattingOrders = (side: 'home' | 'away') => {
+    const batting = record.lineups[side].filter((slot) => slot.pos.toUpperCase() !== 'P');
+    batting.forEach((slot, idx) => battingOrders[side].set(idx + 1, [slot.name]));
+  };
+  seedBattingOrders('home');
+  seedBattingOrders('away');
 
   const statsHome = new Map<string, PlayerStat>();
   const statsAway = new Map<string, PlayerStat>();
@@ -367,6 +378,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
     const defenseSide: 'home' | 'away' = offenseSide === 'home' ? 'away' : 'home';
     const result = entry.result.trim();
+    const orderNum = typeof entry.order === 'number' && entry.order > 0 ? entry.order : null;
 
     if (result.includes('투수 교체')) {
       const incoming = result.split('→')[1];
@@ -387,6 +399,15 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     if (!name) return;
     const side = offenseSide;
     ensureRosterEntry(side, name);
+    if (orderNum) {
+      const list = battingOrders[side].get(orderNum) ?? [];
+      if (!list.length) {
+        list.push(name);
+      } else if (list[list.length - 1] !== name) {
+        list.push(name);
+      }
+      battingOrders[side].set(orderNum, list);
+    }
 
     const pitchSide = side === 'home' ? 'away' : 'home';
     const pitcherName = currentPitcher[pitchSide];
@@ -489,21 +510,27 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     }
   });
 
-  const toArray = (roster: Map<string, { pos?: string; order: number }>, store: Map<string, PlayerStat>) => {
-    const names = [...roster.entries()].sort((a, b) => a[1].order - b[1].order).map(([name]) => name);
-    const fromRoster = names
-      .map((name) => {
-        const meta = roster.get(name);
-        const isPitcher = (meta?.pos ?? '').toUpperCase() === 'P';
-        const stat = store.get(name);
-        // 지명타자 경기에서는 투수를 기본 타자 목록에서 제외하고, 타석 기록이 있는 경우에만 표시
-        if (isPitcher && !stat) return null;
-        const base = ensurePlayerStat(name, meta?.pos);
-        return stat ? { ...base, ...stat, pos: stat.pos ?? base.pos } : base;
-      })
-      .filter(Boolean) as PlayerStat[];
-    const extra = [...store.values()].filter((s) => !roster.has(s.name));
-    return [...fromRoster, ...extra];
+  const toArray = (side: 'home' | 'away', roster: Map<string, { pos?: string; order: number }>, store: Map<string, PlayerStat>) => {
+    const rows: PlayerStat[] = [];
+    const orderMap = battingOrders[side];
+    const orderKeys = [...orderMap.keys()].sort((a, b) => a - b);
+    orderKeys.forEach((order) => {
+      const players = orderMap.get(order) ?? [];
+      players.forEach((playerName, idx) => {
+        const meta = roster.get(playerName);
+        const stat = store.get(playerName);
+        const base = ensurePlayerStat(playerName, meta?.pos);
+        const row = stat ? { ...base, ...stat, pos: stat.pos ?? base.pos } : base;
+        rows.push({ ...row, order, status: idx < players.length - 1 ? 'out' : undefined });
+      });
+    });
+    const remaining = [...store.values()].filter(
+      (s) =>
+        !rows.some((r) => r.name === s.name) &&
+        ![...orderMap.values()].some((list) => list.includes(s.name)),
+    );
+    remaining.forEach((stat) => rows.push({ ...stat, order: null }));
+    return rows;
   };
 
   const toPitcherArray = (
@@ -541,8 +568,8 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
 
   return {
     hitters: {
-      home: toArray(rosterHome, statsHome),
-      away: toArray(rosterAway, statsAway),
+      home: toArray('home', rosterHome, statsHome),
+      away: toArray('away', rosterAway, statsAway),
     },
     pitchers: {
       home: toPitcherArray(rosterHome, pitchHome, pitcherAppearance.home),
@@ -2138,6 +2165,7 @@ function StatsTable({
   const isBatter = variant === 'batter';
   const columns = isBatter
     ? [
+        { key: 'order', label: '타순', width: '50px' },
         { key: 'name', label: '선수', width: '90px' },
         { key: 'pa', label: '타석' },
         { key: 'ab', label: '타수' },
@@ -2212,7 +2240,7 @@ function StatsTable({
             borderCollapse: 'collapse',
             color: '#e2e8f0',
             fontSize: '12px',
-            minWidth: isBatter ? '560px' : '540px',
+            minWidth: isBatter ? '600px' : '540px',
           }}
         >
           <thead style={{ background: 'rgba(255,255,255,0.04)' }}>
@@ -2256,10 +2284,28 @@ function StatsTable({
                     }}
                   >
                     {col.key === 'name' ? (
-                      <span>
-                        {row.name}
-                        {row.pos ? (
-                          <span style={{ color: '#94a3b8', marginLeft: '4px', fontWeight: 700 }}>({row.pos.toUpperCase()})</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <span>
+                          {row.name}
+                          {row.pos ? (
+                            <span style={{ color: '#94a3b8', marginLeft: '4px', fontWeight: 700 }}>({row.pos.toUpperCase()})</span>
+                          ) : null}
+                        </span>
+                        {(row as any).status === 'out' ? (
+                          <span
+                            style={{
+                              padding: '2px 6px',
+                              borderRadius: '999px',
+                              border: '1px solid rgba(239,68,68,0.4)',
+                              background: 'rgba(239,68,68,0.12)',
+                              color: '#ef4444',
+                              fontWeight: 900,
+                              fontSize: '10px',
+                              lineHeight: 1.2,
+                            }}
+                          >
+                            out
+                          </span>
                         ) : null}
                       </span>
                     ) : (
@@ -2267,7 +2313,9 @@ function StatsTable({
                         const value =
                           col.key === 'outs' && !isBatter
                             ? (row as PitcherStat & { outsIp?: string }).outsIp ?? (row as PitcherStat).outs
-                            : (row as Record<string, string | number | undefined>)[col.key];
+                            : col.key === 'order' && isBatter
+                              ? (row as any).order ?? '-'
+                              : (row as Record<string, string | number | undefined>)[col.key];
                         return value ?? '-';
                       })()
                     )}

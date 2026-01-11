@@ -32,7 +32,17 @@ type PitcherLine = {
 
 type DisplayItem =
   | { type: 'marker'; text: string; color: string; key: string; inning: number; half: Half }
-  | { type: 'batter'; text: string; key: string; inning: number; half: Half }
+  | {
+      type: 'batter';
+      text: string;
+      key: string;
+      inning: number;
+      half: Half;
+      order: number | null;
+      jersey?: string;
+      status?: 'out';
+      isSubstitute?: boolean;
+    }
   | { type: 'log'; text: string; key: string; chip: string; inning: number; half: Half };
 
 export default function ScoreboardTextPage() {
@@ -48,7 +58,7 @@ export default function ScoreboardTextPage() {
 
   const batterToday = useMemo(() => computeBatterLine(feed, hittingSide, currentBatter), [feed, hittingSide, currentBatter]);
   const pitcherToday = useMemo(() => computePitcherLine(feed, currentPitcher), [feed, currentPitcher]);
-  const jerseyMap = useMemo(() => buildJerseyMap(state.lineups), [state.lineups]);
+  const jerseyMap = useMemo(() => buildJerseyMap(state.lineups, state.benches), [state.lineups, state.benches]);
   const playerStats = useMemo(() => buildPlayerStats(buildGameRecord(state)), [state]);
   const displayItems = useMemo(() => buildDisplayItems(feed, jerseyMap), [feed, jerseyMap]);
   const sections = useMemo(() => groupByInning(displayItems), [displayItems]);
@@ -339,13 +349,16 @@ function LiveFeed({
                   if (item.type === 'batter') {
                     return (
                       <div key={item.key} style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '13px', padding: '2px 0' }}>
-                        {item.text}
+                        {item.order ? `${item.order}번 ` : ''}
+                        {item.text} 타석
                       </div>
                     );
                   }
                   if (
                     item.type === 'log' &&
-                    (item.text.includes('투수 교체') || item.text.trim().endsWith('투수'))
+                    (item.text.includes('투수 교체') ||
+                      item.text.includes('타자 교체') ||
+                      item.text.trim().endsWith('투수'))
                   ) {
                     return (
                       <div key={item.key} style={{ color: '#e2e8f0', fontWeight: 900, fontSize: '13px', padding: '2px 0' }}>
@@ -572,10 +585,15 @@ function computePitcherLine(feed: ReturnType<typeof useDemoStore>['state']['feed
   return base;
 }
 
-function buildJerseyMap(lineups: ReturnType<typeof useDemoStore>['state']['lineups']) {
+function buildJerseyMap(
+  lineups: ReturnType<typeof useDemoStore>['state']['lineups'],
+  benches?: ReturnType<typeof useDemoStore>['state']['benches'],
+) {
+  const merge = (lineup: { name: string; pos: string; number: string }[], bench?: { name: string; pos: string; number: string }[]) =>
+    [...lineup, ...(bench ?? [])];
   return {
-    home: new Map(lineups.home.map((p) => [p.name, { number: p.number, pos: p.pos }])),
-    away: new Map(lineups.away.map((p) => [p.name, { number: p.number, pos: p.pos }])),
+    home: new Map(merge(lineups.home, benches?.home).map((p) => [p.name, { number: p.number, pos: p.pos }])),
+    away: new Map(merge(lineups.away, benches?.away).map((p) => [p.name, { number: p.number, pos: p.pos }])),
   };
 }
 
@@ -604,9 +622,12 @@ function buildDisplayItems(
   let prevInning: number | null = null;
   let prevBatter: string | null = null;
   const endedInnings = new Set<string>();
+  const battingSlots: Record<'home' | 'away', Map<number, string>> = { home: new Map(), away: new Map() };
 
   chronological.forEach((entry, idx) => {
     const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
+    const order = entry.order && entry.order > 0 ? entry.order : null;
+    const batterName = entry.batter?.trim();
 
     const isEndMarker = entry.result.includes('종료');
     if (isEndMarker) {
@@ -643,12 +664,43 @@ function buildDisplayItems(
       prevBatter = null;
     }
 
-    if (entry.batter) {
-      const jersey = jerseyMap[offenseSide].get(entry.batter)?.number;
-      const batterText = `${entry.order}번 ${entry.batter}${jersey ? `(${jersey})` : ''} 타석`;
-      if (entry.batter !== prevBatter) {
-        items.push({ type: 'batter', text: batterText, key: `batter-${entry.inning}-${entry.half}-${entry.batter}-${idx}`, inning: entry.inning, half: entry.half });
-        prevBatter = entry.batter;
+    let isSubstitute = false;
+    if (batterName && order) {
+      const slot = battingSlots[offenseSide];
+      const prevOccupant = slot.get(order);
+      if (prevOccupant && prevOccupant !== batterName) {
+        const outgoingJersey = jerseyMap[offenseSide].get(prevOccupant)?.number;
+        items.push({
+          type: 'batter',
+          text: `${prevOccupant}${outgoingJersey ? `(${outgoingJersey})` : ''}`,
+          key: `batter-${entry.inning}-${entry.half}-${order}-${idx}-out`,
+          inning: entry.inning,
+          half: entry.half,
+          order,
+          jersey: outgoingJersey,
+          status: 'out',
+        });
+        isSubstitute = true;
+        prevBatter = null;
+      }
+      slot.set(order, batterName);
+    }
+
+    if (batterName) {
+      const jersey = jerseyMap[offenseSide].get(batterName)?.number;
+      const batterText = `${batterName}${jersey ? `(${jersey})` : ''}`;
+      if (batterName !== prevBatter || isSubstitute) {
+        items.push({
+          type: 'batter',
+          text: batterText,
+          key: `batter-${entry.inning}-${entry.half}-${order ?? 'na'}-${batterName}-${idx}${isSubstitute ? '-sub' : ''}`,
+          inning: entry.inning,
+          half: entry.half,
+          order,
+          jersey,
+          isSubstitute,
+        });
+        prevBatter = batterName;
       }
     }
 
@@ -731,6 +783,8 @@ function colorizeText(text: string) {
 type PlayerStat = {
   name: string;
   pos?: string;
+  order?: number | null;
+  status?: 'out';
   pa: number;
   ab: number;
   h: number;
@@ -763,6 +817,7 @@ function ensurePlayerStat(name: string, pos?: string): PlayerStat {
   return {
     name,
     pos,
+    order: null,
     pa: 0,
     ab: 0,
     h: 0,
@@ -805,6 +860,14 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   record.benches.home.forEach((p, idx) => benchMetaHome.set(p.name, { pos: p.pos, order: 100 + idx }));
   record.benches.away.forEach((p, idx) => benchMetaAway.set(p.name, { pos: p.pos, order: 100 + idx }));
   const extraOrder: Record<'home' | 'away', number> = { home: 100, away: 100 };
+  const battingOrders: Record<'home' | 'away', Map<number, string[]>> = { home: new Map(), away: new Map() };
+
+  const seedBattingOrders = (side: 'home' | 'away') => {
+    const batting = record.lineups[side].filter((slot) => slot.pos.toUpperCase() !== 'P');
+    batting.forEach((slot, idx) => battingOrders[side].set(idx + 1, [slot.name]));
+  };
+  seedBattingOrders('home');
+  seedBattingOrders('away');
 
   const statsHome = new Map<string, PlayerStat>();
   const statsAway = new Map<string, PlayerStat>();
@@ -869,6 +932,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
     const defenseSide: 'home' | 'away' = offenseSide === 'home' ? 'away' : 'home';
     const result = entry.result.trim();
+    const orderNum = typeof entry.order === 'number' && entry.order > 0 ? entry.order : null;
 
     const setCurrentPitcher = (side: 'home' | 'away', name: string) => {
       const cleaned = cleanName(name);
@@ -894,6 +958,15 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     if (!name) return;
     const side = offenseSide;
     ensureRosterEntry(side, name);
+    if (orderNum) {
+      const list = battingOrders[side].get(orderNum) ?? [];
+      if (!list.length) {
+        list.push(name);
+      } else if (list[list.length - 1] !== name) {
+        list.push(name);
+      }
+      battingOrders[side].set(orderNum, list);
+    }
 
     const pitchSide = side === 'home' ? 'away' : 'home';
     const pitcherName = currentPitcher[pitchSide];
@@ -997,20 +1070,27 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     }
   });
 
-  const toArray = (roster: Map<string, { pos?: string; order: number }>, store: Map<string, PlayerStat>) => {
-    const names = [...roster.entries()].sort((a, b) => a[1].order - b[1].order).map(([name]) => name);
-    const fromRoster = names
-      .map((name) => {
-        const meta = roster.get(name);
-        const isPitcher = (meta?.pos ?? '').toUpperCase() === 'P';
-        const stat = store.get(name);
-        if (isPitcher && !stat) return null;
-        const base = ensurePlayerStat(name, meta?.pos);
-        return stat ? { ...base, ...stat, pos: stat.pos ?? base.pos } : base;
-      })
-      .filter(Boolean) as PlayerStat[];
-    const extra = [...store.values()].filter((s) => !roster.has(s.name));
-    return [...fromRoster, ...extra];
+  const toArray = (side: 'home' | 'away', roster: Map<string, { pos?: string; order: number }>, store: Map<string, PlayerStat>) => {
+    const rows: PlayerStat[] = [];
+    const orderMap = battingOrders[side];
+    const orderKeys = [...orderMap.keys()].sort((a, b) => a - b);
+    orderKeys.forEach((order) => {
+      const players = orderMap.get(order) ?? [];
+      players.forEach((playerName, idx) => {
+        const meta = roster.get(playerName);
+        const stat = store.get(playerName);
+        const base = ensurePlayerStat(playerName, meta?.pos);
+        const row = stat ? { ...base, ...stat, pos: stat.pos ?? base.pos } : base;
+        rows.push({ ...row, order, status: idx < players.length - 1 ? 'out' : undefined });
+      });
+    });
+    const remaining = [...store.values()].filter(
+      (s) =>
+        !rows.some((r) => r.name === s.name) &&
+        ![...orderMap.values()].some((list) => list.includes(s.name)),
+    );
+    remaining.forEach((stat) => rows.push({ ...stat, order: null }));
+    return rows;
   };
 
   const toPitcherArray = (
@@ -1048,8 +1128,8 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
 
   return {
     hitters: {
-      home: toArray(rosterHome, statsHome),
-      away: toArray(rosterAway, statsAway),
+      home: toArray('home', rosterHome, statsHome),
+      away: toArray('away', rosterAway, statsAway),
     },
     pitchers: {
       home: toPitcherArray(rosterHome, pitchHome, pitcherAppearance.home),
@@ -1062,6 +1142,7 @@ function StatsTable({ title, stats, variant }: { title: string; stats: PlayerSta
   const isBatter = variant === 'batter';
   const columns = isBatter
     ? [
+        { key: 'order', label: '타순', width: '50px' },
         { key: 'name', label: '선수', width: '100px' },
         { key: 'pa', label: '타석' },
         { key: 'ab', label: '타수' },
@@ -1136,7 +1217,7 @@ function StatsTable({ title, stats, variant }: { title: string; stats: PlayerSta
             borderCollapse: 'collapse',
             color: '#e2e8f0',
             fontSize: '11px',
-            minWidth: isBatter ? '560px' : '520px',
+            minWidth: isBatter ? '600px' : '520px',
           }}
         >
           <thead style={{ background: 'rgba(255,255,255,0.04)' }}>
@@ -1172,24 +1253,45 @@ function StatsTable({ title, stats, variant }: { title: string; stats: PlayerSta
                     key={col.key}
                     style={{
                       padding: '6px 5px',
-                      textAlign: col.key === 'name' ? 'left' : 'center',
-                      borderBottom: '1px solid rgba(148, 163, 184, 0.08)',
-                      fontWeight: col.key === 'name' ? 800 : 700,
-                      color: col.key === 'name' ? '#e2e8f0' : '#cbd5e1',
-                      whiteSpace: 'nowrap',
+                    textAlign: col.key === 'name' ? 'left' : 'center',
+                    borderBottom: '1px solid rgba(148, 163, 184, 0.08)',
+                    fontWeight: col.key === 'name' ? 800 : 700,
+                    color: col.key === 'name' ? '#e2e8f0' : '#cbd5e1',
+                    whiteSpace: 'nowrap',
                     }}
                   >
                     {col.key === 'name' ? (
-                      <span>
-                        {row.name}
-                        {(row as any).pos ? (
-                          <span style={{ color: '#94a3b8', marginLeft: '4px', fontWeight: 700 }}>
-                            ({(row as any).pos.toUpperCase()})
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <span>
+                          {row.name}
+                          {(row as any).pos ? (
+                            <span style={{ color: '#94a3b8', marginLeft: '4px', fontWeight: 700 }}>
+                              ({(row as any).pos.toUpperCase()})
+                            </span>
+                          ) : null}
+                        </span>
+                        {(row as any).status === 'out' ? (
+                          <span
+                            style={{
+                              padding: '2px 6px',
+                              borderRadius: '999px',
+                              border: '1px solid rgba(239,68,68,0.4)',
+                              background: 'rgba(239,68,68,0.12)',
+                              color: '#ef4444',
+                              fontWeight: 900,
+                              fontSize: '10px',
+                              lineHeight: 1.2,
+                            }}
+                          >
+                            out
                           </span>
                         ) : null}
                       </span>
                     ) : (
                       (() => {
+                        if (isBatter && col.key === 'order') {
+                          return (row as any).order ?? '-';
+                        }
                         if (!isBatter && col.key === 'outs') {
                           return (row as any).outsIp ?? (row as any).outs;
                         }
