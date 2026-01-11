@@ -1025,6 +1025,7 @@ export default function ScorekeeperPage() {
               onSetTeamName={actions.setTeamName}
               onSetLineup={actions.setLineup}
               onAddBench={actions.addBench}
+              onRemoveBench={actions.removeBench}
               onSubstitute={actions.substitute}
               highlightBatterName={hittingSide === 'home' ? currentBatter : undefined}
               highlightPitcherName={defenseSide === 'home' ? currentPitcher : undefined}
@@ -1050,6 +1051,7 @@ export default function ScorekeeperPage() {
               onSetTeamName={actions.setTeamName}
               onSetLineup={actions.setLineup}
               onAddBench={actions.addBench}
+              onRemoveBench={actions.removeBench}
               onSubstitute={actions.substitute}
               highlightBatterName={hittingSide === 'away' ? currentBatter : undefined}
               highlightPitcherName={defenseSide === 'away' ? currentPitcher : undefined}
@@ -1612,6 +1614,7 @@ function TeamEditor({
   onSetTeamName,
   onSetLineup,
   onAddBench,
+  onRemoveBench,
   onSubstitute,
   highlightBatterName,
   highlightPitcherName,
@@ -1627,6 +1630,7 @@ function TeamEditor({
   onSetTeamName: (side: Side, name: string) => void;
   onSetLineup: (side: Side, index: number, updates: { name?: string; pos?: string; number?: string; throws?: string; bats?: string }) => void;
   onAddBench: (side: Side, player: { name: string; pos: string; number: string; throws: string; bats: string }) => void;
+  onRemoveBench: (side: Side, benchIndex: number) => void;
   onSubstitute: (side: Side, benchIndex: number, lineupIndex: number) => void;
   highlightBatterName?: string;
   highlightPitcherName?: string;
@@ -1989,44 +1993,71 @@ function TeamEditor({
                 </span>
               </div>
               <span style={{ color: '#94a3b8', fontSize: '12px', textAlign: 'center' }}>→ 라인업 투입</span>
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                {battingEntries.map((entry, orderIdx) => (
+              <div style={{ display: 'grid', gap: '8px', width: '100%' }}>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                    gap: '6px',
+                  }}
+                >
+                  {battingEntries.map((entry, orderIdx) => (
+                    <button
+                      key={entry.slot.name + entry.idx}
+                      type="button"
+                      onClick={() => onSubstitute(side, benchIdx, entry.idx)}
+                      style={{
+                        width: '100%',
+                        padding: '6px 8px',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(148,163,184,0.3)',
+                        background: 'rgba(255,255,255,0.04)',
+                        color: '#cbd5e1',
+                        fontWeight: 800,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {orderIdx + 1}번
+                    </button>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                  {pitcherEntry ? (
+                    <button
+                      type="button"
+                      onClick={() => onSubstitute(side, benchIdx, pitcherEntry.idx)}
+                      style={{
+                        padding: '6px 8px',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(148,163,184,0.3)',
+                        background: 'rgba(255,255,255,0.04)',
+                        color: '#cbd5e1',
+                        fontWeight: 800,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      투수
+                    </button>
+                  ) : null}
                   <button
-                    key={entry.slot.name + entry.idx}
                     type="button"
-                    onClick={() => onSubstitute(side, benchIdx, entry.idx)}
+                    onClick={() => onRemoveBench(side, benchIdx)}
                     style={{
                       padding: '6px 8px',
                       borderRadius: '8px',
-                      border: '1px solid rgba(148,163,184,0.3)',
-                      background: 'rgba(255,255,255,0.04)',
-                      color: '#cbd5e1',
-                      fontWeight: 800,
+                      border: '1px solid rgba(239,68,68,0.45)',
+                      background: 'rgba(248,113,113,0.08)',
+                      color: '#fca5a5',
+                      fontWeight: 900,
                       fontSize: '12px',
                       cursor: 'pointer',
                     }}
                   >
-                    {orderIdx + 1}번
+                    삭제
                   </button>
-                ))}
-                {pitcherEntry ? (
-                  <button
-                    type="button"
-                    onClick={() => onSubstitute(side, benchIdx, pitcherEntry.idx)}
-                    style={{
-                      padding: '6px 8px',
-                      borderRadius: '8px',
-                      border: '1px solid rgba(148,163,184,0.3)',
-                      background: 'rgba(255,255,255,0.04)',
-                      color: '#cbd5e1',
-                      fontWeight: 800,
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    투수
-                  </button>
-                ) : null}
+                </div>
               </div>
             </div>
           ))}

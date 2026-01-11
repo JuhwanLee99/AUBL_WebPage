@@ -75,6 +75,7 @@ type Action =
   | { type: 'setTeamName'; side: Side; name: string }
   | { type: 'setLineup'; side: Side; index: number; updates: Partial<PlayerSlot> }
   | { type: 'addBench'; side: Side; player: PlayerSlot }
+  | { type: 'removeBench'; side: Side; benchIndex: number }
   | { type: 'substitute'; side: Side; benchIndex: number; lineupIndex: number }
   | { type: 'endGame'; endedAt: string }
   | { type: 'resetGame' }
@@ -272,7 +273,7 @@ function leadOffName(lineup: PlayerSlot[]) {
 }
 
 function shouldTrackHistory(actionType: Action['type']) {
-  return !['setTeamName', 'setLineup', 'addBench', 'substitute', 'hydrate', 'resetGame'].includes(actionType);
+  return !['setTeamName', 'setLineup', 'addBench', 'removeBench', 'substitute', 'hydrate', 'resetGame'].includes(actionType);
 }
 
 function reducer(state: DemoState, action: Action): DemoState {
@@ -432,6 +433,17 @@ function reducer(state: DemoState, action: Action): DemoState {
         },
       };
       break;
+    case 'removeBench': {
+      const nextBench = state.benches[action.side].filter((_, idx) => idx !== action.benchIndex);
+      if (nextBench.length === state.benches[action.side].length) {
+        return state;
+      }
+      nextState = {
+        ...state,
+        benches: { ...state.benches, [action.side]: nextBench },
+      };
+      break;
+    }
     case 'substitute':
       nextState = substitutePlayer(state, action.side, action.benchIndex, action.lineupIndex);
       break;
@@ -653,18 +665,18 @@ function applySteal(state: DemoState, success: boolean): DemoState {
   const bases = [...state.bases] as Bases;
   let moved: { name: string; from: number; to: number; scored: boolean } | null = null;
   for (let i = 2; i >= 0; i -= 1) {
-    if (bases[i]) {
-      const runner = bases[i];
-      bases[i] = null;
-      const dest = i + 1;
-      if (dest >= 3) {
-        runs += 1;
-      } else {
-        bases[dest] = runner;
-      }
-      moved = { name: runner, from: i, to: dest, scored: dest >= 3 };
-      break;
+    if (!bases[i]) continue;
+    const runner = bases[i];
+    if (!runner) continue;
+    bases[i] = null;
+    const dest = i + 1;
+    if (dest >= 3) {
+      runs += 1;
+    } else {
+      bases[dest] = runner;
     }
+    moved = { name: runner, from: i, to: dest, scored: dest >= 3 };
+    break;
   }
   const side = hittingSide(state);
   const score =
@@ -971,6 +983,7 @@ interface DemoStoreValue {
     setTeamName: (side: Side, name: string) => void;
     setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) => void;
     addBench: (side: Side, player: PlayerSlot) => void;
+    removeBench: (side: Side, benchIndex: number) => void;
     substitute: (side: Side, benchIndex: number, lineupIndex: number) => void;
     setPlay: (message: string) => void;
     endGame: (endedAt: string) => void;
@@ -1058,6 +1071,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) =>
         dispatch({ type: 'setLineup', side, index, updates }),
       addBench: (side: Side, player: PlayerSlot) => dispatch({ type: 'addBench', side, player }),
+      removeBench: (side: Side, benchIndex: number) => dispatch({ type: 'removeBench', side, benchIndex }),
       substitute: (side: Side, benchIndex: number, lineupIndex: number) =>
         dispatch({ type: 'substitute', side, benchIndex, lineupIndex }),
       setPlay: (message: string) => dispatch({ type: 'setPlay', message }),
