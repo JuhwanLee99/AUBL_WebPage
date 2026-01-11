@@ -302,19 +302,31 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   const rosterAway = new Map<string, { pos?: string; order: number }>();
   record.lineups.home.forEach((p, idx) => rosterHome.set(p.name, { pos: p.pos, order: idx }));
   record.lineups.away.forEach((p, idx) => rosterAway.set(p.name, { pos: p.pos, order: idx }));
-  record.benches.home.forEach((p, idx) => {
-    if (!rosterHome.has(p.name)) rosterHome.set(p.name, { pos: p.pos, order: 100 + idx });
-  });
-  record.benches.away.forEach((p, idx) => {
-    if (!rosterAway.has(p.name)) rosterAway.set(p.name, { pos: p.pos, order: 100 + idx });
-  });
+
+  const benchMetaHome = new Map<string, { pos?: string; order: number }>();
+  const benchMetaAway = new Map<string, { pos?: string; order: number }>();
+  record.benches.home.forEach((p, idx) => benchMetaHome.set(p.name, { pos: p.pos, order: 100 + idx }));
+  record.benches.away.forEach((p, idx) => benchMetaAway.set(p.name, { pos: p.pos, order: 100 + idx }));
+  const extraOrder: Record<'home' | 'away', number> = { home: 100, away: 100 };
 
   const statsHome = new Map<string, PlayerStat>();
   const statsAway = new Map<string, PlayerStat>();
   const pitchHome = new Map<string, PitcherStat>();
   const pitchAway = new Map<string, PitcherStat>();
 
+  const ensureRosterEntry = (side: 'home' | 'away', name: string) => {
+    const roster = side === 'home' ? rosterHome : rosterAway;
+    if (roster.has(name)) return roster.get(name)!;
+    const benchMeta = side === 'home' ? benchMetaHome : benchMetaAway;
+    const meta = benchMeta.get(name);
+    const entry = { pos: meta?.pos, order: meta?.order ?? extraOrder[side] };
+    extraOrder[side] += 1;
+    roster.set(name, entry);
+    return entry;
+  };
+
   const addStat = (side: 'home' | 'away', name: string) => {
+    ensureRosterEntry(side, name);
     const roster = side === 'home' ? rosterHome : rosterAway;
     const pos = roster.get(name)?.pos;
     const store = side === 'home' ? statsHome : statsAway;
@@ -325,6 +337,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   };
 
   const addPitch = (side: 'home' | 'away', name: string) => {
+    ensureRosterEntry(side, name);
     const roster = side === 'home' ? rosterHome : rosterAway;
     const pos = roster.get(name)?.pos;
     const store = side === 'home' ? pitchHome : pitchAway;
@@ -334,29 +347,37 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     return store.get(name)!;
   };
 
-  const pitcherOfSide = (side: 'home' | 'away') => {
-    const lineup = side === 'home' ? record.lineups.home : record.lineups.away;
-    return lineup.find((p) => p.pos.toUpperCase() === 'P')?.name;
-  };
+  const chronological = [...record.feed].reverse();
+  const currentPitcher: Record<'home' | 'away', string | null> = { home: null, away: null };
+  const cleanName = (raw: string) => raw.replace(/\([^)]*\)/g, '').replace(/투수/g, '').replace(/·/g, '').trim();
 
-  [...record.feed].reverse().forEach((entry) => {
+  chronological.forEach((entry) => {
+    const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
+    const defenseSide: 'home' | 'away' = offenseSide === 'home' ? 'away' : 'home';
+    const result = entry.result.trim();
+
+    if (result.includes('투수 교체')) {
+      const incoming = result.split('→')[1];
+      if (incoming) currentPitcher[defenseSide] = cleanName(incoming);
+    } else if (result.endsWith('투수')) {
+      currentPitcher[defenseSide] = cleanName(result.replace('투수', ''));
+    }
+
     const name = entry.batter?.trim();
     if (!name) return;
-    const side = rosterHome.has(name) ? 'home' : rosterAway.has(name) ? 'away' : null;
-    if (!side) return;
-    const defenseSide = side === 'home' ? 'away' : 'home';
-    const pitcherName = pitcherOfSide(defenseSide);
-    let pitcherStat: PitcherStat | null = null;
-    if (pitcherName) {
-      pitcherStat = addPitch(defenseSide, pitcherName);
-    }
-    const pitchInfo = classifyPitch(entry.result);
+    const side = offenseSide;
+    ensureRosterEntry(side, name);
+
+    const pitchSide = side === 'home' ? 'away' : 'home';
+    const pitcherName = currentPitcher[pitchSide];
+    const pitcherStat = pitcherName ? addPitch(pitchSide, pitcherName) : null;
+    const pitchInfo = classifyPitch(result);
     if (pitcherStat && pitchInfo.pitch) {
       pitcherStat.pitches += 1;
       if (pitchInfo.strike) pitcherStat.strikes += 1;
       if (pitchInfo.ball) pitcherStat.balls += 1;
     }
-    const kind = classifyResult(entry.result);
+    const kind = classifyResult(result);
     if (!kind) return;
     const stat = addStat(side, name);
     switch (kind) {
@@ -661,7 +682,6 @@ export default function ScorekeeperPage() {
     <div
       style={{
         borderRadius: '20px',
-        overflow: 'hidden',
         border: '1px solid rgba(148, 163, 184, 0.25)',
         background: '#0b0f1a',
         color: '#e2e8f0',
