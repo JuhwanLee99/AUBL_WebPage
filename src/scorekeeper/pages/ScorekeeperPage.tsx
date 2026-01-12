@@ -1921,7 +1921,7 @@ function TeamEditor({
       >
         {battingEntries.map((entry, orderIdx) => (
           <div
-            key={entry.slot.name + entry.idx}
+            key={entry.idx}
             style={{
               display: 'grid',
               gridTemplateColumns: '24px 85px 55px 50px 70px 70px',
@@ -2255,7 +2255,7 @@ function TeamEditor({
                 >
                   {battingEntries.map((entry, orderIdx) => (
                     <button
-                      key={entry.slot.name + entry.idx}
+                      key={entry.idx}
                       type="button"
                       onClick={() => onSubstitute(side, benchIdx, entry.idx)}
                       style={{
