@@ -5,6 +5,15 @@ const defaultLiveSrc = 'https://www.youtube.com/embed/live_stream?channel=YOUR_C
 export default function ScoreboardLiveOverlayPage() {
   const { state } = useDemoStore();
   const youtubeLiveSrc = (state.liveVideoUrl || '').trim() || defaultLiveSrc;
+  const battingSide = state.half === 'top' ? 'away' : 'home';
+  const inningHalfIcon = state.half === 'top' ? '▲' : '▼';
+  const inningLabel = `${inningHalfIcon} ${state.inning}회${state.half === 'top' ? '초' : '말'}`;
+  const baseRunners = state.bases
+    .map((runner, idx) => (runner ? `${idx + 1}루` : null))
+    .filter((label): label is string => Boolean(label));
+  const baseText = baseRunners.length ? baseRunners.join(', ') : '주자 없음';
+  const countText = `B ${state.balls} · S ${state.strikes} · O ${state.outs}`;
+  const lastPlay = state.lastPlay || '경기 대기 중';
 
   return (
     <div
@@ -54,21 +63,41 @@ export default function ScoreboardLiveOverlayPage() {
             minWidth: '240px',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '20px', fontWeight: 700 }}>
-            <span>HOME</span>
-            <span>3</span>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              fontSize: '20px',
+              fontWeight: 700,
+              color: battingSide === 'home' ? '#f97316' : '#f8fafc',
+            }}
+          >
+            <span>{state.teamNames.home || 'HOME'}</span>
+            <span>{state.score.home}</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '20px', fontWeight: 700 }}>
-            <span>AWAY</span>
-            <span>2</span>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              fontSize: '20px',
+              fontWeight: 700,
+              color: battingSide === 'away' ? '#f97316' : '#f8fafc',
+            }}
+          >
+            <span>{state.teamNames.away || 'AWAY'}</span>
+            <span>{state.score.away}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#cbd5f5' }}>
+            <span>이닝</span>
+            <span>{inningLabel}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#cbd5f5' }}>
             <span>볼카운트</span>
-            <span>2 - 1</span>
+            <span>{countText}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#cbd5f5' }}>
             <span>베이스</span>
-            <span>1, 3</span>
+            <span>{baseText}</span>
           </div>
         </div>
 
@@ -98,7 +127,7 @@ export default function ScoreboardLiveOverlayPage() {
           >
             Last Play
           </span>
-          <span style={{ color: '#e2e8f0' }}>4회말 1사, 3루 주자 득점. 희생플라이.</span>
+          <span style={{ color: '#e2e8f0' }}>{lastPlay}</span>
         </div>
       </div>
     </div>
