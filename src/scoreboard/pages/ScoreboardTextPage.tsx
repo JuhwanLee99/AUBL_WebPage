@@ -1,6 +1,9 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import ScoreboardFrame from '../components/ScoreboardFrame';
 import { useDemoStore, buildGameRecord } from '../../shared/state/demoStore';
+import StatsTable from '../../shared/components/StatsTable';
+import RemovedPlayersPanel from '../../shared/components/RemovedPlayersPanel';
+import type { BatterStatLine, PitcherStatLine } from '../../shared/types/scoreStats';
 
 type Half = 'top' | 'bottom';
 
@@ -161,12 +164,13 @@ export default function ScoreboardTextPage() {
         }}
       >
         <div style={{ display: 'grid', gap: '8px' }}>
-          <StatsTable title={`${state.teamNames.home} 타자 기록`} stats={playerStats.hitters.home} variant="batter" />
-          <StatsTable title={`${state.teamNames.home} 투수 기록`} stats={playerStats.pitchers.home} variant="pitcher" />
+          <StatsTable title={`${state.teamNames.home} 타자 기록`} stats={playerStats.hitters.home} variant="batter" density="compact" />
+          <StatsTable title={`${state.teamNames.home} 투수 기록`} stats={playerStats.pitchers.home} variant="pitcher" density="compact" />
+
         </div>
         <div style={{ display: 'grid', gap: '8px' }}>
-          <StatsTable title={`${state.teamNames.away} 타자 기록`} stats={playerStats.hitters.away} variant="batter" />
-          <StatsTable title={`${state.teamNames.away} 투수 기록`} stats={playerStats.pitchers.away} variant="pitcher" />
+          <StatsTable title={`${state.teamNames.away} 타자 기록`} stats={playerStats.hitters.away} variant="batter" density="compact" />
+          <StatsTable title={`${state.teamNames.away} 투수 기록`} stats={playerStats.pitchers.away} variant="pitcher" density="compact" />
         </div>
       </div>
 
@@ -178,8 +182,8 @@ export default function ScoreboardTextPage() {
           padding: '0 2px 12px',
         }}
       >
-        <RemovedPlayersPanel title="교체 out (HOME)" players={state.removed.home} />
-        <RemovedPlayersPanel title="교체 out (AWAY)" players={state.removed.away} />
+        <RemovedPlayersPanel title="교체 out (HOME)" players={state.removed.home} density="compact" />
+        <RemovedPlayersPanel title="교체 out (AWAY)" players={state.removed.away} density="compact" />
       </div>
     </div>
   );
@@ -797,38 +801,9 @@ function colorizeText(text: string) {
   return parts;
 }
 
-type PlayerStat = {
-  name: string;
-  pos?: string;
-  order?: number | null;
-  status?: 'out';
-  pa: number;
-  ab: number;
-  h: number;
-  singles: number;
-  doubles: number;
-  triples: number;
-  hr: number;
-  bb: number;
-  hbp: number;
-  so: number;
-  sac: number;
-};
+type PlayerStat = BatterStatLine;
 
-type PitcherStatExt = {
-  name: string;
-  pos?: string;
-  bf: number;
-  pitches: number;
-  strikes: number;
-  balls: number;
-  outs: number;
-  h: number;
-  hr: number;
-  bb: number;
-  hbp: number;
-  so: number;
-};
+type PitcherStatExt = PitcherStatLine;
 
 function ensurePlayerStat(name: string, pos?: string): PlayerStat {
   return {
@@ -1164,223 +1139,4 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
       away: toPitcherArray(rosterAway, pitchAway, pitcherAppearance.away),
     },
   };
-}
-
-function StatsTable({ title, stats, variant }: { title: string; stats: PlayerStat[] | (PitcherStatExt & { appearanceOrder?: number | null; appearanceLabel?: string })[]; variant: 'batter' | 'pitcher' }) {
-  const isBatter = variant === 'batter';
-  const columns = isBatter
-    ? [
-        { key: 'order', label: '타순', width: '50px' },
-        { key: 'name', label: '선수', width: '100px' },
-        { key: 'pa', label: '타석' },
-        { key: 'ab', label: '타수' },
-        { key: 'h', label: '안타' },
-        { key: 'singles', label: '1루타' },
-        { key: 'doubles', label: '2루타' },
-        { key: 'triples', label: '3루타' },
-        { key: 'hr', label: '홈런' },
-        { key: 'bb', label: '볼넷' },
-        { key: 'hbp', label: '사구' },
-        { key: 'so', label: '삼진' },
-        { key: 'sac', label: '희생' },
-        { key: 'avg', label: '타율' },
-        { key: 'obp', label: '출루율' },
-      ]
-    : [
-        { key: 'appearanceLabel', label: '등판', width: '60px' },
-        { key: 'name', label: '선수', width: '100px' },
-        { key: 'bf', label: '타자상대' },
-        { key: 'pitchCombo', label: '투구수(S/B)' },
-        { key: 'outs', label: '이닝' },
-        { key: 'h', label: '피안타' },
-        { key: 'hr', label: '피홈런' },
-        { key: 'bb', label: '볼넷' },
-        { key: 'hbp', label: '사구' },
-        { key: 'so', label: '탈삼진' },
-      ];
-
-  const rows = isBatter
-    ? (stats as PlayerStat[]).map((stat) => {
-        const avg = stat.ab > 0 ? stat.h / stat.ab : 0;
-        const obpDen = stat.ab + stat.bb + stat.hbp + stat.sac;
-        const obp = obpDen > 0 ? (stat.h + stat.bb + stat.hbp) / obpDen : 0;
-        const fmt = (val: number) => (Number.isFinite(val) ? val.toFixed(3).replace(/^0/, '') : '-');
-        return { ...stat, avg: stat.ab > 0 ? fmt(avg) : '-', obp: obpDen > 0 ? fmt(obp) : '-' };
-      })
-    : (stats as (PitcherStatExt & { appearanceOrder?: number | null; appearanceLabel?: string })[]).map((stat) => {
-        const ip = `${Math.floor(stat.outs / 3)}.${stat.outs % 3}`;
-        return {
-          ...stat,
-          outsIp: ip,
-          pitchCombo: `${stat.pitches} (${stat.strikes}/${stat.balls})`,
-          appearanceLabel: stat.appearanceLabel ?? (stat.appearanceOrder === 0 ? '선발' : stat.appearanceOrder ? `계투(${stat.appearanceOrder})` : '-'),
-        };
-      });
-
-  return (
-    <div
-      style={{
-        background: '#0b0f1a',
-        border: '1px solid rgba(148, 163, 184, 0.2)',
-        borderRadius: '12px',
-        padding: '10px',
-        display: 'grid',
-        gap: '8px',
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 900, color: '#e2e8f0', fontSize: '14px' }}>{title}</span>
-        <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '11px' }}>실시간 자동 집계</span>
-      </div>
-      <div
-        style={{
-          overflowX: 'auto',
-          borderRadius: '8px',
-          border: '1px solid rgba(148, 163, 184, 0.15)',
-        }}
-      >
-        <table
-          style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            color: '#e2e8f0',
-            fontSize: '11px',
-            minWidth: isBatter ? '600px' : '520px',
-          }}
-        >
-          <thead style={{ background: 'rgba(255,255,255,0.04)' }}>
-            <tr>
-              {columns.map((col) => (
-                <th
-                  key={col.key}
-                  style={{
-                    textAlign: col.key === 'name' ? 'left' : 'center',
-                    padding: '6px 5px',
-                    borderBottom: '1px solid rgba(148, 163, 184, 0.2)',
-                    minWidth: col.width ?? '50px',
-                    fontWeight: 800,
-                    color: '#cbd5e1',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {col.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, idx) => (
-              <tr
-                key={row.name + idx}
-                style={{
-                  background: idx % 2 === 0 ? 'rgba(15, 23, 42, 0.5)' : 'rgba(15, 23, 42, 0.3)',
-                }}
-              >
-                {columns.map((col) => (
-                  <td
-                    key={col.key}
-                    style={{
-                      padding: '6px 5px',
-                    textAlign: col.key === 'name' ? 'left' : 'center',
-                    borderBottom: '1px solid rgba(148, 163, 184, 0.08)',
-                    fontWeight: col.key === 'name' ? 800 : 700,
-                    color: col.key === 'name' ? '#e2e8f0' : '#cbd5e1',
-                    whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {col.key === 'name' ? (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                        <span>
-                          {row.name}
-                          {(row as any).pos ? (
-                            <span style={{ color: '#94a3b8', marginLeft: '4px', fontWeight: 700 }}>
-                              ({(row as any).pos.toUpperCase()})
-                            </span>
-                          ) : null}
-                        </span>
-                        {(row as any).status === 'out' ? (
-                          <span
-                            style={{
-                              padding: '2px 6px',
-                              borderRadius: '999px',
-                              border: '1px solid rgba(239,68,68,0.4)',
-                              background: 'rgba(239,68,68,0.12)',
-                              color: '#ef4444',
-                              fontWeight: 900,
-                              fontSize: '10px',
-                              lineHeight: 1.2,
-                            }}
-                          >
-                            out
-                          </span>
-                        ) : null}
-                      </span>
-                    ) : (
-                      (() => {
-                        if (isBatter && col.key === 'order') {
-                          return (row as any).order ?? '-';
-                        }
-                        if (!isBatter && col.key === 'outs') {
-                          return (row as any).outsIp ?? (row as any).outs;
-                        }
-                        return (row as any)[col.key] ?? '-';
-                      })()
-                    )}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function RemovedPlayersPanel({ title, players }: { title: string; players: PlayerStat[] | { name: string; pos: string; number: string }[] }) {
-  return (
-    <div
-      style={{
-        background: '#0b0f1a',
-        border: '1px solid rgba(148, 163, 184, 0.2)',
-        borderRadius: '12px',
-        padding: '10px',
-        display: 'grid',
-        gap: '8px',
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 900, color: '#e2e8f0', fontSize: '14px' }}>{title}</span>
-        <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '11px' }}>{players.length}명</span>
-      </div>
-      {players.length ? (
-        <div style={{ display: 'grid', gap: '6px' }}>
-          {players.map((p, idx) => (
-            <div
-              key={`${p.name}-${idx}`}
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '8px 10px',
-                borderRadius: '10px',
-                background: idx % 2 === 0 ? 'rgba(15, 23, 42, 0.5)' : 'rgba(15, 23, 42, 0.35)',
-                border: '1px solid rgba(148, 163, 184, 0.15)',
-                color: '#e2e8f0',
-                fontWeight: 800,
-                fontSize: '12px',
-              }}
-            >
-              <span>{p.name}</span>
-              <span style={{ color: '#94a3b8', fontWeight: 700 }}>
-                #{(p as any).number || '--'} · {(p as any).pos?.toUpperCase?.() ?? '-'}
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>퇴장 선수 없음</span>
-      )}
-    </div>
-  );
 }
