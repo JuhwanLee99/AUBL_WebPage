@@ -5,6 +5,7 @@ import IntroPage from '../front/pages/IntroPage';
 import StandingsPage from './pages/StandingPage';
 import PredictionPage from './pages/PredictionPage';
 import RecordPage from './pages/RecordPage';
+import CommunityPage from './pages/CommunityPage';
 import ScoreboardPage from '../scoreboard/pages/ScoreboardPage';
 import ScoreboardTextPage from '../scoreboard/pages/ScoreboardTextPage';
 import ScoreboardLiveOverlayPage from '../scoreboard/pages/ScoreboardLiveOverlayPage';
@@ -32,6 +33,10 @@ export const router = createBrowserRouter([
       {
         path: 'prediction',
         element: <PredictionPage />,
+      },
+      {
+        path: 'community',
+        element: <CommunityPage />,
       },
       {
         path: 'records',

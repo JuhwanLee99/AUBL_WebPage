@@ -10,6 +10,7 @@ export default function Layout() {
     { path: '/intro', label: '리그 소개' },
     { path: '/records', label: '기록' },
     { path: '/record-room', label: '기록실' },
+    { path: '/community', label: '커뮤니티' },
     { path: '/standings', label: '순위' },
     { path: '/prediction', label: '승부예측' },
     { path: '/scoreboard', label: '전광판' },
