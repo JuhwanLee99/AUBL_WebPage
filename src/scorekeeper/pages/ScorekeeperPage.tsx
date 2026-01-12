@@ -78,6 +78,34 @@ function escapeCsvCell(value: unknown) {
   return `"${escaped}"`;
 }
 
+function normalizeLiveUrl(raw: string) {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  try {
+    const url = new URL(trimmed);
+    const host = url.hostname.replace(/^www\./, '');
+    if (host === 'youtu.be') {
+      const id = url.pathname.replace('/', '').split(/[?/&#]/)[0];
+      if (id) return `https://www.youtube.com/embed/${id}`;
+    }
+    if (host.includes('youtube.com')) {
+      const liveId = url.pathname.startsWith('/live/') ? url.pathname.split('/live/')[1]?.split(/[?/&#]/)[0] : null;
+      const watchId = url.searchParams.get('v');
+      const candidate = liveId || watchId;
+      if (candidate) {
+        return `https://www.youtube.com/embed/${candidate}`;
+      }
+    }
+  } catch {
+    // Fallback to trimmed string below.
+  }
+  const shortMatch = trimmed.match(/youtu\.be\/([^?&#/]+)/);
+  if (shortMatch?.[1]) {
+    return `https://www.youtube.com/embed/${shortMatch[1]}`;
+  }
+  return trimmed;
+}
+
 function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   const lines: string[] = [];
   const add = (...cells: (string | number | boolean | null | undefined)[]) => {
@@ -588,6 +616,7 @@ export default function ScorekeeperPage() {
   const [showHitOptions, setShowHitOptions] = useState(false);
   const [showOutOptions, setShowOutOptions] = useState(false);
   const [manualBroadcast, setManualBroadcast] = useState('');
+  const [liveVideoUrlInput, setLiveVideoUrlInput] = useState(state.liveVideoUrl);
   const recordPayload = useMemo(() => buildGameRecord(state), [state]);
   const [pendingExportId, setPendingExportId] = useState<string | null>(null);
   const isGameStarted = state.gameStarted;
@@ -616,6 +645,7 @@ export default function ScorekeeperPage() {
           background: 'rgba(56,189,248,0.12)',
           border: 'rgba(56,189,248,0.35)',
         };
+  const hasLiveUrlChange = liveVideoUrlInput.trim() !== state.liveVideoUrl.trim();
 
   useEffect(() => {
     if (state.gameOver) {
@@ -623,6 +653,10 @@ export default function ScorekeeperPage() {
       setShowOutOptions(false);
     }
   }, [state.gameOver]);
+
+  useEffect(() => {
+    setLiveVideoUrlInput(state.liveVideoUrl);
+  }, [state.liveVideoUrl]);
 
   useEffect(() => {
     if (!pendingExportId) return;
@@ -730,6 +764,14 @@ export default function ScorekeeperPage() {
     if (!text) return;
     actions.addManualLog(text);
     setManualBroadcast('');
+  };
+
+  const handleLiveUrlSave = () => {
+    const normalized = normalizeLiveUrl(liveVideoUrlInput);
+    setLiveVideoUrlInput(normalized);
+    if (normalized !== state.liveVideoUrl) {
+      actions.setLiveVideoUrl(normalized);
+    }
   };
 
   const handleStartGame = () => {
@@ -1055,6 +1097,61 @@ export default function ScorekeeperPage() {
               <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
                 문자중계 페이지에 "*기록원* - 내용"으로 바로 반영됩니다. Enter 키로 전송, 줄바꿈은 Ctrl/Cmd+Enter.
               </span>
+            </div>
+            <div
+              style={{
+                padding: '12px',
+                borderRadius: '12px',
+                border: '1px solid rgba(148, 163, 184, 0.3)',
+                background: 'rgba(15,23,42,0.48)',
+                display: 'grid',
+                gap: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 900, color: '#e2e8f0' }}>라이브 영상 링크</span>
+                <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 800 }}>Live Overlay 페이지에 반영</span>
+              </div>
+              <input
+                value={liveVideoUrlInput}
+                onChange={(e) => setLiveVideoUrlInput(e.target.value)}
+                onBlur={() => setLiveVideoUrlInput((val) => normalizeLiveUrl(val))}
+                placeholder="YouTube 임베드/공유 링크 또는 플레이어 URL을 입력하세요"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
+                  YouTube 공유 링크를 붙여넣으면 임베드 주소로 자동 변환됩니다.
+                </span>
+                <button
+                  type="button"
+                  onClick={handleLiveUrlSave}
+                  disabled={!hasLiveUrlChange}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(16,185,129,0.45)',
+                    background: hasLiveUrlChange ? 'linear-gradient(90deg, #10b981, #059669)' : 'rgba(148,163,184,0.18)',
+                    color: hasLiveUrlChange ? '#0b0f1a' : '#cbd5e1',
+                    fontWeight: 900,
+                    fontSize: '13px',
+                    cursor: hasLiveUrlChange ? 'pointer' : 'not-allowed',
+                    boxShadow: hasLiveUrlChange ? '0 10px 20px rgba(16,185,129,0.24)' : 'none',
+                    opacity: hasLiveUrlChange ? 1 : 0.8,
+                  }}
+                >
+                  영상 링크 적용
+                </button>
+              </div>
             </div>
             <div
               style={{

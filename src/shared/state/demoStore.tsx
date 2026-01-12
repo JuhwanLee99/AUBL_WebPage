@@ -45,6 +45,7 @@ interface DemoSnapshot {
   gameStarted: boolean;
   gameOver: boolean;
   endedAt: string | null;
+  liveVideoUrl: string;
 }
 
 interface DemoState extends DemoSnapshot {
@@ -80,6 +81,7 @@ type Action =
   | { type: 'addBench'; side: Side; player: PlayerSlot }
   | { type: 'removeBench'; side: Side; benchIndex: number }
   | { type: 'substitute'; side: Side; benchIndex: number; lineupIndex: number }
+  | { type: 'setLiveVideoUrl'; url: string }
   | { type: 'startGame' }
   | { type: 'endGame'; endedAt: string }
   | { type: 'resetGame' }
@@ -146,6 +148,7 @@ const initialState: DemoState = {
   gameStarted: false,
   gameOver: false,
   endedAt: null,
+  liveVideoUrl: 'https://www.youtube.com/embed/live_stream?channel=YOUR_CHANNEL_ID',
   history: [],
 };
 
@@ -216,6 +219,7 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
     endedAt: typeof merged.endedAt === 'string' ? merged.endedAt : null,
     removed: merged.removed ?? base.removed,
     gameStarted,
+    liveVideoUrl: typeof merged.liveVideoUrl === 'string' ? merged.liveVideoUrl : base.liveVideoUrl,
   };
 }
 
@@ -282,9 +286,17 @@ function snapshotState(state: DemoState): DemoSnapshot {
 }
 
 function shouldTrackHistory(actionType: Action['type']) {
-  return !['setTeamName', 'setLineup', 'addBench', 'removeBench', 'substitute', 'hydrate', 'resetGame', 'startGame'].includes(
-    actionType,
-  );
+  return ![
+    'setTeamName',
+    'setLineup',
+    'addBench',
+    'removeBench',
+    'substitute',
+    'hydrate',
+    'resetGame',
+    'startGame',
+    'setLiveVideoUrl',
+  ].includes(actionType);
 }
 
 function reducer(state: DemoState, action: Action): DemoState {
@@ -305,6 +317,7 @@ function reducer(state: DemoState, action: Action): DemoState {
     'manualLog',
     'resetGame',
     'startGame',
+    'setLiveVideoUrl',
   ];
   if (!state.gameStarted && !setupActions.includes(action.type)) {
     return state;
@@ -433,6 +446,7 @@ function reducer(state: DemoState, action: Action): DemoState {
         gameStarted: true,
         gameOver: false,
         endedAt: null,
+        liveVideoUrl: state.liveVideoUrl,
         feed,
         history: [],
         removed: { ...state.removed },
@@ -497,6 +511,11 @@ function reducer(state: DemoState, action: Action): DemoState {
     case 'substitute':
       nextState = substitutePlayer(state, action.side, action.benchIndex, action.lineupIndex);
       break;
+    case 'setLiveVideoUrl': {
+      const trimmed = action.url.trim();
+      nextState = { ...state, liveVideoUrl: trimmed };
+      break;
+    }
     case 'endGame':
       nextState = applyEndGame(state, action.endedAt);
       break;
@@ -888,6 +907,7 @@ function createNewGame(state: DemoState): DemoState {
     gameStarted: false,
     gameOver: false,
     endedAt: null,
+    liveVideoUrl: state.liveVideoUrl,
     history: [],
     removed: { home: [], away: [] },
   };
@@ -1041,6 +1061,7 @@ interface DemoStoreValue {
     runnerPickoff: (base: 0 | 1 | 2) => void;
     runnerOut: (base: 0 | 1 | 2) => void;
     addManualLog: (message: string) => void;
+    setLiveVideoUrl: (url: string) => void;
     setTeamName: (side: Side, name: string) => void;
     setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) => void;
     addBench: (side: Side, player: PlayerSlot) => void;
@@ -1126,6 +1147,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       runnerPickoff: (base: 0 | 1 | 2) => dispatch({ type: 'runnerPickoff', base }),
       runnerOut: (base: 0 | 1 | 2) => dispatch({ type: 'runnerOut', base }),
       addManualLog: (message: string) => dispatch({ type: 'manualLog', message }),
+      setLiveVideoUrl: (url: string) => dispatch({ type: 'setLiveVideoUrl', url }),
       addOutWithMessage: (note: string) => dispatch({ type: 'outWithMessage', note }),
       doublePlay: () => dispatch({ type: 'doublePlay' }),
       triplePlay: () => dispatch({ type: 'triplePlay' }),

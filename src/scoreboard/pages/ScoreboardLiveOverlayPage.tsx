@@ -1,5 +1,10 @@
+import { useDemoStore } from '../../shared/state/demoStore';
+
+const defaultLiveSrc = 'https://www.youtube.com/embed/live_stream?channel=YOUR_CHANNEL_ID';
+
 export default function ScoreboardLiveOverlayPage() {
-  const youtubeLiveSrc = 'https://www.youtube.com/embed/live_stream?channel=YOUR_CHANNEL_ID';
+  const { state } = useDemoStore();
+  const youtubeLiveSrc = (state.liveVideoUrl || '').trim() || defaultLiveSrc;
 
   return (
     <div
