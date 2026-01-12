@@ -7,6 +7,7 @@ import PredictionPage from './pages/PredictionPage';
 import RecordPage from './pages/RecordPage';
 import ScoreboardPage from '../scoreboard/pages/ScoreboardPage';
 import ScoreboardTextPage from '../scoreboard/pages/ScoreboardTextPage';
+import ScoreboardLiveOverlayPage from '../scoreboard/pages/ScoreboardLiveOverlayPage';
 import ScorekeeperPage from '../scorekeeper/pages/ScorekeeperPage';
 import RecordRoomPage from './pages/RecordRoomPage';
 import PlayerDetailPage from './pages/PlayerDetailPage';
@@ -47,6 +48,10 @@ export const router = createBrowserRouter([
       {
         path: 'scoreboard-text',
         element: <ScoreboardTextPage />,
+      },
+      {
+        path: 'live-overlay',
+        element: <ScoreboardLiveOverlayPage />,
       },
       {
         path: 'scorekeeper',
