@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import ScoreboardPanel from '../components/ScoreboardPanel';
+import ScoreboardFrame from '../components/ScoreboardFrame';
 import { useDemoStore, buildGameRecord } from '../../shared/state/demoStore';
 
 type Half = 'top' | 'bottom';
@@ -103,9 +103,10 @@ export default function ScoreboardTextPage() {
         }}
       >
         <div style={{ display: 'grid', alignItems: 'start', gap: '0px' }}>
-          <ScoreboardPanel
+          <ScoreboardFrame
+            variant="text"
             showFootnote={false}
-            style={{
+            panelStyle={{
               width: '100%',
               aspectRatio: '4 / 3',
             }}
