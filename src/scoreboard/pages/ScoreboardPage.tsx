@@ -1,26 +1,14 @@
-import ScoreboardPanel from '../components/ScoreboardPanel';
+import ScoreboardFrame from '../components/ScoreboardFrame';
 
 export default function ScoreboardPage() {
   return (
-    <div
-      style={{
+    <ScoreboardFrame
+      variant="page"
+      panelStyle={{
         width: '100%',
-        background: '#050505',
-        display: 'grid',
-        placeItems: 'center',
-        padding: '0.6vw',
-        boxSizing: 'border-box',
-        borderRadius: '16px',
-        overflow: 'hidden',
+        maxWidth: 'min(100%, calc(min(74vh, calc(100vh - 320px)) * 16 / 9))',
+        height: 'min(74vh, calc(100vh - 320px))',
       }}
-    >
-      <ScoreboardPanel
-        style={{
-          width: '100%',
-          maxWidth: 'min(100%, calc(min(74vh, calc(100vh - 320px)) * 16 / 9))',
-          height: 'min(74vh, calc(100vh - 320px))',
-        }}
-      />
-    </div>
+    />
   );
 }
