@@ -15,6 +15,9 @@ interface PlayerSlot {
   order?: number | null;
 }
 
+export type RunnerAdvanceOutcome = 'hold' | 'advance' | 'out' | 'score';
+export type RunnerAdvanceSelections = Partial<Record<0 | 1 | 2, RunnerAdvanceOutcome>>;
+
 export interface PlayLog {
   inning: number;
   half: Half;
@@ -75,7 +78,7 @@ type Action =
   | { type: 'outWithMessage'; note: string }
   | { type: 'doublePlay' }
   | { type: 'triplePlay' }
-  | { type: 'hit'; bases: 1 | 2 | 3 | 4 }
+  | { type: 'hit'; bases: 1 | 2 | 3 | 4; advances?: RunnerAdvanceSelections }
   | { type: 'walk' }
   | { type: 'hbp' }
   | { type: 'sac' }
@@ -459,7 +462,7 @@ function reducer(state: DemoState, action: Action): DemoState {
       nextState = applyDoublePlay(state, 3, '삼중살');
       break;
     case 'hit':
-      nextState = applyHit(state, action.bases, state.pitchCount + 1);
+      nextState = applyHitWithAdvances(state, action.bases, state.pitchCount + 1, action.advances);
       break;
     case 'walk':
       nextState = applyWalk(state, '볼넷', state.pitchCount + 1);
@@ -647,13 +650,36 @@ function baseLabel(idx: number) {
   return idx >= 3 ? '홈' : `${idx + 1}루`;
 }
 
-function formatRunnerMove(runner: string, from: number, to: number, scored: boolean, baseMessage: string, outsCount?: number) {
-  const move = `${baseLabel(from)}→${baseLabel(to)}`;
-  const scoredText = scored ? ' · 득점' : '';
-  const feedText = `${baseMessage} · ${runner} ${move}${scoredText}`;
-  const outText = outsCount && baseMessage.includes('아웃') ? ` · ${outsCount}아웃` : '';
-  const lastPlay = `${feedText}${outText}`;
-  return { feedText, lastPlay };
+function formatRunnerMove({
+  runner,
+  from,
+  to,
+  outcome,
+  message,
+  outsCount,
+}: {
+  runner: string;
+  from: number;
+  to: number;
+  outcome: RunnerAdvanceOutcome;
+  message?: string;
+  outsCount?: number;
+}) {
+  const runnerLabel = `${baseLabel(from)} 주자`;
+  const fromLabel = baseLabel(from);
+  const toLabel = baseLabel(to);
+  const moveLabel =
+    outcome === 'score'
+      ? `${fromLabel}→홈 득점`
+      : outcome === 'out'
+        ? `${toLabel} 아웃`
+        : `${outcome === 'hold' ? fromLabel : toLabel} 정지`;
+  const runnerMove = `${runnerLabel} ${moveLabel}`;
+  const messagePrefix = message ? `${message} · ` : '';
+  const feedText = `${messagePrefix}${runnerMove} · ${runner}`;
+  const outText = outsCount && outcome === 'out' ? ` · ${outsCount}아웃` : '';
+  const lastPlay = `${messagePrefix}${runnerMove} · ${runner}${outText}`;
+  return { feedText, lastPlay, runnerSummary: `${runnerMove} · ${runner}` };
 }
 
 function currentBatterInfo(state: DemoState) {
@@ -805,27 +831,107 @@ function applyOut(
   };
 }
 
-function applyHit(state: DemoState, basesToAdvance: 1 | 2 | 3 | 4, pitchNumber: number): DemoState {
+function placeRunnerOnBases(bases: Bases, runner: string, targetBase: number) {
+  let dest = targetBase;
+  while (dest < 3 && bases[dest]) {
+    dest += 1;
+  }
+  if (dest >= 3) {
+    return { bases, scored: true, dest };
+  }
+  bases[dest] = runner;
+  return { bases, scored: false, dest };
+}
+
+function applyHitWithAdvances(
+  state: DemoState,
+  basesToAdvance: 1 | 2 | 3 | 4,
+  pitchNumber: number,
+  advances?: RunnerAdvanceSelections,
+): DemoState {
   const { batterName, batterIndex } = nextBatter(state);
-  const { bases, runs } = advanceBases(state.bases, basesToAdvance, batterName);
+  const result = basesToAdvance === 4 ? '홈런' : `${basesToAdvance}루타`;
+  const message = `${result} · ${batterName}`;
+  const bases = [null, null, null] as Bases;
+  let runs = 0;
+  let outs = state.outs;
+  const runnerMoves: { feedText: string; lastPlay: string; runnerSummary: string }[] = [];
+
+  for (let i = 2; i >= 0; i -= 1) {
+    const runner = state.bases[i];
+    if (!runner) continue;
+    const outcome = advances?.[i as 0 | 1 | 2] ?? 'advance';
+    if (outcome === 'out') {
+      outs += 1;
+      runnerMoves.push(
+        formatRunnerMove({ runner, from: i, to: i, outcome: 'out', outsCount: outs }),
+      );
+      continue;
+    }
+    if (outcome === 'score') {
+      runs += 1;
+      runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score' }));
+      continue;
+    }
+    if (outcome === 'hold') {
+      const placed = placeRunnerOnBases(bases, runner, i);
+      if (placed.scored) {
+        runs += 1;
+        runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score' }));
+      } else {
+        runnerMoves.push(formatRunnerMove({ runner, from: i, to: placed.dest, outcome: 'hold' }));
+      }
+      continue;
+    }
+    const dest = i + basesToAdvance;
+    if (dest >= 3) {
+      runs += 1;
+      runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score' }));
+    } else {
+      const placed = placeRunnerOnBases(bases, runner, dest);
+      if (placed.scored) {
+        runs += 1;
+        runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score' }));
+      } else {
+        runnerMoves.push(formatRunnerMove({ runner, from: i, to: placed.dest, outcome: 'advance' }));
+      }
+    }
+  }
+
+  if (basesToAdvance >= 4) {
+    runs += 1;
+  } else {
+    const batterDest = basesToAdvance - 1;
+    const placed = placeRunnerOnBases(bases, batterName, batterDest);
+    if (placed.scored) {
+      runs += 1;
+    }
+  }
+
   const side = hittingSide(state);
   const score =
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
-  const result = basesToAdvance === 4 ? '홈런' : `${basesToAdvance}루타`;
-  const message = `${result} · ${batterName}`;
   const eventEntry = createPlayEvent(
     state,
     {
       type: 'hit',
-      runners: getRunnerNames(state.bases),
+      runners: runnerMoves.map((move) => move.runnerSummary),
       battedBall: result,
       notes: message,
     },
     pitchNumber,
   );
-  return {
+  
+  let feed = state.feed;
+  runnerMoves.forEach((move) => {
+    feed = pushFeed(feed, createLogEntryForBaserunning(state, move.feedText, pitchNumber));
+  });
+  const resultLog = runs ? `${result} · ${runs}득점` : result;
+  feed = pushPlayFeed(state, createLogEntry(state, resultLog, pitchNumber), feed);
+
+  const nextState = {
     ...state,
     bases,
     score,
@@ -833,10 +939,17 @@ function applyHit(state: DemoState, basesToAdvance: 1 | 2 | 3 | 4, pitchNumber: 
     strikes: 0,
     pitchCount: 0,
     batterIndex,
+    outs,
     lastPlay: message,
-    feed: pushPlayFeed(state, createLogEntry(state, runs ? `${result} · ${runs}득점` : result, pitchNumber)),
+    feed,
     events: pushEvent(state.events, eventEntry),
   };
+
+  if (outs >= 3) {
+    return changeHalf(nextState, `${result} · 3아웃 · 이닝 종료`, pitchNumber, state);
+  }
+
+  return nextState;
 }
 
 function applyWalk(state: DemoState, message: string, pitchNumber: number): DemoState {
@@ -911,7 +1024,14 @@ function applySteal(state: DemoState, success: boolean): DemoState {
         break;
       }
     }
-    const detail = formatRunnerMove(runner, foundIndex ?? 0, foundIndex ?? 0, false, '도루 실패 아웃', state.outs + 1);
+    const detail = formatRunnerMove({
+      runner,
+      from: foundIndex ?? 0,
+      to: foundIndex ?? 0,
+      outcome: 'out',
+      message: '도루 실패',
+      outsCount: state.outs + 1,
+    });
     const afterOut = applyOut({ ...state, bases }, detail.feedText, { advanceBatter: false, pitchNumber: 0 });
     const feedEntry = createLogEntryForBaserunning(state, detail.feedText, state.pitchCount);
     return { ...afterOut, lastPlay: detail.lastPlay, feed: pushFeed(afterOut.feed, feedEntry) };
@@ -938,13 +1058,21 @@ function applySteal(state: DemoState, success: boolean): DemoState {
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
-  const detail = moved ? formatRunnerMove(moved.name, moved.from, moved.to, moved.scored, '도루 성공') : null;
+  const detail = moved
+    ? formatRunnerMove({
+        runner: moved.name,
+        from: moved.from,
+        to: moved.to,
+        outcome: moved.scored ? 'score' : 'advance',
+        message: '도루 성공',
+      })
+    : null;    
   const feedEntry = detail ? createLogEntryForBaserunning(state, detail.feedText, state.pitchCount + 1) : null;
   const eventEntry = createPlayEventForBaserunning(
     state,
     {
       type: success ? 'steal' : 'steal_fail',
-      runners: moved ? [moved.name] : [],
+      runners: detail ? [detail.runnerSummary] : [],
       notes: detail?.feedText ?? (runs ? `도루 성공 · ${runs}득점` : '도루 성공'),
     },
     state.pitchCount + 1,
@@ -982,10 +1110,16 @@ function applyRunnerAdvance(state: DemoState, baseIndex: 0 | 1 | 2, steps: numbe
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
-  const detail = formatRunnerMove(runner, baseIndex, dest, runs > 0, message);
+  const detail = formatRunnerMove({
+    runner,
+    from: baseIndex,
+    to: dest,
+    outcome: runs > 0 ? 'score' : 'advance',
+    message,
+  });
   const eventEntry = createPlayEventForBaserunning(
     state,
-    { type: 'runner', runners: [runner], notes: detail.feedText },
+    { type: 'runner', runners: [detail.runnerSummary], notes: detail.feedText },
     state.pitchCount,
   );
   return {
@@ -1004,11 +1138,18 @@ function applyRunnerOut(state: DemoState, baseIndex: 0 | 1 | 2, message: string)
   const runner = bases[baseIndex];
   bases[baseIndex] = null;
   const outs = state.outs + 1;
-  const detail = formatRunnerMove(runner ?? '주자', baseIndex, baseIndex, false, `${message}`, outs);
+  const detail = formatRunnerMove({
+    runner: runner ?? '주자',
+    from: baseIndex,
+    to: baseIndex,
+    outcome: 'out',
+    message,
+    outsCount: outs,
+  });
   const feedEntry = createLogEntryForBaserunning(state, detail.feedText, state.pitchCount);
   const eventEntry = createPlayEventForBaserunning(
     state,
-    { type: 'runner_out', runners: [runner ?? '주자'], notes: detail.feedText },
+    { type: 'runner_out', runners: [detail.runnerSummary], notes: detail.feedText },
     state.pitchCount,
   );
   if (outs >= 3) {
@@ -1264,9 +1405,9 @@ interface DemoStoreValue {
     addFoul: () => void;
     strikeOut: () => void;
     addOut: () => void;
-    hitSingle: () => void;
-    hitDouble: () => void;
-    hitTriple: () => void;
+    hitSingle: (advances?: RunnerAdvanceSelections) => void;
+    hitDouble: (advances?: RunnerAdvanceSelections) => void;
+    hitTriple: (advances?: RunnerAdvanceSelections) => void;
     homeRun: () => void;
     walk: () => void;
     hbp: () => void;
@@ -1350,9 +1491,9 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       addFoul: () => dispatch({ type: 'foul' }),
       strikeOut: () => dispatch({ type: 'strikeOut' }),
       addOut: () => dispatch({ type: 'out' }),
-      hitSingle: () => dispatch({ type: 'hit', bases: 1 }),
-      hitDouble: () => dispatch({ type: 'hit', bases: 2 }),
-      hitTriple: () => dispatch({ type: 'hit', bases: 3 }),
+      hitSingle: (advances?: RunnerAdvanceSelections) => dispatch({ type: 'hit', bases: 1, advances }),
+      hitDouble: (advances?: RunnerAdvanceSelections) => dispatch({ type: 'hit', bases: 2, advances }),
+      hitTriple: (advances?: RunnerAdvanceSelections) => dispatch({ type: 'hit', bases: 3, advances }),
       homeRun: () => dispatch({ type: 'hit', bases: 4 }),
       walk: () => dispatch({ type: 'walk' }),
       hbp: () => dispatch({ type: 'hbp' }),
