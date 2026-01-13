@@ -29,6 +29,7 @@ export interface MatchSchedule {
   homeScore?: number | null;
   awayScore?: number | null;
   lineups?: { home: PlayerSlot[]; away: PlayerSlot[] };
+  benches?: { home: PlayerSlot[]; away: PlayerSlot[] };
   notes?: string;
 }
 
@@ -144,7 +145,12 @@ type Action =
   | { type: 'addMatch'; match: MatchSchedule }
   | { type: 'updateMatch'; matchId: string; updates: Partial<MatchSchedule> }
   | { type: 'selectMatch'; matchId: string | null }
-  | { type: 'saveMatchLineups'; matchId: string; lineups: { home: PlayerSlot[]; away: PlayerSlot[] } };
+  | {
+      type: 'saveMatchLineups';
+      matchId: string;
+      lineups: { home: PlayerSlot[]; away: PlayerSlot[] };
+      benches: { home: PlayerSlot[]; away: PlayerSlot[] };
+    };
 
 const STORAGE_KEY = 'aubl-demo-store';
 
@@ -179,6 +185,42 @@ const demoLineups: { home: PlayerSlot[]; away: PlayerSlot[] } = {
 const cloneLineups = (lineups: { home: PlayerSlot[]; away: PlayerSlot[] }) => ({
   home: lineups.home.map((player) => ({ ...player })),
   away: lineups.away.map((player) => ({ ...player })),
+});
+
+const cloneBenches = (benches: { home: PlayerSlot[]; away: PlayerSlot[] }) => ({
+  home: benches.home.map((player) => ({ ...player })),
+  away: benches.away.map((player) => ({ ...player })),
+});
+
+const emptyPlayerSlot: PlayerSlot = { name: '', pos: '', number: '', throws: 'R', bats: 'R', order: null };
+
+const normalizePlayerSlotForGame = (player: PlayerSlot): PlayerSlot => ({
+  name: typeof player.name === 'string' ? player.name : '',
+  pos: typeof player.pos === 'string' ? player.pos : '',
+  number: typeof player.number === 'string' ? player.number : '',
+  throws: player.throws === 'L' ? 'L' : 'R',
+  bats: player.bats === 'L' ? 'L' : 'R',
+  order: typeof player.order === 'number' ? player.order : null,
+});
+
+const ensureLineupFilled = (lineup: PlayerSlot[]) => {
+  const normalized = lineup.map(normalizePlayerSlotForGame);
+  let hasPitcher = normalized.some((slot) => slot.pos.toUpperCase() === 'P');
+  let battingCount = normalized.reduce((count, slot) => (slot.pos.toUpperCase() === 'P' ? count : count + 1), 0);
+  while (battingCount < 9) {
+    normalized.push({ ...emptyPlayerSlot });
+    battingCount += 1;
+  }
+  if (!hasPitcher) {
+    normalized.push({ ...emptyPlayerSlot, pos: 'P' });
+    hasPitcher = true;
+  }
+  return normalized;
+};
+
+const ensureCompleteLineups = (lineups: { home: PlayerSlot[]; away: PlayerSlot[] }) => ({
+  home: ensureLineupFilled(lineups.home),
+  away: ensureLineupFilled(lineups.away),
 });
 
 const teamNameById = (teamId?: string) => TEAMS.find((team) => team.id === teamId)?.name ?? '미정';
@@ -365,6 +407,15 @@ function normalizeLineups(lineups: unknown): { home: PlayerSlot[]; away: PlayerS
   return { home, away };
 }
 
+function normalizeBenches(benches: unknown): { home: PlayerSlot[]; away: PlayerSlot[] } | undefined {
+  if (!benches || typeof benches !== 'object') return undefined;
+  const b = benches as { home?: unknown; away?: unknown };
+  const home = Array.isArray(b.home) ? b.home.map(normalizePlayerSlot).filter((p): p is PlayerSlot => Boolean(p)) : [];
+  const away = Array.isArray(b.away) ? b.away.map(normalizePlayerSlot).filter((p): p is PlayerSlot => Boolean(p)) : [];
+  if (!home.length && !away.length) return undefined;
+  return { home, away };
+}
+
 function normalizeMatches(matches: unknown): MatchSchedule[] {
   if (!Array.isArray(matches)) return [];
   return matches.map((entry) => {
@@ -391,6 +442,7 @@ function normalizeMatches(matches: unknown): MatchSchedule[] {
       homeScore: typeof match.homeScore === 'number' ? match.homeScore : null,
       awayScore: typeof match.awayScore === 'number' ? match.awayScore : null,
       lineups: normalizeLineups(match.lineups),
+      benches: normalizeBenches(match.benches),
       notes: typeof match.notes === 'string' ? match.notes : undefined,
     };
   });
@@ -401,6 +453,7 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
   const feed = normalizeFeed(merged.feed, { inning: merged.inning, half: merged.half });
   const events = normalizeEvents(merged.events, { inning: merged.inning, half: merged.half });
   const matches = normalizeMatches(merged.matches ?? base.matches);
+  const safeLineups = ensureCompleteLineups(merged.lineups ?? base.lineups);
   const history = Array.isArray(merged.history)
     ? merged.history.map((snap) => {
         const normalizedHistoryFeed = normalizeFeed((snap as DemoSnapshot).feed, { inning: snap.inning, half: snap.half });
@@ -432,6 +485,7 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
     events,
     matches,
     history,
+    lineups: safeLineups,
     gameOver: Boolean(merged.gameOver),
     endedAt: typeof merged.endedAt === 'string' ? merged.endedAt : null,
     removed: merged.removed ?? base.removed,
@@ -809,7 +863,10 @@ function reducer(state: DemoState, action: Action): DemoState {
     case 'saveMatchLineups':
       nextState = {
         ...state,
-        matches: updateMatchSchedule(state.matches, action.matchId, { lineups: cloneLineups(action.lineups) }),
+        matches: updateMatchSchedule(state.matches, action.matchId, {
+          lineups: cloneLineups(action.lineups),
+          benches: cloneBenches(action.benches),
+        }),
       };
       break;
     case 'selectMatch': {
@@ -1572,7 +1629,8 @@ function updateMatchSchedule(matches: MatchSchedule[], matchId: string, updates:
 }
 
 function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
-  const lineups = match.lineups ?? state.lineups;
+  const lineups = ensureCompleteLineups(match.lineups ?? state.lineups);
+  const benches = match.benches ?? state.benches;
   return {
     inning: 1,
     half: 'top',
@@ -1589,10 +1647,7 @@ function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
     awayTeamId: match.awayTeamId ?? state.awayTeamId,
     batterIndex: { home: 0, away: 0 },
     lineups: cloneLineups(lineups),
-    benches: {
-      home: state.benches.home.map((p) => ({ ...p })),
-      away: state.benches.away.map((p) => ({ ...p })),
-    },
+    benches: cloneBenches(benches),
     teamNames: { home: match.homeTeamName, away: match.awayTeamName },
     gameStarted: false,
     gameOver: false,
@@ -1606,6 +1661,7 @@ function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
 }
 
 function createNewGame(state: DemoState): DemoState {
+  const preparedLineups = ensureCompleteLineups(state.lineups);
   return {
     inning: 1,
     half: 'top',
@@ -1621,10 +1677,7 @@ function createNewGame(state: DemoState): DemoState {
     homeTeamId: state.homeTeamId,
     awayTeamId: state.awayTeamId,
     batterIndex: { home: 0, away: 0 },
-    lineups: {
-      home: state.lineups.home.map((p) => ({ ...p })),
-      away: state.lineups.away.map((p) => ({ ...p })),
-    },
+    lineups: cloneLineups(preparedLineups),
     benches: {
       home: state.benches.home.map((p) => ({ ...p })),
       away: state.benches.away.map((p) => ({ ...p })),
@@ -1851,7 +1904,11 @@ interface DemoStoreValue {
     triplePlay: (battedBall?: BattedBallDetails | null) => void;
     addMatch: (match: MatchSchedule) => void;
     updateMatch: (matchId: string, updates: Partial<MatchSchedule>) => void;
-    saveMatchLineups: (matchId: string, lineups: { home: PlayerSlot[]; away: PlayerSlot[] }) => void;
+    saveMatchLineups: (
+      matchId: string,
+      lineups: { home: PlayerSlot[]; away: PlayerSlot[] },
+      benches: { home: PlayerSlot[]; away: PlayerSlot[] },
+    ) => void;
     selectMatch: (matchId: string | null) => void;
   };
 }
@@ -1948,8 +2005,11 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       undo: () => dispatch({ type: 'undo' }),
       addMatch: (match: MatchSchedule) => dispatch({ type: 'addMatch', match }),
       updateMatch: (matchId: string, updates: Partial<MatchSchedule>) => dispatch({ type: 'updateMatch', matchId, updates }),
-      saveMatchLineups: (matchId: string, lineups: { home: PlayerSlot[]; away: PlayerSlot[] }) =>
-        dispatch({ type: 'saveMatchLineups', matchId, lineups }),
+      saveMatchLineups: (
+        matchId: string,
+        lineups: { home: PlayerSlot[]; away: PlayerSlot[] },
+        benches: { home: PlayerSlot[]; away: PlayerSlot[] },
+      ) => dispatch({ type: 'saveMatchLineups', matchId, lineups, benches }),
       selectMatch: (matchId: string | null) => dispatch({ type: 'selectMatch', matchId }),
     }),
     [],

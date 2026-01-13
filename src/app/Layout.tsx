@@ -8,12 +8,12 @@ export default function Layout() {
 
   const navItems = [
     { path: '/intro', label: '리그 소개' },
-    { path: '/schedule', label: '경기 일정' },
     { path: '/records', label: '기록' },
     { path: '/record-room', label: '기록실' },
     { path: '/community', label: '커뮤니티' },
     { path: '/standings', label: '순위' },
     { path: '/prediction', label: '승부예측' },
+    { path: '/schedule', label: '경기 일정' },
     { path: '/scoreboard', label: '전광판' },
     { path: '/scoreboard-text', label: '문자중계' },
     { path: '/live-overlay', label: '라이브 오버레이' },

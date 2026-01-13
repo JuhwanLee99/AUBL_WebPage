@@ -17,6 +17,46 @@ const emptyForm = {
   notes: '',
 };
 
+type Side = 'home' | 'away';
+type PlayerSlot = NonNullable<MatchSchedule['lineups']>['home'][number];
+
+const defaultPlayerSlot: PlayerSlot = {
+  name: '',
+  pos: '',
+  number: '',
+  throws: 'R',
+  bats: 'R',
+};
+
+const createEmptyLineup = (): PlayerSlot[] => [
+  ...Array.from({ length: 9 }, () => ({ ...defaultPlayerSlot })),
+  { ...defaultPlayerSlot, pos: 'P' },
+];
+
+const createEmptyBenchInput = () => ({
+  name: '',
+  pos: '',
+  number: '',
+  throws: 'R',
+  bats: 'R',
+});
+
+const normalizeLineupForEditing = (lineup?: PlayerSlot[]) => {
+  const base = lineup?.length ? lineup.map((slot) => ({ ...defaultPlayerSlot, ...slot })) : createEmptyLineup();
+  const filled = [...base];
+  const hasPitcher = filled.some((slot) => slot.pos.toUpperCase() === 'P');
+  while (filled.length < 10) {
+    filled.push({ ...defaultPlayerSlot });
+  }
+  if (!hasPitcher) {
+    filled.push({ ...defaultPlayerSlot, pos: 'P' });
+  }
+  return filled;
+};
+
+const normalizeBenchForEditing = (bench?: PlayerSlot[]) =>
+  bench?.length ? bench.map((player) => ({ ...defaultPlayerSlot, ...player })) : [];
+
 function toIsoString(value: string) {
   if (!value) return new Date().toISOString();
   const date = new Date(value);
@@ -49,6 +89,30 @@ function parseLineup(text: string) {
   });
 }
 
+const positionOptions = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'OF', 'IF', 'PH', 'PR'];
+
+const filterPositionOptions = (value: string) => {
+  const normalized = value.trim().toUpperCase();
+  if (!normalized) return positionOptions;
+  return positionOptions.filter((option) => option.includes(normalized));
+};
+
+const hasMeaningfulPlayerData = (player: PlayerSlot) => {
+  const name = player.name.trim();
+  const number = player.number.trim();
+  const pos = player.pos.trim().toUpperCase();
+  if (name || number) return true;
+  return pos !== '' && pos !== 'P';
+};
+
+const normalizePlayerSlot = (player: PlayerSlot): PlayerSlot => ({
+  name: player.name.trim() || '미정',
+  pos: player.pos.trim() || 'UT',
+  number: player.number.trim(),
+  throws: player.throws || 'R',
+  bats: player.bats || 'R',
+});
+
 function extractDateParts(value: string) {
   if (!value) return { date: '', hour: '', minute: '' };
   const date = new Date(value);
@@ -67,20 +131,6 @@ function buildDateTimeIso(date: string, hour: string, minute: string) {
   return toIsoString(`${date}T${safeHour}:${safeMinute}:00`);
 }
 
-function formatLineupText(lineups?: MatchSchedule['lineups']) {
-  if (!lineups) return '';
-  return lineups.home
-    .map((player) => `${player.name}, ${player.pos}, ${player.number ?? ''}`.trim())
-    .join('\n');
-}
-
-function formatAwayLineupText(lineups?: MatchSchedule['lineups']) {
-  if (!lineups) return '';
-  return lineups.away
-    .map((player) => `${player.name}, ${player.pos}, ${player.number ?? ''}`.trim())
-    .join('\n');
-}
-
 function statusLabel(status: MatchStatus) {
   switch (status) {
     case 'completed':
@@ -97,9 +147,31 @@ export default function MatchSchedulePage() {
   const navigate = useNavigate();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [formLineups, setFormLineups] = useState<{ home: PlayerSlot[]; away: PlayerSlot[] }>(() => ({
+    home: createEmptyLineup(),
+    away: createEmptyLineup(),
+  }));
+  const [formBenches, setFormBenches] = useState<{ home: PlayerSlot[]; away: PlayerSlot[] }>(() => ({
+    home: [],
+    away: [],
+  }));
+  const [benchInputs, setBenchInputs] = useState(() => ({
+    home: createEmptyBenchInput(),
+    away: createEmptyBenchInput(),
+  }));
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
-  const [editingHomeLineup, setEditingHomeLineup] = useState('');
-  const [editingAwayLineup, setEditingAwayLineup] = useState('');
+  const [editingLineups, setEditingLineups] = useState<{ home: PlayerSlot[]; away: PlayerSlot[] }>(() => ({
+    home: createEmptyLineup(),
+    away: createEmptyLineup(),
+  }));
+  const [editingBenches, setEditingBenches] = useState<{ home: PlayerSlot[]; away: PlayerSlot[] }>(() => ({
+    home: [],
+    away: [],
+  }));
+  const [editingBenchInputs, setEditingBenchInputs] = useState(() => ({
+    home: createEmptyBenchInput(),
+    away: createEmptyBenchInput(),
+  }));
 
   const startTimeParts = useMemo(() => extractDateParts(form.startTime), [form.startTime]);
   const hourOptions = useMemo(() => Array.from({ length: 24 }, (_, index) => String(index).padStart(2, '0')), []);
@@ -133,7 +205,22 @@ export default function MatchSchedulePage() {
     event.preventDefault();
     const homeLineup = form.homeLineup.trim();
     const awayLineup = form.awayLineup.trim();
-    const lineups = homeLineup || awayLineup ? { home: parseLineup(homeLineup), away: parseLineup(awayLineup) } : undefined;
+    const lineupsFromText =
+      homeLineup || awayLineup ? { home: parseLineup(homeLineup), away: parseLineup(awayLineup) } : undefined;
+    const trimmedLineups = form.status === 'scheduled'
+      ? {
+          home: formLineups.home.filter(hasMeaningfulPlayerData).map(normalizePlayerSlot),
+          away: formLineups.away.filter(hasMeaningfulPlayerData).map(normalizePlayerSlot),
+        }
+      : undefined;
+    const trimmedBenches = form.status === 'scheduled'
+      ? {
+          home: formBenches.home.filter((player) => player.name.trim()).map(normalizePlayerSlot),
+          away: formBenches.away.filter((player) => player.name.trim()).map(normalizePlayerSlot),
+        }
+      : undefined;
+    const hasStructuredLineups = Boolean(trimmedLineups?.home.length || trimmedLineups?.away.length);
+    const hasStructuredBenches = Boolean(trimmedBenches?.home.length || trimmedBenches?.away.length);
     const match: MatchSchedule = {
       id: `match-${Date.now()}`,
       homeTeamName: form.homeTeamName || '홈팀',
@@ -143,28 +230,49 @@ export default function MatchSchedulePage() {
       status: form.status,
       homeScore: form.status === 'completed' ? Number(form.homeScore || 0) : null,
       awayScore: form.status === 'completed' ? Number(form.awayScore || 0) : null,
-      lineups,
+      lineups: hasStructuredLineups ? trimmedLineups : lineupsFromText,
+      benches: hasStructuredBenches ? trimmedBenches : undefined,
       notes: form.notes || undefined,
     };
     actions.addMatch(match);
     setForm(emptyForm);
+    setFormLineups({ home: createEmptyLineup(), away: createEmptyLineup() });
+    setFormBenches({ home: [], away: [] });
+    setBenchInputs({ home: createEmptyBenchInput(), away: createEmptyBenchInput() });
     setShowForm(false);
   };
 
   const handleEditLineups = (match: MatchSchedule) => {
+    setEditingLineups({
+      home: normalizeLineupForEditing(match.lineups?.home),
+      away: normalizeLineupForEditing(match.lineups?.away),
+    });
+    setEditingBenches({
+      home: normalizeBenchForEditing(match.benches?.home),
+      away: normalizeBenchForEditing(match.benches?.away),
+    });
+    setEditingBenchInputs({ home: createEmptyBenchInput(), away: createEmptyBenchInput() });
     setEditingMatchId(match.id);
-    setEditingHomeLineup(formatLineupText(match.lineups));
-    setEditingAwayLineup(formatAwayLineupText(match.lineups));
+  };
+
+  const resetEditingState = () => {
+    setEditingMatchId(null);
+    setEditingLineups({ home: createEmptyLineup(), away: createEmptyLineup() });
+    setEditingBenches({ home: [], away: [] });
+    setEditingBenchInputs({ home: createEmptyBenchInput(), away: createEmptyBenchInput() });
   };
 
   const handleSaveLineups = (matchId: string) => {
-    actions.saveMatchLineups(matchId, {
-      home: parseLineup(editingHomeLineup),
-      away: parseLineup(editingAwayLineup),
-    });
-    setEditingMatchId(null);
-    setEditingHomeLineup('');
-    setEditingAwayLineup('');
+    const trimmedLineups = {
+      home: editingLineups.home.filter(hasMeaningfulPlayerData).map(normalizePlayerSlot),
+      away: editingLineups.away.filter(hasMeaningfulPlayerData).map(normalizePlayerSlot),
+    };
+    const trimmedBenches = {
+      home: editingBenches.home.filter((player) => player.name.trim()).map(normalizePlayerSlot),
+      away: editingBenches.away.filter((player) => player.name.trim()).map(normalizePlayerSlot),
+    };
+    actions.saveMatchLineups(matchId, trimmedLineups, trimmedBenches);
+    resetEditingState();
   };
 
   return (
@@ -314,27 +422,53 @@ export default function MatchSchedulePage() {
           </div>
 
           {form.status === 'scheduled' && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
-              <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
-                홈 라인업(선택)
-                <textarea
-                  rows={5}
-                  value={form.homeLineup}
-                  onChange={(event) => setForm((prev) => ({ ...prev, homeLineup: event.target.value }))}
-                  placeholder="예) 김지찬, 2B, 1"
-                  style={textareaStyle}
+            <div style={{ display: 'grid', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '12px' }}>
+                <ScheduleLineupEditor
+                  label="홈 라인업 & 후보"
+                  side="home"
+                  lineup={formLineups.home}
+                  bench={formBenches.home}
+                  benchInput={benchInputs.home}
+                  onSetLineup={(side, index, updates) =>
+                    setFormLineups((prev) => ({
+                      ...prev,
+                      [side]: prev[side].map((slot, idx) => (idx === index ? { ...slot, ...updates } : slot)),
+                    }))
+                  }
+                  onChangeBenchInput={(side, updates) =>
+                    setBenchInputs((prev) => ({ ...prev, [side]: { ...prev[side], ...updates } }))
+                  }
+                  onAddBench={(side, player) =>
+                    setFormBenches((prev) => ({ ...prev, [side]: [...prev[side], player] }))
+                  }
+                  onRemoveBench={(side, index) =>
+                    setFormBenches((prev) => ({ ...prev, [side]: prev[side].filter((_, idx) => idx !== index) }))
+                  }
                 />
-              </label>
-              <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
-                원정 라인업(선택)
-                <textarea
-                  rows={5}
-                  value={form.awayLineup}
-                  onChange={(event) => setForm((prev) => ({ ...prev, awayLineup: event.target.value }))}
-                  placeholder="예) 정수빈, CF, 31"
-                  style={textareaStyle}
+                <ScheduleLineupEditor
+                  label="원정 라인업 & 후보"
+                  side="away"
+                  lineup={formLineups.away}
+                  bench={formBenches.away}
+                  benchInput={benchInputs.away}
+                  onSetLineup={(side, index, updates) =>
+                    setFormLineups((prev) => ({
+                      ...prev,
+                      [side]: prev[side].map((slot, idx) => (idx === index ? { ...slot, ...updates } : slot)),
+                    }))
+                  }
+                  onChangeBenchInput={(side, updates) =>
+                    setBenchInputs((prev) => ({ ...prev, [side]: { ...prev[side], ...updates } }))
+                  }
+                  onAddBench={(side, player) =>
+                    setFormBenches((prev) => ({ ...prev, [side]: [...prev[side], player] }))
+                  }
+                  onRemoveBench={(side, index) =>
+                    setFormBenches((prev) => ({ ...prev, [side]: prev[side].filter((_, idx) => idx !== index) }))
+                  }
                 />
-              </label>
+              </div>
             </div>
           )}
 
@@ -431,28 +565,54 @@ export default function MatchSchedulePage() {
                     background: '#0b0f1a',
                   }}
                 >
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
-                    <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
-                      홈 라인업
-                      <textarea
-                        rows={5}
-                        value={editingHomeLineup}
-                        onChange={(event) => setEditingHomeLineup(event.target.value)}
-                        style={textareaStyle}
-                      />
-                    </label>
-                    <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
-                      원정 라인업
-                      <textarea
-                        rows={5}
-                        value={editingAwayLineup}
-                        onChange={(event) => setEditingAwayLineup(event.target.value)}
-                        style={textareaStyle}
-                      />
-                    </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '12px' }}>
+                    <ScheduleLineupEditor
+                      label="홈 라인업 & 후보"
+                      side="home"
+                      lineup={editingLineups.home}
+                      bench={editingBenches.home}
+                      benchInput={editingBenchInputs.home}
+                      onSetLineup={(side, index, updates) =>
+                        setEditingLineups((prev) => ({
+                          ...prev,
+                          [side]: prev[side].map((slot, idx) => (idx === index ? { ...slot, ...updates } : slot)),
+                        }))
+                      }
+                      onChangeBenchInput={(side, updates) =>
+                        setEditingBenchInputs((prev) => ({ ...prev, [side]: { ...prev[side], ...updates } }))
+                      }
+                      onAddBench={(side, player) =>
+                        setEditingBenches((prev) => ({ ...prev, [side]: [...prev[side], player] }))
+                      }
+                      onRemoveBench={(side, index) =>
+                        setEditingBenches((prev) => ({ ...prev, [side]: prev[side].filter((_, idx) => idx !== index) }))
+                      }
+                    />
+                    <ScheduleLineupEditor
+                      label="원정 라인업 & 후보"
+                      side="away"
+                      lineup={editingLineups.away}
+                      bench={editingBenches.away}
+                      benchInput={editingBenchInputs.away}
+                      onSetLineup={(side, index, updates) =>
+                        setEditingLineups((prev) => ({
+                          ...prev,
+                          [side]: prev[side].map((slot, idx) => (idx === index ? { ...slot, ...updates } : slot)),
+                        }))
+                      }
+                      onChangeBenchInput={(side, updates) =>
+                        setEditingBenchInputs((prev) => ({ ...prev, [side]: { ...prev[side], ...updates } }))
+                      }
+                      onAddBench={(side, player) =>
+                        setEditingBenches((prev) => ({ ...prev, [side]: [...prev[side], player] }))
+                      }
+                      onRemoveBench={(side, index) =>
+                        setEditingBenches((prev) => ({ ...prev, [side]: prev[side].filter((_, idx) => idx !== index) }))
+                      }
+                    />
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                    <button type="button" onClick={() => setEditingMatchId(null)} style={secondaryButtonStyle}>
+                    <button type="button" onClick={resetEditingState} style={secondaryButtonStyle}>
                       취소
                     </button>
                     <button type="button" onClick={() => handleSaveLineups(match.id)} style={primaryButtonStyle}>
@@ -477,11 +637,6 @@ const inputStyle: CSSProperties = {
   color: '#e2e8f0',
 };
 
-const textareaStyle: CSSProperties = {
-  ...inputStyle,
-  fontFamily: 'inherit',
-};
-
 const primaryButtonStyle: CSSProperties = {
   borderRadius: '999px',
   padding: '10px 18px',
@@ -501,3 +656,395 @@ const secondaryButtonStyle: CSSProperties = {
   fontWeight: 700,
   cursor: 'pointer',
 };
+
+function ScheduleLineupEditor({
+  label,
+  side,
+  lineup,
+  bench,
+  benchInput,
+  onSetLineup,
+  onChangeBenchInput,
+  onAddBench,
+  onRemoveBench,
+}: {
+  label: string;
+  side: Side;
+  lineup: PlayerSlot[];
+  bench: PlayerSlot[];
+  benchInput: PlayerSlot;
+  onSetLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) => void;
+  onChangeBenchInput: (side: Side, updates: Partial<PlayerSlot>) => void;
+  onAddBench: (side: Side, player: PlayerSlot) => void;
+  onRemoveBench: (side: Side, index: number) => void;
+}) {
+  const lineupEntries = lineup.map((slot, idx) => ({ slot, idx }));
+  const battingEntries = lineupEntries.filter((entry) => entry.slot.pos.toUpperCase() !== 'P');
+  const pitcherEntry = lineupEntries.find((entry) => entry.slot.pos.toUpperCase() === 'P');
+  return (
+    <div style={{ display: 'grid', gap: '8px' }}>
+      <span style={{ fontWeight: 800, color: '#cbd5e1' }}>{label}</span>
+      <div
+        style={{
+          background: '#0b0f1a',
+          borderRadius: '12px',
+          border: '1px solid rgba(148, 163, 184, 0.25)',
+          padding: '10px 12px',
+          display: 'grid',
+          gap: '8px',
+        }}
+      >
+        {battingEntries.map((entry, orderIdx) => (
+          <div
+            key={entry.idx}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '24px 85px 55px 50px 70px 70px',
+              gap: '8px',
+              alignItems: 'center',
+              padding: '4px',
+              borderRadius: '10px',
+              border: '1px solid transparent',
+              background: 'transparent',
+              boxSizing: 'border-box',
+            }}
+          >
+            <span style={{ color: '#94a3b8', fontWeight: 800 }}>{orderIdx + 1}.</span>
+            <input
+              value={entry.slot.name}
+              onChange={(e) => onSetLineup(side, entry.idx, { name: e.target.value })}
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(148, 163, 184, 0.25)',
+                borderRadius: '10px',
+                padding: '8px 10px',
+                color: '#e2e8f0',
+                fontWeight: 800,
+                width: '100%',
+              }}
+            />
+            <input
+              value={entry.slot.pos}
+              onChange={(e) => onSetLineup(side, entry.idx, { pos: e.target.value })}
+              list={`schedule-lineup-pos-${side}-${entry.idx}`}
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(148, 163, 184, 0.25)',
+                borderRadius: '10px',
+                padding: '8px 10px',
+                color: '#e2e8f0',
+                fontWeight: 800,
+              }}
+            />
+            <datalist id={`schedule-lineup-pos-${side}-${entry.idx}`}>
+              {filterPositionOptions(entry.slot.pos).map((option) => (
+                <option key={option} value={option} />
+              ))}
+            </datalist>
+            <input
+              value={entry.slot.number}
+              onChange={(e) => onSetLineup(side, entry.idx, { number: e.target.value })}
+              placeholder="#"
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(148, 163, 184, 0.25)',
+                borderRadius: '10px',
+                padding: '8px 10px',
+                color: '#e2e8f0',
+                fontWeight: 800,
+              }}
+            />
+            <select
+              value={entry.slot.throws}
+              onChange={(e) => onSetLineup(side, entry.idx, { throws: e.target.value })}
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(148, 163, 184, 0.25)',
+                borderRadius: '10px',
+                padding: '8px 10px',
+                color: '#e2e8f0',
+                fontWeight: 800,
+              }}
+            >
+              <option value="R">투 R</option>
+              <option value="L">투 L</option>
+            </select>
+            <select
+              value={entry.slot.bats}
+              onChange={(e) => onSetLineup(side, entry.idx, { bats: e.target.value })}
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(148, 163, 184, 0.25)',
+                borderRadius: '10px',
+                padding: '8px 10px',
+                color: '#e2e8f0',
+                fontWeight: 800,
+              }}
+            >
+              <option value="R">타 R</option>
+              <option value="L">타 L</option>
+            </select>
+          </div>
+        ))}
+        <div
+          style={{
+            marginTop: '6px',
+            padding: '10px',
+            borderRadius: '10px',
+            border: '1px solid rgba(148, 163, 184, 0.2)',
+            background: 'rgba(255,255,255,0.03)',
+            display: 'grid',
+            gap: '6px',
+          }}
+        >
+          <span style={{ fontWeight: 800, color: '#cbd5e1' }}>투수</span>
+          {pitcherEntry ? (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '85px 50px 70px 70px 50px',
+                gap: '8px',
+                alignItems: 'center',
+                padding: '4px',
+                borderRadius: '10px',
+                border: '1px solid transparent',
+                background: 'transparent',
+                boxSizing: 'border-box',
+              }}
+            >
+              <input
+                value={pitcherEntry.slot.name}
+                onChange={(e) => onSetLineup(side, pitcherEntry.idx, { name: e.target.value, pos: 'P' })}
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(148, 163, 184, 0.25)',
+                  borderRadius: '10px',
+                  padding: '8px 10px',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                }}
+              />
+              <input
+                value={pitcherEntry.slot.number}
+                onChange={(e) => onSetLineup(side, pitcherEntry.idx, { number: e.target.value })}
+                placeholder="#"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(148, 163, 184, 0.25)',
+                  borderRadius: '10px',
+                  padding: '8px 10px',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                }}
+              />
+              <select
+                value={pitcherEntry.slot.throws}
+                onChange={(e) => onSetLineup(side, pitcherEntry.idx, { throws: e.target.value })}
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(148, 163, 184, 0.25)',
+                  borderRadius: '10px',
+                  padding: '8px 10px',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                }}
+              >
+                <option value="R">투 R</option>
+                <option value="L">투 L</option>
+              </select>
+              <select
+                value={pitcherEntry.slot.bats}
+                onChange={(e) => onSetLineup(side, pitcherEntry.idx, { bats: e.target.value })}
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(148, 163, 184, 0.25)',
+                  borderRadius: '10px',
+                  padding: '8px 10px',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                }}
+              >
+                <option value="R">타 R</option>
+                <option value="L">타 L</option>
+              </select>
+              <input
+                value="P"
+                readOnly
+                style={{
+                  background: 'rgba(15,23,42,0.8)',
+                  border: '1px solid rgba(148, 163, 184, 0.25)',
+                  borderRadius: '10px',
+                  padding: '8px 10px',
+                  color: '#94a3b8',
+                  fontWeight: 800,
+                  textAlign: 'center',
+                }}
+              />
+            </div>
+          ) : (
+            <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>투수 미지정</span>
+          )}
+        </div>
+      </div>
+      <div
+        style={{
+          background: 'rgba(255,255,255,0.03)',
+          borderRadius: '12px',
+          border: '1px dashed rgba(148, 163, 184, 0.25)',
+          padding: '10px 12px',
+          display: 'grid',
+          gap: '8px',
+        }}
+      >
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            value={benchInput.name}
+            placeholder="후보 이름"
+            onChange={(e) => onChangeBenchInput(side, { name: e.target.value })}
+            style={{
+              flex: 1,
+              minWidth: '120px',
+              background: '#0b0f1a',
+              border: '1px solid rgba(148, 163, 184, 0.3)',
+              borderRadius: '10px',
+              padding: '8px 10px',
+              color: '#e2e8f0',
+              fontWeight: 800,
+            }}
+          />
+          <input
+            value={benchInput.number}
+            placeholder="등번호"
+            onChange={(e) => onChangeBenchInput(side, { number: e.target.value })}
+            style={{
+              width: '70px',
+              background: '#0b0f1a',
+              border: '1px solid rgba(148, 163, 184, 0.3)',
+              borderRadius: '10px',
+              padding: '8px 10px',
+              color: '#e2e8f0',
+              fontWeight: 800,
+            }}
+          />
+          <input
+            value={benchInput.pos}
+            placeholder="포지션"
+            onChange={(e) => onChangeBenchInput(side, { pos: e.target.value })}
+            list={`schedule-bench-pos-${side}`}
+            style={{
+              width: '90px',
+              background: '#0b0f1a',
+              border: '1px solid rgba(148, 163, 184, 0.3)',
+              borderRadius: '10px',
+              padding: '8px 10px',
+              color: '#e2e8f0',
+              fontWeight: 800,
+            }}
+          />
+          <datalist id={`schedule-bench-pos-${side}`}>
+            {filterPositionOptions(benchInput.pos).map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
+          <select
+            value={benchInput.throws}
+            onChange={(e) => onChangeBenchInput(side, { throws: e.target.value })}
+            style={{
+              width: '100px',
+              background: '#0b0f1a',
+              border: '1px solid rgba(148, 163, 184, 0.3)',
+              borderRadius: '10px',
+              padding: '8px 10px',
+              color: '#e2e8f0',
+              fontWeight: 800,
+            }}
+          >
+            <option value="R">투 R</option>
+            <option value="L">투 L</option>
+          </select>
+          <select
+            value={benchInput.bats}
+            onChange={(e) => onChangeBenchInput(side, { bats: e.target.value })}
+            style={{
+              width: '100px',
+              background: '#0b0f1a',
+              border: '1px solid rgba(148, 163, 184, 0.3)',
+              borderRadius: '10px',
+              padding: '8px 10px',
+              color: '#e2e8f0',
+              fontWeight: 800,
+            }}
+          >
+            <option value="R">타 R</option>
+            <option value="L">타 L</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => {
+              if (!benchInput.name.trim()) return;
+              onAddBench(side, {
+                name: benchInput.name,
+                pos: benchInput.pos || 'PH',
+                number: benchInput.number,
+                throws: benchInput.throws,
+                bats: benchInput.bats,
+              });
+              onChangeBenchInput(side, createEmptyBenchInput());
+            }}
+            style={{
+              padding: '10px 12px',
+              borderRadius: '10px',
+              border: '1px solid rgba(148, 163, 184, 0.3)',
+              background: 'rgba(255,255,255,0.08)',
+              color: '#cbd5e1',
+              fontWeight: 800,
+              cursor: 'pointer',
+            }}
+          >
+            후보 추가
+          </button>
+        </div>
+        <div style={{ display: 'grid', gap: '8px' }}>
+          {bench.map((player, benchIdx) => (
+            <div
+              key={`${player.name}-${benchIdx}`}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr auto',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'rgba(255,255,255,0.02)',
+                borderRadius: '10px',
+                padding: '8px 10px',
+                border: '1px solid rgba(148, 163, 184, 0.2)',
+              }}
+            >
+              <div style={{ display: 'grid', gap: '2px' }}>
+                <span style={{ fontWeight: 800 }}>{player.name}</span>
+                <span style={{ color: '#94a3b8', fontWeight: 700 }}>
+                  #{player.number || '--'} · {player.pos} · 투 {player.throws} / 타 {player.bats}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onRemoveBench(side, benchIdx)}
+                style={{
+                  padding: '6px 8px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(239,68,68,0.45)',
+                  background: 'rgba(248,113,113,0.08)',
+                  color: '#fca5a5',
+                  fontWeight: 900,
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                }}
+              >
+                삭제
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
