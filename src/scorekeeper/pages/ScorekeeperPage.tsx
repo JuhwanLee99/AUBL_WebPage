@@ -124,7 +124,9 @@ function formatErrorSummary(error?: ErrorDetails | string | null) {
   return `${error.errorType} · ${error.fielderPos}${context}`;
 }
 
-function formatErrorField(error?: ErrorDetails | string | null, field: keyof ErrorDetails) {
+type ErrorSummaryField = Exclude<keyof ErrorDetails, 'advanceResults'>;
+
+function formatErrorField(error?: ErrorDetails | string | null, field: ErrorSummaryField) {
   if (!error || typeof error === 'string') return '-';
   return error[field] || '-';
 }
@@ -2146,7 +2148,7 @@ function ActionModal({
     }, {});
     setRunnerSelections(initialSelections);
   }, [bases, data.role]);
-}) {
+
   const renderButtons = () => {
     if (data.role === 'runner') {
       return (
