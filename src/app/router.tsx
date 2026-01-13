@@ -12,6 +12,7 @@ import ScoreboardLiveOverlayPage from '../scoreboard/pages/ScoreboardLiveOverlay
 import ScorekeeperPage from '../scorekeeper/pages/ScorekeeperPage';
 import RecordRoomPage from './pages/RecordRoomPage';
 import PlayerDetailPage from './pages/PlayerDetailPage';
+import MatchSchedulePage from './pages/MatchSchedulePage';
 
 export const router = createBrowserRouter([
   {
@@ -37,6 +38,10 @@ export const router = createBrowserRouter([
       {
         path: 'community',
         element: <CommunityPage />,
+      },
+      {
+        path: 'schedule',
+        element: <MatchSchedulePage />,
       },
       {
         path: 'records',

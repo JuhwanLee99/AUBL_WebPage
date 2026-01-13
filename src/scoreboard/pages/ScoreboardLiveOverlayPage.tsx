@@ -4,6 +4,25 @@ const defaultLiveSrc = 'https://www.youtube.com/embed/live_stream?channel=YOUR_C
 
 export default function ScoreboardLiveOverlayPage() {
   const { state } = useDemoStore();
+  if (!state.activeMatchId) {
+    return (
+      <div
+        style={{
+          display: 'grid',
+          placeItems: 'center',
+          height: '100vh',
+          background: '#020617',
+          color: '#e2e8f0',
+          fontSize: '18px',
+          fontWeight: 700,
+          textAlign: 'center',
+          padding: '24px',
+        }}
+      >
+        기록원에서 경기를 선택해야 라이브 오버레이가 반영됩니다.
+      </div>
+    );
+  }
   const youtubeLiveSrc = (state.liveVideoUrl || '').trim() || defaultLiveSrc;
   const battingSide = state.half === 'top' ? 'away' : 'home';
   const inningHalfIcon = state.half === 'top' ? '▲' : '▼';

@@ -720,6 +720,11 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
 
 export default function ScorekeeperPage() {
   const { state, actions } = useDemoStore();
+  const activeMatch = useMemo(
+    () => state.matches.find((match) => match.id === state.activeMatchId) ?? null,
+    [state.matches, state.activeMatchId],
+  );
+  const [selectedMatchId, setSelectedMatchId] = useState(state.activeMatchId ?? '');
   const homeTeam = useMemo(() => TEAMS.find((t) => t.id === state.homeTeamId), [state.homeTeamId]);
   const awayTeam = useMemo(() => TEAMS.find((t) => t.id === state.awayTeamId), [state.awayTeamId]);
   const hittingSide: Side = state.half === 'top' ? 'away' : 'home';
@@ -749,11 +754,19 @@ export default function ScorekeeperPage() {
   const [pendingExportId, setPendingExportId] = useState<string | null>(null);
   const isGameStarted = state.gameStarted;
   const isGameOver = state.gameOver;
-  const controlsDisabled = isGameOver || !isGameStarted;
+  const hasActiveMatch = Boolean(state.activeMatchId);
+  const controlsDisabled = isGameOver || !isGameStarted || !hasActiveMatch;
   const isExporting = Boolean(pendingExportId);
   const canUndo = state.history.length > 0;
   const playerStats = useMemo(() => buildPlayerStats(recordPayload), [recordPayload]);
-  const statusBadge = isGameOver
+  const statusBadge = !hasActiveMatch
+    ? {
+        text: '경기 미선택 · 기록 대기',
+        color: '#fbbf24',
+        background: 'rgba(251,191,36,0.12)',
+        border: 'rgba(251,191,36,0.4)',
+      }
+    : isGameOver
     ? {
         text: '경기 종료됨 · 기록 잠금',
         color: '#fca5a5',
@@ -784,6 +797,10 @@ export default function ScorekeeperPage() {
       setHitWizard(null);
     }
   }, [state.gameOver]);
+
+  useEffect(() => {
+    setSelectedMatchId(state.activeMatchId ?? '');
+  }, [state.activeMatchId]);
 
   useEffect(() => {
     setLiveVideoUrlInput(state.liveVideoUrl);
@@ -1002,7 +1019,7 @@ export default function ScorekeeperPage() {
   };
 
   const handleStartGame = () => {
-    if (isGameStarted || isGameOver) return;
+    if (!hasActiveMatch || isGameStarted || isGameOver) return;
     setHitWizard(null);
     setShowOutOptions(false);
     setActionModal(null);
@@ -1039,6 +1056,71 @@ export default function ScorekeeperPage() {
         boxShadow: '0 24px 60px rgba(0,0,0,0.4)',
       }}
     >
+      <section
+        style={{
+          padding: '18px',
+          borderBottom: '1px solid rgba(148, 163, 184, 0.2)',
+          display: 'grid',
+          gap: '12px',
+          background: 'rgba(15, 23, 42, 0.6)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h2 style={{ fontSize: '18px', fontWeight: 900 }}>기록할 경기 선택</h2>
+            <p style={{ color: '#94a3b8', fontSize: '13px' }}>경기 일정에서 선택한 경기를 불러와 기록을 시작합니다.</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <select
+              value={selectedMatchId}
+              onChange={(event) => setSelectedMatchId(event.target.value)}
+              style={{
+                borderRadius: '10px',
+                border: '1px solid rgba(148,163,184,0.4)',
+                padding: '8px 12px',
+                background: 'rgba(15,23,42,0.8)',
+                color: '#e2e8f0',
+                minWidth: '240px',
+              }}
+            >
+              <option value="">경기를 선택하세요</option>
+              {state.matches.map((match) => (
+                <option key={match.id} value={match.id}>
+                  {match.homeTeamName} vs {match.awayTeamName} ({match.status === 'completed' ? '종료' : '예정'})
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => actions.selectMatch(selectedMatchId || null)}
+              style={{
+                padding: '8px 14px',
+                borderRadius: '999px',
+                border: '1px solid rgba(148,163,184,0.4)',
+                background: 'rgba(148,163,184,0.18)',
+                color: '#e2e8f0',
+                fontWeight: 800,
+                cursor: selectedMatchId ? 'pointer' : 'not-allowed',
+                opacity: selectedMatchId ? 1 : 0.5,
+              }}
+              disabled={!selectedMatchId}
+            >
+              기록 선택
+            </button>
+          </div>
+        </div>
+        {activeMatch ? (
+          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', color: '#cbd5e1', fontSize: '13px' }}>
+            <span>
+              선택된 경기: {activeMatch.homeTeamName} vs {activeMatch.awayTeamName}
+            </span>
+            <span>일시: {formatDateTimeLabel(activeMatch.startTime)}</span>
+            <span>라인업: {activeMatch.lineups ? '사전 저장됨' : '미저장'}</span>
+          </div>
+        ) : (
+          <span style={{ color: '#fbbf24', fontSize: '13px' }}>현재 선택된 경기가 없습니다.</span>
+        )}
+      </section>
       <header
         style={{
           padding: '12px 18px',

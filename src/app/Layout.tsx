@@ -8,6 +8,7 @@ export default function Layout() {
 
   const navItems = [
     { path: '/intro', label: '리그 소개' },
+    { path: '/schedule', label: '경기 일정' },
     { path: '/records', label: '기록' },
     { path: '/record-room', label: '기록실' },
     { path: '/community', label: '커뮤니티' },
