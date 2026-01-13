@@ -2881,6 +2881,12 @@ function TeamEditor({
   const lineupEntries = lineup.map((slot, idx) => ({ slot, idx }));
   const battingEntries = lineupEntries.filter((entry) => entry.slot.pos.toUpperCase() !== 'P');
   const pitcherEntry = lineupEntries.find((entry) => entry.slot.pos.toUpperCase() === 'P');
+  const positionOptions = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'OF', 'IF', 'PH', 'PR'];
+  const filterPositionOptions = (value: string) => {
+    const normalized = value.trim().toUpperCase();
+    if (!normalized) return positionOptions;
+    return positionOptions.filter((option) => option.includes(normalized));
+  };
   return (
     <div style={{ display: 'grid', gap: '8px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between' }}>
@@ -2945,6 +2951,7 @@ function TeamEditor({
             <input
               value={entry.slot.pos}
               onChange={(e) => onSetLineup(side, entry.idx, { pos: e.target.value })}
+              list={`lineup-pos-${side}-${entry.idx}`}
               style={{
                 background: 'rgba(255,255,255,0.04)',
                 border: '1px solid rgba(148, 163, 184, 0.25)',
@@ -2954,6 +2961,11 @@ function TeamEditor({
                 fontWeight: 800,
               }}
             />
+            <datalist id={`lineup-pos-${side}-${entry.idx}`}>
+              {filterPositionOptions(entry.slot.pos).map((option) => (
+                <option key={option} value={option} />
+              ))}
+            </datalist>
             <input
               value={entry.slot.number}
               onChange={(e) => onSetLineup(side, entry.idx, { number: e.target.value })}
@@ -3146,6 +3158,7 @@ function TeamEditor({
             value={benchInput.pos}
             placeholder="포지션"
             onChange={(e) => onChangeBenchInput({ ...benchInput, pos: e.target.value })}
+            list={`bench-pos-${side}`}
             style={{
               width: '90px',
               background: '#0b0f1a',
@@ -3156,6 +3169,11 @@ function TeamEditor({
               fontWeight: 800,
             }}
           />
+          <datalist id={`bench-pos-${side}`}>
+            {filterPositionOptions(benchInput.pos).map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
           <select
             value={benchInput.throws}
             onChange={(e) => onChangeBenchInput({ ...benchInput, throws: e.target.value })}
