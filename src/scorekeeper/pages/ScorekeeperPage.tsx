@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { TEAMS } from '../../shared/lib/mockData';
 import { buildGameRecord, useDemoStore } from '../../shared/state/demoStore';
-import type { RunnerAdvanceOutcome, RunnerAdvanceSelections } from '../../shared/state/demoStore';
+import type { BattedBallDetails, RunnerAdvanceOutcome, RunnerAdvanceSelections } from '../../shared/state/demoStore';
 import StatsTable from '../../shared/components/StatsTable';
 import RemovedPlayersPanel from '../../shared/components/RemovedPlayersPanel';
 import type { BatterStatLine, PitcherStatLine } from '../../shared/types/scoreStats';
@@ -45,6 +45,9 @@ const outButtons = [
   { label: '기타 아웃', action: 'out_other' },
 ];
 
+const battedBallTypeOptions = ['선택 안 함', '땅볼', '뜬공', '라인드라이브', '번트', '플라이', '팝업', '기타'];
+const battedBallZoneOptions = ['선택 안 함', '3루선상', '좌전', '좌중간', '중전', '우중간', '우전', '1루선상', '내야'];
+
 function downloadCsv(content: string, filenamePrefix: string) {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
   const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
@@ -77,6 +80,12 @@ function escapeCsvCell(value: unknown) {
   const str = String(value);
   const escaped = str.replace(/"/g, '""');
   return `"${escaped}"`;
+}
+
+function formatBattedBallDetails(details?: BattedBallDetails | null) {
+  if (!details) return '-';
+  const parts = [details.type, details.zone].filter((part) => part && part !== '선택 안 함');
+  return parts.length ? parts.join(' / ') : '-';
 }
 
 function normalizeLiveUrl(raw: string) {
@@ -227,7 +236,7 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   addBlank();
   add('상세 플레이 이벤트');
   if (events.length) {
-    add('이닝', '공/말', '타순', '타자', '구수', '유형', '주자 이동', '타구', '실책', '비고');
+    add('이닝', '공/말', '타순', '타자', '구수', '유형', '주자 이동', '타구 유형/방향', '실책', '비고');
     events.forEach((event) => {
       add(
         event.inning,
@@ -237,7 +246,7 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
         event.pitch,
         event.type,
         event.runners.length ? event.runners.join(' | ') : '-',
-        event.battedBall ?? '-',
+        formatBattedBallDetails(event.battedBall),
         event.error ?? '-',
         event.notes ?? '-',
       );
@@ -642,6 +651,8 @@ export default function ScorekeeperPage() {
   const [manualBroadcast, setManualBroadcast] = useState('');
   const [liveVideoUrlInput, setLiveVideoUrlInput] = useState(state.liveVideoUrl);
   const [hitAdvanceModal, setHitAdvanceModal] = useState<null | { bases: 1 | 2 | 3; selections: RunnerAdvanceSelections }>(null);
+  const [battedBallType, setBattedBallType] = useState(battedBallTypeOptions[0]);
+  const [battedBallZone, setBattedBallZone] = useState(battedBallZoneOptions[0]);
   const recordPayload = useMemo(() => buildGameRecord(state), [state]);
   const [pendingExportId, setPendingExportId] = useState<string | null>(null);
   const isGameStarted = state.gameStarted;
@@ -671,6 +682,10 @@ export default function ScorekeeperPage() {
           border: 'rgba(56,189,248,0.35)',
         };
   const hasLiveUrlChange = liveVideoUrlInput.trim() !== state.liveVideoUrl.trim();
+  const battedBallDetails = useMemo<BattedBallDetails | null>(() => {
+    if (battedBallType === '선택 안 함' && battedBallZone === '선택 안 함') return null;
+    return { type: battedBallType, zone: battedBallZone };
+  }, [battedBallType, battedBallZone]);
 
   useEffect(() => {
     if (state.gameOver) {
@@ -738,7 +753,7 @@ export default function ScorekeeperPage() {
         openHitAdvanceModal(3);
         break;
       case 'hr':
-        actions.homeRun();
+        actions.homeRun(battedBallDetails);
         break;
       case 'walk':
         actions.walk();
@@ -750,31 +765,31 @@ export default function ScorekeeperPage() {
         actions.strikeOut();
         break;
       case 'out_ground':
-        actions.addOutWithMessage('땅볼 아웃');
+        actions.addOutWithMessage('땅볼 아웃', battedBallDetails);
         break;
       case 'out_fly':
-        actions.addOutWithMessage('뜬공 아웃');
+        actions.addOutWithMessage('뜬공 아웃', battedBallDetails);
         break;
       case 'out_line':
-        actions.addOutWithMessage('라인드라이브 아웃');
+        actions.addOutWithMessage('라인드라이브 아웃', battedBallDetails);
         break;
       case 'out_dp2':
-        actions.doublePlay();
+        actions.doublePlay(battedBallDetails);
         break;
       case 'out_tp3':
-        actions.triplePlay();
+        actions.triplePlay(battedBallDetails);
         break;
       case 'out_infield_fly':
-        actions.addOutWithMessage('내야 플라이 아웃');
+        actions.addOutWithMessage('내야 플라이 아웃', battedBallDetails);
         break;
       case 'out_outfield_fly':
-        actions.addOutWithMessage('외야 플라이 아웃');
+        actions.addOutWithMessage('외야 플라이 아웃', battedBallDetails);
         break;
       case 'out_other':
-        actions.addOutWithMessage('기타 아웃');
+        actions.addOutWithMessage('기타 아웃', battedBallDetails);
         break;
       case 'sac':
-        actions.sacFly();
+        actions.sacFly(battedBallDetails);
         break;
       case 'resetCount':
         actions.resetCount();
@@ -799,9 +814,9 @@ export default function ScorekeeperPage() {
   const handleConfirmHitAdvance = () => {
     if (!hitAdvanceModal) return;
     const { bases, selections } = hitAdvanceModal;
-    if (bases === 1) actions.hitSingle(selections);
-    if (bases === 2) actions.hitDouble(selections);
-    if (bases === 3) actions.hitTriple(selections);
+    if (bases === 1) actions.hitSingle(selections, battedBallDetails);
+    if (bases === 2) actions.hitDouble(selections, battedBallDetails);
+    if (bases === 3) actions.hitTriple(selections, battedBallDetails);
     setHitAdvanceModal(null);
   };
 
@@ -970,6 +985,70 @@ export default function ScorekeeperPage() {
                 >
                   {isGameStarted ? '경기 진행 중' : '경기 시작'}
                 </button>
+              </div>
+            </div>
+            <div
+              style={{
+                padding: '10px 12px',
+                borderRadius: '12px',
+                border: '1px solid rgba(148, 163, 184, 0.25)',
+                background: 'rgba(15,23,42,0.45)',
+                display: 'grid',
+                gap: '10px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontWeight: 900, color: '#e2e8f0' }}>타구 유형/방향</span>
+                <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 800 }}>
+                  기록 시 함께 저장됩니다
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
+                <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1', fontSize: '12px', fontWeight: 800 }}>
+                  유형
+                  <select
+                    value={battedBallType}
+                    onChange={(e) => setBattedBallType(e.target.value)}
+                    style={{
+                      borderRadius: '10px',
+                      border: '1px solid rgba(148,163,184,0.35)',
+                      background: '#0b0f1a',
+                      color: '#e2e8f0',
+                      padding: '8px 10px',
+                      fontWeight: 800,
+                    }}
+                  >
+                    {battedBallTypeOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1', fontSize: '12px', fontWeight: 800 }}>
+                  방향
+                  <select
+                    value={battedBallZone}
+                    onChange={(e) => setBattedBallZone(e.target.value)}
+                    style={{
+                      borderRadius: '10px',
+                      border: '1px solid rgba(148,163,184,0.35)',
+                      background: '#0b0f1a',
+                      color: '#e2e8f0',
+                      padding: '8px 10px',
+                      fontWeight: 800,
+                    }}
+                  >
+                    {battedBallZoneOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
+                현재 선택: {formatBattedBallDetails(battedBallDetails)}
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '10px' }}>
@@ -1382,6 +1461,11 @@ export default function ScorekeeperPage() {
           onClose={() => setActionModal(null)}
           actions={actions}
           onSelectHit={openHitAdvanceModal}
+          battedBallType={battedBallType}
+          battedBallZone={battedBallZone}
+          onChangeBattedBallType={setBattedBallType}
+          onChangeBattedBallZone={setBattedBallZone}
+          battedBallDetails={battedBallDetails}
         />
       )}
       {hitAdvanceModal && (
@@ -1967,11 +2051,21 @@ function ActionModal({
   onClose,
   actions,
   onSelectHit,
+  battedBallType,
+  battedBallZone,
+  onChangeBattedBallType,
+  onChangeBattedBallZone,
+  battedBallDetails,
 }: {
   data: { role: 'runner'; name: string; base: 0 | 1 | 2 } | { role: 'batter'; name: string } | { role: 'fielder'; name: string; pos: string };
   onClose: () => void;
   actions: ReturnType<typeof useDemoStore>['actions'];
   onSelectHit: (bases: 1 | 2 | 3) => void;
+  battedBallType: string;
+  battedBallZone: string;
+  onChangeBattedBallType: (value: string) => void;
+  onChangeBattedBallZone: (value: string) => void;
+  battedBallDetails: BattedBallDetails | null;
 }) {
   const renderButtons = () => {
     if (data.role === 'runner') {
@@ -1990,10 +2084,10 @@ function ActionModal({
           <RunnerActionButton label="1루타" color="#3b82f6" onClick={() => onSelectHit(1)} />
           <RunnerActionButton label="2루타" color="#3b82f6" onClick={() => onSelectHit(2)} />
           <RunnerActionButton label="3루타" color="#3b82f6" onClick={() => onSelectHit(3)} />
-          <RunnerActionButton label="홈런" color="#f97316" onClick={() => actions.homeRun()} />
+          <RunnerActionButton label="홈런" color="#f97316" onClick={() => actions.homeRun(battedBallDetails)} />
           <RunnerActionButton label="볼넷" color="#22c55e" onClick={() => actions.walk()} />
           <RunnerActionButton label="사구" color="#22c55e" onClick={() => actions.hbp()} />
-          <RunnerActionButton label="아웃" color="#ef4444" onClick={() => actions.addOut()} />
+          <RunnerActionButton label="아웃" color="#ef4444" onClick={() => actions.addOut(battedBallDetails)} />
         </>
       );
     }
@@ -2053,6 +2147,70 @@ function ActionModal({
             ✕
           </button>
         </div>
+        {data.role === 'batter' ? (
+          <div
+            style={{
+              padding: '10px 12px',
+              borderRadius: '12px',
+              border: '1px solid rgba(148, 163, 184, 0.25)',
+              background: 'rgba(15,23,42,0.55)',
+              display: 'grid',
+              gap: '10px',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontWeight: 900, color: '#e2e8f0' }}>타구 유형/방향</span>
+              <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>타격/아웃 기록에 반영</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
+              <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1', fontSize: '12px', fontWeight: 800 }}>
+                유형
+                <select
+                  value={battedBallType}
+                  onChange={(e) => onChangeBattedBallType(e.target.value)}
+                  style={{
+                    borderRadius: '10px',
+                    border: '1px solid rgba(148,163,184,0.35)',
+                    background: '#0b0f1a',
+                    color: '#e2e8f0',
+                    padding: '8px 10px',
+                    fontWeight: 800,
+                  }}
+                >
+                  {battedBallTypeOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1', fontSize: '12px', fontWeight: 800 }}>
+                방향
+                <select
+                  value={battedBallZone}
+                  onChange={(e) => onChangeBattedBallZone(e.target.value)}
+                  style={{
+                    borderRadius: '10px',
+                    border: '1px solid rgba(148,163,184,0.35)',
+                    background: '#0b0f1a',
+                    color: '#e2e8f0',
+                    padding: '8px 10px',
+                    fontWeight: 800,
+                  }}
+                >
+                  {battedBallZoneOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
+              현재 선택: {formatBattedBallDetails(battedBallDetails)}
+            </div>
+          </div>
+        ) : null}
         <div style={{ display: 'grid', gap: '8px', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>{renderButtons()}</div>
         <p style={{ margin: 0, color: '#94a3b8', fontSize: '12px' }}>
           이벤트 확정 시 DB 저장 훅으로 연결해 텍스트 기록과 동일하게 남길 수 있습니다.

@@ -18,6 +18,11 @@ interface PlayerSlot {
 export type RunnerAdvanceOutcome = 'hold' | 'advance' | 'out' | 'score';
 export type RunnerAdvanceSelections = Partial<Record<0 | 1 | 2, RunnerAdvanceOutcome>>;
 
+export type BattedBallDetails = {
+  type: string;
+  zone: string;
+};
+
 export interface PlayLog {
   inning: number;
   half: Half;
@@ -35,7 +40,7 @@ export interface PlayEvent {
   pitch: number;
   type: string;
   runners: string[];
-  battedBall?: string | null;
+  battedBall?: BattedBallDetails | null;
   error?: string | null;
   notes?: string;
 }
@@ -74,14 +79,14 @@ type Action =
   | { type: 'strike' }
   | { type: 'foul' }
   | { type: 'strikeOut' }
-  | { type: 'out' }
-  | { type: 'outWithMessage'; note: string }
-  | { type: 'doublePlay' }
-  | { type: 'triplePlay' }
-  | { type: 'hit'; bases: 1 | 2 | 3 | 4; advances?: RunnerAdvanceSelections }
+  | { type: 'out'; battedBall?: BattedBallDetails | null }
+  | { type: 'outWithMessage'; note: string; battedBall?: BattedBallDetails | null }
+  | { type: 'doublePlay'; battedBall?: BattedBallDetails | null }
+  | { type: 'triplePlay'; battedBall?: BattedBallDetails | null }
+  | { type: 'hit'; bases: 1 | 2 | 3 | 4; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null }
   | { type: 'walk' }
   | { type: 'hbp' }
-  | { type: 'sac' }
+  | { type: 'sac'; battedBall?: BattedBallDetails | null }
   | { type: 'stealSuccess' }
   | { type: 'stealFail' }
   | { type: 'resetCount' }
@@ -224,6 +229,12 @@ function normalizeEvents(events: unknown, fallback: { inning: number; half: Half
     if (entry && typeof entry === 'object') {
       const e = entry as Partial<PlayEvent>;
       const half = e.half === 'top' || e.half === 'bottom' ? e.half : fallback.half;
+      const battedBall =
+        e.battedBall && typeof e.battedBall === 'object'
+          ? (e.battedBall as BattedBallDetails)
+          : typeof e.battedBall === 'string'
+            ? { type: e.battedBall, zone: '' }
+            : null;
       return {
         inning: typeof e.inning === 'number' ? e.inning : fallback.inning,
         half,
@@ -232,7 +243,7 @@ function normalizeEvents(events: unknown, fallback: { inning: number; half: Half
         pitch: typeof e.pitch === 'number' ? e.pitch : 0,
         type: typeof e.type === 'string' ? e.type : 'play',
         runners: Array.isArray(e.runners) ? e.runners.filter((r): r is string => typeof r === 'string') : [],
-        battedBall: e.battedBall ?? null,
+        battedBall,
         error: e.error ?? null,
         notes: typeof e.notes === 'string' ? e.notes : undefined,
       };
@@ -346,7 +357,11 @@ export function buildGameRecord(state: DemoState): GameRecord {
       away: state.removed.away.map((player) => ({ ...player })),
     },
     feed: state.feed.map((entry) => ({ ...entry })),
-    events: state.events.map((entry) => ({ ...entry, runners: [...entry.runners] })),
+    events: state.events.map((entry) => ({
+      ...entry,
+      runners: [...entry.runners],
+      battedBall: entry.battedBall ? { ...entry.battedBall } : null,
+    })),
     lastPlay: state.lastPlay,
   };
 }
@@ -450,19 +465,19 @@ function reducer(state: DemoState, action: Action): DemoState {
       nextState = applyOut(state, '삼진', { pitchNumber: state.pitchCount + 1 });
       break;
     case 'out':
-      nextState = applyOut(state, '아웃', { pitchNumber: state.pitchCount + 1 });
+      nextState = applyOut(state, '아웃', { pitchNumber: state.pitchCount + 1, battedBall: action.battedBall });
       break;
     case 'outWithMessage':
-      nextState = applyOut(state, action.note, { pitchNumber: state.pitchCount + 1 });
+      nextState = applyOut(state, action.note, { pitchNumber: state.pitchCount + 1, battedBall: action.battedBall });
       break;
     case 'doublePlay':
-      nextState = applyDoublePlay(state, 2, '병살타');
+      nextState = applyDoublePlay(state, 2, '병살타', action.battedBall);
       break;
     case 'triplePlay':
-      nextState = applyDoublePlay(state, 3, '삼중살');
+      nextState = applyDoublePlay(state, 3, '삼중살', action.battedBall);
       break;
     case 'hit':
-      nextState = applyHitWithAdvances(state, action.bases, state.pitchCount + 1, action.advances);
+      nextState = applyHitWithAdvances(state, action.bases, state.pitchCount + 1, action.advances, action.battedBall);
       break;
     case 'walk':
       nextState = applyWalk(state, '볼넷', state.pitchCount + 1);
@@ -471,7 +486,7 @@ function reducer(state: DemoState, action: Action): DemoState {
       nextState = applyWalk(state, '몸에 맞는 공', state.pitchCount + 1);
       break;
     case 'sac':
-      nextState = applySacrifice(state, state.pitchCount + 1);
+      nextState = applySacrifice(state, state.pitchCount + 1, action.battedBall);
       break;
     case 'stealSuccess':
       nextState = applySteal(state, true);
@@ -727,7 +742,7 @@ function createPlayEvent(
   details: {
     type: string;
     runners?: string[];
-    battedBall?: string | null;
+    battedBall?: BattedBallDetails | null;
     error?: string | null;
     notes?: string;
   },
@@ -753,7 +768,7 @@ function createPlayEventForBaserunning(
   details: {
     type: string;
     runners?: string[];
-    battedBall?: string | null;
+    battedBall?: BattedBallDetails | null;
     error?: string | null;
     notes?: string;
   },
@@ -785,7 +800,7 @@ function applyOut(
     pitchNumber?: number;
     eventType?: string;
     runners?: string[];
-    battedBall?: string | null;
+    battedBall?: BattedBallDetails | null;
     error?: string | null;
     notes?: string;
   },
@@ -848,6 +863,7 @@ function applyHitWithAdvances(
   basesToAdvance: 1 | 2 | 3 | 4,
   pitchNumber: number,
   advances?: RunnerAdvanceSelections,
+  battedBall?: BattedBallDetails | null,
 ): DemoState {
   const { batterName, batterIndex } = nextBatter(state);
   const result = basesToAdvance === 4 ? '홈런' : `${basesToAdvance}루타`;
@@ -918,7 +934,7 @@ function applyHitWithAdvances(
     {
       type: 'hit',
       runners: runnerMoves.map((move) => move.runnerSummary),
-      battedBall: result,
+      battedBall: battedBall ?? null,
       notes: message,
     },
     pitchNumber,
@@ -983,7 +999,7 @@ function applyWalk(state: DemoState, message: string, pitchNumber: number): Demo
   };
 }
 
-function applySacrifice(state: DemoState, pitchNumber: number): DemoState {
+function applySacrifice(state: DemoState, pitchNumber: number, battedBall?: BattedBallDetails | null): DemoState {
   const bases = [...state.bases] as Bases;
   let runs = 0;
   if (bases[2]) {
@@ -998,7 +1014,7 @@ function applySacrifice(state: DemoState, pitchNumber: number): DemoState {
   const newState = applyOut(
     { ...state, bases, score },
     runs ? `희생플라이 · ${runs}득점` : '희생플라이',
-    { pitchNumber, eventType: 'sac', runners: getRunnerNames(state.bases), notes: '희생플라이' },
+    { pitchNumber, eventType: 'sac', runners: getRunnerNames(state.bases), notes: '희생플라이', battedBall },
   );
   return newState;
 }
@@ -1173,7 +1189,12 @@ function applyRunnerOut(state: DemoState, baseIndex: 0 | 1 | 2, message: string)
   };
 }
 
-function applyDoublePlay(state: DemoState, outsToAdd: 2 | 3, label: string): DemoState {
+function applyDoublePlay(
+  state: DemoState,
+  outsToAdd: 2 | 3,
+  label: string,
+  battedBall?: BattedBallDetails | null,
+): DemoState {
   const bases = [...state.bases] as Bases;
   const current = currentBatterInfo(state);
   const batterName = current.batter;
@@ -1200,7 +1221,7 @@ function applyDoublePlay(state: DemoState, outsToAdd: 2 | 3, label: string): Dem
   const lastPlay = feedText;
   const eventEntry = createPlayEvent(
     state,
-    { type: 'out', runners: getRunnerNames(state.bases), notes: feedText },
+    { type: 'out', runners: getRunnerNames(state.bases), notes: feedText, battedBall: battedBall ?? null },
     Math.max(1, state.pitchCount + 1),
   );
 
@@ -1404,14 +1425,14 @@ interface DemoStoreValue {
     addStrike: () => void;
     addFoul: () => void;
     strikeOut: () => void;
-    addOut: () => void;
-    hitSingle: (advances?: RunnerAdvanceSelections) => void;
-    hitDouble: (advances?: RunnerAdvanceSelections) => void;
-    hitTriple: (advances?: RunnerAdvanceSelections) => void;
-    homeRun: () => void;
+    addOut: (battedBall?: BattedBallDetails | null) => void;
+    hitSingle: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) => void;
+    hitDouble: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) => void;
+    hitTriple: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) => void;
+    homeRun: (battedBall?: BattedBallDetails | null) => void;
     walk: () => void;
     hbp: () => void;
-    sacFly: () => void;
+    sacFly: (battedBall?: BattedBallDetails | null) => void;
     stealSuccess: () => void;
     stealFail: () => void;
     resetCount: () => void;
@@ -1433,9 +1454,9 @@ interface DemoStoreValue {
     endGame: (endedAt: string) => void;
     resetGame: () => void;
     undo: () => void;
-    addOutWithMessage: (note: string) => void;
-    doublePlay: () => void;
-    triplePlay: () => void;
+    addOutWithMessage: (note: string, battedBall?: BattedBallDetails | null) => void;
+    doublePlay: (battedBall?: BattedBallDetails | null) => void;
+    triplePlay: (battedBall?: BattedBallDetails | null) => void;
   };
 }
 
@@ -1490,14 +1511,17 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       addStrike: () => dispatch({ type: 'strike' }),
       addFoul: () => dispatch({ type: 'foul' }),
       strikeOut: () => dispatch({ type: 'strikeOut' }),
-      addOut: () => dispatch({ type: 'out' }),
-      hitSingle: (advances?: RunnerAdvanceSelections) => dispatch({ type: 'hit', bases: 1, advances }),
-      hitDouble: (advances?: RunnerAdvanceSelections) => dispatch({ type: 'hit', bases: 2, advances }),
-      hitTriple: (advances?: RunnerAdvanceSelections) => dispatch({ type: 'hit', bases: 3, advances }),
-      homeRun: () => dispatch({ type: 'hit', bases: 4 }),
+      addOut: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'out', battedBall }),
+      hitSingle: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) =>
+        dispatch({ type: 'hit', bases: 1, advances, battedBall }),
+      hitDouble: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) =>
+        dispatch({ type: 'hit', bases: 2, advances, battedBall }),
+      hitTriple: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) =>
+        dispatch({ type: 'hit', bases: 3, advances, battedBall }),
+      homeRun: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'hit', bases: 4, battedBall }),
       walk: () => dispatch({ type: 'walk' }),
       hbp: () => dispatch({ type: 'hbp' }),
-      sacFly: () => dispatch({ type: 'sac' }),
+      sacFly: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'sac', battedBall }),
       stealSuccess: () => dispatch({ type: 'stealSuccess' }),
       stealFail: () => dispatch({ type: 'stealFail' }),
       resetCount: () => dispatch({ type: 'resetCount' }),
@@ -1509,9 +1533,10 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       runnerOut: (base: 0 | 1 | 2) => dispatch({ type: 'runnerOut', base }),
       addManualLog: (message: string) => dispatch({ type: 'manualLog', message }),
       setLiveVideoUrl: (url: string) => dispatch({ type: 'setLiveVideoUrl', url }),
-      addOutWithMessage: (note: string) => dispatch({ type: 'outWithMessage', note }),
-      doublePlay: () => dispatch({ type: 'doublePlay' }),
-      triplePlay: () => dispatch({ type: 'triplePlay' }),
+      addOutWithMessage: (note: string, battedBall?: BattedBallDetails | null) =>
+        dispatch({ type: 'outWithMessage', note, battedBall }),
+      doublePlay: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'doublePlay', battedBall }),
+      triplePlay: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'triplePlay', battedBall }),
       setTeamName: (side: Side, name: string) => dispatch({ type: 'setTeamName', side, name }),
       setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) =>
         dispatch({ type: 'setLineup', side, index, updates }),
