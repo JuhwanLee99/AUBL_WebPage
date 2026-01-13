@@ -275,18 +275,6 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   writePitcherStats('home', record.meta.homeTeamName);
   writePitcherStats('away', record.meta.awayTeamName);
 
-  const feed = [...record.feed].reverse();
-  addBlank();
-  add('플레이 로그');
-  if (feed.length) {
-    add('이닝', '공/말', '타순', '타자', '구수', '결과');
-    feed.forEach((entry) => {
-      add(entry.inning, halfLabel(entry.half), entry.order, entry.batter || '-', entry.pitch, entry.result);
-    });
-  } else {
-    add('-', '기록 없음');
-  }
-
   const events = [...record.events].reverse();
   addBlank();
   add('상세 플레이 이벤트');
@@ -324,6 +312,18 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
         formatErrorAdvanceResults(event.error),
         event.notes ?? '-',
       );
+    });
+  } else {
+    add('-', '기록 없음');
+  }
+
+  const feed = [...record.feed].reverse();
+  addBlank();
+  add('플레이 로그');
+  if (feed.length) {
+    add('이닝', '공/말', '타순', '타자', '구수', '결과');
+    feed.forEach((entry) => {
+      add(entry.inning, halfLabel(entry.half), entry.order, entry.batter || '-', entry.pitch, entry.result);
     });
   } else {
     add('-', '기록 없음');
