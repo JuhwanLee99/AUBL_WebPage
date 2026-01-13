@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
-import { MATCHES } from '../lib/mockData';
+import { MATCHES, TEAMS } from '../lib/mockData';
 
 type Half = 'top' | 'bottom';
 
@@ -13,6 +13,23 @@ interface PlayerSlot {
   throws: string;
   bats: string;
   order?: number | null;
+}
+
+export type MatchStatus = 'scheduled' | 'inProgress' | 'completed';
+
+export interface MatchSchedule {
+  id: string;
+  homeTeamId?: string;
+  awayTeamId?: string;
+  homeTeamName: string;
+  awayTeamName: string;
+  startTime: string;
+  venue: string;
+  status: MatchStatus;
+  homeScore?: number | null;
+  awayScore?: number | null;
+  lineups?: { home: PlayerSlot[]; away: PlayerSlot[] };
+  notes?: string;
 }
 
 export type RunnerAdvanceOutcome = 'hold' | 'advance' | 'out' | 'score' | 1 | 2 | 3 | 4;
@@ -80,6 +97,8 @@ interface DemoSnapshot {
   gameOver: boolean;
   endedAt: string | null;
   liveVideoUrl: string;
+  matches: MatchSchedule[];
+  activeMatchId: string | null;
 }
 
 interface DemoState extends DemoSnapshot {
@@ -121,7 +140,11 @@ type Action =
   | { type: 'endGame'; endedAt: string }
   | { type: 'resetGame' }
   | { type: 'undo' }
-  | { type: 'hydrate'; state: DemoState };
+  | { type: 'hydrate'; state: DemoState }
+  | { type: 'addMatch'; match: MatchSchedule }
+  | { type: 'updateMatch'; matchId: string; updates: Partial<MatchSchedule> }
+  | { type: 'selectMatch'; matchId: string | null }
+  | { type: 'saveMatchLineups'; matchId: string; lineups: { home: PlayerSlot[]; away: PlayerSlot[] } };
 
 const STORAGE_KEY = 'aubl-demo-store';
 
@@ -153,6 +176,50 @@ const demoLineups: { home: PlayerSlot[]; away: PlayerSlot[] } = {
   ],
 };
 
+const cloneLineups = (lineups: { home: PlayerSlot[]; away: PlayerSlot[] }) => ({
+  home: lineups.home.map((player) => ({ ...player })),
+  away: lineups.away.map((player) => ({ ...player })),
+});
+
+const teamNameById = (teamId?: string) => TEAMS.find((team) => team.id === teamId)?.name ?? '미정';
+
+const initialScheduledMatches: MatchSchedule[] = [
+  {
+    id: 'schedule-1',
+    homeTeamId: 'team-1',
+    awayTeamId: 'team-2',
+    homeTeamName: teamNameById('team-1'),
+    awayTeamName: teamNameById('team-2'),
+    startTime: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+    venue: 'AUBL 메인구장',
+    status: 'scheduled',
+    lineups: cloneLineups(demoLineups),
+    notes: '라인업 사전 등록 완료',
+  },
+  {
+    id: 'schedule-2',
+    homeTeamId: 'team-3',
+    awayTeamId: 'team-4',
+    homeTeamName: teamNameById('team-3'),
+    awayTeamName: teamNameById('team-4'),
+    startTime: new Date(Date.now() + 1000 * 60 * 60 * 48).toISOString(),
+    venue: 'AUBL 보조구장',
+    status: 'scheduled',
+  },
+  ...MATCHES.slice(0, 3).map((match, index) => ({
+    id: `result-${index + 1}`,
+    homeTeamId: match.homeTeamId,
+    awayTeamId: match.awayTeamId,
+    homeTeamName: teamNameById(match.homeTeamId),
+    awayTeamName: teamNameById(match.awayTeamId),
+    startTime: new Date(Date.now() - 1000 * 60 * 60 * 24 * (index + 1)).toISOString(),
+    venue: 'AUBL 기록실',
+    status: 'completed' as const,
+    homeScore: match.homeScore,
+    awayScore: match.awayScore,
+  })),
+];
+
 const initialState: DemoState = {
   inning: 1,
   half: 'top',
@@ -180,12 +247,14 @@ const initialState: DemoState = {
     ],
   },
   removed: { home: [], away: [] },
-  teamNames: { home: '삼성 라이온즈', away: '두산 베어스' },
+  teamNames: { home: '홈팀', away: '원정팀' },
   gameStarted: false,
   gameOver: false,
   endedAt: null,
   liveVideoUrl: 'https://www.youtube.com/embed/live_stream?channel=YOUR_CHANNEL_ID',
   history: [],
+  matches: initialScheduledMatches,
+  activeMatchId: null,
 };
 
 function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }): PlayLog[] {
@@ -274,10 +343,64 @@ function normalizeEvents(events: unknown, fallback: { inning: number; half: Half
   });
 }
 
+function normalizePlayerSlot(slot: unknown): PlayerSlot | null {
+  if (!slot || typeof slot !== 'object') return null;
+  const s = slot as Partial<PlayerSlot>;
+  return {
+    name: typeof s.name === 'string' ? s.name : '미정',
+    pos: typeof s.pos === 'string' ? s.pos : 'UT',
+    number: typeof s.number === 'string' ? s.number : '',
+    throws: typeof s.throws === 'string' ? s.throws : 'R',
+    bats: typeof s.bats === 'string' ? s.bats : 'R',
+    order: typeof s.order === 'number' ? s.order : s.order ?? null,
+  };
+}
+
+function normalizeLineups(lineups: unknown): { home: PlayerSlot[]; away: PlayerSlot[] } | undefined {
+  if (!lineups || typeof lineups !== 'object') return undefined;
+  const l = lineups as { home?: unknown; away?: unknown };
+  const home = Array.isArray(l.home) ? l.home.map(normalizePlayerSlot).filter((p): p is PlayerSlot => Boolean(p)) : [];
+  const away = Array.isArray(l.away) ? l.away.map(normalizePlayerSlot).filter((p): p is PlayerSlot => Boolean(p)) : [];
+  if (!home.length && !away.length) return undefined;
+  return { home, away };
+}
+
+function normalizeMatches(matches: unknown): MatchSchedule[] {
+  if (!Array.isArray(matches)) return [];
+  return matches.map((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return {
+        id: `match-${Math.random().toString(36).slice(2, 8)}`,
+        homeTeamName: '미정',
+        awayTeamName: '미정',
+        startTime: new Date().toISOString(),
+        venue: '미정',
+        status: 'scheduled',
+      } satisfies MatchSchedule;
+    }
+    const match = entry as Partial<MatchSchedule>;
+    return {
+      id: typeof match.id === 'string' ? match.id : `match-${Math.random().toString(36).slice(2, 8)}`,
+      homeTeamId: typeof match.homeTeamId === 'string' ? match.homeTeamId : undefined,
+      awayTeamId: typeof match.awayTeamId === 'string' ? match.awayTeamId : undefined,
+      homeTeamName: typeof match.homeTeamName === 'string' ? match.homeTeamName : '미정',
+      awayTeamName: typeof match.awayTeamName === 'string' ? match.awayTeamName : '미정',
+      startTime: typeof match.startTime === 'string' ? match.startTime : new Date().toISOString(),
+      venue: typeof match.venue === 'string' ? match.venue : '미정',
+      status: match.status === 'completed' || match.status === 'inProgress' ? match.status : 'scheduled',
+      homeScore: typeof match.homeScore === 'number' ? match.homeScore : null,
+      awayScore: typeof match.awayScore === 'number' ? match.awayScore : null,
+      lineups: normalizeLineups(match.lineups),
+      notes: typeof match.notes === 'string' ? match.notes : undefined,
+    };
+  });
+}
+
 function normalizeState(base: DemoState, incoming: DemoState): DemoState {
   const merged = { ...base, ...incoming } as DemoState;
   const feed = normalizeFeed(merged.feed, { inning: merged.inning, half: merged.half });
   const events = normalizeEvents(merged.events, { inning: merged.inning, half: merged.half });
+  const matches = normalizeMatches(merged.matches ?? base.matches);
   const history = Array.isArray(merged.history)
     ? merged.history.map((snap) => {
         const normalizedHistoryFeed = normalizeFeed((snap as DemoSnapshot).feed, { inning: snap.inning, half: snap.half });
@@ -307,12 +430,14 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
     pitchCount: merged.pitchCount ?? 0,
     feed,
     events,
+    matches,
     history,
     gameOver: Boolean(merged.gameOver),
     endedAt: typeof merged.endedAt === 'string' ? merged.endedAt : null,
     removed: merged.removed ?? base.removed,
     gameStarted,
     liveVideoUrl: typeof merged.liveVideoUrl === 'string' ? merged.liveVideoUrl : base.liveVideoUrl,
+    activeMatchId: typeof merged.activeMatchId === 'string' ? merged.activeMatchId : merged.activeMatchId === null ? null : base.activeMatchId,
   };
 }
 
@@ -402,6 +527,10 @@ function shouldTrackHistory(actionType: Action['type']) {
     'addBench',
     'removeBench',
     'substitute',
+    'addMatch',
+    'updateMatch',
+    'saveMatchLineups',
+    'selectMatch',
     'hydrate',
     'resetGame',
     'startGame',
@@ -428,6 +557,10 @@ function reducer(state: DemoState, action: Action): DemoState {
     'resetGame',
     'startGame',
     'setLiveVideoUrl',
+    'addMatch',
+    'updateMatch',
+    'saveMatchLineups',
+    'selectMatch',
   ];
   if (!state.gameStarted && !setupActions.includes(action.type)) {
     return state;
@@ -544,6 +677,9 @@ function reducer(state: DemoState, action: Action): DemoState {
       const startLabel = '경기 시작';
       const broadcast = `*기록원* - ${startLabel}`;
       const feed = pushFeed(state.feed, createLogEntryForBaserunning(state, broadcast, 0));
+      const matches = state.activeMatchId
+        ? updateMatchSchedule(state.matches, state.activeMatchId, { status: 'inProgress' })
+        : state.matches;
       nextState = {
         ...state,
         inning: 1,
@@ -563,6 +699,7 @@ function reducer(state: DemoState, action: Action): DemoState {
         feed,
         history: [],
         removed: { ...state.removed },
+        matches,
       };
       break;
     }
@@ -643,10 +780,48 @@ function reducer(state: DemoState, action: Action): DemoState {
     }
     case 'endGame':
       nextState = applyEndGame(state, action.endedAt);
+      if (state.activeMatchId) {
+        nextState = {
+          ...nextState,
+          matches: updateMatchSchedule(nextState.matches, state.activeMatchId, {
+            status: 'completed',
+            homeScore: nextState.score.home,
+            awayScore: nextState.score.away,
+          }),
+        };
+      }
       break;
     case 'resetGame':
       nextState = createNewGame(state);
       break;
+    case 'addMatch':
+      nextState = {
+        ...state,
+        matches: [...state.matches, action.match],
+      };
+      break;
+    case 'updateMatch':
+      nextState = {
+        ...state,
+        matches: updateMatchSchedule(state.matches, action.matchId, action.updates),
+      };
+      break;
+    case 'saveMatchLineups':
+      nextState = {
+        ...state,
+        matches: updateMatchSchedule(state.matches, action.matchId, { lineups: cloneLineups(action.lineups) }),
+      };
+      break;
+    case 'selectMatch': {
+      if (!action.matchId) {
+        nextState = { ...state, activeMatchId: null };
+        break;
+      }
+      const selected = state.matches.find((match) => match.id === action.matchId);
+      if (!selected) return state;
+      nextState = resetGameForMatch(state, selected);
+      break;
+    }
     default:
       nextState = state;
   }
@@ -1392,6 +1567,44 @@ function applyEndGame(state: DemoState, endedAt: string): DemoState {
   };
 }
 
+function updateMatchSchedule(matches: MatchSchedule[], matchId: string, updates: Partial<MatchSchedule>) {
+  return matches.map((match) => (match.id === matchId ? { ...match, ...updates } : match));
+}
+
+function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
+  const lineups = match.lineups ?? state.lineups;
+  return {
+    inning: 1,
+    half: 'top',
+    balls: 0,
+    strikes: 0,
+    outs: 0,
+    pitchCount: 0,
+    bases: [null, null, null],
+    score: { home: 0, away: 0 },
+    lastPlay: '경기 대기 중',
+    feed: [],
+    events: [],
+    homeTeamId: match.homeTeamId ?? state.homeTeamId,
+    awayTeamId: match.awayTeamId ?? state.awayTeamId,
+    batterIndex: { home: 0, away: 0 },
+    lineups: cloneLineups(lineups),
+    benches: {
+      home: state.benches.home.map((p) => ({ ...p })),
+      away: state.benches.away.map((p) => ({ ...p })),
+    },
+    teamNames: { home: match.homeTeamName, away: match.awayTeamName },
+    gameStarted: false,
+    gameOver: false,
+    endedAt: null,
+    liveVideoUrl: state.liveVideoUrl,
+    history: [],
+    removed: { home: [], away: [] },
+    matches: state.matches,
+    activeMatchId: match.id,
+  };
+}
+
 function createNewGame(state: DemoState): DemoState {
   return {
     inning: 1,
@@ -1423,6 +1636,8 @@ function createNewGame(state: DemoState): DemoState {
     liveVideoUrl: state.liveVideoUrl,
     history: [],
     removed: { home: [], away: [] },
+    matches: state.matches,
+    activeMatchId: state.activeMatchId,
   };
 }
 
@@ -1634,6 +1849,10 @@ interface DemoStoreValue {
     addOutWithMessage: (note: string, battedBall?: BattedBallDetails | null) => void;
     doublePlay: (battedBall?: BattedBallDetails | null) => void;
     triplePlay: (battedBall?: BattedBallDetails | null) => void;
+    addMatch: (match: MatchSchedule) => void;
+    updateMatch: (matchId: string, updates: Partial<MatchSchedule>) => void;
+    saveMatchLineups: (matchId: string, lineups: { home: PlayerSlot[]; away: PlayerSlot[] }) => void;
+    selectMatch: (matchId: string | null) => void;
   };
 }
 
@@ -1727,6 +1946,11 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       endGame: (endedAt: string) => dispatch({ type: 'endGame', endedAt }),
       resetGame: () => dispatch({ type: 'resetGame' }),
       undo: () => dispatch({ type: 'undo' }),
+      addMatch: (match: MatchSchedule) => dispatch({ type: 'addMatch', match }),
+      updateMatch: (matchId: string, updates: Partial<MatchSchedule>) => dispatch({ type: 'updateMatch', matchId, updates }),
+      saveMatchLineups: (matchId: string, lineups: { home: PlayerSlot[]; away: PlayerSlot[] }) =>
+        dispatch({ type: 'saveMatchLineups', matchId, lineups }),
+      selectMatch: (matchId: string | null) => dispatch({ type: 'selectMatch', matchId }),
     }),
     [],
   );
