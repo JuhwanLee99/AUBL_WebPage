@@ -51,6 +51,10 @@ const errorTypeOptions = ['포구', '송구', '포구 후 송구', '기타'];
 type HitResultAction = (typeof hitResultOptions)[number]['value'];
 type HitWizardStep = 'result' | 'type' | 'zone';
 type HitWizardState = { step: HitWizardStep; result: HitResultAction | null; type: string; zone: string };
+type ActionModalData =
+  | { role: 'runner'; name: string; base: 0 | 1 | 2 }
+  | { role: 'batter'; name: string; side: Side; lineupIndex: number }
+  | { role: 'fielder'; name: string; pos: string };
 
 function downloadCsv(content: string, filenamePrefix: string) {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
@@ -700,18 +704,16 @@ export default function ScorekeeperPage() {
   const awayTeam = useMemo(() => TEAMS.find((t) => t.id === state.awayTeamId), [state.awayTeamId]);
   const hittingSide: Side = state.half === 'top' ? 'away' : 'home';
   const defenseSide: Side = hittingSide === 'home' ? 'away' : 'home';
-  const offenseLineup = state.lineups[hittingSide].filter((slot) => slot.pos.toUpperCase() !== 'P');
-  const activeOffenseLineup = offenseLineup.length ? offenseLineup : state.lineups[hittingSide];
+  const offenseLineupEntries = state.lineups[hittingSide].map((slot, idx) => ({ slot, idx }));
+  const offenseBattingEntries = offenseLineupEntries.filter((entry) => entry.slot.pos.toUpperCase() !== 'P');
+  const activeOffenseEntries = offenseBattingEntries.length ? offenseBattingEntries : offenseLineupEntries;
   const defenseLineup = state.lineups[defenseSide];
-  const currentBatter =
-    activeOffenseLineup[state.batterIndex[hittingSide] % (activeOffenseLineup.length || 1)]?.name ?? '타자';
+  const activeLineupLength = activeOffenseEntries.length || 1;
+  const currentBatterEntry = activeOffenseEntries[state.batterIndex[hittingSide] % activeLineupLength] ?? null;
+  const currentBatter = currentBatterEntry?.slot?.name ?? '타자';
+  const currentBatterLineupIndex = currentBatterEntry?.idx ?? 0;
   const currentPitcher = defenseLineup.find((slot) => slot.pos.toUpperCase() === 'P')?.name ?? '';
-  const [actionModal, setActionModal] = useState<
-    | { role: 'runner'; name: string; base: 0 | 1 | 2 }
-    | { role: 'batter'; name: string }
-    | { role: 'fielder'; name: string; pos: string }
-    | null
-  >(null);
+  const [actionModal, setActionModal] = useState<ActionModalData | null>(null);
   const [benchInput, setBenchInput] = useState<{ [K in Side]: { name: string; pos: string; number: string; throws: string; bats: string } }>({
     home: { name: '', pos: '', number: '', throws: 'R', bats: 'R' },
     away: { name: '', pos: '', number: '', throws: 'R', bats: 'R' },
@@ -1059,7 +1061,7 @@ export default function ScorekeeperPage() {
             }}
             onSelectBatter={() => {
               if (controlsDisabled) return;
-              setActionModal({ role: 'batter', name: currentBatter });
+              setActionModal({ role: 'batter', name: currentBatter, side: hittingSide, lineupIndex: currentBatterLineupIndex });
             }}
             onSelectFielder={(payload) => {
               if (controlsDisabled) return;
@@ -1521,13 +1523,9 @@ export default function ScorekeeperPage() {
           data={actionModal}
           onClose={() => setActionModal(null)}
           actions={actions}
-          onSelectHit={openHitAdvanceModal}
-          battedBallType={battedBallType}
-          battedBallZone={battedBallZone}
-          onChangeBattedBallType={setBattedBallType}
-          onChangeBattedBallZone={setBattedBallZone}
-          battedBallDetails={battedBallDetails}
           bases={state.bases}
+          bench={state.benches[hittingSide]}
+          lineup={state.lineups[hittingSide]}
         />
       )}
       {hitAdvanceModal && (
@@ -2391,24 +2389,16 @@ function ActionModal({
   data,
   onClose,
   actions,
-  onSelectHit,
-  battedBallType,
-  battedBallZone,
-  onChangeBattedBallType,
-  onChangeBattedBallZone,
-  battedBallDetails,
   bases,
+  bench,
+  lineup,
 }: {
-  data: { role: 'runner'; name: string; base: 0 | 1 | 2 } | { role: 'batter'; name: string } | { role: 'fielder'; name: string; pos: string };
+  data: ActionModalData;
   onClose: () => void;
   actions: ReturnType<typeof useDemoStore>['actions'];
-  onSelectHit: (bases: 1 | 2 | 3) => void;
-  battedBallType: string;
-  battedBallZone: string;
-  onChangeBattedBallType: (value: string) => void;
-  onChangeBattedBallZone: (value: string) => void;
-  battedBallDetails: BattedBallDetails | null;
   bases: (string | null)[];
+  bench: { name: string; pos: string; number: string; throws: string; bats: string }[];
+  lineup: { name: string; pos: string; number: string; throws: string; bats: string }[];
 }) {
   const [errorType, setErrorType] = useState(errorTypeOptions[0]);
   const [errorContext, setErrorContext] = useState('');
@@ -2427,6 +2417,30 @@ function ActionModal({
     setRunnerSelections(initialSelections);
   }, [bases, data.role]);
 
+  const battingOrder =
+    data.role === 'batter'
+      ? (() => {
+          const slot = lineup[data.lineupIndex];
+          if (!slot || slot.pos.toUpperCase() === 'P') return null;
+          let order = 0;
+          for (let i = 0; i < lineup.length; i += 1) {
+            const player = lineup[i];
+            if (player.pos.toUpperCase() === 'P') continue;
+            order += 1;
+            if (i === data.lineupIndex) return order;
+          }
+          return order || null;
+        })()
+      : null;
+
+  const currentSlot = data.role === 'batter' ? lineup[data.lineupIndex] : null;
+
+  const handleSubstitute = (benchIndex: number) => {
+    if (data.role !== 'batter') return;
+    actions.substitute(data.side, benchIndex, data.lineupIndex);
+    onClose();
+  };
+
   const renderButtons = () => {
     if (data.role === 'runner') {
       return (
@@ -2438,25 +2452,13 @@ function ActionModal({
         </>
       );
     }
-    if (data.role === 'batter') {
+    if (data.role === 'fielder') {
       return (
         <>
-          <RunnerActionButton label="1루타" color="#3b82f6" onClick={() => onSelectHit(1)} />
-          <RunnerActionButton label="2루타" color="#3b82f6" onClick={() => onSelectHit(2)} />
-          <RunnerActionButton label="3루타" color="#3b82f6" onClick={() => onSelectHit(3)} />
-          <RunnerActionButton label="홈런" color="#f97316" onClick={() => actions.homeRun(battedBallDetails)} />
-          <RunnerActionButton label="볼넷" color="#22c55e" onClick={() => actions.walk()} />
-          <RunnerActionButton label="사구" color="#22c55e" onClick={() => actions.hbp()} />
-          <RunnerActionButton label="아웃" color="#ef4444" onClick={() => actions.addOut(battedBallDetails)} />
-        </>
-      );
-    }
-    return (
-      <>
-        <RunnerActionButton
-          label="실책 기록"
-          color="#f97316"
-          onClick={() => {
+          <RunnerActionButton
+            label="실책 기록"
+            color="#f97316"
+            onClick={() => {
             actions.recordError({
               fielderPos: data.pos,
               errorType,
@@ -2465,11 +2467,13 @@ function ActionModal({
             });
             onClose();
           }}
-        />
-        <RunnerActionButton label="포구 완료" color="#22c55e" onClick={() => actions.setPlay(`포구 · ${data.pos} ${data.name}`)} />
-        <RunnerActionButton label="중계 플레이" color="#38bdf8" onClick={() => actions.setPlay(`중계 · ${data.pos} ${data.name}`)} />
-      </>
-    );
+          />
+          <RunnerActionButton label="포구 완료" color="#22c55e" onClick={() => actions.setPlay(`포구 · ${data.pos} ${data.name}`)} />
+          <RunnerActionButton label="중계 플레이" color="#38bdf8" onClick={() => actions.setPlay(`중계 · ${data.pos} ${data.name}`)} />
+        </>
+      );
+    }
+    return null;
   };
 
   return (
@@ -2530,56 +2534,111 @@ function ActionModal({
               gap: '10px',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontWeight: 900, color: '#e2e8f0' }}>타구 유형/방향</span>
-              <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>타격/아웃 기록에 반영</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'grid', gap: '4px' }}>
+                <span style={{ fontWeight: 900, color: '#e2e8f0' }}>타자 교체/대타</span>
+                <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
+                  {battingOrder ? `${battingOrder}번 타순` : '타순 미지정'} · 포지션 {currentSlot?.pos ?? '-'}
+                </span>
+              </div>
+              <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>교체 즉시 라인업/피드 반영</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
-              <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1', fontSize: '12px', fontWeight: 800 }}>
-                유형
-                <select
-                  value={battedBallType}
-                  onChange={(e) => onChangeBattedBallType(e.target.value)}
+            <div
+              style={{
+                padding: '10px',
+                borderRadius: '10px',
+                border: '1px dashed rgba(148,163,184,0.35)',
+                background: 'rgba(255,255,255,0.03)',
+                display: 'grid',
+                gap: '4px',
+              }}
+            >
+              <span style={{ color: '#cbd5e1', fontWeight: 800 }}>현재 타자</span>
+              <span style={{ color: '#e2e8f0', fontWeight: 900 }}>{currentSlot?.name ?? data.name}</span>
+              <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
+                등번호 {currentSlot?.number || '-'} · 투 {currentSlot?.throws || '-'} · 타 {currentSlot?.bats || '-'}
+              </span>
+            </div>
+            <div style={{ display: 'grid', gap: '8px' }}>
+              <span style={{ fontWeight: 800, color: '#cbd5e1', fontSize: '13px' }}>벤치에서 교체할 선수를 선택하세요</span>
+              {bench.length ? (
+                <div style={{ display: 'grid', gap: '8px' }}>
+                  {bench.map((player, idx) => (
+                    <div
+                      key={`${player.name}-${idx}`}
+                      style={{
+                        borderRadius: '12px',
+                        border: '1px solid rgba(148,163,184,0.25)',
+                        padding: '10px',
+                        background: 'rgba(255,255,255,0.03)',
+                        display: 'grid',
+                        gap: '6px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'grid', gap: '2px' }}>
+                          <span style={{ fontWeight: 900, color: '#e2e8f0' }}>
+                            {player.name} · {player.pos}
+                          </span>
+                          <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
+                            등번호 {player.number || '-'} · 투 {player.throws || '-'} · 타 {player.bats || '-'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleSubstitute(idx)}
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: '10px',
+                            border: '1px solid rgba(74,222,128,0.5)',
+                            background: 'linear-gradient(90deg, #22c55e, #16a34a)',
+                            color: '#0b0f1a',
+                            fontWeight: 900,
+                            cursor: 'pointer',
+                            boxShadow: '0 8px 16px rgba(34,197,94,0.25)',
+                          }}
+                        >
+                          이 선수로 교체
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div
                   style={{
-                    borderRadius: '10px',
-                    border: '1px solid rgba(148,163,184,0.35)',
-                    background: '#0b0f1a',
-                    color: '#e2e8f0',
-                    padding: '8px 10px',
-                    fontWeight: 800,
+                    borderRadius: '12px',
+                    border: '1px dashed rgba(148,163,184,0.35)',
+                    padding: '12px',
+                    color: '#94a3b8',
+                    fontWeight: 700,
+                    textAlign: 'center',
+                    background: 'rgba(255,255,255,0.02)',
                   }}
                 >
-                  {battedBallTypeOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1', fontSize: '12px', fontWeight: 800 }}>
-                방향
-                <select
-                  value={battedBallZone}
-                  onChange={(e) => onChangeBattedBallZone(e.target.value)}
-                  style={{
-                    borderRadius: '10px',
-                    border: '1px solid rgba(148,163,184,0.35)',
-                    background: '#0b0f1a',
-                    color: '#e2e8f0',
-                    padding: '8px 10px',
-                    fontWeight: 800,
-                  }}
-                >
-                  {battedBallZoneOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  벤치 명단이 없습니다. Team Editor에서 선수를 추가하세요.
+                </div>
+              )}
             </div>
-            <div style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
-              현재 선택: {formatBattedBallDetails(battedBallDetails)}
+            <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
+              교체 시 이전 선수는 교체 out 패널에 기록되고 볼카운트는 유지됩니다.
+            </span>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  background: 'transparent',
+                  color: '#cbd5e1',
+                  fontWeight: 900,
+                  cursor: 'pointer',
+                }}
+              >
+                닫기
+              </button>
             </div>
           </div>
         ) : null}
@@ -2705,24 +2764,28 @@ function ActionModal({
             </div>
           </div>
         ) : null}
-        <div style={{ display: 'grid', gap: '8px', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>{renderButtons()}</div>
-        <p style={{ margin: 0, color: '#94a3b8', fontSize: '12px' }}>
-          이벤트 확정 시 DB 저장 훅으로 연결해 텍스트 기록과 동일하게 남길 수 있습니다.
-        </p>
+        {data.role !== 'batter' ? (
+          <>
+            <div style={{ display: 'grid', gap: '8px', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>{renderButtons()}</div>
+            <p style={{ margin: 0, color: '#94a3b8', fontSize: '12px' }}>
+              이벤트 확정 시 DB 저장 훅으로 연결해 텍스트 기록과 동일하게 남길 수 있습니다.
+            </p>
+          </>
+        ) : null}
       </div>
     </div>
   );
 }
 
-function labelForModal(data: { role: 'runner'; name: string; base: 0 | 1 | 2 } | { role: 'batter'; name: string } | { role: 'fielder'; name: string; pos: string }) {
+function labelForModal(data: ActionModalData) {
   if (data.role === 'runner') return `주자 액션 · ${data.name}`;
-  if (data.role === 'batter') return `타석 액션 · ${data.name}`;
+  if (data.role === 'batter') return `타자 교체 · ${data.name}`;
   return `수비 액션 · ${data.pos} ${data.name}`;
 }
 
-function subLabelForModal(data: { role: 'runner'; name: string; base: 0 | 1 | 2 } | { role: 'batter'; name: string } | { role: 'fielder'; name: string; pos: string }) {
+function subLabelForModal(data: ActionModalData) {
   if (data.role === 'runner') return `${data.base + 1}루 주자`;
-  if (data.role === 'batter') return '현재 타자';
+  if (data.role === 'batter') return '벤치에서 대타/교체 선택';
   return '수비 위치 선택';
 }
 
