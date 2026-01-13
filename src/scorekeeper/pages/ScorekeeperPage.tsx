@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { TEAMS } from '../../shared/lib/mockData';
 import { buildGameRecord, useDemoStore } from '../../shared/state/demoStore';
+import type { RunnerAdvanceOutcome, RunnerAdvanceSelections } from '../../shared/state/demoStore';
 import StatsTable from '../../shared/components/StatsTable';
 import RemovedPlayersPanel from '../../shared/components/RemovedPlayersPanel';
 import type { BatterStatLine, PitcherStatLine } from '../../shared/types/scoreStats';
@@ -226,7 +227,7 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   addBlank();
   add('상세 플레이 이벤트');
   if (events.length) {
-    add('이닝', '공/말', '타순', '타자', '구수', '유형', '주자', '타구', '실책', '비고');
+    add('이닝', '공/말', '타순', '타자', '구수', '유형', '주자 이동', '타구', '실책', '비고');
     events.forEach((event) => {
       add(
         event.inning,
@@ -640,6 +641,7 @@ export default function ScorekeeperPage() {
   const [showOutOptions, setShowOutOptions] = useState(false);
   const [manualBroadcast, setManualBroadcast] = useState('');
   const [liveVideoUrlInput, setLiveVideoUrlInput] = useState(state.liveVideoUrl);
+  const [hitAdvanceModal, setHitAdvanceModal] = useState<null | { bases: 1 | 2 | 3; selections: RunnerAdvanceSelections }>(null);
   const recordPayload = useMemo(() => buildGameRecord(state), [state]);
   const [pendingExportId, setPendingExportId] = useState<string | null>(null);
   const isGameStarted = state.gameStarted;
@@ -691,6 +693,18 @@ export default function ScorekeeperPage() {
     }
   }, [pendingExportId, recordPayload, state.endedAt, state.gameOver]);
 
+  const openHitAdvanceModal = (bases: 1 | 2 | 3) => {
+    if (controlsDisabled) return;
+    const selections = state.bases.reduce<RunnerAdvanceSelections>((acc, runner, idx) => {
+      if (runner) acc[idx as 0 | 1 | 2] = 'advance';
+      return acc;
+    }, {});
+    setHitAdvanceModal({ bases, selections });
+    setActionModal(null);
+    setShowHitOptions(false);
+    setShowOutOptions(false);
+  };
+
   const handleAction = (action: string) => {
     if (isGameOver || !isGameStarted) return;
     if (action === 'hitMenu') {
@@ -715,13 +729,13 @@ export default function ScorekeeperPage() {
         actions.addFoul();
         break;
       case 'single':
-        actions.hitSingle();
+        openHitAdvanceModal(1);
         break;
       case 'double':
-        actions.hitDouble();
+        openHitAdvanceModal(2);
         break;
       case 'triple':
-        actions.hitTriple();
+        openHitAdvanceModal(3);
         break;
       case 'hr':
         actions.homeRun();
@@ -780,6 +794,15 @@ export default function ScorekeeperPage() {
 
     setShowHitOptions(false);
     setShowOutOptions(false);
+  };
+
+  const handleConfirmHitAdvance = () => {
+    if (!hitAdvanceModal) return;
+    const { bases, selections } = hitAdvanceModal;
+    if (bases === 1) actions.hitSingle(selections);
+    if (bases === 2) actions.hitDouble(selections);
+    if (bases === 3) actions.hitTriple(selections);
+    setHitAdvanceModal(null);
   };
 
   const handleManualSubmit = () => {
@@ -1358,6 +1381,17 @@ export default function ScorekeeperPage() {
           data={actionModal}
           onClose={() => setActionModal(null)}
           actions={actions}
+          onSelectHit={openHitAdvanceModal}
+        />
+      )}
+      {hitAdvanceModal && (
+        <HitAdvanceModal
+          bases={hitAdvanceModal.bases}
+          basesState={state.bases}
+          selections={hitAdvanceModal.selections}
+          onChangeSelections={(next) => setHitAdvanceModal((prev) => (prev ? { ...prev, selections: next } : prev))}
+          onClose={() => setHitAdvanceModal(null)}
+          onConfirm={handleConfirmHitAdvance}
         />
       )}
     </div>
@@ -1747,14 +1781,197 @@ function FieldSvg() {
   );
 }
 
+const runnerOutcomeOptions: { value: RunnerAdvanceOutcome; label: string; color: string }[] = [
+  { value: 'hold', label: '정지', color: '#e2e8f0' },
+  { value: 'advance', label: '진루', color: '#22c55e' },
+  { value: 'out', label: '아웃', color: '#ef4444' },
+  { value: 'score', label: '득점', color: '#f97316' },
+];
+
+function baseLabelForIndex(baseIndex: number) {
+  return `${baseIndex + 1}루`;
+}
+
+function HitAdvanceModal({
+  bases,
+  basesState,
+  selections,
+  onChangeSelections,
+  onClose,
+  onConfirm,
+}: {
+  bases: 1 | 2 | 3;
+  basesState: (string | null)[];
+  selections: RunnerAdvanceSelections;
+  onChangeSelections: (next: RunnerAdvanceSelections) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const hitLabel = `${bases}루타 주자 선택`;
+  const runners = basesState
+    .map((runner, idx) => (runner ? { runner, baseIndex: idx as 0 | 1 | 2 } : null))
+    .filter(Boolean) as { runner: string; baseIndex: 0 | 1 | 2 }[];
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'grid',
+        placeItems: 'center',
+        zIndex: 1000,
+        padding: '20px',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 'min(560px, 100%)',
+          background: '#0f172a',
+          borderRadius: '16px',
+          border: '1px solid rgba(148, 163, 184, 0.25)',
+          padding: '18px',
+          display: 'grid',
+          gap: '14px',
+          color: '#e2e8f0',
+          boxShadow: '0 24px 60px rgba(0,0,0,0.4)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'grid', gap: '4px' }}>
+            <span style={{ fontWeight: 900 }}>{hitLabel}</span>
+            <span style={{ color: '#94a3b8', fontWeight: 700 }}>주자별 결과를 선택하세요.</span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#94a3b8',
+              fontSize: '18px',
+              cursor: 'pointer',
+              fontWeight: 800,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+        <div style={{ display: 'grid', gap: '10px' }}>
+          {runners.length ? (
+            runners.map((entry) => (
+              <div
+                key={`${entry.baseIndex}-${entry.runner}`}
+                style={{
+                  borderRadius: '12px',
+                  border: '1px solid rgba(148,163,184,0.25)',
+                  padding: '12px',
+                  background: 'rgba(255,255,255,0.04)',
+                  display: 'grid',
+                  gap: '10px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 900 }}>
+                    {baseLabelForIndex(entry.baseIndex)} 주자 · {entry.runner}
+                  </span>
+                  <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>기본값: 진루</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
+                  {runnerOutcomeOptions.map((option) => {
+                    const isSelected = selections[entry.baseIndex] === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() =>
+                          onChangeSelections({
+                            ...selections,
+                            [entry.baseIndex]: option.value,
+                          })
+                        }
+                        style={{
+                          padding: '10px',
+                          borderRadius: '10px',
+                          border: isSelected ? `1px solid ${option.color}` : '1px solid rgba(148,163,184,0.2)',
+                          background: isSelected ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.02)',
+                          color: option.color,
+                          fontWeight: 900,
+                          cursor: 'pointer',
+                          boxShadow: isSelected ? `0 0 0 1px ${option.color}60` : 'none',
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div
+              style={{
+                borderRadius: '12px',
+                border: '1px dashed rgba(148,163,184,0.3)',
+                padding: '14px',
+                textAlign: 'center',
+                color: '#94a3b8',
+                fontWeight: 700,
+              }}
+            >
+              베이스에 주자가 없습니다. 기본 진루로 기록됩니다.
+            </div>
+          )}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '10px',
+              border: '1px solid rgba(148,163,184,0.3)',
+              background: 'transparent',
+              color: '#cbd5e1',
+              fontWeight: 900,
+              cursor: 'pointer',
+            }}
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '10px',
+              border: '1px solid rgba(59,130,246,0.4)',
+              background: 'linear-gradient(90deg, #2563eb, #1d4ed8)',
+              color: '#f8fafc',
+              fontWeight: 900,
+              cursor: 'pointer',
+            }}
+          >
+            적용하기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ActionModal({
   data,
   onClose,
   actions,
+  onSelectHit,
 }: {
   data: { role: 'runner'; name: string; base: 0 | 1 | 2 } | { role: 'batter'; name: string } | { role: 'fielder'; name: string; pos: string };
   onClose: () => void;
   actions: ReturnType<typeof useDemoStore>['actions'];
+  onSelectHit: (bases: 1 | 2 | 3) => void;
 }) {
   const renderButtons = () => {
     if (data.role === 'runner') {
@@ -1770,9 +1987,9 @@ function ActionModal({
     if (data.role === 'batter') {
       return (
         <>
-          <RunnerActionButton label="1루타" color="#3b82f6" onClick={() => actions.hitSingle()} />
-          <RunnerActionButton label="2루타" color="#3b82f6" onClick={() => actions.hitDouble()} />
-          <RunnerActionButton label="3루타" color="#3b82f6" onClick={() => actions.hitTriple()} />
+          <RunnerActionButton label="1루타" color="#3b82f6" onClick={() => onSelectHit(1)} />
+          <RunnerActionButton label="2루타" color="#3b82f6" onClick={() => onSelectHit(2)} />
+          <RunnerActionButton label="3루타" color="#3b82f6" onClick={() => onSelectHit(3)} />
           <RunnerActionButton label="홈런" color="#f97316" onClick={() => actions.homeRun()} />
           <RunnerActionButton label="볼넷" color="#22c55e" onClick={() => actions.walk()} />
           <RunnerActionButton label="사구" color="#22c55e" onClick={() => actions.hbp()} />
