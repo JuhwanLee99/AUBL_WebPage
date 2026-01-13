@@ -15,7 +15,7 @@ interface PlayerSlot {
   order?: number | null;
 }
 
-export type RunnerAdvanceOutcome = 'hold' | 'advance' | 'out' | 'score';
+export type RunnerAdvanceOutcome = 'hold' | 'advance' | 'out' | 'score' | 1 | 2 | 3 | 4;
 export type RunnerAdvanceSelections = Partial<Record<0 | 1 | 2, RunnerAdvanceOutcome>>;
 
 export type BattedBallDetails = {
@@ -715,7 +715,9 @@ function formatRunnerMove({
       ? `${fromLabel}→홈 득점`
       : outcome === 'out'
         ? `${toLabel} 아웃`
-        : `${outcome === 'hold' ? fromLabel : toLabel} 정지`;
+        : outcome === 'hold'
+          ? `${fromLabel} 정지`
+          : `${fromLabel}→${toLabel} 진루`;
   const runnerMove = `${runnerLabel} ${moveLabel}`;
   const messagePrefix = message ? `${message} · ` : '';
   const feedText = `${messagePrefix}${runnerMove} · ${runner}`;
@@ -903,21 +905,22 @@ function applyHitWithAdvances(
   for (let i = 2; i >= 0; i -= 1) {
     const runner = state.bases[i];
     if (!runner) continue;
-    const outcome = advances?.[i as 0 | 1 | 2] ?? 'advance';
-    if (outcome === 'out') {
+    const outcome = advances?.[i as 0 | 1 | 2];
+    const resolved = resolveAdvanceOutcome(outcome, i, basesToAdvance);
+    if (resolved.type === 'out') {
       outs += 1;
       runnerMoves.push(
         formatRunnerMove({ runner, from: i, to: i, outcome: 'out', outsCount: outs }),
       );
       continue;
     }
-    if (outcome === 'score') {
+    if (resolved.type === 'score') {
       runs += 1;
       runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score' }));
       continue;
     }
-    if (outcome === 'hold') {
-      const placed = placeRunnerOnBases(bases, runner, i);
+    if (resolved.type === 'hold') {
+      const placed = placeRunnerOnBases(bases, runner, resolved.targetBaseIndex);
       if (placed.scored) {
         runs += 1;
         runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score' }));
@@ -926,18 +929,12 @@ function applyHitWithAdvances(
       }
       continue;
     }
-    const dest = i + basesToAdvance;
-    if (dest >= 3) {
+    const placed = placeRunnerOnBases(bases, runner, resolved.targetBaseIndex);
+    if (placed.scored) {
       runs += 1;
       runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score' }));
     } else {
-      const placed = placeRunnerOnBases(bases, runner, dest);
-      if (placed.scored) {
-        runs += 1;
-        runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score' }));
-      } else {
-        runnerMoves.push(formatRunnerMove({ runner, from: i, to: placed.dest, outcome: 'advance' }));
-      }
+      runnerMoves.push(formatRunnerMove({ runner, from: i, to: placed.dest, outcome: 'advance' }));
     }
   }
 
@@ -997,7 +994,7 @@ function applyHitWithAdvances(
 
 function applyWalk(state: DemoState, message: string, pitchNumber: number): DemoState {
   const { batterName, batterIndex } = nextBatter(state);
-  const { bases, runs } = advanceBases(state.bases, 1, batterName);
+  const { bases, runs } = advanceBasesOnWalk(state.bases, batterName);
   const side = hittingSide(state);
   const score =
     side === 'home'
@@ -1057,37 +1054,32 @@ function applyError(state: DemoState, details: ErrorDetails): DemoState {
   for (let i = 2; i >= 0; i -= 1) {
     const runner = state.bases[i];
     if (!runner) continue;
-    const outcome = details.advanceResults.runners[i as 0 | 1 | 2] ?? 'hold';
-    if (outcome === 'out') {
+    const outcome = details.advanceResults.runners[i as 0 | 1 | 2];
+    const resolved = resolveAdvanceOutcome(outcome, i, 1);
+    if (resolved.type === 'out') {
       outs += 1;
       runnerMoves.push(formatRunnerMove({ runner, from: i, to: i, outcome: 'out', outsCount: outs, message: `실책(${details.errorType})` }));
       continue;
     }
-    if (outcome === 'score') {
+    if (resolved.type === 'score') {
       runs += 1;
       runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score', message: `실책(${details.errorType})` }));
       continue;
     }
-    if (outcome === 'hold') {
-      const placed = placeRunnerOnBases(bases, runner, i);
+    if (resolved.type === 'hold') {
+      const placed = placeRunnerOnBases(bases, runner, resolved.targetBaseIndex);
       if (placed.scored) {
         runs += 1;
         runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score', message: `실책(${details.errorType})` }));
       }
       continue;
     }
-    const dest = i + 1;
-    if (dest >= 3) {
+    const placed = placeRunnerOnBases(bases, runner, resolved.targetBaseIndex);
+    if (placed.scored) {
       runs += 1;
       runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score', message: `실책(${details.errorType})` }));
     } else {
-      const placed = placeRunnerOnBases(bases, runner, dest);
-      if (placed.scored) {
-        runs += 1;
-        runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score', message: `실책(${details.errorType})` }));
-      } else {
-        runnerMoves.push(formatRunnerMove({ runner, from: i, to: placed.dest, outcome: 'advance', message: `실책(${details.errorType})` }));
-      }
+      runnerMoves.push(formatRunnerMove({ runner, from: i, to: placed.dest, outcome: 'advance', message: `실책(${details.errorType})` }));
     }
   }
 
@@ -1486,6 +1478,51 @@ function advanceBases(currentBases: Bases, steps: number, batterName: string) {
       bases[dest] = batterName;
     }
   }
+
+  return { bases, runs };
+}
+
+function resolveAdvanceOutcome(
+  outcome: RunnerAdvanceOutcome | undefined,
+  fromBase: number,
+  defaultSteps: number,
+): { type: 'hold' | 'advance' | 'score' | 'out'; targetBaseIndex: number } {
+  if (outcome === 'out') return { type: 'out', targetBaseIndex: fromBase };
+  if (outcome === 'score') return { type: 'score', targetBaseIndex: 3 };
+  if (outcome === 'hold') return { type: 'hold', targetBaseIndex: fromBase };
+  if (typeof outcome === 'number') {
+    if (outcome >= 4) return { type: 'score', targetBaseIndex: 3 };
+    const targetBaseIndex = Math.max(0, outcome - 1);
+    if (targetBaseIndex <= fromBase) {
+      return { type: 'hold', targetBaseIndex: fromBase };
+    }
+    return { type: 'advance', targetBaseIndex };
+  }
+  const targetBaseIndex = fromBase + defaultSteps;
+  if (targetBaseIndex >= 3) {
+    return { type: 'score', targetBaseIndex: 3 };
+  }
+  return { type: 'advance', targetBaseIndex };
+}
+
+function advanceBasesOnWalk(currentBases: Bases, batterName: string) {
+  const bases = [...currentBases] as Bases;
+  let runs = 0;
+
+  if (bases[0]) {
+    if (bases[1] && bases[2]) {
+      runs += 1;
+      bases[2] = null;
+    }
+    if (bases[1]) {
+      bases[2] = bases[1];
+      bases[1] = null;
+    }
+    bases[1] = bases[0];
+    bases[0] = null;
+  }
+
+  bases[0] = batterName;
 
   return { bases, runs };
 }
