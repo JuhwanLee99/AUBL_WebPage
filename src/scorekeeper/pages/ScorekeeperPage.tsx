@@ -126,7 +126,7 @@ function formatErrorSummary(error?: ErrorDetails | string | null) {
 
 type ErrorSummaryField = Exclude<keyof ErrorDetails, 'advanceResults'>;
 
-function formatErrorField(error?: ErrorDetails | string | null, field: ErrorSummaryField) {
+function formatErrorField(error: ErrorDetails | string | null | undefined, field: ErrorSummaryField) {
   if (!error || typeof error === 'string') return '-';
   return error[field] || '-';
 }
