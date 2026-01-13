@@ -17,11 +17,11 @@ const mainButtons = [
   { label: '실행 취소', color: '#94a3b8', action: 'undo' },
 ];
 
-const hitButtons = [
-  { label: '1루타', color: '#3b82f6', action: 'single' },
-  { label: '2루타', color: '#3b82f6', action: 'double' },
-  { label: '3루타', color: '#3b82f6', action: 'triple' },
-  { label: '홈런', color: '#f97316', action: 'hr' },
+const hitResultOptions = [
+  { label: '1루타', color: '#3b82f6', value: 'single' as const, helper: '타자·주자 1루' },
+  { label: '2루타', color: '#3b82f6', value: 'double' as const, helper: '타자·주자 2루' },
+  { label: '3루타', color: '#3b82f6', value: 'triple' as const, helper: '타자·주자 3루' },
+  { label: '홈런', color: '#f97316', value: 'hr' as const, helper: '전원 득점' },
 ];
 
 const secondaryButtons = [
@@ -48,6 +48,9 @@ const outButtons = [
 const battedBallTypeOptions = ['선택 안 함', '땅볼', '뜬공', '라인드라이브', '번트', '플라이', '팝업', '기타'];
 const battedBallZoneOptions = ['선택 안 함', '3루선상', '좌전', '좌중간', '중전', '우중간', '우전', '1루선상', '내야'];
 const errorTypeOptions = ['포구', '송구', '포구 후 송구', '기타'];
+type HitResultAction = (typeof hitResultOptions)[number]['value'];
+type HitWizardStep = 'result' | 'type' | 'zone';
+type HitWizardState = { step: HitWizardStep; result: HitResultAction | null; type: string; zone: string };
 
 function downloadCsv(content: string, filenamePrefix: string) {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
@@ -87,6 +90,11 @@ function formatBattedBallDetails(details?: BattedBallDetails | null) {
   if (!details) return '-';
   const parts = [details.type, details.zone].filter((part) => part && part !== '선택 안 함');
   return parts.length ? parts.join(' / ') : '-';
+}
+
+function buildBattedBallDetailsFromValues(type: string, zone: string): BattedBallDetails | null {
+  if (type === '선택 안 함' && zone === '선택 안 함') return null;
+  return { type, zone };
 }
 
 function baseLabel(idx: number) {
@@ -708,8 +716,8 @@ export default function ScorekeeperPage() {
     home: { name: '', pos: '', number: '', throws: 'R', bats: 'R' },
     away: { name: '', pos: '', number: '', throws: 'R', bats: 'R' },
   });
-  const [showHitOptions, setShowHitOptions] = useState(false);
   const [showOutOptions, setShowOutOptions] = useState(false);
+  const [hitWizard, setHitWizard] = useState<HitWizardState | null>(null);
   const [manualBroadcast, setManualBroadcast] = useState('');
   const [liveVideoUrlInput, setLiveVideoUrlInput] = useState(state.liveVideoUrl);
   const [hitAdvanceModal, setHitAdvanceModal] = useState<null | { bases: 1 | 2 | 3; selections: RunnerAdvanceSelections }>(null);
@@ -745,14 +753,13 @@ export default function ScorekeeperPage() {
         };
   const hasLiveUrlChange = liveVideoUrlInput.trim() !== state.liveVideoUrl.trim();
   const battedBallDetails = useMemo<BattedBallDetails | null>(() => {
-    if (battedBallType === '선택 안 함' && battedBallZone === '선택 안 함') return null;
-    return { type: battedBallType, zone: battedBallZone };
+    return buildBattedBallDetailsFromValues(battedBallType, battedBallZone);
   }, [battedBallType, battedBallZone]);
 
   useEffect(() => {
     if (state.gameOver) {
-      setShowHitOptions(false);
       setShowOutOptions(false);
+      setHitWizard(null);
     }
   }, [state.gameOver]);
 
@@ -778,20 +785,89 @@ export default function ScorekeeperPage() {
     }, {});
     setHitAdvanceModal({ bases, selections });
     setActionModal(null);
-    setShowHitOptions(false);
+    setHitWizard(null);
     setShowOutOptions(false);
+  };
+
+  const openHitWizardFlow = () => {
+    if (controlsDisabled) return;
+    setHitWizard((prev) =>
+      prev
+        ? null
+        : {
+            step: 'result',
+            result: null,
+            type: battedBallType,
+            zone: battedBallZone,
+          },
+    );
+    setShowOutOptions(false);
+  };
+
+  const goToNextHitWizardStep = () =>
+    setHitWizard((prev) => {
+      if (!prev) return prev;
+      if (prev.step === 'result') {
+        if (!prev.result) return prev;
+        return { ...prev, step: 'type' };
+      }
+      if (prev.step === 'type') return { ...prev, step: 'zone' };
+      return prev;
+    });
+
+  const goToPrevHitWizardStep = () =>
+    setHitWizard((prev) => {
+      if (!prev) return prev;
+      if (prev.step === 'zone') return { ...prev, step: 'type' };
+      if (prev.step === 'type') return { ...prev, step: 'result' };
+      return prev;
+    });
+
+  const handleSelectHitResult = (result: HitResultAction) =>
+    setHitWizard((prev) => (prev ? { ...prev, result, step: 'type' } : prev));
+
+  const handleSelectBattedBallType = (type: string) =>
+    setHitWizard((prev) => (prev ? { ...prev, type, step: 'zone' } : prev));
+
+  const handleSelectBattedBallZone = (zone: string) =>
+    setHitWizard((prev) => (prev ? { ...prev, zone } : prev));
+
+  const handleConfirmHitWizard = () => {
+    if (!hitWizard?.result || controlsDisabled) {
+      setHitWizard(null);
+      return;
+    }
+    const details = buildBattedBallDetailsFromValues(hitWizard.type, hitWizard.zone);
+    setBattedBallType(hitWizard.type);
+    setBattedBallZone(hitWizard.zone);
+    setHitWizard(null);
+    switch (hitWizard.result) {
+      case 'single':
+        openHitAdvanceModal(1);
+        break;
+      case 'double':
+        openHitAdvanceModal(2);
+        break;
+      case 'triple':
+        openHitAdvanceModal(3);
+        break;
+      case 'hr':
+        actions.homeRun(details);
+        break;
+      default:
+        break;
+    }
   };
 
   const handleAction = (action: string) => {
     if (isGameOver || !isGameStarted) return;
     if (action === 'hitMenu') {
-      setShowHitOptions((prev) => !prev);
-      setShowOutOptions(false);
+      openHitWizardFlow();
       return;
     }
     if (action === 'outMenu') {
       setShowOutOptions((prev) => !prev);
-      setShowHitOptions(false);
+      setHitWizard(null);
       return;
     }
 
@@ -869,7 +945,7 @@ export default function ScorekeeperPage() {
         break;
     }
 
-    setShowHitOptions(false);
+    setHitWizard(null);
     setShowOutOptions(false);
   };
 
@@ -899,7 +975,7 @@ export default function ScorekeeperPage() {
 
   const handleStartGame = () => {
     if (isGameStarted || isGameOver) return;
-    setShowHitOptions(false);
+    setHitWizard(null);
     setShowOutOptions(false);
     setActionModal(null);
     actions.startGame();
@@ -920,7 +996,7 @@ export default function ScorekeeperPage() {
 
   const handleNewGame = () => {
     setPendingExportId(null);
-    setShowHitOptions(false);
+    setHitWizard(null);
     setActionModal(null);
     actions.resetGame();
   };
@@ -1049,75 +1125,11 @@ export default function ScorekeeperPage() {
                 </button>
               </div>
             </div>
-            <div
-              style={{
-                padding: '10px 12px',
-                borderRadius: '12px',
-                border: '1px solid rgba(148, 163, 184, 0.25)',
-                background: 'rgba(15,23,42,0.45)',
-                display: 'grid',
-                gap: '10px',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontWeight: 900, color: '#e2e8f0' }}>타구 유형/방향</span>
-                <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 800 }}>
-                  기록 시 함께 저장됩니다
-                </span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
-                <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1', fontSize: '12px', fontWeight: 800 }}>
-                  유형
-                  <select
-                    value={battedBallType}
-                    onChange={(e) => setBattedBallType(e.target.value)}
-                    style={{
-                      borderRadius: '10px',
-                      border: '1px solid rgba(148,163,184,0.35)',
-                      background: '#0b0f1a',
-                      color: '#e2e8f0',
-                      padding: '8px 10px',
-                      fontWeight: 800,
-                    }}
-                  >
-                    {battedBallTypeOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1', fontSize: '12px', fontWeight: 800 }}>
-                  방향
-                  <select
-                    value={battedBallZone}
-                    onChange={(e) => setBattedBallZone(e.target.value)}
-                    style={{
-                      borderRadius: '10px',
-                      border: '1px solid rgba(148,163,184,0.35)',
-                      background: '#0b0f1a',
-                      color: '#e2e8f0',
-                      padding: '8px 10px',
-                      fontWeight: 800,
-                    }}
-                  >
-                    {battedBallZoneOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <div style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
-                현재 선택: {formatBattedBallDetails(battedBallDetails)}
-              </div>
-            </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '10px' }}>
               {mainButtons.map((btn) => {
                 const isUndo = btn.action === 'undo';
                 const isHitMenu = btn.action === 'hitMenu';
-                const isActive = isHitMenu && showHitOptions;
+                const isActive = isHitMenu && Boolean(hitWizard);
                 const isDisabled = controlsDisabled || (isUndo && !canUndo);
                 return (
                   <button
@@ -1148,31 +1160,6 @@ export default function ScorekeeperPage() {
                 );
               })}
             </div>
-            {showHitOptions ? (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
-                {hitButtons.map((btn) => (
-                  <button
-                    key={btn.label}
-                    type="button"
-                    disabled={controlsDisabled}
-                    style={{
-                      padding: '12px 10px',
-                      borderRadius: '10px',
-                      border: '1px solid rgba(15,23,42,0.4)',
-                      background: 'rgba(255,255,255,0.08)',
-                      color: btn.color,
-                      fontWeight: 800,
-                      fontSize: '13px',
-                      cursor: controlsDisabled ? 'not-allowed' : 'pointer',
-                      opacity: controlsDisabled ? 0.6 : 1,
-                    }}
-                    onClick={() => handleAction(btn.action)}
-                  >
-                    {btn.label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
             {showOutOptions ? (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
                 {outButtons.map((btn) => (
@@ -1517,6 +1504,18 @@ export default function ScorekeeperPage() {
         <RemovedPlayersPanel title="교체 out (AWAY)" players={state.removed.away} density="regular" />
       </div>
 
+      {hitWizard && (
+        <HitWizardModal
+          state={hitWizard}
+          onClose={() => setHitWizard(null)}
+          onNext={goToNextHitWizardStep}
+          onBack={goToPrevHitWizardStep}
+          onSelectResult={handleSelectHitResult}
+          onSelectType={handleSelectBattedBallType}
+          onSelectZone={handleSelectBattedBallZone}
+          onConfirm={handleConfirmHitWizard}
+        />
+      )}
       {actionModal && (
         <ActionModal
           data={actionModal}
@@ -2103,6 +2102,285 @@ function HitAdvanceModal({
           >
             적용하기
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HitWizardModal({
+  state,
+  onClose,
+  onNext,
+  onBack,
+  onSelectResult,
+  onSelectType,
+  onSelectZone,
+  onConfirm,
+}: {
+  state: HitWizardState;
+  onClose: () => void;
+  onNext: () => void;
+  onBack: () => void;
+  onSelectResult: (result: HitResultAction) => void;
+  onSelectType: (type: string) => void;
+  onSelectZone: (zone: string) => void;
+  onConfirm: () => void;
+}) {
+  const steps: { key: HitWizardStep; label: string }[] = [
+    { key: 'result', label: '타구 결과' },
+    { key: 'type', label: '인플레이 유형' },
+    { key: 'zone', label: '타구 방향' },
+  ];
+  const currentStepIndex = steps.findIndex((step) => step.key === state.step);
+  const selectedResult = hitResultOptions.find((option) => option.value === state.result);
+  const selectionSummary = formatBattedBallDetails(buildBattedBallDetailsFromValues(state.type, state.zone));
+  const isFinalStep = state.step === 'zone';
+  const primaryDisabled = state.step === 'result' && !state.result;
+
+  const renderStep = () => {
+    if (state.step === 'result') {
+      return (
+        <div style={{ display: 'grid', gap: '10px' }}>
+          <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '14px' }}>기록할 타구 결과를 선택하세요.</span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '10px' }}>
+            {hitResultOptions.map((option) => {
+              const isSelected = state.result === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => onSelectResult(option.value)}
+                  style={{
+                    padding: '12px 10px',
+                    borderRadius: '12px',
+                    border: isSelected ? `2px solid ${option.color}` : '1px solid rgba(148,163,184,0.25)',
+                    background: isSelected ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
+                    color: option.color,
+                    fontWeight: 900,
+                    textAlign: 'left',
+                    boxShadow: isSelected ? `0 0 0 1px ${option.color}50` : 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div>{option.label}</div>
+                  <div style={{ color: '#cbd5e1', fontSize: '12px', fontWeight: 700 }}>{option.helper}</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    if (state.step === 'type') {
+      return (
+        <div style={{ display: 'grid', gap: '10px' }}>
+          <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '14px' }}>어떤 유형의 인플레이 타구였나요?</span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
+            {battedBallTypeOptions.map((option) => {
+              const isSelected = state.type === option;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => onSelectType(option)}
+                  style={{
+                    padding: '10px',
+                    borderRadius: '10px',
+                    border: isSelected ? '1px solid rgba(59,130,246,0.6)' : '1px solid rgba(148,163,184,0.25)',
+                    background: isSelected ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.03)',
+                    color: '#e2e8f0',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    boxShadow: isSelected ? '0 0 0 1px rgba(59,130,246,0.35)' : 'none',
+                  }}
+                >
+                  {option}
+                </button>
+              );
+            })}
+          </div>
+          <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>선택 후 바로 방향을 고를 수 있습니다.</span>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ display: 'grid', gap: '10px' }}>
+        <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '14px' }}>타구가 향한 방향을 선택하세요.</span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
+          {battedBallZoneOptions.map((option) => {
+            const isSelected = state.zone === option;
+            return (
+              <button
+                key={option}
+                type="button"
+                onClick={() => onSelectZone(option)}
+                style={{
+                  padding: '10px',
+                  borderRadius: '10px',
+                  border: isSelected ? '1px solid rgba(52,211,153,0.6)' : '1px solid rgba(148,163,184,0.25)',
+                  background: isSelected ? 'rgba(52,211,153,0.12)' : 'rgba(255,255,255,0.03)',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  boxShadow: isSelected ? '0 0 0 1px rgba(52,211,153,0.35)' : 'none',
+                }}
+              >
+                {option}
+              </button>
+            );
+          })}
+        </div>
+        <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>선택이 없으면 "선택 안 함"으로 기록됩니다.</span>
+      </div>
+    );
+  };
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'grid',
+        placeItems: 'center',
+        zIndex: 1100,
+        padding: '20px',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 'min(640px, 100%)',
+          background: '#0f172a',
+          borderRadius: '16px',
+          border: '1px solid rgba(148, 163, 184, 0.25)',
+          padding: '18px',
+          display: 'grid',
+          gap: '14px',
+          color: '#e2e8f0',
+          boxShadow: '0 24px 60px rgba(0,0,0,0.4)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'grid', gap: '4px' }}>
+            <span style={{ fontWeight: 900 }}>타격 기록</span>
+            <span style={{ color: '#94a3b8', fontWeight: 700 }}>결과 → 유형 → 방향 순서로 안내합니다.</span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#94a3b8',
+              fontSize: '18px',
+              cursor: 'pointer',
+              fontWeight: 800,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', alignItems: 'center' }}>
+          {steps.map((step, idx) => {
+            const isActive = idx === currentStepIndex;
+            const isDone = idx < currentStepIndex;
+            return (
+              <div
+                key={step.key}
+                style={{
+                  padding: '10px',
+                  borderRadius: '10px',
+                  border: isActive ? '1px solid rgba(59,130,246,0.6)' : '1px solid rgba(148,163,184,0.25)',
+                  background: isDone ? 'rgba(59,130,246,0.08)' : isActive ? 'rgba(59,130,246,0.14)' : 'rgba(255,255,255,0.03)',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                  textAlign: 'center',
+                  fontSize: '13px',
+                }}
+              >
+                {idx + 1}. {step.label}
+              </div>
+            );
+          })}
+        </div>
+
+        {renderStep()}
+
+        <div
+          style={{
+            padding: '10px 12px',
+            borderRadius: '12px',
+            border: '1px dashed rgba(148,163,184,0.4)',
+            background: 'rgba(255,255,255,0.02)',
+            display: 'grid',
+            gap: '6px',
+          }}
+        >
+          <span style={{ fontWeight: 800, color: '#cbd5e1', fontSize: '13px' }}>선택 요약</span>
+          <span style={{ color: '#e2e8f0', fontWeight: 900 }}>
+            {selectedResult ? selectedResult.label : '결과 미선택'} · {selectionSummary}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={onBack}
+            disabled={state.step === 'result'}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '10px',
+              border: '1px solid rgba(148,163,184,0.35)',
+              background: state.step === 'result' ? 'rgba(148,163,184,0.15)' : 'transparent',
+              color: '#cbd5e1',
+              fontWeight: 900,
+              cursor: state.step === 'result' ? 'not-allowed' : 'pointer',
+              opacity: state.step === 'result' ? 0.6 : 1,
+            }}
+          >
+            이전
+          </button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                padding: '10px 14px',
+                borderRadius: '10px',
+                border: '1px solid rgba(148,163,184,0.35)',
+                background: 'transparent',
+                color: '#cbd5e1',
+                fontWeight: 900,
+                cursor: 'pointer',
+              }}
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={isFinalStep ? onConfirm : onNext}
+              disabled={primaryDisabled}
+              style={{
+                padding: '10px 14px',
+                borderRadius: '10px',
+                border: '1px solid rgba(59,130,246,0.4)',
+                background: 'linear-gradient(90deg, #2563eb, #1d4ed8)',
+                color: '#f8fafc',
+                fontWeight: 900,
+                cursor: primaryDisabled ? 'not-allowed' : 'pointer',
+                opacity: primaryDisabled ? 0.6 : 1,
+                boxShadow: primaryDisabled ? 'none' : '0 10px 20px rgba(37,99,235,0.25)',
+              }}
+            >
+              {isFinalStep ? '기록하기' : '다음'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
