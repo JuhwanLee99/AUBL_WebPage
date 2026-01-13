@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { TEAMS } from '../../shared/lib/mockData';
 import { buildGameRecord, useDemoStore } from '../../shared/state/demoStore';
-import type { BattedBallDetails, ErrorDetails, RunnerAdvanceOutcome, RunnerAdvanceSelections } from '../../shared/state/demoStore';
+import type {
+  BattedBallDetails,
+  ErrorDetails,
+  PlayEvent,
+  RunnerAdvanceOutcome,
+  RunnerAdvanceSelections,
+} from '../../shared/state/demoStore';
 import StatsTable from '../../shared/components/StatsTable';
 import RemovedPlayersPanel from '../../shared/components/RemovedPlayersPanel';
 import type { BatterStatLine, PitcherStatLine } from '../../shared/types/scoreStats';
@@ -122,6 +128,28 @@ function baseLabel(idx: number) {
   return idx === 0 ? '1루' : idx === 1 ? '2루' : idx === 2 ? '3루' : '홈';
 }
 
+function defensePositionNumber(pos: string) {
+  const normalized = pos.trim().toUpperCase();
+  const map: Record<string, string> = {
+    P: '1',
+    C: '2',
+    '1B': '3',
+    '2B': '4',
+    '3B': '5',
+    SS: '6',
+    'S/S': '6',
+    LF: '7',
+    CF: '8',
+    RF: '9',
+    DH: 'D',
+    D: 'D',
+    PH: 'PH',
+    PR: 'PR',
+  };
+  if (map[normalized]) return map[normalized];
+  return normalized || '-';
+}
+
 function formatRunnerOutcomeLabel(outcome: RunnerAdvanceOutcome) {
   if (outcome === 'advance') return '진루';
   if (outcome === 'score') return '득점';
@@ -198,6 +226,87 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   };
   const addBlank = () => lines.push('');
   const halfLabel = (half: 'top' | 'bottom') => (half === 'top' ? '초' : '말');
+  const innings = Array.from({ length: 9 }, (_, idx) => idx + 1);
+  const playerDirectory: Record<
+    'home' | 'away',
+    Map<string, { number: string; pos: string; posNumber: string; throws: string; bats: string }>
+  > = {
+    home: new Map(),
+    away: new Map(),
+  };
+  const seedDirectory = (side: 'home' | 'away', slots: typeof record.lineups.home) => {
+    slots.forEach((slot) => {
+      if (!slot.name) return;
+      playerDirectory[side].set(slot.name, {
+        number: slot.number || '-',
+        pos: slot.pos || '-',
+        posNumber: defensePositionNumber(slot.pos || '-'),
+        throws: slot.throws || '-',
+        bats: slot.bats || '-',
+      });
+    });
+  };
+  seedDirectory('home', record.lineups.home);
+  seedDirectory('away', record.lineups.away);
+  seedDirectory('home', record.benches.home);
+  seedDirectory('away', record.benches.away);
+  seedDirectory('home', record.removed.home);
+  seedDirectory('away', record.removed.away);
+  const getPlayerMeta = (side: 'home' | 'away', name: string) =>
+    playerDirectory[side].get(name) ?? { number: '-', pos: '-', posNumber: '-', throws: '-', bats: '-' };
+  const stripBatterFromNote = (note: string, batter?: string) => {
+    const cleaned = (note || '').replace(/\s+/g, ' ').trim();
+    if (!batter) return cleaned;
+    const escaped = batter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`\\s*·?\\s*${escaped}\\s*`, 'g');
+    const removed = cleaned.replace(regex, '').trim();
+    return removed || cleaned;
+  };
+  const formatRunnerNotes = (runners: string[]) => {
+    if (!runners?.length) return '';
+    const notes = runners
+      .map((r) => {
+        const withoutName = r.includes('·') ? r.split('·')[0] : r;
+        return withoutName.replace(/\s+/g, ' ').trim();
+      })
+      .filter(Boolean);
+    return notes.join(' | ');
+  };
+  const classifyKboResult = (event: PlayEvent) => {
+    const normalized = (event.notes || event.type || '').replace(/\s+/g, '');
+    if (normalized.includes('홈런')) return 'HR';
+    if (normalized.includes('3루타')) return '3B';
+    if (normalized.includes('2루타')) return '2B';
+    if (normalized.includes('1루타')) return '1B';
+    if (normalized.includes('고의') || normalized.toUpperCase().includes('IB')) return 'IB';
+    if (event.type === 'walk' || normalized.includes('볼넷') || normalized.includes('4구')) return 'B';
+    if (event.type === 'hbp' || normalized.includes('몸에맞는공')) return 'HP';
+    if (event.type === 'sac' || normalized.includes('희생')) return 'SAC';
+    if (event.type === 'error' || normalized.includes('실책')) return 'E';
+    if (normalized.includes('병살')) return 'GDP';
+    if (normalized.includes('삼진')) return 'K';
+    if (event.type === 'steal') return 'SB';
+    if (event.type === 'steal_fail') return 'CS';
+    if (event.type === 'runner_out') return 'RUN OUT';
+    if (event.type === 'runner') return 'RUN';
+    if (normalized.includes('아웃') || event.type === 'out') return 'OUT';
+    return event.type.toUpperCase();
+  };
+  const formatScorebookCell = (event: PlayEvent) => {
+    const result = classifyKboResult(event);
+    const batted = event.battedBall ? formatBattedBallDetails(event.battedBall) : '';
+    const runnerNote = formatRunnerNotes(event.runners);
+    const errorNote = formatErrorSummary(event.error);
+    const baseNote = stripBatterFromNote(event.notes ?? '', event.batter);
+    const parts = [result];
+    if (batted && batted !== '-') parts.push(`타구:${batted}`);
+    if (runnerNote) parts.push(`주루:${runnerNote}`);
+    if (errorNote && errorNote !== '-') parts.push(`E:${errorNote}`);
+    if (baseNote && !baseNote.replace(/\s+/g, '').includes(result.replace(/\s+/g, ''))) {
+      parts.push(`비고:${baseNote}`);
+    }
+    return parts.filter(Boolean).join(' / ');
+  };
 
   add('게임 정보');
   add('항목', '값');
@@ -208,29 +317,37 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   add('종료 여부', record.meta.gameOver ? '예' : '아니오');
   add('종료 시각', record.meta.endedAt ? formatDateTimeLabel(record.meta.endedAt) : '-');
   add('최종 볼카운트', `B${record.counts.balls} / S${record.counts.strikes} / O${record.counts.outs}`);
+  add('기록 기준', 'KBO 기록지 기입법 기준');
   add('주자 상황', record.bases.map((runner, idx) => `${idx + 1}루:${runner ?? '-'}`).join(' | '));
 
   const writeLineup = (side: 'home' | 'away', label: string) => {
     addBlank();
-    add(`라인업 - ${label}`);
-    add('타순', '이름', '포지션', '등번호', '투', '타');
+    add(`라인업 - ${label} (KBO 표준: 등번호·수비번호)`);
+    add('타순', '등번호', '선수', '수비번호', '포지션', '투', '타');
     const batting = record.lineups[side].filter((slot) => slot.pos.toUpperCase() !== 'P');
-    batting.forEach((slot, idx) => add(idx + 1, slot.name, slot.pos, slot.number, slot.throws, slot.bats));
+    batting.forEach((slot, idx) => {
+      const meta = getPlayerMeta(side, slot.name);
+      add(idx + 1, meta.number, slot.name, meta.posNumber, slot.pos, meta.throws, meta.bats);
+    });
     const pitcher = record.lineups[side].find((slot) => slot.pos.toUpperCase() === 'P');
     if (pitcher) {
-      add('P', pitcher.name, pitcher.pos, pitcher.number, pitcher.throws, pitcher.bats);
+      const meta = getPlayerMeta(side, pitcher.name);
+      add('P', meta.number, pitcher.name, meta.posNumber, pitcher.pos, meta.throws, meta.bats);
     }
   };
 
   const writeBench = (side: 'home' | 'away', label: string) => {
     addBlank();
     add(`벤치 - ${label}`);
-    add('이름', '포지션', '등번호', '투', '타');
+    add('등번호', '이름', '포지션', '수비번호', '투', '타');
     if (!record.benches[side].length) {
-      add('-', '-', '-', '-', '-');
+      add('-', '-', '-', '-', '-', '-');
       return;
     }
-    record.benches[side].forEach((slot) => add(slot.name, slot.pos, slot.number, slot.throws, slot.bats));
+    record.benches[side].forEach((slot) => {
+      const meta = getPlayerMeta(side, slot.name);
+      add(meta.number, slot.name, slot.pos, meta.posNumber, meta.throws, meta.bats);
+    });
   };
 
   writeLineup('home', record.meta.homeTeamName);
@@ -240,6 +357,20 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
 
   const stats = buildPlayerStats(record);
   const fmt3 = (val: number) => (Number.isFinite(val) ? val.toFixed(3).replace(/^0/, '') : '-');
+  const writePitcherOrder = (side: 'home' | 'away', label: string) => {
+    addBlank();
+    add(`투수 등판 순서 - ${label}`);
+    add('등판순서', '등번호', '선수', '포지션', '투', '타');
+    if (!stats.pitchers[side].length) {
+      add('-', '-', '-', '-', '-', '-');
+      return;
+    }
+    stats.pitchers[side].forEach((p, idx) => {
+      const meta = getPlayerMeta(side, p.name);
+      const orderLabel = p.appearanceLabel || (idx === 0 ? '선발' : `계투(${idx})`);
+      add(orderLabel, meta.number, p.name, p.pos ?? meta.pos, meta.throws, meta.bats);
+    });
+  };
   const writeHitterStats = (side: 'home' | 'away', label: string) => {
     addBlank();
     add(`실시간 타자 기록 - ${label}`);
@@ -294,11 +425,13 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   writeHitterStats('away', record.meta.awayTeamName);
   writePitcherStats('home', record.meta.homeTeamName);
   writePitcherStats('away', record.meta.awayTeamName);
+  writePitcherOrder('home', record.meta.homeTeamName);
+  writePitcherOrder('away', record.meta.awayTeamName);
 
-  const events = [...record.events].reverse();
+  const eventsChrono = [...record.events].reverse();
   addBlank();
   add('상세 플레이 이벤트');
-  if (events.length) {
+  if (eventsChrono.length) {
     add(
       '이닝',
       '공/말',
@@ -315,7 +448,7 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
       '실책 결과',
       '비고',
     );
-    events.forEach((event) => {
+    eventsChrono.forEach((event) => {
       add(
         event.inning,
         halfLabel(event.half),
@@ -348,6 +481,92 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   } else {
     add('-', '기록 없음');
   }
+
+  const scorebookEventsBySide = (side: 'home' | 'away') => {
+    const targetHalf = side === 'away' ? 'top' : 'bottom';
+    const notesByOrder = new Map<number, Map<number, string[]>>();
+    eventsChrono
+      .filter((event) => event.half === targetHalf && event.order > 0)
+      .forEach((event) => {
+        const inningMap = notesByOrder.get(event.order) ?? new Map<number, string[]>();
+        const notes = inningMap.get(event.inning) ?? [];
+        const note = formatScorebookCell(event);
+        notes.push(note || '-');
+        inningMap.set(event.inning, notes);
+        notesByOrder.set(event.order, inningMap);
+      });
+    return notesByOrder;
+  };
+
+  const writeScorebook = (side: 'home' | 'away', label: string) => {
+    addBlank();
+    add(`${label} 팀 KBO 기록지 (타석별 기록)`);
+    add(
+      '타순',
+      '등번호',
+      '선수',
+      '수비번호',
+      '포지션',
+      ...innings.map((inning) => `${inning}회 타석(기록)`),
+      '타석',
+      '타수',
+      '안타',
+      '1루타',
+      '2루타',
+      '3루타',
+      '홈런',
+      '볼넷',
+      '사구',
+      '삼진',
+      '희생',
+    );
+    const hitters = record.lineups[side].filter((slot) => slot.pos.toUpperCase() !== 'P');
+    while (hitters.length < 9) {
+      hitters.push({ name: '-', pos: '-', number: '-', throws: 'R', bats: 'R' });
+    }
+    const notesByOrder = scorebookEventsBySide(side);
+    const statsByName = new Map(stats.hitters[side].map((stat) => [stat.name, stat]));
+    hitters.slice(0, 9).forEach((slot, idx) => {
+      const order = idx + 1;
+      const inningNotes = innings.map((inning) => {
+        const notes = notesByOrder.get(order)?.get(inning);
+        return notes?.length ? notes.join(' | ') : '-';
+      });
+      const stat = statsByName.get(slot.name);
+      const meta = getPlayerMeta(side, slot.name);
+      add(
+        order,
+        meta.number,
+        slot.name || '-',
+        meta.posNumber,
+        slot.pos || '-',
+        ...inningNotes,
+        stat?.pa ?? '-',
+        stat?.ab ?? '-',
+        stat?.h ?? '-',
+        stat?.singles ?? '-',
+        stat?.doubles ?? '-',
+        stat?.triples ?? '-',
+        stat?.hr ?? '-',
+        stat?.bb ?? '-',
+        stat?.hbp ?? '-',
+        stat?.so ?? '-',
+        stat?.sac ?? '-',
+      );
+    });
+  };
+
+  writeScorebook('away', '초공');
+  writeScorebook('home', '말공');
+
+  addBlank();
+  add('KBO 기록 기호 안내 (요약)');
+  add('항목', '설명');
+  add('수비번호', '1투 2포 3일 4이 5삼 6유 7좌 8중 9우 D지명타자');
+  add('타석 기호', '상단 선=볼, 원=스트라이크(선=헛스윙, 채움=번트), 하단 삼각형=파울');
+  add('타구 기호', '플라이(◠), 땅볼(◡), 직선타(-), 번트(~), 실책은 E와 수비번호 병기');
+  add('사구·4구', 'HP(사구), B(볼넷), IB(고의4구), F.C(야수선택)');
+  add('주루 표기', '후속 타자 타순 번호를 괄호로 기록하며 진루·득점·아웃을 구분');
 
   return lines.join('\n');
 }
