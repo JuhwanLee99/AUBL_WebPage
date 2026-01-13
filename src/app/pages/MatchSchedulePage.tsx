@@ -49,6 +49,24 @@ function parseLineup(text: string) {
   });
 }
 
+function extractDateParts(value: string) {
+  if (!value) return { date: '', hour: '', minute: '' };
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return { date: '', hour: '', minute: '' };
+  return {
+    date: date.toISOString().slice(0, 10),
+    hour: String(date.getHours()).padStart(2, '0'),
+    minute: String(date.getMinutes()).padStart(2, '0'),
+  };
+}
+
+function buildDateTimeIso(date: string, hour: string, minute: string) {
+  if (!date) return '';
+  const safeHour = hour ? hour.padStart(2, '0') : '00';
+  const safeMinute = minute ? minute.padStart(2, '0') : '00';
+  return toIsoString(`${date}T${safeHour}:${safeMinute}:00`);
+}
+
 function formatLineupText(lineups?: MatchSchedule['lineups']) {
   if (!lineups) return '';
   return lineups.home
@@ -83,8 +101,32 @@ export default function MatchSchedulePage() {
   const [editingHomeLineup, setEditingHomeLineup] = useState('');
   const [editingAwayLineup, setEditingAwayLineup] = useState('');
 
+  const startTimeParts = useMemo(() => extractDateParts(form.startTime), [form.startTime]);
+  const hourOptions = useMemo(() => Array.from({ length: 24 }, (_, index) => String(index).padStart(2, '0')), []);
+  const minuteOptions = useMemo(
+    () => Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0')),
+    [],
+  );
+
+  const updateStartTime = (updates: Partial<{ date: string; hour: string; minute: string }>) => {
+    setForm((prev) => {
+      const current = extractDateParts(prev.startTime);
+      const nextDate = updates.date ?? current.date;
+      const nextHour = updates.hour ?? current.hour;
+      const nextMinute = updates.minute ?? current.minute;
+      const startTime = nextDate ? buildDateTimeIso(nextDate, nextHour, nextMinute) : '';
+      return { ...prev, startTime };
+    });
+  };
+
   const sortedMatches = useMemo(() => {
-    return [...state.matches].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+    return [...state.matches].sort((a, b) => {
+      const aTime = new Date(a.startTime).getTime();
+      const bTime = new Date(b.startTime).getTime();
+      const safeATime = Number.isNaN(aTime) ? 0 : aTime;
+      const safeBTime = Number.isNaN(bTime) ? 0 : bTime;
+      return safeATime - safeBTime;
+    });
   }, [state.matches]);
 
   const handleFormSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -182,12 +224,45 @@ export default function MatchSchedulePage() {
             </label>
             <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
               경기 일시
-              <input
-                type="datetime-local"
-                value={form.startTime}
-                onChange={(event) => setForm((prev) => ({ ...prev, startTime: event.target.value }))}
-                style={inputStyle}
-              />
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1.2fr 0.8fr 0.8fr',
+                  gap: '8px',
+                  alignItems: 'center',
+                }}
+              >
+                <input
+                  type="date"
+                  value={startTimeParts.date}
+                  onChange={(event) => updateStartTime({ date: event.target.value })}
+                  style={inputStyle}
+                />
+                <select
+                  value={startTimeParts.hour}
+                  onChange={(event) => updateStartTime({ hour: event.target.value })}
+                  style={inputStyle}
+                >
+                  <option value="">시 선택</option>
+                  {hourOptions.map((hour) => (
+                    <option key={hour} value={hour}>
+                      {hour}시
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={startTimeParts.minute}
+                  onChange={(event) => updateStartTime({ minute: event.target.value })}
+                  style={inputStyle}
+                >
+                  <option value="">분 선택</option>
+                  {minuteOptions.map((minute) => (
+                    <option key={minute} value={minute}>
+                      {minute}분
+                    </option>
+                  ))}
+                </select>
+              </div>
             </label>
             <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
               구장

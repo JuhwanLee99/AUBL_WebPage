@@ -206,7 +206,7 @@ const initialScheduledMatches: MatchSchedule[] = [
     venue: 'AUBL 보조구장',
     status: 'scheduled',
   },
-  ...MATCHES.slice(0, 3).map((match, index) => ({
+  ...MATCHES.slice(0, 1).map((match, index) => ({
     id: `result-${index + 1}`,
     homeTeamId: match.homeTeamId,
     awayTeamId: match.awayTeamId,
