@@ -222,6 +222,29 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
     add('-', '기록 없음');
   }
 
+  const events = [...record.events].reverse();
+  addBlank();
+  add('상세 플레이 이벤트');
+  if (events.length) {
+    add('이닝', '공/말', '타순', '타자', '구수', '유형', '주자', '타구', '실책', '비고');
+    events.forEach((event) => {
+      add(
+        event.inning,
+        halfLabel(event.half),
+        event.order || '-',
+        event.batter || '-',
+        event.pitch,
+        event.type,
+        event.runners.length ? event.runners.join(' | ') : '-',
+        event.battedBall ?? '-',
+        event.error ?? '-',
+        event.notes ?? '-',
+      );
+    });
+  } else {
+    add('-', '기록 없음');
+  }
+
   return lines.join('\n');
 }
 

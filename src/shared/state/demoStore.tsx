@@ -24,6 +24,19 @@ export interface PlayLog {
   result: string;
 }
 
+export interface PlayEvent {
+  inning: number;
+  half: Half;
+  order: number;
+  batter: string;
+  pitch: number;
+  type: string;
+  runners: string[];
+  battedBall?: string | null;
+  error?: string | null;
+  notes?: string;
+}
+
 interface DemoSnapshot {
   inning: number;
   half: Half;
@@ -35,6 +48,7 @@ interface DemoSnapshot {
   score: { home: number; away: number };
   lastPlay: string;
   feed: PlayLog[];
+  events: PlayEvent[];
   homeTeamId: string;
   awayTeamId: string;
   batterIndex: { home: number; away: number };
@@ -129,6 +143,7 @@ const initialState: DemoState = {
   score: { home: 0, away: 0 },
   lastPlay: '경기 대기 중',
   feed: [],
+  events: [],
   homeTeamId: initialMatch?.homeTeamId ?? 'home',
   awayTeamId: initialMatch?.awayTeamId ?? 'away',
   batterIndex: { home: 0, away: 0 },
@@ -188,12 +203,61 @@ function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }):
   });
 }
 
+function normalizeEvents(events: unknown, fallback: { inning: number; half: Half }): PlayEvent[] {
+  if (!Array.isArray(events)) return [];
+  return events.map((entry) => {
+    if (typeof entry === 'string') {
+      return {
+        inning: fallback.inning,
+        half: fallback.half,
+        order: 0,
+        batter: '',
+        pitch: 0,
+        type: 'note',
+        runners: [],
+        notes: entry,
+      };
+    }
+    if (entry && typeof entry === 'object') {
+      const e = entry as Partial<PlayEvent>;
+      const half = e.half === 'top' || e.half === 'bottom' ? e.half : fallback.half;
+      return {
+        inning: typeof e.inning === 'number' ? e.inning : fallback.inning,
+        half,
+        order: typeof e.order === 'number' ? e.order : 0,
+        batter: typeof e.batter === 'string' ? e.batter : '',
+        pitch: typeof e.pitch === 'number' ? e.pitch : 0,
+        type: typeof e.type === 'string' ? e.type : 'play',
+        runners: Array.isArray(e.runners) ? e.runners.filter((r): r is string => typeof r === 'string') : [],
+        battedBall: e.battedBall ?? null,
+        error: e.error ?? null,
+        notes: typeof e.notes === 'string' ? e.notes : undefined,
+      };
+    }
+    return {
+      inning: fallback.inning,
+      half: fallback.half,
+      order: 0,
+      batter: '',
+      pitch: 0,
+      type: 'play',
+      runners: [],
+      notes: String(entry),
+    };
+  });
+}
+
 function normalizeState(base: DemoState, incoming: DemoState): DemoState {
   const merged = { ...base, ...incoming } as DemoState;
   const feed = normalizeFeed(merged.feed, { inning: merged.inning, half: merged.half });
+  const events = normalizeEvents(merged.events, { inning: merged.inning, half: merged.half });
   const history = Array.isArray(merged.history)
     ? merged.history.map((snap) => {
         const normalizedHistoryFeed = normalizeFeed((snap as DemoSnapshot).feed, { inning: snap.inning, half: snap.half });
+        const normalizedHistoryEvents = normalizeEvents((snap as DemoSnapshot).events, {
+          inning: snap.inning,
+          half: snap.half,
+        });
         const normalizedGameStarted =
           typeof (snap as DemoSnapshot).gameStarted === 'boolean'
             ? (snap as DemoSnapshot).gameStarted
@@ -203,6 +267,7 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
           ...snap,
           pitchCount: typeof snap.pitchCount === 'number' ? snap.pitchCount : 0,
           feed: normalizedHistoryFeed,
+          events: normalizedHistoryEvents,
           gameOver: Boolean((snap as DemoSnapshot).gameOver),
           endedAt: typeof (snap as DemoSnapshot).endedAt === 'string' ? (snap as DemoSnapshot).endedAt : null,
           gameStarted: normalizedGameStarted,
@@ -214,6 +279,7 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
     ...merged,
     pitchCount: merged.pitchCount ?? 0,
     feed,
+    events,
     history,
     gameOver: Boolean(merged.gameOver),
     endedAt: typeof merged.endedAt === 'string' ? merged.endedAt : null,
@@ -243,6 +309,7 @@ export interface GameRecord {
   benches: DemoState['benches'];
   removed: DemoState['removed'];
   feed: PlayLog[];
+  events: PlayEvent[];
   lastPlay: string;
 }
 
@@ -276,6 +343,7 @@ export function buildGameRecord(state: DemoState): GameRecord {
       away: state.removed.away.map((player) => ({ ...player })),
     },
     feed: state.feed.map((entry) => ({ ...entry })),
+    events: state.events.map((entry) => ({ ...entry, runners: [...entry.runners] })),
     lastPlay: state.lastPlay,
   };
 }
@@ -468,7 +536,19 @@ function reducer(state: DemoState, action: Action): DemoState {
       nextState = changeHalf(state, '이닝 전환');
       break;
     case 'setPlay':
-      nextState = { ...state, lastPlay: action.message, feed: pushPlayFeed(state, createLogEntry(state, action.message, 0)) };
+      nextState = {
+        ...state,
+        lastPlay: action.message,
+        feed: pushPlayFeed(state, createLogEntry(state, action.message, 0)),
+        events: pushEvent(
+          state.events,
+          createPlayEventForBaserunning(
+            state,
+            { type: 'setPlay', runners: getRunnerNames(state.bases), notes: action.message },
+            0,
+          ),
+        ),
+      };
       break;
     case 'runnerStealSuccess':
       nextState = applyRunnerAdvance(state, action.base, 1, '도루 성공');
@@ -535,6 +615,10 @@ function pushFeed(feed: PlayLog[], entry: PlayLog) {
   return [entry, ...feed];
 }
 
+function pushEvent(events: PlayEvent[], entry: PlayEvent) {
+  return [entry, ...events];
+}
+
 function ensureHalfPitcherLogged(state: DemoState, feed: PlayLog[]) {
   const exists = feed.some(
     (entry) => entry.inning === state.inning && entry.half === state.half && entry.result.endsWith('투수'),
@@ -585,6 +669,10 @@ function currentBatterInfo(state: DemoState) {
   };
 }
 
+function getRunnerNames(bases: Bases) {
+  return bases.filter((runner): runner is string => typeof runner === 'string');
+}
+
 function createLogEntry(state: DemoState, result: string, pitch: number): PlayLog {
   const info = currentBatterInfo(state);
   return {
@@ -608,6 +696,57 @@ function createLogEntryForBaserunning(state: DemoState, result: string, pitch: n
   };
 }
 
+function createPlayEvent(
+  state: DemoState,
+  details: {
+    type: string;
+    runners?: string[];
+    battedBall?: string | null;
+    error?: string | null;
+    notes?: string;
+  },
+  pitch: number,
+): PlayEvent {
+  const info = currentBatterInfo(state);
+  return {
+    inning: state.inning,
+    half: state.half,
+    order: info.order,
+    batter: info.batter,
+    pitch,
+    type: details.type,
+    runners: details.runners ?? getRunnerNames(state.bases),
+    battedBall: details.battedBall ?? null,
+    error: details.error ?? null,
+    notes: details.notes,
+  };
+}
+
+function createPlayEventForBaserunning(
+  state: DemoState,
+  details: {
+    type: string;
+    runners?: string[];
+    battedBall?: string | null;
+    error?: string | null;
+    notes?: string;
+  },
+  pitch: number,
+): PlayEvent {
+  return {
+    inning: state.inning,
+    half: state.half,
+    order: 0,
+    batter: '',
+    pitch,
+    type: details.type,
+    runners: details.runners ?? [],
+    battedBall: details.battedBall ?? null,
+    error: details.error ?? null,
+    notes: details.notes,
+  };
+}
+
 function hittingSide(state: DemoState) {
   return state.half === 'top' ? 'away' : 'home';
 }
@@ -615,7 +754,15 @@ function hittingSide(state: DemoState) {
 function applyOut(
   state: DemoState,
   message: string,
-  options?: { advanceBatter?: boolean; pitchNumber?: number },
+  options?: {
+    advanceBatter?: boolean;
+    pitchNumber?: number;
+    eventType?: string;
+    runners?: string[];
+    battedBall?: string | null;
+    error?: string | null;
+    notes?: string;
+  },
 ): DemoState {
   const outs = state.outs + 1;
   const advanceBatter = options?.advanceBatter ?? true;
@@ -624,10 +771,27 @@ function applyOut(
   const batterIndex = advanceBatter ? nextBatter(state).batterIndex : state.batterIndex;
   const pitchCount = advanceBatter ? 0 : state.pitchCount;
   const logResult = `${message} (${outs} 아웃)`;
+  const eventEntry = createPlayEvent(
+    state,
+    {
+      type: options?.eventType ?? 'out',
+      runners: options?.runners,
+      battedBall: options?.battedBall ?? null,
+      error: options?.error ?? null,
+      notes: options?.notes ?? message,
+    },
+    advanceBatter ? pitchNumber : 0,
+  );
   if (outs >= 3) {
     const finalMessage = `${message} · 3아웃 · 이닝 종료`;
     const feedWithPlay = pushPlayFeed(state, createLogEntry(state, logResult, advanceBatter ? pitchNumber : 0));
-    return changeHalf({ ...state, batterIndex, pitchCount, feed: feedWithPlay }, finalMessage, advanceBatter ? pitchNumber : 0, state);
+    const eventsWithPlay = pushEvent(state.events, eventEntry);
+    return changeHalf(
+      { ...state, batterIndex, pitchCount, feed: feedWithPlay, events: eventsWithPlay },
+      finalMessage,
+      advanceBatter ? pitchNumber : 0,
+      state,
+    );
   }
   return {
     ...state,
@@ -637,6 +801,7 @@ function applyOut(
     pitchCount,
     lastPlay: message,
     feed: pushPlayFeed(state, createLogEntry(state, logResult, advanceBatter ? pitchNumber : 0)),
+    events: pushEvent(state.events, eventEntry),
   };
 }
 
@@ -650,6 +815,16 @@ function applyHit(state: DemoState, basesToAdvance: 1 | 2 | 3 | 4, pitchNumber: 
       : { ...state.score, away: state.score.away + runs };
   const result = basesToAdvance === 4 ? '홈런' : `${basesToAdvance}루타`;
   const message = `${result} · ${batterName}`;
+  const eventEntry = createPlayEvent(
+    state,
+    {
+      type: 'hit',
+      runners: getRunnerNames(state.bases),
+      battedBall: result,
+      notes: message,
+    },
+    pitchNumber,
+  );
   return {
     ...state,
     bases,
@@ -660,6 +835,7 @@ function applyHit(state: DemoState, basesToAdvance: 1 | 2 | 3 | 4, pitchNumber: 
     batterIndex,
     lastPlay: message,
     feed: pushPlayFeed(state, createLogEntry(state, runs ? `${result} · ${runs}득점` : result, pitchNumber)),
+    events: pushEvent(state.events, eventEntry),
   };
 }
 
@@ -671,6 +847,15 @@ function applyWalk(state: DemoState, message: string, pitchNumber: number): Demo
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
+  const eventEntry = createPlayEvent(
+    state,
+    {
+      type: message === '몸에 맞는 공' ? 'hbp' : 'walk',
+      runners: getRunnerNames(state.bases),
+      notes: `${message} · ${batterName}`,
+    },
+    pitchNumber,
+  );
   return {
     ...state,
     bases,
@@ -681,6 +866,7 @@ function applyWalk(state: DemoState, message: string, pitchNumber: number): Demo
     batterIndex,
     lastPlay: `${message} · ${batterName}`,
     feed: pushPlayFeed(state, createLogEntry(state, runs ? `${message} · ${runs}득점` : message, pitchNumber)),
+    events: pushEvent(state.events, eventEntry),
   };
 }
 
@@ -699,7 +885,7 @@ function applySacrifice(state: DemoState, pitchNumber: number): DemoState {
   const newState = applyOut(
     { ...state, bases, score },
     runs ? `희생플라이 · ${runs}득점` : '희생플라이',
-    { pitchNumber },
+    { pitchNumber, eventType: 'sac', runners: getRunnerNames(state.bases), notes: '희생플라이' },
   );
   return newState;
 }
@@ -754,6 +940,15 @@ function applySteal(state: DemoState, success: boolean): DemoState {
       : { ...state.score, away: state.score.away + runs };
   const detail = moved ? formatRunnerMove(moved.name, moved.from, moved.to, moved.scored, '도루 성공') : null;
   const feedEntry = detail ? createLogEntryForBaserunning(state, detail.feedText, state.pitchCount + 1) : null;
+  const eventEntry = createPlayEventForBaserunning(
+    state,
+    {
+      type: success ? 'steal' : 'steal_fail',
+      runners: moved ? [moved.name] : [],
+      notes: detail?.feedText ?? (runs ? `도루 성공 · ${runs}득점` : '도루 성공'),
+    },
+    state.pitchCount + 1,
+  );
   return {
     ...state,
     bases,
@@ -766,6 +961,7 @@ function applySteal(state: DemoState, success: boolean): DemoState {
       state.feed,
       feedEntry ?? createLogEntry(state, detail?.feedText ?? (runs ? `도루 성공 · ${runs}득점` : '도루 성공'), 0),
     ),
+    events: pushEvent(state.events, eventEntry),
   };
 }
 
@@ -787,12 +983,18 @@ function applyRunnerAdvance(state: DemoState, baseIndex: 0 | 1 | 2, steps: numbe
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
   const detail = formatRunnerMove(runner, baseIndex, dest, runs > 0, message);
+  const eventEntry = createPlayEventForBaserunning(
+    state,
+    { type: 'runner', runners: [runner], notes: detail.feedText },
+    state.pitchCount,
+  );
   return {
     ...state,
     bases,
     score,
     lastPlay: detail.lastPlay,
     feed: pushFeed(state.feed, createLogEntry(state, detail.feedText, 0)),
+    events: pushEvent(state.events, eventEntry),
   };
 }
 
@@ -804,9 +1006,19 @@ function applyRunnerOut(state: DemoState, baseIndex: 0 | 1 | 2, message: string)
   const outs = state.outs + 1;
   const detail = formatRunnerMove(runner ?? '주자', baseIndex, baseIndex, false, `${message}`, outs);
   const feedEntry = createLogEntryForBaserunning(state, detail.feedText, state.pitchCount);
+  const eventEntry = createPlayEventForBaserunning(
+    state,
+    { type: 'runner_out', runners: [runner ?? '주자'], notes: detail.feedText },
+    state.pitchCount,
+  );
   if (outs >= 3) {
     const finalMessage = `${detail.lastPlay} · 이닝 종료`;
-    const afterHalf = changeHalf({ ...state, bases, outs, feed: pushFeed(state.feed, feedEntry) }, finalMessage, state.pitchCount, state);
+    const afterHalf = changeHalf(
+      { ...state, bases, outs, feed: pushFeed(state.feed, feedEntry), events: pushEvent(state.events, eventEntry) },
+      finalMessage,
+      state.pitchCount,
+      state,
+    );
     return afterHalf;
   }
   return {
@@ -816,6 +1028,7 @@ function applyRunnerOut(state: DemoState, baseIndex: 0 | 1 | 2, message: string)
     lastPlay: detail.lastPlay,
     pitchCount: state.pitchCount,
     feed: pushFeed(state.feed, feedEntry),
+    events: pushEvent(state.events, eventEntry),
   };
 }
 
@@ -844,6 +1057,11 @@ function applyDoublePlay(state: DemoState, outsToAdd: 2 | 3, label: string): Dem
     .join(', ');
   const feedText = runnerDesc ? `${label} · ${batterName} 아웃 / ${runnerDesc} 아웃` : `${label} · ${batterName} 아웃`;
   const lastPlay = feedText;
+  const eventEntry = createPlayEvent(
+    state,
+    { type: 'out', runners: getRunnerNames(state.bases), notes: feedText },
+    Math.max(1, state.pitchCount + 1),
+  );
 
   const nextState = {
     ...state,
@@ -855,6 +1073,7 @@ function applyDoublePlay(state: DemoState, outsToAdd: 2 | 3, label: string): Dem
     batterIndex,
     lastPlay,
     feed: pushPlayFeed(state, createLogEntry(state, feedText, Math.max(1, state.pitchCount + 1))),
+    events: pushEvent(state.events, eventEntry),
   };
 
   if (outs >= 3) {
@@ -892,6 +1111,7 @@ function createNewGame(state: DemoState): DemoState {
     score: { home: 0, away: 0 },
     lastPlay: '경기 대기 중',
     feed: [],
+    events: [],
     homeTeamId: state.homeTeamId,
     awayTeamId: state.awayTeamId,
     batterIndex: { home: 0, away: 0 },
