@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { TEAMS } from '../../shared/lib/mockData';
 import { buildGameRecord, useDemoStore } from '../../shared/state/demoStore';
-import type { BattedBallDetails, RunnerAdvanceOutcome, RunnerAdvanceSelections } from '../../shared/state/demoStore';
+import type { BattedBallDetails, ErrorDetails, RunnerAdvanceOutcome, RunnerAdvanceSelections } from '../../shared/state/demoStore';
 import StatsTable from '../../shared/components/StatsTable';
 import RemovedPlayersPanel from '../../shared/components/RemovedPlayersPanel';
 import type { BatterStatLine, PitcherStatLine } from '../../shared/types/scoreStats';
@@ -47,6 +47,7 @@ const outButtons = [
 
 const battedBallTypeOptions = ['선택 안 함', '땅볼', '뜬공', '라인드라이브', '번트', '플라이', '팝업', '기타'];
 const battedBallZoneOptions = ['선택 안 함', '3루선상', '좌전', '좌중간', '중전', '우중간', '우전', '1루선상', '내야'];
+const errorTypeOptions = ['포구', '송구', '포구 후 송구', '기타'];
 
 function downloadCsv(content: string, filenamePrefix: string) {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
@@ -86,6 +87,46 @@ function formatBattedBallDetails(details?: BattedBallDetails | null) {
   if (!details) return '-';
   const parts = [details.type, details.zone].filter((part) => part && part !== '선택 안 함');
   return parts.length ? parts.join(' / ') : '-';
+}
+
+function baseLabel(idx: number) {
+  return idx === 0 ? '1루' : idx === 1 ? '2루' : idx === 2 ? '3루' : '홈';
+}
+
+function formatRunnerOutcomeLabel(outcome: RunnerAdvanceOutcome) {
+  if (outcome === 'advance') return '진루';
+  if (outcome === 'score') return '득점';
+  if (outcome === 'out') return '아웃';
+  return '유지';
+}
+
+function formatErrorAdvanceResults(error?: ErrorDetails | string | null) {
+  if (!error || typeof error === 'string') return '-';
+  const parts: string[] = [];
+  if (error.advanceResults.batter === 'out') {
+    parts.push('타자:아웃');
+  } else {
+    const batterBase = error.advanceResults.batter;
+    parts.push(`타자:${batterBase >= 4 ? '홈(득점)' : `${batterBase}루`}`);
+  }
+  Object.entries(error.advanceResults.runners).forEach(([base, outcome]) => {
+    if (!outcome) return;
+    const label = `${baseLabel(Number(base))}:${formatRunnerOutcomeLabel(outcome)}`;
+    parts.push(label);
+  });
+  return parts.length ? parts.join(' / ') : '-';
+}
+
+function formatErrorSummary(error?: ErrorDetails | string | null) {
+  if (!error) return '-';
+  if (typeof error === 'string') return error;
+  const context = error.context ? ` · ${error.context}` : '';
+  return `${error.errorType} · ${error.fielderPos}${context}`;
+}
+
+function formatErrorField(error?: ErrorDetails | string | null, field: keyof ErrorDetails) {
+  if (!error || typeof error === 'string') return '-';
+  return error[field] || '-';
 }
 
 function normalizeLiveUrl(raw: string) {
@@ -236,7 +277,22 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   addBlank();
   add('상세 플레이 이벤트');
   if (events.length) {
-    add('이닝', '공/말', '타순', '타자', '구수', '유형', '주자 이동', '타구 유형/방향', '실책', '비고');
+    add(
+      '이닝',
+      '공/말',
+      '타순',
+      '타자',
+      '구수',
+      '유형',
+      '주자 이동',
+      '타구 유형/방향',
+      '실책 요약',
+      '실책 위치',
+      '실책 유형',
+      '실책 상황',
+      '실책 결과',
+      '비고',
+    );
     events.forEach((event) => {
       add(
         event.inning,
@@ -247,7 +303,11 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
         event.type,
         event.runners.length ? event.runners.join(' | ') : '-',
         formatBattedBallDetails(event.battedBall),
-        event.error ?? '-',
+        formatErrorSummary(event.error),
+        formatErrorField(event.error, 'fielderPos'),
+        formatErrorField(event.error, 'errorType'),
+        formatErrorField(event.error, 'context'),
+        formatErrorAdvanceResults(event.error),
         event.notes ?? '-',
       );
     });
@@ -1466,6 +1526,7 @@ export default function ScorekeeperPage() {
           onChangeBattedBallType={setBattedBallType}
           onChangeBattedBallZone={setBattedBallZone}
           battedBallDetails={battedBallDetails}
+          bases={state.bases}
         />
       )}
       {hitAdvanceModal && (
@@ -2056,6 +2117,7 @@ function ActionModal({
   onChangeBattedBallType,
   onChangeBattedBallZone,
   battedBallDetails,
+  bases,
 }: {
   data: { role: 'runner'; name: string; base: 0 | 1 | 2 } | { role: 'batter'; name: string } | { role: 'fielder'; name: string; pos: string };
   onClose: () => void;
@@ -2066,6 +2128,24 @@ function ActionModal({
   onChangeBattedBallType: (value: string) => void;
   onChangeBattedBallZone: (value: string) => void;
   battedBallDetails: BattedBallDetails | null;
+  bases: (string | null)[];
+}) {
+  const [errorType, setErrorType] = useState(errorTypeOptions[0]);
+  const [errorContext, setErrorContext] = useState('');
+  const [errorBatterResult, setErrorBatterResult] = useState<'out' | 1 | 2 | 3 | 4>(1);
+  const [runnerSelections, setRunnerSelections] = useState<RunnerAdvanceSelections>({});
+
+  useEffect(() => {
+    if (data.role !== 'fielder') return;
+    setErrorType(errorTypeOptions[0]);
+    setErrorContext('');
+    setErrorBatterResult(1);
+    const initialSelections = bases.reduce<RunnerAdvanceSelections>((acc, runner, idx) => {
+      if (runner) acc[idx as 0 | 1 | 2] = 'hold';
+      return acc;
+    }, {});
+    setRunnerSelections(initialSelections);
+  }, [bases, data.role]);
 }) {
   const renderButtons = () => {
     if (data.role === 'runner') {
@@ -2093,7 +2173,19 @@ function ActionModal({
     }
     return (
       <>
-        <RunnerActionButton label="실책 기록" color="#f97316" onClick={() => actions.setPlay(`실책 · ${data.pos} ${data.name}`)} />
+        <RunnerActionButton
+          label="실책 기록"
+          color="#f97316"
+          onClick={() => {
+            actions.recordError({
+              fielderPos: data.pos,
+              errorType,
+              context: errorContext.trim(),
+              advanceResults: { batter: errorBatterResult, runners: runnerSelections },
+            });
+            onClose();
+          }}
+        />
         <RunnerActionButton label="포구 완료" color="#22c55e" onClick={() => actions.setPlay(`포구 · ${data.pos} ${data.name}`)} />
         <RunnerActionButton label="중계 플레이" color="#38bdf8" onClick={() => actions.setPlay(`중계 · ${data.pos} ${data.name}`)} />
       </>
@@ -2208,6 +2300,128 @@ function ActionModal({
             </div>
             <div style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
               현재 선택: {formatBattedBallDetails(battedBallDetails)}
+            </div>
+          </div>
+        ) : null}
+        {data.role === 'fielder' ? (
+          <div
+            style={{
+              padding: '10px 12px',
+              borderRadius: '12px',
+              border: '1px solid rgba(148, 163, 184, 0.25)',
+              background: 'rgba(15,23,42,0.55)',
+              display: 'grid',
+              gap: '10px',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontWeight: 900, color: '#e2e8f0' }}>실책 상세 입력</span>
+              <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>기록/CSV에 반영</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
+              <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1', fontSize: '12px', fontWeight: 800 }}>
+                에러 유형
+                <select
+                  value={errorType}
+                  onChange={(e) => setErrorType(e.target.value)}
+                  style={{
+                    borderRadius: '10px',
+                    border: '1px solid rgba(148,163,184,0.35)',
+                    background: '#0b0f1a',
+                    color: '#e2e8f0',
+                    padding: '8px 10px',
+                    fontWeight: 800,
+                  }}
+                >
+                  {errorTypeOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1', fontSize: '12px', fontWeight: 800 }}>
+                상황
+                <input
+                  value={errorContext}
+                  onChange={(e) => setErrorContext(e.target.value)}
+                  placeholder="예) 내야 타구 처리, 포구 후 송구"
+                  style={{
+                    borderRadius: '10px',
+                    border: '1px solid rgba(148,163,184,0.35)',
+                    background: '#0b0f1a',
+                    color: '#e2e8f0',
+                    padding: '8px 10px',
+                    fontWeight: 800,
+                  }}
+                />
+              </label>
+            </div>
+            <div style={{ display: 'grid', gap: '8px' }}>
+              <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1', fontSize: '12px', fontWeight: 800 }}>
+                타자 결과
+                <select
+                  value={String(errorBatterResult)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setErrorBatterResult(value === 'out' ? 'out' : (Number(value) as 1 | 2 | 3 | 4));
+                  }}
+                  style={{
+                    borderRadius: '10px',
+                    border: '1px solid rgba(148,163,184,0.35)',
+                    background: '#0b0f1a',
+                    color: '#e2e8f0',
+                    padding: '8px 10px',
+                    fontWeight: 800,
+                    maxWidth: '220px',
+                  }}
+                >
+                  <option value="out">아웃</option>
+                  <option value="1">1루 진루</option>
+                  <option value="2">2루 진루</option>
+                  <option value="3">3루 진루</option>
+                  <option value="4">홈 득점</option>
+                </select>
+              </label>
+              <div style={{ display: 'grid', gap: '6px' }}>
+                <span style={{ color: '#cbd5e1', fontSize: '12px', fontWeight: 800 }}>주자 결과</span>
+                {bases.map((runner, idx) =>
+                  runner ? (
+                    <label
+                      key={`${runner}-${idx}`}
+                      style={{ display: 'grid', gap: '4px', color: '#e2e8f0', fontSize: '12px', fontWeight: 700 }}
+                    >
+                      {baseLabel(idx)} 주자 · {runner}
+                      <select
+                        value={runnerSelections[idx as 0 | 1 | 2] ?? 'hold'}
+                        onChange={(e) =>
+                          setRunnerSelections((prev) => ({
+                            ...prev,
+                            [idx]: e.target.value as RunnerAdvanceOutcome,
+                          }))
+                        }
+                        style={{
+                          borderRadius: '10px',
+                          border: '1px solid rgba(148,163,184,0.35)',
+                          background: '#0b0f1a',
+                          color: '#e2e8f0',
+                          padding: '6px 8px',
+                          fontWeight: 800,
+                          maxWidth: '180px',
+                        }}
+                      >
+                        <option value="hold">유지</option>
+                        <option value="advance">진루</option>
+                        <option value="score">득점</option>
+                        <option value="out">아웃</option>
+                      </select>
+                    </label>
+                  ) : null,
+                )}
+                {!bases.some(Boolean) ? (
+                  <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>현재 주자 없음</span>
+                ) : null}
+              </div>
             </div>
           </div>
         ) : null}
