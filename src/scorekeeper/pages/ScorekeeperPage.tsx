@@ -126,6 +126,9 @@ function formatRunnerOutcomeLabel(outcome: RunnerAdvanceOutcome) {
   if (outcome === 'advance') return '진루';
   if (outcome === 'score') return '득점';
   if (outcome === 'out') return '아웃';
+  if (typeof outcome === 'number') {
+    return outcome >= 4 ? '홈(득점)' : `${outcome}루`;
+  }
   return '유지';
 }
 
@@ -799,7 +802,10 @@ export default function ScorekeeperPage() {
   const openHitAdvanceModal = (bases: 1 | 2 | 3) => {
     if (controlsDisabled) return;
     const selections = state.bases.reduce<RunnerAdvanceSelections>((acc, runner, idx) => {
-      if (runner) acc[idx as 0 | 1 | 2] = 'advance';
+      if (runner) {
+        const targetBase = Math.min(idx + 1 + bases, 4);
+        acc[idx as 0 | 1 | 2] = targetBase >= 4 ? 4 : (targetBase as 1 | 2 | 3);
+      }
       return acc;
     }, {});
     setHitAdvanceModal({ bases, selections });
@@ -1945,12 +1951,17 @@ function FieldSvg() {
   );
 }
 
-const runnerOutcomeOptions: { value: RunnerAdvanceOutcome; label: string; color: string }[] = [
-  { value: 'hold', label: '정지', color: '#e2e8f0' },
-  { value: 'advance', label: '진루', color: '#22c55e' },
-  { value: 'out', label: '아웃', color: '#ef4444' },
-  { value: 'score', label: '득점', color: '#f97316' },
-];
+function buildRunnerOutcomeOptions(baseIndex: 0 | 1 | 2) {
+  const options: { value: RunnerAdvanceOutcome; label: string; color: string }[] = [
+    { value: 'hold', label: '정지', color: '#e2e8f0' },
+  ];
+  for (let base = baseIndex + 2; base <= 3; base += 1) {
+    options.push({ value: base as 2 | 3, label: `${base}루`, color: '#22c55e' });
+  }
+  options.push({ value: 4, label: '홈 득점', color: '#f97316' });
+  options.push({ value: 'out', label: '아웃', color: '#ef4444' });
+  return options;
+}
 
 function baseLabelForIndex(baseIndex: number) {
   return `${baseIndex + 1}루`;
@@ -2041,10 +2052,10 @@ function HitAdvanceModal({
                   <span style={{ fontWeight: 900 }}>
                     {baseLabelForIndex(entry.baseIndex)} 주자 · {entry.runner}
                   </span>
-                  <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>기본값: 진루</span>
+                  <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>기본값: 타구 기준 진루</span>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
-                  {runnerOutcomeOptions.map((option) => {
+                  {buildRunnerOutcomeOptions(entry.baseIndex).map((option) => {
                     const isSelected = selections[entry.baseIndex] === option.value;
                     return (
                       <button
