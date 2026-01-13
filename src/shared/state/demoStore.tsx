@@ -23,6 +23,18 @@ export type BattedBallDetails = {
   zone: string;
 };
 
+export type ErrorAdvanceResults = {
+  batter: 'out' | 1 | 2 | 3 | 4;
+  runners: RunnerAdvanceSelections;
+};
+
+export type ErrorDetails = {
+  fielderPos: string;
+  errorType: string;
+  context: string;
+  advanceResults: ErrorAdvanceResults;
+};
+
 export interface PlayLog {
   inning: number;
   half: Half;
@@ -41,7 +53,7 @@ export interface PlayEvent {
   type: string;
   runners: string[];
   battedBall?: BattedBallDetails | null;
-  error?: string | null;
+  error?: ErrorDetails | string | null;
   notes?: string;
 }
 
@@ -87,6 +99,7 @@ type Action =
   | { type: 'walk' }
   | { type: 'hbp' }
   | { type: 'sac'; battedBall?: BattedBallDetails | null }
+  | { type: 'error'; details: ErrorDetails }
   | { type: 'stealSuccess' }
   | { type: 'stealFail' }
   | { type: 'resetCount' }
@@ -361,6 +374,17 @@ export function buildGameRecord(state: DemoState): GameRecord {
       ...entry,
       runners: [...entry.runners],
       battedBall: entry.battedBall ? { ...entry.battedBall } : null,
+      error: entry.error
+        ? typeof entry.error === 'string'
+          ? entry.error
+          : {
+              ...entry.error,
+              advanceResults: {
+                batter: entry.error.advanceResults.batter,
+                runners: { ...entry.error.advanceResults.runners },
+              },
+            }
+        : null,
     })),
     lastPlay: state.lastPlay,
   };
@@ -487,6 +511,9 @@ function reducer(state: DemoState, action: Action): DemoState {
       break;
     case 'sac':
       nextState = applySacrifice(state, state.pitchCount + 1, action.battedBall);
+      break;
+      case 'error':
+      nextState = applyError(state, action.details);
       break;
     case 'stealSuccess':
       nextState = applySteal(state, true);
@@ -743,7 +770,7 @@ function createPlayEvent(
     type: string;
     runners?: string[];
     battedBall?: BattedBallDetails | null;
-    error?: string | null;
+    error?: ErrorDetails | string | null;
     notes?: string;
   },
   pitch: number,
@@ -769,7 +796,7 @@ function createPlayEventForBaserunning(
     type: string;
     runners?: string[];
     battedBall?: BattedBallDetails | null;
-    error?: string | null;
+    error?: ErrorDetails | string | null;
     notes?: string;
   },
   pitch: number,
@@ -1017,6 +1044,118 @@ function applySacrifice(state: DemoState, pitchNumber: number, battedBall?: Batt
     { pitchNumber, eventType: 'sac', runners: getRunnerNames(state.bases), notes: '희생플라이', battedBall },
   );
   return newState;
+}
+
+function applyError(state: DemoState, details: ErrorDetails): DemoState {
+  const pitchNumber = Math.max(1, state.pitchCount + 1);
+  const { batterName, batterIndex } = nextBatter(state);
+  const bases = [null, null, null] as Bases;
+  const runnerMoves: { feedText: string; lastPlay: string; runnerSummary: string }[] = [];
+  let runs = 0;
+  let outs = state.outs;
+
+  for (let i = 2; i >= 0; i -= 1) {
+    const runner = state.bases[i];
+    if (!runner) continue;
+    const outcome = details.advanceResults.runners[i as 0 | 1 | 2] ?? 'hold';
+    if (outcome === 'out') {
+      outs += 1;
+      runnerMoves.push(formatRunnerMove({ runner, from: i, to: i, outcome: 'out', outsCount: outs, message: `실책(${details.errorType})` }));
+      continue;
+    }
+    if (outcome === 'score') {
+      runs += 1;
+      runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score', message: `실책(${details.errorType})` }));
+      continue;
+    }
+    if (outcome === 'hold') {
+      const placed = placeRunnerOnBases(bases, runner, i);
+      if (placed.scored) {
+        runs += 1;
+        runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score', message: `실책(${details.errorType})` }));
+      }
+      continue;
+    }
+    const dest = i + 1;
+    if (dest >= 3) {
+      runs += 1;
+      runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score', message: `실책(${details.errorType})` }));
+    } else {
+      const placed = placeRunnerOnBases(bases, runner, dest);
+      if (placed.scored) {
+        runs += 1;
+        runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score', message: `실책(${details.errorType})` }));
+      } else {
+        runnerMoves.push(formatRunnerMove({ runner, from: i, to: placed.dest, outcome: 'advance', message: `실책(${details.errorType})` }));
+      }
+    }
+  }
+
+  const batterResult = details.advanceResults.batter;
+  if (batterResult === 'out') {
+    outs += 1;
+  } else if (batterResult >= 4) {
+    runs += 1;
+  } else {
+    const placed = placeRunnerOnBases(bases, batterName, batterResult - 1);
+    if (placed.scored) {
+      runs += 1;
+    }
+  }
+
+  const side = hittingSide(state);
+  const score =
+    side === 'home'
+      ? { ...state.score, home: state.score.home + runs }
+      : { ...state.score, away: state.score.away + runs };
+
+  const errorContext = details.context.trim();
+  const summary = `실책 · ${details.errorType} · ${details.fielderPos}${errorContext ? ` · ${errorContext}` : ''}`;
+  const resultTags: string[] = [summary];
+  if (batterResult === 'out') {
+    resultTags.push('타자 아웃');
+  }
+  if (runs > 0) {
+    resultTags.push(`${runs}득점`);
+  }
+  const resultText = resultTags.join(' · ');
+
+  let feed = state.feed;
+  runnerMoves.forEach((move) => {
+    feed = pushFeed(feed, createLogEntryForBaserunning(state, move.feedText, pitchNumber));
+  });
+  feed = pushPlayFeed(state, createLogEntry(state, resultText, pitchNumber), feed);
+
+  const eventEntry = createPlayEvent(
+    state,
+    {
+      type: 'error',
+      runners: runnerMoves.map((move) => move.runnerSummary),
+      error: details,
+      notes: summary,
+    },
+    pitchNumber,
+  );
+
+  const nextState = {
+    ...state,
+    bases,
+    score,
+    balls: 0,
+    strikes: 0,
+    pitchCount: 0,
+    batterIndex,
+    outs,
+    lastPlay: summary,
+    feed,
+    events: pushEvent(state.events, eventEntry),
+  };
+
+  if (outs >= 3) {
+    return changeHalf(nextState, `${resultText} · 3아웃 · 이닝 종료`, pitchNumber, state);
+  }
+
+  return nextState;
 }
 
 function applySteal(state: DemoState, success: boolean): DemoState {
@@ -1433,6 +1572,7 @@ interface DemoStoreValue {
     walk: () => void;
     hbp: () => void;
     sacFly: (battedBall?: BattedBallDetails | null) => void;
+    recordError: (details: ErrorDetails) => void;
     stealSuccess: () => void;
     stealFail: () => void;
     resetCount: () => void;
@@ -1522,6 +1662,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       walk: () => dispatch({ type: 'walk' }),
       hbp: () => dispatch({ type: 'hbp' }),
       sacFly: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'sac', battedBall }),
+      recordError: (details: ErrorDetails) => dispatch({ type: 'error', details }),
       stealSuccess: () => dispatch({ type: 'stealSuccess' }),
       stealFail: () => dispatch({ type: 'stealFail' }),
       resetCount: () => dispatch({ type: 'resetCount' }),
