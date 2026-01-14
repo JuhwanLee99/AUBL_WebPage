@@ -43,7 +43,8 @@ const battedBallResultOptions = [
   { label: '라인드라이브', color: '#ef4444', value: 'out_line' as const, helper: '직선타 아웃', group: 'out' as const },
   { label: '병살타(2아웃)', color: '#ef4444', value: 'out_dp2' as const, helper: '타자+주자 아웃', group: 'out' as const },
   { label: '삼중살(3아웃)', color: '#ef4444', value: 'out_tp3' as const, helper: '모두 아웃', group: 'out' as const },
-  { label: '내야 플라이', color: '#ef4444', value: 'out_infield_fly' as const, helper: '인필드 플라이 선언', group: 'out' as const },
+  { label: '내야 플라이', color: '#ef4444', value: 'out_infield_fly' as const, helper: '타자만 아웃(인필드 플라이 아님)', group: 'out' as const },
+  { label: '인필드 플라이 선언', color: '#ef4444', value: 'out_infield_fly_rule' as const, helper: '주자 묶임 · 선언 상황', group: 'out' as const },
   { label: '외야 플라이', color: '#ef4444', value: 'out_outfield_fly' as const, helper: '외야 플라이 아웃', group: 'out' as const },
   { label: '기타 아웃', color: '#ef4444', value: 'out_other' as const, helper: '상황 메모', group: 'out' as const },
   { label: '희생플라이', color: '#facc15', value: 'sac_fly' as const, helper: '타점·진루 기록', group: 'sac' as const },
@@ -73,9 +74,11 @@ const sacBuntTypeOptions = [baseBattedBallType, '스퀴즈 번트', '1루쪽 희
 const groundOutTypeOptions = [baseBattedBallType, '느린 땅볼', '강한 땅볼', '바운드 조정 땅볼'];
 const flyOutTypeOptions = [baseBattedBallType, '얕은 플라이', '깊은 플라이', '팝업/인필드'];
 const lineOutTypeOptions = [baseBattedBallType, '직선타(내야)', '직선타(외야)'];
-const infieldFlyTypeOptions = [baseBattedBallType, '인필드 플라이'];
+const infieldFlyTypeOptions = [baseBattedBallType, '인필드 플라이 선언'];
+const infieldFielderOptions = ['선택 안 함', '투수', '포수', '1루수', '2루수', '3루수', '유격수'];
+const outfieldFielderOptions = ['선택 안 함', '좌익수', '중견수', '우익수', '좌익수 파울', '우익수 파울'];
 const defaultTypeOptions = [baseBattedBallType];
-const battedBallZoneOptions = [
+const defaultZoneOptions = [
   '선택 안 함',
   '3루 라인/코너',
   '좌익수 앞',
@@ -86,11 +89,29 @@ const battedBallZoneOptions = [
   '1루 라인/코너',
   '내야 앞/번트',
 ];
+const infieldFlyZoneOptions = [
+  '선택 안 함',
+  '포수 파울',
+  '1루 파울',
+  '3루 파울',
+  '투수 앞',
+  '1루 앞',
+  '2루 앞',
+  '3루 앞',
+  '마운드 뒤',
+];
+const buntZoneOptions = ['선택 안 함', '1루선상', '3루선상', '포수 앞', '투수 앞', '1루 앞', '3루 앞'];
 const errorTypeOptions = ['포구', '송구', '포구 후 송구', '기타'];
 type HitResultAction = Extract<(typeof battedBallResultOptions)[number]['value'], 'single' | 'single_infield' | 'single_bunt' | 'double' | 'double_ground' | 'triple' | 'hr'>;
 type BattedBallResultAction = (typeof battedBallResultOptions)[number]['value'];
 type HitWizardStep = 'result' | 'type' | 'zone';
-type HitWizardState = { step: HitWizardStep; result: BattedBallResultAction | null; type: string; zone: string };
+type HitWizardState = {
+  step: HitWizardStep;
+  result: BattedBallResultAction | null;
+  type: string;
+  zone: string;
+  fielder: string;
+};
 type ActionModalData =
   | { role: 'runner'; name: string; base: 0 | 1 | 2 }
   | { role: 'batter'; name: string; side: Side; lineupIndex: number }
@@ -141,6 +162,14 @@ function buildBattedBallDetailsFromValues(type: string, zone: string): BattedBal
   return { type, zone };
 }
 
+function isInfieldFlyResult(result: BattedBallResultAction | null) {
+  return result === 'out_infield_fly' || result === 'out_infield_fly_rule';
+}
+
+function isOutfieldFlyResult(result: BattedBallResultAction | null) {
+  return result === 'out_outfield_fly' || result === 'out_fly';
+}
+
 function baseLabel(idx: number) {
   return idx === 0 ? '1루' : idx === 1 ? '2루' : idx === 2 ? '3루' : '홈';
 }
@@ -155,8 +184,22 @@ function getTypeOptionsForResult(result: BattedBallResultAction | null) {
   if (['out_ground', 'out_dp2', 'out_tp3'].includes(result)) return groundOutTypeOptions;
   if (['out_fly', 'out_outfield_fly'].includes(result)) return flyOutTypeOptions;
   if (result === 'out_line') return lineOutTypeOptions;
-  if (result === 'out_infield_fly') return infieldFlyTypeOptions;
+  if (result === 'out_infield_fly') return flyOutTypeOptions;
+  if (result === 'out_infield_fly_rule') return infieldFlyTypeOptions;
   return defaultTypeOptions;
+}
+
+function getZoneOptionsForResult(result: BattedBallResultAction | null) {
+  if (!result) return defaultZoneOptions;
+  if (isInfieldFlyResult(result)) return infieldFlyZoneOptions;
+  if (result === 'sac_bunt' || result === 'single_bunt') return buntZoneOptions;
+  return defaultZoneOptions;
+}
+
+function getFielderOptionsForResult(result: BattedBallResultAction | null) {
+  if (isInfieldFlyResult(result)) return infieldFielderOptions;
+  if (isOutfieldFlyResult(result)) return outfieldFielderOptions;
+  return null;
 }
 
 function defensePositionNumber(pos: string) {
@@ -1009,7 +1052,9 @@ export default function ScorekeeperPage() {
   const [hitAdvanceModal, setHitAdvanceModal] = useState<null | { bases: 1 | 2 | 3; selections: RunnerAdvanceSelections }>(null);
   const [showDroppedThirdStrike, setShowDroppedThirdStrike] = useState(false);
   const [battedBallType, setBattedBallType] = useState(baseBattedBallType);
-  const [battedBallZone, setBattedBallZone] = useState(battedBallZoneOptions[0]);
+  const [battedBallZone, setBattedBallZone] = useState(defaultZoneOptions[0]);
+  const [infieldFielder, setInfieldFielder] = useState(infieldFielderOptions[0]);
+  const [outfieldFielder, setOutfieldFielder] = useState(outfieldFielderOptions[0]);
   const recordPayload = useMemo(() => buildGameRecord(state), [state]);
   const [pendingExportId, setPendingExportId] = useState<string | null>(null);
   const isGameStarted = state.gameStarted;
@@ -1098,7 +1143,8 @@ export default function ScorekeeperPage() {
             step: 'result',
             result: null,
             type: baseBattedBallType,
-            zone: battedBallZoneOptions[0],
+            zone: defaultZoneOptions[0],
+            fielder: infieldFielderOptions[0],
           },
     );
   };
@@ -1127,8 +1173,29 @@ export default function ScorekeeperPage() {
       return;
     }
     const typeOptions = getTypeOptionsForResult(result);
-    const nextType = typeOptions.includes(battedBallType) ? battedBallType : typeOptions[0] ?? baseBattedBallType;
-    setHitWizard((prev) => (prev ? { ...prev, result, step: 'type', type: nextType } : prev));
+    const zoneOptions = getZoneOptionsForResult(result);
+    const fielderOptions = getFielderOptionsForResult(result);
+    const nextType = isInfieldFlyResult(result)
+      ? baseBattedBallType
+      : typeOptions.includes(battedBallType)
+        ? battedBallType
+        : typeOptions[0] ?? baseBattedBallType;
+    const nextZone = zoneOptions.includes(battedBallZone) ? battedBallZone : zoneOptions[0] ?? defaultZoneOptions[0];
+    const nextFielder =
+      fielderOptions?.[0] ??
+      (isInfieldFlyResult(result) ? infieldFielderOptions[0] : isOutfieldFlyResult(result) ? outfieldFielderOptions[0] : '');
+    setHitWizard((prev) =>
+      prev
+        ? {
+            ...prev,
+            result,
+            step: 'type',
+            type: nextType,
+            zone: nextZone,
+            fielder: nextFielder,
+          }
+        : prev,
+    );
   };
 
   const handleSelectBattedBallType = (type: string) =>
@@ -1136,6 +1203,8 @@ export default function ScorekeeperPage() {
 
   const handleSelectBattedBallZone = (zone: string) =>
     setHitWizard((prev) => (prev ? { ...prev, zone } : prev));
+  const handleSelectFielder = (fielder: string) =>
+    setHitWizard((prev) => (prev ? { ...prev, fielder } : prev));
 
   const isHitResult = (result: BattedBallResultAction): result is HitResultAction =>
     ['single', 'single_infield', 'single_bunt', 'double', 'double_ground', 'triple', 'hr'].includes(
@@ -1148,6 +1217,9 @@ export default function ScorekeeperPage() {
       return;
     }
     const details = buildBattedBallDetailsFromValues(hitWizard.type, hitWizard.zone);
+    const fielderOptions = getFielderOptionsForResult(hitWizard.result);
+    const fielderNote =
+      fielderOptions && hitWizard.fielder && hitWizard.fielder !== fielderOptions[0] ? ` · 포구:${hitWizard.fielder}` : '';
     setBattedBallType(hitWizard.type);
     setBattedBallZone(hitWizard.zone);
     setHitWizard(null);
@@ -1187,10 +1259,13 @@ export default function ScorekeeperPage() {
         actions.triplePlay(details);
         break;
       case 'out_infield_fly':
-        actions.addOutWithMessage('내야 플라이 아웃', details);
+        actions.addOutWithMessage(`내야 플라이 아웃${fielderNote}`, details);
+        break;
+      case 'out_infield_fly_rule':
+        actions.addOutWithMessage(`인필드 플라이 선언${fielderNote}`, details);
         break;
       case 'out_outfield_fly':
-        actions.addOutWithMessage('외야 플라이 아웃', details);
+        actions.addOutWithMessage(`외야 플라이 아웃${fielderNote}`, details);
         break;
       case 'out_other':
         actions.addOutWithMessage('기타 아웃', details);
@@ -1905,6 +1980,7 @@ export default function ScorekeeperPage() {
           onSelectResult={handleSelectHitResult}
           onSelectType={handleSelectBattedBallType}
           onSelectZone={handleSelectBattedBallZone}
+          onSelectFielder={handleSelectFielder}
           onConfirm={handleConfirmHitWizard}
         />
       )}
@@ -2613,6 +2689,7 @@ function HitWizardModal({
   onSelectResult,
   onSelectType,
   onSelectZone,
+  onSelectFielder,
   onConfirm,
 }: {
   state: HitWizardState;
@@ -2622,6 +2699,7 @@ function HitWizardModal({
   onSelectResult: (result: BattedBallResultAction) => void;
   onSelectType: (type: string) => void;
   onSelectZone: (zone: string) => void;
+  onSelectFielder: (fielder: string) => void;
   onConfirm: () => void;
 }) {
   const steps: { key: HitWizardStep; label: string }[] = [
@@ -2631,7 +2709,11 @@ function HitWizardModal({
   ];
   const currentStepIndex = steps.findIndex((step) => step.key === state.step);
   const selectedResult = battedBallResultOptions.find((option) => option.value === state.result);
+  const zoneOptions = getZoneOptionsForResult(state.result);
   const selectionSummary = formatBattedBallDetails(buildBattedBallDetailsFromValues(state.type, state.zone));
+  const fielderOptions = getFielderOptionsForResult(state.result);
+  const fielderSummary =
+    fielderOptions && state.fielder && state.fielder !== fielderOptions[0] ? state.fielder : null;
   const isFinalStep = state.step === 'zone';
   const primaryDisabled = state.step === 'result' && !state.result;
 
@@ -2689,40 +2771,77 @@ function HitWizardModal({
       return (
         <div style={{ display: 'grid', gap: '10px' }}>
           <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '14px' }}>
-            {state.result === 'sac_bunt'
-              ? '희생번트 성격을 선택하세요.'
-              : state.result === 'sac_fly'
-                ? '희생플라이 성격을 선택하세요.'
-                : '타구 유형을 선택하세요.'}
+            {isInfieldFlyResult(state.result)
+              ? '포구한 내야수/투수를 선택하세요. (타구 유형 선택 없음)'
+              : state.result === 'sac_bunt'
+                ? '희생번트 성격을 선택하세요.'
+                : state.result === 'sac_fly'
+                  ? '희생플라이 성격을 선택하세요.'
+                  : '타구 유형을 선택하세요.'}
           </span>
           {state.result ? (
             <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
-                {options.map((option) => {
-                  const isSelected = state.type === option;
-                  return (
-                    <button
-                      key={option}
-                      type="button"
-                      onClick={() => onSelectType(option)}
-                      style={{
-                        padding: '10px',
-                        borderRadius: '10px',
-                        border: isSelected ? '1px solid rgba(59,130,246,0.6)' : '1px solid rgba(148,163,184,0.25)',
-                        background: isSelected ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.03)',
-                        color: '#e2e8f0',
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                        boxShadow: isSelected ? '0 0 0 1px rgba(59,130,246,0.35)' : 'none',
-                      }}
-                    >
-                      {option}
-                    </button>
-                  );
-                })}
-              </div>
+              {isInfieldFlyResult(state.result) ? null : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
+                  {options.map((option) => {
+                    const isSelected = state.type === option;
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => onSelectType(option)}
+                        style={{
+                          padding: '10px',
+                          borderRadius: '10px',
+                          border: isSelected ? '1px solid rgba(59,130,246,0.6)' : '1px solid rgba(148,163,184,0.25)',
+                          background: isSelected ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.03)',
+                          color: '#e2e8f0',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          boxShadow: isSelected ? '0 0 0 1px rgba(59,130,246,0.35)' : 'none',
+                        }}
+                      >
+                        {option}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {fielderOptions ? (
+                <div style={{ display: 'grid', gap: '6px' }}>
+                  <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '13px' }}>
+                    {isInfieldFlyResult(state.result) ? '포구한 내야수/투수 선택' : '포구한 외야수 선택'}
+                  </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
+                    {fielderOptions.map((option) => {
+                      const isSelected = state.fielder === option;
+                      return (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => onSelectFielder(option)}
+                          style={{
+                            padding: '10px',
+                            borderRadius: '10px',
+                            border: isSelected ? '1px solid rgba(239,68,68,0.6)' : '1px solid rgba(148,163,184,0.25)',
+                            background: isSelected ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.03)',
+                            color: '#e2e8f0',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            boxShadow: isSelected ? '0 0 0 1px rgba(239,68,68,0.35)' : 'none',
+                          }}
+                        >
+                          {option}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
               <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
-                결과에 맞는 유형만 노출됩니다. 필요 없으면 &quot;선택 안 함&quot;을 그대로 두세요.
+                {isInfieldFlyResult(state.result)
+                  ? '인필드 플라이는 포구자만 기록합니다.'
+                  : '결과에 맞는 유형만 노출됩니다. 필요 없으면 "선택 안 함"을 그대로 두세요.'}
               </span>
             </>
           ) : (
@@ -2736,7 +2855,7 @@ function HitWizardModal({
       <div style={{ display: 'grid', gap: '10px' }}>
         <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '14px' }}>타구가 향한 방향을 선택하세요.</span>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
-          {battedBallZoneOptions.map((option) => {
+          {zoneOptions.map((option) => {
             const isSelected = state.zone === option;
             return (
               <button
@@ -2851,6 +2970,7 @@ function HitWizardModal({
           <span style={{ fontWeight: 800, color: '#cbd5e1', fontSize: '13px' }}>선택 요약</span>
           <span style={{ color: '#e2e8f0', fontWeight: 900 }}>
             {selectedResult ? selectedResult.label : '결과 미선택'} · {selectionSummary}
+            {fielderSummary ? ` · 포구:${fielderSummary}` : ''}
           </span>
         </div>
 
