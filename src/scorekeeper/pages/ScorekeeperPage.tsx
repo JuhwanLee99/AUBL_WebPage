@@ -17,7 +17,6 @@ type Side = 'home' | 'away';
 const mainButtons = [
   { label: '볼', color: '#22c55e', action: 'ball' },
   { label: '스트라이크', color: '#22c55e', action: 'strike' },
-  { label: '파울', color: '#facc15', action: 'foul' },
   { label: '타격 입력', color: '#3b82f6', action: 'hitMenu' },
   { label: '실행 취소', color: '#94a3b8', action: 'undo' },
 ];
@@ -48,31 +47,45 @@ const battedBallResultOptions = [
   { label: '외야 플라이', color: '#ef4444', value: 'out_outfield_fly' as const, helper: '외야 플라이 아웃', group: 'out' as const },
   { label: '기타 아웃', color: '#ef4444', value: 'out_other' as const, helper: '상황 메모', group: 'out' as const },
   { label: '희생플라이', color: '#facc15', value: 'sac_fly' as const, helper: '타점·진루 기록', group: 'sac' as const },
+  { label: '희생번트', color: '#facc15', value: 'sac_bunt' as const, helper: '주자 진루 번트', group: 'sac' as const },
 ];
 
 const battedBallResultGroups: { key: 'count' | 'hit' | 'out' | 'sac'; label: string }[] = [
   { key: 'count', label: '파울/카운트' },
   { key: 'hit', label: '안타/출루' },
   { key: 'out', label: '인플레이 아웃' },
-  { key: 'sac', label: '희생플라이' },
+  { key: 'sac', label: '희생' },
 ];
 
-const battedBallTypeOptions = [
-  '선택 안 함',
-  '강한 땅볼',
-  '느린 땅볼',
-  '라인드라이브(내야)',
-  '라인드라이브(외야)',
-  '높은 뜬공',
-  '낮은 뜬공',
-  '내야 플라이',
-  '외야 플라이',
-  '번트(희생)',
-  '번트(안타)',
-  '팝업',
-  '기타',
+const baseBattedBallType = '선택 안 함';
+const hitContactTypeOptions = [
+  baseBattedBallType,
+  '내야 느린 땅볼',
+  '내야 강한 땅볼',
+  '내야 라인드라이브',
+  '외야 앞에 떨어짐',
+  '외야 직선타',
+  '외야 넘어감/장타',
+  '번트 안타',
 ];
-const battedBallZoneOptions = ['선택 안 함', '3루선상', '좌전', '좌중간', '중전', '우중간', '우전', '1루선상', '내야'];
+const sacFlyTypeOptions = [baseBattedBallType, '좌익수 희생플라이', '중견수 희생플라이', '우익수 희생플라이', '파울 플라이 희생'];
+const sacBuntTypeOptions = [baseBattedBallType, '스퀴즈 번트', '1루쪽 희생번트', '3루쪽 희생번트', '투수 앞 희생번트'];
+const groundOutTypeOptions = [baseBattedBallType, '느린 땅볼', '강한 땅볼', '바운드 조정 땅볼'];
+const flyOutTypeOptions = [baseBattedBallType, '얕은 플라이', '깊은 플라이', '팝업/인필드'];
+const lineOutTypeOptions = [baseBattedBallType, '직선타(내야)', '직선타(외야)'];
+const infieldFlyTypeOptions = [baseBattedBallType, '인필드 플라이'];
+const defaultTypeOptions = [baseBattedBallType];
+const battedBallZoneOptions = [
+  '선택 안 함',
+  '3루 라인/코너',
+  '좌익수 앞',
+  '좌중간 갭',
+  '중견수 정면',
+  '우중간 갭',
+  '우익수 앞',
+  '1루 라인/코너',
+  '내야 앞/번트',
+];
 const errorTypeOptions = ['포구', '송구', '포구 후 송구', '기타'];
 type HitResultAction = Extract<(typeof battedBallResultOptions)[number]['value'], 'single' | 'single_infield' | 'single_bunt' | 'double' | 'double_ground' | 'triple' | 'hr'>;
 type BattedBallResultAction = (typeof battedBallResultOptions)[number]['value'];
@@ -130,6 +143,20 @@ function buildBattedBallDetailsFromValues(type: string, zone: string): BattedBal
 
 function baseLabel(idx: number) {
   return idx === 0 ? '1루' : idx === 1 ? '2루' : idx === 2 ? '3루' : '홈';
+}
+
+function getTypeOptionsForResult(result: BattedBallResultAction | null) {
+  if (!result) return defaultTypeOptions;
+  if (['single', 'single_infield', 'single_bunt', 'double', 'double_ground', 'triple', 'hr'].includes(result)) {
+    return hitContactTypeOptions;
+  }
+  if (result === 'sac_fly') return sacFlyTypeOptions;
+  if (result === 'sac_bunt') return sacBuntTypeOptions;
+  if (['out_ground', 'out_dp2', 'out_tp3'].includes(result)) return groundOutTypeOptions;
+  if (['out_fly', 'out_outfield_fly'].includes(result)) return flyOutTypeOptions;
+  if (result === 'out_line') return lineOutTypeOptions;
+  if (result === 'out_infield_fly') return infieldFlyTypeOptions;
+  return defaultTypeOptions;
 }
 
 function defensePositionNumber(pos: string) {
@@ -981,7 +1008,7 @@ export default function ScorekeeperPage() {
   const [liveVideoUrlInput, setLiveVideoUrlInput] = useState(state.liveVideoUrl);
   const [hitAdvanceModal, setHitAdvanceModal] = useState<null | { bases: 1 | 2 | 3; selections: RunnerAdvanceSelections }>(null);
   const [showDroppedThirdStrike, setShowDroppedThirdStrike] = useState(false);
-  const [battedBallType, setBattedBallType] = useState(battedBallTypeOptions[0]);
+  const [battedBallType, setBattedBallType] = useState(baseBattedBallType);
   const [battedBallZone, setBattedBallZone] = useState(battedBallZoneOptions[0]);
   const recordPayload = useMemo(() => buildGameRecord(state), [state]);
   const [pendingExportId, setPendingExportId] = useState<string | null>(null);
@@ -1070,8 +1097,8 @@ export default function ScorekeeperPage() {
         : {
             step: 'result',
             result: null,
-            type: battedBallType,
-            zone: battedBallZone,
+            type: baseBattedBallType,
+            zone: battedBallZoneOptions[0],
           },
     );
   };
@@ -1099,7 +1126,9 @@ export default function ScorekeeperPage() {
       setHitWizard(null);
       return;
     }
-    setHitWizard((prev) => (prev ? { ...prev, result, step: 'type' } : prev));
+    const typeOptions = getTypeOptionsForResult(result);
+    const nextType = typeOptions.includes(battedBallType) ? battedBallType : typeOptions[0] ?? baseBattedBallType;
+    setHitWizard((prev) => (prev ? { ...prev, result, step: 'type', type: nextType } : prev));
   };
 
   const handleSelectBattedBallType = (type: string) =>
@@ -1138,6 +1167,9 @@ export default function ScorekeeperPage() {
     switch (hitWizard.result) {
       case 'sac_fly':
         actions.sacFly(details);
+        break;
+      case 'sac_bunt':
+        actions.sacBunt(details);
         break;
       case 'out_ground':
         actions.addOutWithMessage('땅볼 아웃', details);
@@ -1543,7 +1575,7 @@ export default function ScorekeeperPage() {
               })}
             </div>
             <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
-              타격 이후 결과(안타/아웃/희생/파울)는 &quot;타격 입력&quot; 버튼에서 한 번에 선택하세요.
+              타격 후 결과(안타·희생·아웃·파울)를 먼저 고르면, 상황에 맞는 세부 유형/방향 선택으로 이어집니다.
             </span>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
               {secondaryButtons.map((btn) => (
@@ -2653,36 +2685,49 @@ function HitWizardModal({
     }
 
     if (state.step === 'type') {
+      const options = getTypeOptionsForResult(state.result);
       return (
         <div style={{ display: 'grid', gap: '10px' }}>
-          <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '14px' }}>인플레이 타구 유형을 선택하세요.</span>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
-            {battedBallTypeOptions.map((option) => {
-              const isSelected = state.type === option;
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => onSelectType(option)}
-                  style={{
-                    padding: '10px',
-                    borderRadius: '10px',
-                    border: isSelected ? '1px solid rgba(59,130,246,0.6)' : '1px solid rgba(148,163,184,0.25)',
-                    background: isSelected ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.03)',
-                    color: '#e2e8f0',
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                    boxShadow: isSelected ? '0 0 0 1px rgba(59,130,246,0.35)' : 'none',
-                  }}
-                >
-                  {option}
-                </button>
-              );
-            })}
-          </div>
-          <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
-            파울을 제외한 결과에만 필요한 선택이며, &quot;선택 안 함&quot;도 가능.
+          <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '14px' }}>
+            {state.result === 'sac_bunt'
+              ? '희생번트 성격을 선택하세요.'
+              : state.result === 'sac_fly'
+                ? '희생플라이 성격을 선택하세요.'
+                : '타구 유형을 선택하세요.'}
           </span>
+          {state.result ? (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
+                {options.map((option) => {
+                  const isSelected = state.type === option;
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => onSelectType(option)}
+                      style={{
+                        padding: '10px',
+                        borderRadius: '10px',
+                        border: isSelected ? '1px solid rgba(59,130,246,0.6)' : '1px solid rgba(148,163,184,0.25)',
+                        background: isSelected ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.03)',
+                        color: '#e2e8f0',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        boxShadow: isSelected ? '0 0 0 1px rgba(59,130,246,0.35)' : 'none',
+                      }}
+                    >
+                      {option}
+                    </button>
+                  );
+                })}
+              </div>
+              <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
+                결과에 맞는 유형만 노출됩니다. 필요 없으면 &quot;선택 안 함&quot;을 그대로 두세요.
+              </span>
+            </>
+          ) : (
+            <div style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>먼저 결과를 선택해 주세요.</div>
+          )}
         </div>
       );
     }

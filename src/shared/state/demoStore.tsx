@@ -119,7 +119,7 @@ type Action =
   | { type: 'hit'; bases: 1 | 2 | 3 | 4; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null }
   | { type: 'walk' }
   | { type: 'hbp' }
-  | { type: 'sac'; battedBall?: BattedBallDetails | null }
+  | { type: 'sac'; battedBall?: BattedBallDetails | null; sacType?: 'fly' | 'bunt' }
   | { type: 'error'; details: ErrorDetails }
   | { type: 'stealSuccess' }
   | { type: 'stealFail' }
@@ -701,7 +701,7 @@ function reducer(state: DemoState, action: Action): DemoState {
       nextState = applyWalk(state, '몸에 맞는 공', state.pitchCount + 1);
       break;
     case 'sac':
-      nextState = applySacrifice(state, state.pitchCount + 1, action.battedBall);
+      nextState = applySacrifice(state, state.pitchCount + 1, action.battedBall, action.sacType ?? 'fly');
       break;
       case 'error':
       nextState = applyError(state, action.details);
@@ -1292,7 +1292,37 @@ function applyDroppedThirdStrike(state: DemoState): DemoState {
   };
 }
 
-function applySacrifice(state: DemoState, pitchNumber: number, battedBall?: BattedBallDetails | null): DemoState {
+function applySacrifice(
+  state: DemoState,
+  pitchNumber: number,
+  battedBall?: BattedBallDetails | null,
+  sacType: 'fly' | 'bunt' = 'fly',
+): DemoState {
+  if (sacType === 'bunt') {
+    const bases = [null, null, null] as Bases;
+    let runs = 0;
+    for (let i = 2; i >= 0; i -= 1) {
+      const runner = state.bases[i];
+      if (!runner) continue;
+      if (i === 2) {
+        runs += 1;
+        continue;
+      }
+      const placed = placeRunnerOnBases(bases, runner, i + 1);
+      if (placed.scored) runs += 1;
+    }
+    const side = hittingSide(state);
+    const score =
+      side === 'home'
+        ? { ...state.score, home: state.score.home + runs }
+        : { ...state.score, away: state.score.away + runs };
+    return applyOut(
+      { ...state, bases, score },
+      runs ? `희생번트 · ${runs}득점` : '희생번트',
+      { pitchNumber, eventType: 'sac', runners: getRunnerNames(bases), notes: '희생번트', battedBall },
+    );
+  }
+
   const bases = [...state.bases] as Bases;
   let runs = 0;
   if (bases[2]) {
@@ -1304,12 +1334,11 @@ function applySacrifice(state: DemoState, pitchNumber: number, battedBall?: Batt
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
-  const newState = applyOut(
+  return applyOut(
     { ...state, bases, score },
     runs ? `희생플라이 · ${runs}득점` : '희생플라이',
-    { pitchNumber, eventType: 'sac', runners: getRunnerNames(state.bases), notes: '희생플라이', battedBall },
+    { pitchNumber, eventType: 'sac', runners: getRunnerNames(bases), notes: '희생플라이', battedBall },
   );
-  return newState;
 }
 
 function applyError(state: DemoState, details: ErrorDetails): DemoState {
@@ -1915,6 +1944,7 @@ interface DemoStoreValue {
     walk: () => void;
     hbp: () => void;
     sacFly: (battedBall?: BattedBallDetails | null) => void;
+    sacBunt: (battedBall?: BattedBallDetails | null) => void;
     recordError: (details: ErrorDetails) => void;
     stealSuccess: () => void;
     stealFail: () => void;
@@ -2013,7 +2043,8 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       homeRun: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'hit', bases: 4, battedBall }),
       walk: () => dispatch({ type: 'walk' }),
       hbp: () => dispatch({ type: 'hbp' }),
-      sacFly: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'sac', battedBall }),
+      sacFly: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'sac', battedBall, sacType: 'fly' }),
+      sacBunt: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'sac', battedBall, sacType: 'bunt' }),
       recordError: (details: ErrorDetails) => dispatch({ type: 'error', details }),
       stealSuccess: () => dispatch({ type: 'stealSuccess' }),
       stealFail: () => dispatch({ type: 'stealFail' }),
