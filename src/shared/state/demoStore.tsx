@@ -111,6 +111,7 @@ type Action =
   | { type: 'strike' }
   | { type: 'foul' }
   | { type: 'strikeOut' }
+  | { type: 'droppedThirdStrike' }
   | { type: 'out'; battedBall?: BattedBallDetails | null }
   | { type: 'outWithMessage'; note: string; battedBall?: BattedBallDetails | null }
   | { type: 'doublePlay'; battedBall?: BattedBallDetails | null }
@@ -675,6 +676,9 @@ function reducer(state: DemoState, action: Action): DemoState {
     case 'strikeOut':
       nextState = applyOut(state, '삼진', { pitchNumber: state.pitchCount + 1 });
       break;
+    case 'droppedThirdStrike':
+      nextState = applyDroppedThirdStrike(state);
+      break;
     case 'out':
       nextState = applyOut(state, '아웃', { pitchNumber: state.pitchCount + 1, battedBall: action.battedBall });
       break;
@@ -1236,6 +1240,39 @@ function applyWalk(state: DemoState, message: string, pitchNumber: number): Demo
     state,
     {
       type: message === '몸에 맞는 공' ? 'hbp' : 'walk',
+      runners: getRunnerNames(state.bases),
+      notes: `${message} · ${batterName}`,
+    },
+    pitchNumber,
+  );
+  return {
+    ...state,
+    bases,
+    score,
+    balls: 0,
+    strikes: 0,
+    pitchCount: 0,
+    batterIndex,
+    lastPlay: `${message} · ${batterName}`,
+    feed: pushPlayFeed(state, createLogEntry(state, runs ? `${message} · ${runs}득점` : message, pitchNumber)),
+    events: pushEvent(state.events, eventEntry),
+  };
+}
+
+function applyDroppedThirdStrike(state: DemoState): DemoState {
+  const pitchNumber = Math.max(1, state.pitchCount + 1);
+  const { batterName, batterIndex } = nextBatter(state);
+  const { bases, runs } = advanceBasesOnWalk(state.bases, batterName);
+  const side = hittingSide(state);
+  const score =
+    side === 'home'
+      ? { ...state.score, home: state.score.home + runs }
+      : { ...state.score, away: state.score.away + runs };
+  const message = '삼진 낫아웃';
+  const eventEntry = createPlayEvent(
+    state,
+    {
+      type: 'dropped_third_strike',
       runners: getRunnerNames(state.bases),
       notes: `${message} · ${batterName}`,
     },
@@ -1869,6 +1906,7 @@ interface DemoStoreValue {
     addStrike: () => void;
     addFoul: () => void;
     strikeOut: () => void;
+    droppedThirdStrike: () => void;
     addOut: (battedBall?: BattedBallDetails | null) => void;
     hitSingle: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) => void;
     hitDouble: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) => void;
@@ -1964,6 +2002,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       addStrike: () => dispatch({ type: 'strike' }),
       addFoul: () => dispatch({ type: 'foul' }),
       strikeOut: () => dispatch({ type: 'strikeOut' }),
+      droppedThirdStrike: () => dispatch({ type: 'droppedThirdStrike' }),
       addOut: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'out', battedBall }),
       hitSingle: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) =>
         dispatch({ type: 'hit', bases: 1, advances, battedBall }),

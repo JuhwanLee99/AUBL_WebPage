@@ -19,7 +19,6 @@ const mainButtons = [
   { label: '스트라이크', color: '#22c55e', action: 'strike' },
   { label: '파울', color: '#facc15', action: 'foul' },
   { label: '타격', color: '#3b82f6', action: 'hitMenu' },
-  { label: '삼진', color: '#ef4444', action: 'strikeOut' },
   { label: '실행 취소', color: '#94a3b8', action: 'undo' },
 ];
 
@@ -601,6 +600,7 @@ function classifyResult(result: string) {
   if (normalized.includes('볼넷')) return 'bb' as const;
   if (normalized.includes('몸에맞는공')) return 'hbp' as const;
   if (normalized.includes('희생플라이')) return 'sac' as const;
+  if (normalized.includes('낫아웃')) return 'so_reach' as const;
   if (normalized.includes('삼진')) return 'so' as const;
   if (normalized.includes('아웃') && !normalized.includes('도루')) return 'out' as const;
   return null;
@@ -848,6 +848,15 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
           pitcherStat.so += 1;
         }
         break;
+      case 'so_reach':
+        stat.pa += 1;
+        stat.ab += 1;
+        stat.so += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.so += 1;
+        }
+        break;
       case 'out':
         stat.pa += 1;
         stat.ab += 1;
@@ -967,6 +976,7 @@ export default function ScorekeeperPage() {
   const [manualBroadcast, setManualBroadcast] = useState('');
   const [liveVideoUrlInput, setLiveVideoUrlInput] = useState(state.liveVideoUrl);
   const [hitAdvanceModal, setHitAdvanceModal] = useState<null | { bases: 1 | 2 | 3; selections: RunnerAdvanceSelections }>(null);
+  const [showDroppedThirdStrike, setShowDroppedThirdStrike] = useState(false);
   const [battedBallType, setBattedBallType] = useState(battedBallTypeOptions[0]);
   const [battedBallZone, setBattedBallZone] = useState(battedBallZoneOptions[0]);
   const recordPayload = useMemo(() => buildGameRecord(state), [state]);
@@ -1135,6 +1145,13 @@ export default function ScorekeeperPage() {
       return;
     }
 
+    if (action === 'strike' && state.strikes >= 2) {
+      setShowDroppedThirdStrike(true);
+      setHitWizard(null);
+      setShowOutOptions(false);
+      return;
+    }
+
     switch (action) {
       case 'ball':
         actions.addBall();
@@ -1162,9 +1179,6 @@ export default function ScorekeeperPage() {
         break;
       case 'hbp':
         actions.hbp();
-        break;
-      case 'strikeOut':
-        actions.strikeOut();
         break;
       case 'out_ground':
         actions.addOutWithMessage('땅볼 아웃', battedBallDetails);
@@ -1243,6 +1257,15 @@ export default function ScorekeeperPage() {
     setShowOutOptions(false);
     setActionModal(null);
     actions.startGame();
+  };
+
+  const handleDroppedThirdStrike = (isDropped: boolean) => {
+    setShowDroppedThirdStrike(false);
+    if (isDropped) {
+      actions.droppedThirdStrike();
+    } else {
+      actions.strikeOut();
+    }
   };
 
   const handleEndGame = () => {
@@ -1865,6 +1888,13 @@ export default function ScorekeeperPage() {
           onConfirm={handleConfirmHitAdvance}
         />
       )}
+      {showDroppedThirdStrike && (
+        <DroppedThirdStrikeModal
+          batterName={currentBatter}
+          onClose={() => setShowDroppedThirdStrike(false)}
+          onSelect={(isDropped) => handleDroppedThirdStrike(isDropped)}
+        />
+      )}
     </div>
   );
 }
@@ -2431,6 +2461,103 @@ function HitAdvanceModal({
             }}
           >
             적용하기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DroppedThirdStrikeModal({
+  batterName,
+  onClose,
+  onSelect,
+}: {
+  batterName: string;
+  onClose: () => void;
+  onSelect: (isDropped: boolean) => void;
+}) {
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'grid',
+        placeItems: 'center',
+        zIndex: 1000,
+        padding: '20px',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 'min(480px, 100%)',
+          background: '#0f172a',
+          borderRadius: '16px',
+          border: '1px solid rgba(148, 163, 184, 0.25)',
+          padding: '18px',
+          display: 'grid',
+          gap: '14px',
+          color: '#e2e8f0',
+          boxShadow: '0 24px 60px rgba(0,0,0,0.4)',
+        }}
+      >
+        <div style={{ display: 'grid', gap: '4px' }}>
+          <span style={{ fontWeight: 900 }}>삼진 처리</span>
+          <span style={{ color: '#94a3b8', fontWeight: 700 }}>
+            {batterName} · 낫아웃 여부를 선택하세요.
+          </span>
+        </div>
+        <div style={{ display: 'grid', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={() => onSelect(false)}
+            style={{
+              width: '100%',
+              borderRadius: '12px',
+              border: '1px solid rgba(239,68,68,0.5)',
+              background: 'rgba(239,68,68,0.15)',
+              color: '#fecaca',
+              fontWeight: 800,
+              padding: '10px 12px',
+              cursor: 'pointer',
+            }}
+          >
+            삼진 아웃
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelect(true)}
+            style={{
+              width: '100%',
+              borderRadius: '12px',
+              border: '1px solid rgba(59,130,246,0.5)',
+              background: 'rgba(59,130,246,0.15)',
+              color: '#bfdbfe',
+              fontWeight: 800,
+              padding: '10px 12px',
+              cursor: 'pointer',
+            }}
+          >
+            낫아웃 출루
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              width: '100%',
+              borderRadius: '12px',
+              border: '1px solid rgba(148,163,184,0.5)',
+              background: 'transparent',
+              color: '#e2e8f0',
+              fontWeight: 700,
+              padding: '8px 12px',
+              cursor: 'pointer',
+            }}
+          >
+            취소
           </button>
         </div>
       </div>

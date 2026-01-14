@@ -455,6 +455,7 @@ function classifyResult(result: string) {
   if (normalized.includes('볼넷')) return 'bb' as const;
   if (normalized.includes('몸에맞는공')) return 'hbp' as const;
   if (normalized.includes('희생플라이')) return 'sac' as const;
+  if (normalized.includes('낫아웃')) return 'so_reach' as const;
   if (normalized.includes('삼진')) return 'so' as const;
   if (normalized.includes('아웃') && !normalized.includes('도루')) return 'out' as const;
   return null;
@@ -492,7 +493,7 @@ function computeBatterLine(feed: ReturnType<typeof useDemoStore>['state']['feed'
     if (entry.batter !== batter) return;
     const kind = classifyResult(entry.result);
     if (!kind) return;
-    if (['single', 'double', 'triple', 'hr', 'bb', 'hbp', 'so', 'out', 'sac'].includes(kind)) {
+    if (['single', 'double', 'triple', 'hr', 'bb', 'hbp', 'so', 'so_reach', 'out', 'sac'].includes(kind)) {
       base.pa += 1;
     }
     switch (kind) {
@@ -522,6 +523,10 @@ function computeBatterLine(feed: ReturnType<typeof useDemoStore>['state']['feed'
         base.hbp += 1;
         break;
       case 'so':
+        base.ab += 1;
+        base.so += 1;
+        break;
+      case 'so_reach':
         base.ab += 1;
         base.so += 1;
         break;
@@ -1065,6 +1070,15 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
         if (pitcherStat) {
           pitcherStat.bf += 1;
           pitcherStat.outs += 1;
+          pitcherStat.so += 1;
+        }
+        break;
+      case 'so_reach':
+        stat.pa += 1;
+        stat.ab += 1;
+        stat.so += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
           pitcherStat.so += 1;
         }
         break;
