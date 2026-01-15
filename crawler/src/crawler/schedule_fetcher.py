@@ -18,6 +18,7 @@ FINAL_STATUSES = {"final", "finalized", "finished", "f"}
 class GameSummary:
     game_idx: int
     status: str
+    group_code: str | None
 
 
 def _extract_games(payload: Any) -> Iterable[dict[str, Any]]:
@@ -61,7 +62,13 @@ def fetch_schedule_games(client: ApiClient, settings: Settings, year: int) -> li
             if not game_idx or not status:
                 continue
             if _is_final_status(str(status)):
-                games.append(GameSummary(game_idx=int(game_idx), status=str(status)))
+                games.append(
+                    GameSummary(
+                        game_idx=int(game_idx),
+                        status=str(status),
+                        group_code=group_code,
+                    )
+                )
                 group_games += 1
         logger.info(
             json.dumps(

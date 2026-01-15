@@ -12,6 +12,9 @@ dependencies = [
   "python-dotenv>=1.0.1",
 ]
 
+[project.scripts]
+crawler-sync = "crawler.cli:main"
+
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
