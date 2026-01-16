@@ -22,9 +22,91 @@ Copy the example environment file and fill in values:
 cp config/.env.example config/.env
 ```
 
-The crawler expects PostgreSQL connection info and rate limit settings defined in `.env`.
+Fill in the Gameone API settings and rate limits in `config/.env`:
+
+```bash
+CRAWLER_BASE_URL=https://<gameone-base-url>
+SCHEDULE_LIST_ENDPOINT=/schedule/list
+BOXSCORE_ENDPOINT=/game/boxscore
+LIG_IDX=972
+GROUP_CODES= # 필요 시 쉼표로 구분된 group_code 입력
+REQUESTS_PER_MINUTE=60
+REQUEST_TIMEOUT_SECONDS=10
+REQUEST_SLEEP_SECONDS=0
+CRAWLER_USER_AGENT=AUBL-Crawler/1.0
+```
+
+The crawler also requires a PostgreSQL connection string via `DATABASE_URL` (or
+`CRAWLER_DATABASE_URL`). For example:
+
+```bash
+export DATABASE_URL=postgresql://postgres:aubl@localhost:5432/aubl
+```
+
+If you need a quick local database with Docker:
+
+```bash
+docker run --name aubl-postgres -e POSTGRES_PASSWORD=aubl -e POSTGRES_DB=aubl \
+  -p 5432:5432 -d postgres:15
+```
 
 ## Usage
+
+Run the crawler for a specific year range:
+
+```bash
+python -m crawler.cli --from-year 2024 --to-year 2024
+```
+
+Limit collection to specific group codes (repeatable):
+
+```bash
+python -m crawler.cli --from-year 2024 --to-year 2024 --group-code A --group-code B
+```
+
+## CSV quick checks (DB export)
+
+The crawler currently stores to PostgreSQL only. For a quick local check, export
+tables to CSV using `psql`:
+
+```bash
+psql "$DATABASE_URL" -c "\\copy matches TO 'matches.csv' CSV HEADER"
+psql "$DATABASE_URL" -c "\\copy teams TO 'teams.csv' CSV HEADER"
+psql "$DATABASE_URL" -c "\\copy players TO 'players.csv' CSV HEADER"
+psql "$DATABASE_URL" -c "\\copy batting_stats TO 'batting_stats.csv' CSV HEADER"
+psql "$DATABASE_URL" -c "\\copy pitching_stats TO 'pitching_stats.csv' CSV HEADER"
+```
+
+## DB 없이 동작 확인하기 (API 응답 JSON 저장)
+
+현재 CLI(`crawler.cli`)는 DB 연결이 필수입니다. DB 없이 동작 여부와 결과 포맷을
+빠르게 확인하려면 아래처럼 파이썬 스크립트로 스케줄/박스스코어를 가져와
+JSON 파일로 저장할 수 있습니다.
+
+```bash
+python - <<'PY'
+from crawler.api_client import ApiClient
+from crawler.boxscore_fetcher import fetch_boxscore
+from crawler.schedule_fetcher import fetch_schedule_games
+from crawler.settings import load_settings
+
+settings = load_settings()
+client = ApiClient(settings)
+try:
+    games = fetch_schedule_games(client, settings, 2024)
+    print(f"fetched schedule games: {len(games)}")
+    if games:
+        sample = games[0]
+        payload = fetch_boxscore(client, settings, sample.game_idx)
+        with open("boxscore_sample.json", "w", encoding="utf-8") as f:
+            f.write(__import__("json").dumps(payload, ensure_ascii=False, indent=2))
+        print(f"saved sample boxscore: game_idx={sample.game_idx}")
+finally:
+    client.close()
+PY
+```
+
+생성된 `boxscore_sample.json` 파일로 결과 구조를 확인할 수 있습니다.
 
 Import the package from `crawler/src` once you add crawler modules:
 
