@@ -115,3 +115,11 @@ from crawler import settings
 ```
 
 You can extend `crawler/src/crawler` with additional modules as needed.
+
+### CSV 출력 모드
+
+DB 대신 CSV 파일로 저장하려면 `--output-csv` 옵션을 사용하세요:
+
+```bash
+python -m crawler.cli --from-year 2024 --to-year 2024 --output-csv ./out
+```
