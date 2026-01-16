@@ -13,6 +13,7 @@ from crawler.boxscore_fetcher import fetch_boxscore
 from crawler.schedule_fetcher import GameSummary, fetch_schedule_games
 from crawler.settings import Settings, load_settings
 from crawler.storage import Storage
+from crawler.storage_csv import CsvStorage
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,10 @@ def _build_parser() -> argparse.ArgumentParser:
         action="append",
         default=None,
         help="Override group codes to sync (can be specified multiple times).",
+    )
+    parser.add_argument(
+        "--output-csv",
+        help="Directory to write CSV output instead of using the database.",
     )
     return parser
 
@@ -64,13 +69,16 @@ def run_sync() -> None:
     settings = load_settings()
     group_codes = _resolve_group_codes(settings, args)
     sync_settings = replace(settings, group_codes=group_codes)
-    database_url = os.getenv("DATABASE_URL") or os.getenv("CRAWLER_DATABASE_URL", "")
-    if not database_url:
-        raise ValueError("DATABASE_URL or CRAWLER_DATABASE_URL must be set")
 
     start_year, end_year = _resolve_years(args)
 
-    storage = Storage(database_url)
+    if args.output_csv:
+        storage = CsvStorage(args.output_csv)
+    else:
+        database_url = os.getenv("DATABASE_URL") or os.getenv("CRAWLER_DATABASE_URL", "")
+        if not database_url:
+            raise ValueError("DATABASE_URL or CRAWLER_DATABASE_URL must be set")
+        storage = Storage(database_url)
     storage.create_tables()
     client = ApiClient(sync_settings)
 
