@@ -46,6 +46,74 @@ npm run dev
 
 브라우저에서 http://localhost:5173 (포트는 변경될 수 있음)으로 접속하여 확인합니다.
 
+## 🧭 크롤러(Gameone) 세팅 및 실행
+
+크롤러는 `crawler/` 디렉토리의 독립 패키지로 관리됩니다. 현재 구현은 **DB 저장소(PostgreSQL) 필수**이며, `DATABASE_URL`(또는 `CRAWLER_DATABASE_URL`)이 없으면 실행되지 않습니다.
+
+### 1) 파이썬 가상환경 및 의존성 설치
+
+```bash
+cd crawler
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+### 2) 환경변수 준비
+
+```bash
+cp config/.env.example config/.env
+```
+
+`config/.env` 파일에 Gameone API 설정을 채워 주세요.
+
+```bash
+CRAWLER_BASE_URL=https://<gameone-base-url>
+SCHEDULE_LIST_ENDPOINT=/schedule/list
+BOXSCORE_ENDPOINT=/game/boxscore
+LIG_IDX=972
+GROUP_CODES= # 필요 시 쉼표로 구분된 group_code 입력
+```
+
+### 3) 로컬 DB 준비 및 연결 문자열 설정
+
+PostgreSQL이 필요합니다. 로컬에 준비되어 있지 않다면 Docker로 임시 실행할 수 있습니다.
+
+```bash
+docker run --name aubl-postgres -e POSTGRES_PASSWORD=aubl -e POSTGRES_DB=aubl \
+  -p 5432:5432 -d postgres:15
+```
+
+DB 연결 문자열을 환경변수로 설정합니다.
+
+```bash
+export DATABASE_URL=postgresql://postgres:aubl@localhost:5432/aubl
+```
+
+### 4) 크롤러 실행
+
+```bash
+python -m crawler.cli --from-year 2024 --to-year 2024
+```
+
+필요하면 그룹 코드만 수집하도록 `--group-code` 옵션을 여러 번 사용할 수 있습니다.
+
+```bash
+python -m crawler.cli --from-year 2024 --to-year 2024 --group-code A --group-code B
+```
+
+### 5) CSV로 임시 확인하기 (DB에서 추출)
+
+현재 코드는 DB 저장만 지원합니다. 로컬에서 빠르게 확인하려면 PostgreSQL에서 CSV로 내보낼 수 있습니다.
+
+```bash
+psql "$DATABASE_URL" -c "\\copy matches TO 'matches.csv' CSV HEADER"
+psql "$DATABASE_URL" -c "\\copy teams TO 'teams.csv' CSV HEADER"
+psql "$DATABASE_URL" -c "\\copy players TO 'players.csv' CSV HEADER"
+psql "$DATABASE_URL" -c "\\copy batting_stats TO 'batting_stats.csv' CSV HEADER"
+psql "$DATABASE_URL" -c "\\copy pitching_stats TO 'pitching_stats.csv' CSV HEADER"
+```
+
 ## 📂 페이지 구성
 
 /: 랜딩 페이지 (리그 뉴스, 공지)
