@@ -77,6 +77,37 @@ psql "$DATABASE_URL" -c "\\copy batting_stats TO 'batting_stats.csv' CSV HEADER"
 psql "$DATABASE_URL" -c "\\copy pitching_stats TO 'pitching_stats.csv' CSV HEADER"
 ```
 
+## DB 없이 동작 확인하기 (API 응답 JSON 저장)
+
+현재 CLI(`crawler.cli`)는 DB 연결이 필수입니다. DB 없이 동작 여부와 결과 포맷을
+빠르게 확인하려면 아래처럼 파이썬 스크립트로 스케줄/박스스코어를 가져와
+JSON 파일로 저장할 수 있습니다.
+
+```bash
+python - <<'PY'
+from crawler.api_client import ApiClient
+from crawler.boxscore_fetcher import fetch_boxscore
+from crawler.schedule_fetcher import fetch_schedule_games
+from crawler.settings import load_settings
+
+settings = load_settings()
+client = ApiClient(settings)
+try:
+    games = fetch_schedule_games(client, settings, 2024)
+    print(f"fetched schedule games: {len(games)}")
+    if games:
+        sample = games[0]
+        payload = fetch_boxscore(client, settings, sample.game_idx)
+        with open("boxscore_sample.json", "w", encoding="utf-8") as f:
+            f.write(__import__("json").dumps(payload, ensure_ascii=False, indent=2))
+        print(f"saved sample boxscore: game_idx={sample.game_idx}")
+finally:
+    client.close()
+PY
+```
+
+생성된 `boxscore_sample.json` 파일로 결과 구조를 확인할 수 있습니다.
+
 Import the package from `crawler/src` once you add crawler modules:
 
 ```python
