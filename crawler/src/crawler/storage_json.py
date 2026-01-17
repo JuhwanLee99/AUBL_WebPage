@@ -6,7 +6,7 @@ import logging
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from crawler.schedule_fetcher import FINAL_STATUSES, GameSummary
 from crawler.storage import (
@@ -14,7 +14,9 @@ from crawler.storage import (
     MatchPayload,
     PitchingEntry,
     PlayerInfo,
+    RosterEntry,
     TeamInfo,
+    _apply_team_registry,
     _extract_match_payload,
     _team_id_for_side,
     validate_match_integrity,
@@ -26,6 +28,7 @@ logger = logging.getLogger(__name__)
 class JsonStorage:
     def __init__(self, output_dir: str | Path) -> None:
         self._output_dir = Path(output_dir)
+        self._team_registry: dict[str, int] = {}
         self._paths = {
             "matches": self._output_dir / "matches.jsonl",
             "teams": self._output_dir / "teams.jsonl",
@@ -34,12 +37,39 @@ class JsonStorage:
             "pitching_stats": self._output_dir / "pitching_stats.jsonl",
             "crawl_state": self._output_dir / "crawl_state.jsonl",
             "web_pages": self._output_dir / "web_pages.jsonl",
+            "league_batting_records": self._output_dir / "league_batting_records.jsonl",
+            "league_pitching_records": self._output_dir / "league_pitching_records.jsonl",
         }
 
     def create_tables(self) -> None:
         self._output_dir.mkdir(parents=True, exist_ok=True)
         for path in self._paths.values():
             path.touch(exist_ok=True)
+
+    def set_team_registry(self, registry: dict[str, int]) -> None:
+        self._team_registry = registry
+
+    def store_roster(self, entries: Iterable[RosterEntry]) -> None:
+        for entry in entries:
+            self._append_team(entry.team)
+            for player in entry.players:
+                self._append_player(player, entry.team.team_idx)
+
+    def store_league_records(
+        self,
+        year: int | None,
+        batting_payload: dict[str, Any],
+        pitching_payload: dict[str, Any],
+    ) -> None:
+        fetched_at = datetime.now(timezone.utc).isoformat()
+        self._append(
+            "league_batting_records",
+            {"year": year, "payload": batting_payload, "fetched_at": fetched_at},
+        )
+        self._append(
+            "league_pitching_records",
+            {"year": year, "payload": pitching_payload, "fetched_at": fetched_at},
+        )
 
     def get_existing_game_idx(self, year: int, group_code: str | None) -> set[int]:
         path = self._paths["matches"]
@@ -123,6 +153,7 @@ class JsonStorage:
 
     def store_boxscore(self, game: GameSummary, year: int, payload: dict[str, Any]) -> None:
         match_data = _extract_match_payload(payload, game)
+        match_data = _apply_team_registry(match_data, self._team_registry)
         errors = validate_match_integrity(match_data)
         if errors:
             logger.error(
@@ -138,9 +169,6 @@ class JsonStorage:
             return
 
         self._append_match(game, year, payload, match_data)
-        self._append_team(match_data.home_team)
-        self._append_team(match_data.away_team)
-        self._append_players(match_data)
         self._append_batting(game, match_data)
         self._append_pitching(game, match_data)
 
