@@ -68,11 +68,25 @@ cp config/.env.example config/.env
 `config/.env` 파일에 Gameone API 설정을 채워 주세요.
 
 ```bash
+CRAWLER_DATA_SOURCE=api
 CRAWLER_BASE_URL=https://<gameone-base-url>
+CRAWLER_WEB_BASE_URL=
 SCHEDULE_LIST_ENDPOINT=/schedule/list
 BOXSCORE_ENDPOINT=/game/boxscore
+SCHEDULE_PAGE_PATH=/schedule
+BOXSCORE_PAGE_PATH=/game/boxscore
+HTML_JSON_SCRIPT_ID=
 LIG_IDX=972
 GROUP_CODES= # 필요 시 쉼표로 구분된 group_code 입력
+```
+
+`CRAWLER_DATA_SOURCE`는 `api` 또는 `web`을 지정할 수 있습니다. `web` 모드에서는
+`CRAWLER_WEB_BASE_URL`(없으면 `CRAWLER_BASE_URL` fallback)에서 HTML을 받아 JSON을 파싱합니다.
+
+`config/.env`를 다른 위치에서 읽으려면 `CRAWLER_ENV_FILE`을 설정하세요:
+
+```bash
+CRAWLER_ENV_FILE=./crawler/config/.env
 ```
 
 ### 3) 로컬 DB 준비 및 연결 문자열 설정
@@ -96,6 +110,18 @@ export DATABASE_URL=postgresql://postgres:aubl@localhost:5432/aubl
 python -m crawler.cli --from-year 2024 --to-year 2024
 ```
 
+DB 없이 JSONL 파일로 저장하려면:
+
+```bash
+python -m crawler.cli --from-year 2024 --to-year 2024 --output-json ./out
+```
+
+HTML 페이지 스크래핑 모드로 실행하려면:
+
+```bash
+python -m crawler.cli --from-year 2024 --to-year 2024 --data-source web
+```
+
 필요하면 그룹 코드만 수집하도록 `--group-code` 옵션을 여러 번 사용할 수 있습니다.
 
 ```bash
@@ -104,7 +130,8 @@ python -m crawler.cli --from-year 2024 --to-year 2024 --group-code A --group-cod
 
 ### 5) CSV로 임시 확인하기 (DB에서 추출)
 
-현재 코드는 DB 저장만 지원합니다. 로컬에서 빠르게 확인하려면 PostgreSQL에서 CSV로 내보낼 수 있습니다.
+기본 저장소는 DB이지만 `--output-json` 또는 `--output-csv`로 로컬 파일 출력도 가능합니다. DB에서
+빠르게 확인하려면 PostgreSQL에서 CSV로 내보낼 수 있습니다.
 
 ```bash
 psql "$DATABASE_URL" -c "\\copy matches TO 'matches.csv' CSV HEADER"
