@@ -35,6 +35,7 @@ class JsonStorage:
             "matches": self._output_dir / "matches.jsonl",
             "teams": self._output_dir / "teams.jsonl",
             "players": self._output_dir / "players.jsonl",
+            "roster_players": self._output_dir / "roster_players.jsonl",
             "batting_stats": self._output_dir / "batting_stats.jsonl",
             "pitching_stats": self._output_dir / "pitching_stats.jsonl",
             "crawl_state": self._output_dir / "crawl_state.jsonl",
@@ -65,7 +66,7 @@ class JsonStorage:
                 if player_key in self._seen_player_keys:
                     continue
                 self._seen_player_keys.add(player_key)
-                self._append_player(player, entry.team.team_idx)
+                self._append("roster_players", {"team_idx": entry.team.team_idx, **asdict(player)})
 
     def store_league_records(
         self,
@@ -181,6 +182,7 @@ class JsonStorage:
             return
 
         self._append_match(game, year, payload, match_data)
+        self._append_players(match_data)
         self._append_batting(game, match_data)
         self._append_pitching(game, match_data)
 
