@@ -63,6 +63,8 @@ def fetch_boxscore(
             payload = parse_html_json(response.text, settings.html_json_script_id)
         except (ValueError, json.JSONDecodeError):
             payload = _parse_boxscore_html(response.text)
+        else:
+            payload = _merge_boxscore_payload(payload, response.text)
     else:
         response = client.request(
             "GET",
@@ -154,6 +156,35 @@ def _resolve_result_winner(results: dict[str, str]) -> str | None:
         if "패" in result:
             continue
     return None
+
+
+def _merge_boxscore_payload(payload: Any, html_text: str) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return _parse_boxscore_html(html_text)
+    if not _has_team_payload(payload):
+        return _parse_boxscore_html(html_text)
+    parsed = _parse_boxscore_html(html_text)
+    for key in ("batting_stats", "pitching_stats"):
+        if key not in payload and key in parsed:
+            payload[key] = parsed[key]
+    for team_key in ("home", "away"):
+        if team_key not in payload or not isinstance(payload.get(team_key), dict):
+            if team_key in parsed:
+                payload[team_key] = parsed[team_key]
+            continue
+        if team_key not in parsed or not isinstance(parsed.get(team_key), dict):
+            continue
+        for stats_key in ("batting", "pitching", "batting_stats", "pitching_stats"):
+            if stats_key not in payload[team_key] and stats_key in parsed[team_key]:
+                payload[team_key][stats_key] = parsed[team_key][stats_key]
+    return payload
+
+
+def _has_team_payload(payload: dict[str, Any]) -> bool:
+    for key in ("home", "away", "home_team", "away_team", "homeTeam", "awayTeam"):
+        if isinstance(payload.get(key), dict):
+            return True
+    return False
 
 
 def _parse_record_tables(
