@@ -1,6 +1,7 @@
 """Schedule fetcher for collecting game indexes."""
 from __future__ import annotations
 
+import html
 import json
 import logging
 import re
@@ -54,7 +55,6 @@ def _extract_games(payload: Any) -> Iterable[dict[str, Any]]:
 
 def _is_final_status(status: str) -> bool:
     return status.lower() in FINAL_STATUSES
-
 
 def _extract_game_ids_from_html(html_text: str) -> list[int]:
     seen: set[int] = set()
