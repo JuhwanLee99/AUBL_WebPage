@@ -10,15 +10,17 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 SCRIPT_ID_TEMPLATE = r"<script[^>]*id=[\"']{script_id}[\"'][^>]*>(?P<json>.*?)</script>"
+JSON_OBJECT_OR_ARRAY = r"(?:\{.*?\}|\[.*?\])"
 WINDOW_ASSIGNMENTS = (
-    r"window\.__INITIAL_STATE__\s*=\s*(?P<json>\{.*?\})\s*;",
-    r"window\.__NEXT_DATA__\s*=\s*(?P<json>\{.*?\})\s*;",
-    r"window\.__PRELOADED_STATE__\s*=\s*(?P<json>\{.*?\})\s*;",
+    rf"window\.__INITIAL_STATE__\s*=\s*(?P<json>{JSON_OBJECT_OR_ARRAY})\s*;",
+    rf"window\.__NEXT_DATA__\s*=\s*(?P<json>{JSON_OBJECT_OR_ARRAY})\s*;",
+    rf"window\.__PRELOADED_STATE__\s*=\s*(?P<json>{JSON_OBJECT_OR_ARRAY})\s*;",
+    rf"window\.__NUXT__\s*=\s*(?P<json>{JSON_OBJECT_OR_ARRAY})\s*;",
 )
 GENERIC_SCRIPT = r"<script[^>]*type=[\"']application/json[\"'][^>]*>(?P<json>.*?)</script>"
 JSON_PARSE = r"JSON\.parse\(\s*(?P<quote>[\"'])(?P<json>.*?)(?P=quote)\s*\)"
 DATA_JSON_ATTRIBUTE = r"data-json=[\"'](?P<json>.*?)[\"']"
-SCRIPT_ASSIGNMENT = r"(?:var|let|const)\s+[A-Za-z0-9_$]+\s*=\s*(?P<json>\{.*?\})\s*;"
+SCRIPT_ASSIGNMENT = rf"(?:var|let|const)\s+[A-Za-z0-9_$]+\s*=\s*(?P<json>{JSON_OBJECT_OR_ARRAY})\s*;"
 
 
 def parse_html_json(html_text: str, script_id: str = "") -> Any:
