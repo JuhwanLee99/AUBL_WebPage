@@ -45,7 +45,7 @@ class JsonStorage:
         path = self._paths["matches"]
         if not path.exists():
             return set()
-        existing: set[int] = set()
+        match_statuses: dict[int, str | None] = {}
         with path.open("r", encoding="utf-8") as handle:
             for line in handle:
                 line = line.strip()
@@ -62,8 +62,31 @@ class JsonStorage:
                     continue
                 game_idx = row.get("game_idx")
                 if isinstance(game_idx, int):
-                    existing.add(game_idx)
-        return existing
+                    match_statuses[game_idx] = row.get("status")
+        if not match_statuses:
+            return set()
+        stats_games = self._existing_stat_games()
+        return {game_idx for game_idx in match_statuses if game_idx in stats_games}
+
+    def _existing_stat_games(self) -> set[int]:
+        stat_games: set[int] = set()
+        for key in ("batting_stats", "pitching_stats"):
+            path = self._paths[key]
+            if not path.exists():
+                continue
+            with path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        row = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    game_idx = row.get("game_idx")
+                    if isinstance(game_idx, int):
+                        stat_games.add(game_idx)
+        return stat_games
 
     def update_crawl_state(self, year: int, group_code: str | None, max_game_idx: int | None) -> None:
         now = datetime.now(timezone.utc).isoformat()
