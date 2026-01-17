@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from crawler.schedule_fetcher import GameSummary
+from crawler.schedule_fetcher import FINAL_STATUSES, GameSummary
 from crawler.storage import (
     BattingEntry,
     MatchPayload,
@@ -45,7 +45,7 @@ class JsonStorage:
         path = self._paths["matches"]
         if not path.exists():
             return set()
-        existing: set[int] = set()
+        match_statuses: dict[int, str | None] = {}
         with path.open("r", encoding="utf-8") as handle:
             for line in handle:
                 line = line.strip()
@@ -62,8 +62,38 @@ class JsonStorage:
                     continue
                 game_idx = row.get("game_idx")
                 if isinstance(game_idx, int):
-                    existing.add(game_idx)
+                    match_statuses[game_idx] = row.get("status")
+        if not match_statuses:
+            return set()
+        stats_games = self._existing_stat_games()
+        existing: set[int] = set()
+        for game_idx, status in match_statuses.items():
+            if status and not _is_final_status(status):
+                existing.add(game_idx)
+                continue
+            if game_idx in stats_games:
+                existing.add(game_idx)
         return existing
+
+    def _existing_stat_games(self) -> set[int]:
+        stat_games: set[int] = set()
+        for key in ("batting_stats", "pitching_stats"):
+            path = self._paths[key]
+            if not path.exists():
+                continue
+            with path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        row = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    game_idx = row.get("game_idx")
+                    if isinstance(game_idx, int):
+                        stat_games.add(game_idx)
+        return stat_games
 
     def update_crawl_state(self, year: int, group_code: str | None, max_game_idx: int | None) -> None:
         now = datetime.now(timezone.utc).isoformat()
@@ -245,3 +275,7 @@ class JsonStorage:
         path = self._paths[name]
         with path.open("a", encoding="utf-8") as handle:
             handle.write(f"{json.dumps(row, ensure_ascii=False)}\n")
+
+
+def _is_final_status(status: str) -> bool:
+    return status.lower() in FINAL_STATUSES

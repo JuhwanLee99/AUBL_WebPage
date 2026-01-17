@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from crawler.schedule_fetcher import GameSummary
+from crawler.schedule_fetcher import FINAL_STATUSES, GameSummary
 from crawler.storage import (
     BattingEntry,
     MatchPayload,
@@ -130,7 +130,7 @@ class CsvStorage:
         path = self._paths["matches"]
         if not path.exists():
             return set()
-        existing: set[int] = set()
+        match_statuses: dict[int, str | None] = {}
         with path.open("r", encoding="utf-8", newline="") as handle:
             reader = csv.DictReader(handle)
             for row in reader:
@@ -144,10 +144,39 @@ class CsvStorage:
                 game_idx = row.get("game_idx")
                 if game_idx:
                     try:
-                        existing.add(int(game_idx))
+                        match_statuses[int(game_idx)] = row.get("status")
                     except ValueError:
                         continue
+        if not match_statuses:
+            return set()
+        stats_games = self._existing_stat_games()
+        existing: set[int] = set()
+        for game_idx, status in match_statuses.items():
+            if status and not _is_final_status(status):
+                existing.add(game_idx)
+                continue
+            if game_idx in stats_games:
+                existing.add(game_idx)
         return existing
+
+    def _existing_stat_games(self) -> set[int]:
+        stat_games: set[int] = set()
+        for key in ("batting_stats", "pitching_stats"):
+            path = self._paths[key]
+            if not path.exists():
+                continue
+            with path.open("r", encoding="utf-8", newline="") as handle:
+                reader = csv.DictReader(handle)
+                for row in reader:
+                    if not row:
+                        continue
+                    game_idx = row.get("game_idx")
+                    if game_idx:
+                        try:
+                            stat_games.add(int(game_idx))
+                        except ValueError:
+                            continue
+        return stat_games
 
     def update_crawl_state(self, year: int, group_code: str | None, max_game_idx: int | None) -> None:
         now = datetime.now(timezone.utc)
@@ -341,3 +370,7 @@ class CsvStorage:
                 writer.writeheader()
             if row:
                 writer.writerow({key: row.get(key) for key in fieldnames})
+
+
+def _is_final_status(status: str) -> bool:
+    return status.lower() in FINAL_STATUSES
