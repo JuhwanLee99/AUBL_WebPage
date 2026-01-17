@@ -118,6 +118,18 @@ crawl_state_table = Table(
     UniqueConstraint("year", "group_code", name="crawl_state_year_group_unique"),
 )
 
+web_pages_table = Table(
+    "web_pages",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("page_key", String(100), nullable=False),
+    Column("url", String(500), nullable=False),
+    Column("year", Integer, nullable=True),
+    Column("params", JSON, nullable=True),
+    Column("payload", JSON, nullable=True),
+    Column("fetched_at", DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)),
+)
+
 
 @dataclass(frozen=True)
 class TeamInfo:
@@ -211,6 +223,26 @@ class Storage:
             )
             self._store_batting_stats(conn, match_id, home_team_id, away_team_id, match_data)
             self._store_pitching_stats(conn, match_id, home_team_id, away_team_id, match_data)
+
+    def store_web_page(
+        self,
+        page_key: str,
+        url: str,
+        params: dict[str, Any],
+        payload: dict[str, Any],
+        year: int | None,
+    ) -> None:
+        with self._engine.begin() as conn:
+            conn.execute(
+                web_pages_table.insert().values(
+                    page_key=page_key,
+                    url=url,
+                    year=year,
+                    params=params,
+                    payload=payload,
+                    fetched_at=datetime.now(timezone.utc),
+                )
+            )
 
     def _upsert_team(self, conn, team: TeamInfo | None) -> int | None:
         if team is None:

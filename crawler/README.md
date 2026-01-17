@@ -32,6 +32,14 @@ SCHEDULE_LIST_ENDPOINT=/schedule/list
 BOXSCORE_ENDPOINT=/game/boxscore
 SCHEDULE_PAGE_PATH=/schedule
 BOXSCORE_PAGE_PATH=/game/boxscore
+LEAGUE_PAGE_PATH=/league/
+SCHEDULE_ALL_PAGE_PATH=/league/schedule/all
+TEAM_RANK_PAGE_PATH=/league/record/rank
+TEAM_OFFENSE_PAGE_PATH=/league/record/offense
+TEAM_DEFENSE_PAGE_PATH=/league/record/defense
+BATTER_RANK_PAGE_PATH=/league/record/batter
+PITCHER_RANK_PAGE_PATH=/league/record/pitcher
+ROSTER_PAGE_PATH=/league/state/regist
 HTML_JSON_SCRIPT_ID=
 LIG_IDX=972
 GROUP_CODES= # 필요 시 쉼표로 구분된 group_code 입력
@@ -39,11 +47,17 @@ REQUESTS_PER_MINUTE=60
 REQUEST_TIMEOUT_SECONDS=10
 REQUEST_SLEEP_SECONDS=0
 CRAWLER_USER_AGENT=AUBL-Crawler/1.0
+CRAWLER_TLS_CIPHERS=
 ```
 
 `CRAWLER_DATA_SOURCE`는 `api`(기본값) 또는 `web`을 사용할 수 있습니다. `web` 모드에서는
 `CRAWLER_WEB_BASE_URL`(없으면 `CRAWLER_BASE_URL` fallback)을 사용해 HTML 페이지를
 가져오고, `HTML_JSON_SCRIPT_ID`가 있다면 해당 `<script>` 태그의 JSON을 파싱합니다.
+또한 기본적으로 리그 메인/일정/팀 랭킹/팀 공격·수비 랭킹/타자·투수 랭킹/선수 등록
+페이지를 함께 수집합니다.
+
+HTTPS 핸드셰이크에서 `DH_KEY_TOO_SMALL` 오류가 발생하면 `CRAWLER_TLS_CIPHERS`로
+보안 레벨을 낮춘 ciphersuite를 지정할 수 있습니다 (예: `DEFAULT@SECLEVEL=1`).
 
 `config/.env`를 다른 위치에서 읽으려면 `CRAWLER_ENV_FILE`을 설정하세요:
 
