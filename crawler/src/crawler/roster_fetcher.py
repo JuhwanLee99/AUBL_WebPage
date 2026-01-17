@@ -4,7 +4,7 @@ from __future__ import annotations
 import html
 import logging
 import re
-from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qs, urlsplit, urlunsplit
 from dataclasses import dataclass
 from typing import Iterable
 

@@ -33,6 +33,7 @@ class CsvStorage:
             "matches": self._output_dir / "matches.csv",
             "teams": self._output_dir / "teams.csv",
             "players": self._output_dir / "players.csv",
+            "roster_players": self._output_dir / "roster_players.csv",
             "batting_stats": self._output_dir / "batting_stats.csv",
             "pitching_stats": self._output_dir / "pitching_stats.csv",
             "crawl_state": self._output_dir / "crawl_state.csv",
@@ -68,6 +69,14 @@ class CsvStorage:
             "players": [
                 "player_idx",
                 "team_idx",
+                "name",
+                "position",
+                "bats",
+                "throws",
+            ],
+            "roster_players": [
+                "team_idx",
+                "player_idx",
                 "name",
                 "position",
                 "bats",
@@ -160,7 +169,11 @@ class CsvStorage:
                 if player_key in self._seen_player_keys:
                     continue
                 self._seen_player_keys.add(player_key)
-                self._append_player(player, entry.team.team_idx)
+                row = {
+                    "team_idx": entry.team.team_idx,
+                    **asdict(player),
+                }
+                self._append("roster_players", row)
 
     def store_league_records(
         self,
@@ -279,6 +292,7 @@ class CsvStorage:
             return
 
         self._append_match(game, year, payload, match_data)
+        self._append_players(match_data)
         self._append_batting(game, match_data)
         self._append_pitching(game, match_data)
 
