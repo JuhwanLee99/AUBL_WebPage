@@ -104,6 +104,12 @@ export DATABASE_URL=postgresql://postgres:aubl@localhost:5432/aubl
 python -m crawler.cli --from-year 2024 --to-year 2024
 ```
 
+DB 없이 JSONL 파일로 저장하려면:
+
+```bash
+python -m crawler.cli --from-year 2024 --to-year 2024 --output-json ./out
+```
+
 HTML 페이지 스크래핑 모드로 실행하려면:
 
 ```bash
@@ -118,7 +124,8 @@ python -m crawler.cli --from-year 2024 --to-year 2024 --group-code A --group-cod
 
 ### 5) CSV로 임시 확인하기 (DB에서 추출)
 
-현재 코드는 DB 저장만 지원합니다. 로컬에서 빠르게 확인하려면 PostgreSQL에서 CSV로 내보낼 수 있습니다.
+기본 저장소는 DB이지만 `--output-json` 또는 `--output-csv`로 로컬 파일 출력도 가능합니다. DB에서
+빠르게 확인하려면 PostgreSQL에서 CSV로 내보낼 수 있습니다.
 
 ```bash
 psql "$DATABASE_URL" -c "\\copy matches TO 'matches.csv' CSV HEADER"

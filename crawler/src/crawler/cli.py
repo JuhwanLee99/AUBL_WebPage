@@ -14,6 +14,7 @@ from crawler.schedule_fetcher import GameSummary, fetch_schedule_games
 from crawler.settings import Settings, load_settings
 from crawler.storage import Storage
 from crawler.storage_csv import CsvStorage
+from crawler.storage_json import JsonStorage
 from crawler.web_client import WebClient
 
 logger = logging.getLogger(__name__)
@@ -29,9 +30,14 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Override group codes to sync (can be specified multiple times).",
     )
-    parser.add_argument(
+    output_group = parser.add_mutually_exclusive_group()
+    output_group.add_argument(
         "--output-csv",
         help="Directory to write CSV output instead of using the database.",
+    )
+    output_group.add_argument(
+        "--output-json",
+        help="Directory to write JSONL output instead of using the database.",
     )
     parser.add_argument(
         "--data-source",
@@ -99,6 +105,8 @@ def run_sync() -> None:
 
     if args.output_csv:
         storage = CsvStorage(args.output_csv)
+    elif args.output_json:
+        storage = JsonStorage(args.output_json)
     else:
         database_url = os.getenv("DATABASE_URL") or os.getenv("CRAWLER_DATABASE_URL", "")
         if not database_url:
