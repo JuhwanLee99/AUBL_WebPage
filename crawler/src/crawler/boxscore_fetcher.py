@@ -193,10 +193,24 @@ def _merge_boxscore_payload(payload: Any, html_text: str) -> dict[str, Any]:
             continue
         if team_key not in parsed or not isinstance(parsed.get(team_key), dict):
             continue
+        _merge_team_identity(payload[team_key], parsed[team_key])
         for stats_key in ("batting", "pitching", "batting_stats", "pitching_stats"):
             if stats_key not in payload[team_key] and stats_key in parsed[team_key]:
                 payload[team_key][stats_key] = parsed[team_key][stats_key]
     return payload
+
+
+def _merge_team_identity(target: dict[str, Any], source: dict[str, Any]) -> None:
+    source_idx = source.get("team_idx")
+    source_name = source.get("name")
+    target_name = target.get("name")
+    if source_name:
+        target_name_normalized = _normalize_team_name(str(target_name)) if target_name else ""
+        source_name_normalized = _normalize_team_name(str(source_name))
+        if not target_name or target_name_normalized == source_name_normalized:
+            target["name"] = source_name
+    if isinstance(source_idx, int):
+        target["team_idx"] = source_idx
 
 
 def _has_team_payload(payload: dict[str, Any]) -> bool:
