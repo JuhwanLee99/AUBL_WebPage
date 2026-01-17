@@ -83,6 +83,12 @@ GROUP_CODES= # 필요 시 쉼표로 구분된 group_code 입력
 `CRAWLER_DATA_SOURCE`는 `api` 또는 `web`을 지정할 수 있습니다. `web` 모드에서는
 `CRAWLER_WEB_BASE_URL`(없으면 `CRAWLER_BASE_URL` fallback)에서 HTML을 받아 JSON을 파싱합니다.
 
+`config/.env`를 다른 위치에서 읽으려면 `CRAWLER_ENV_FILE`을 설정하세요:
+
+```bash
+CRAWLER_ENV_FILE=./crawler/config/.env
+```
+
 ### 3) 로컬 DB 준비 및 연결 문자열 설정
 
 PostgreSQL이 필요합니다. 로컬에 준비되어 있지 않다면 Docker로 임시 실행할 수 있습니다.

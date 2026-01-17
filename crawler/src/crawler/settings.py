@@ -1,19 +1,43 @@
 """Configuration for the crawler package."""
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterable
 
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 
 def _load_dotenv() -> None:
     env_path = os.getenv("CRAWLER_ENV_FILE", "")
     if env_path:
-        load_dotenv(env_path)
-    else:
-        load_dotenv()
+        resolved = _resolve_env_path(env_path)
+        if resolved:
+            load_dotenv(resolved)
+        else:
+            logger.warning("CRAWLER_ENV_FILE not found: %s", env_path)
+            load_dotenv()
+        return
+    resolved = _resolve_env_path("config/.env")
+    if resolved:
+        load_dotenv(resolved)
+        return
+    load_dotenv()
+
+
+def _resolve_env_path(env_path: str) -> str | None:
+    candidate = Path(env_path).expanduser()
+    if candidate.exists():
+        return str(candidate)
+    for parent in Path(__file__).resolve().parents:
+        for option in (parent / env_path, parent / "config/.env", parent / "crawler/config/.env"):
+            if option.exists():
+                return str(option)
+    return None
 
 
 @dataclass(frozen=True)
