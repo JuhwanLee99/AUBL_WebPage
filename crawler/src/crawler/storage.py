@@ -22,7 +22,7 @@ from sqlalchemy import (
     select,
 )
 
-from crawler.schedule_fetcher import GameSummary
+from crawler.schedule_fetcher import FINAL_STATUSES, GameSummary
 
 logger = logging.getLogger(__name__)
 
@@ -156,13 +156,45 @@ class Storage:
 
     def get_existing_game_idx(self, year: int, group_code: str | None) -> set[int]:
         with self._engine.connect() as conn:
-            query = select(matches_table.c.game_idx).where(matches_table.c.year == year)
+            query = select(
+                matches_table.c.id,
+                matches_table.c.game_idx,
+                matches_table.c.status,
+            ).where(matches_table.c.year == year)
             if group_code is None:
                 query = query.where(matches_table.c.group_code.is_(None))
             else:
                 query = query.where(matches_table.c.group_code == group_code)
             rows = conn.execute(query).fetchall()
-        return {int(row[0]) for row in rows}
+            if not rows:
+                return set()
+            match_ids = [row.id for row in rows]
+            batting_ids = {
+                int(row[0])
+                for row in conn.execute(
+                    select(batting_stats_table.c.game_id).where(
+                        batting_stats_table.c.game_id.in_(match_ids)
+                    )
+                ).fetchall()
+            }
+            pitching_ids = {
+                int(row[0])
+                for row in conn.execute(
+                    select(pitching_stats_table.c.game_id).where(
+                        pitching_stats_table.c.game_id.in_(match_ids)
+                    )
+                ).fetchall()
+            }
+            stats_ids = batting_ids | pitching_ids
+            existing: set[int] = set()
+            for row in rows:
+                status = row.status
+                if status and not _is_final_status(status):
+                    existing.add(int(row.game_idx))
+                    continue
+                if row.id in stats_ids:
+                    existing.add(int(row.game_idx))
+        return existing
 
     def update_crawl_state(self, year: int, group_code: str | None, max_game_idx: int | None) -> None:
         now = datetime.now(timezone.utc)
@@ -698,6 +730,10 @@ def _team_id_for_side(
     if side == "away":
         return away_team_id
     return None
+
+
+def _is_final_status(status: str) -> bool:
+    return status.lower() in FINAL_STATUSES
 
 
 def validate_match_integrity(match_data: MatchPayload) -> list[str]:
