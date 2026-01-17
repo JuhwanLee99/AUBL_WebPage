@@ -54,7 +54,8 @@ CRAWLER_TLS_CIPHERS=
 `CRAWLER_WEB_BASE_URL`(없으면 `CRAWLER_BASE_URL` fallback)을 사용해 HTML 페이지를
 가져오고, `HTML_JSON_SCRIPT_ID`가 있다면 해당 `<script>` 태그의 JSON을 파싱합니다.
 또한 기본적으로 리그 메인/일정/팀 랭킹/팀 공격·수비 랭킹/타자·투수 랭킹/선수 등록
-페이지를 함께 수집합니다.
+페이지를 함께 수집합니다. JSON이 없는 리그 타자/투수 랭킹 페이지는 HTML 테이블을
+직접 파싱해 레코드를 구성합니다.
 
 HTTPS 핸드셰이크에서 `DH_KEY_TOO_SMALL` 오류가 발생하면 `CRAWLER_TLS_CIPHERS`로
 보안 레벨을 낮춘 ciphersuite를 지정할 수 있습니다 (예: `DEFAULT:@SECLEVEL=1`).
@@ -100,6 +101,9 @@ Run the crawler using HTML scraping mode:
 ```bash
 python -m crawler.cli --from-year 2024 --to-year 2024 --data-source web
 ```
+
+리그 타자/투수 기록은 동일 연도에 대해 중복 저장되지 않으며, DB 모드에서는
+기존 연도 데이터를 덮어쓴 후 최신 데이터를 저장합니다.
 
 Limit collection to specific group codes (repeatable):
 
