@@ -45,6 +45,12 @@ CRAWLER_USER_AGENT=AUBL-Crawler/1.0
 `CRAWLER_WEB_BASE_URL`(없으면 `CRAWLER_BASE_URL` fallback)을 사용해 HTML 페이지를
 가져오고, `HTML_JSON_SCRIPT_ID`가 있다면 해당 `<script>` 태그의 JSON을 파싱합니다.
 
+`config/.env`를 다른 위치에서 읽으려면 `CRAWLER_ENV_FILE`을 설정하세요:
+
+```bash
+CRAWLER_ENV_FILE=./crawler/config/.env
+```
+
 The crawler also requires a PostgreSQL connection string via `DATABASE_URL` (or
 `CRAWLER_DATABASE_URL`). For example:
 
