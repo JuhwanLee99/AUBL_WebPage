@@ -145,6 +145,7 @@ class CsvStorage:
         self._team_registry: dict[str, int] = {}
         self._seen_team_keys: set[int | str] = set()
         self._seen_player_keys: set[tuple[int | None, str, str | None]] = set()
+        self._league_record_years: dict[str, set[int | None]] = {}
 
     def create_tables(self) -> None:
         self._output_dir.mkdir(parents=True, exist_ok=True)
@@ -181,23 +182,31 @@ class CsvStorage:
         batting_payload: dict[str, Any],
         pitching_payload: dict[str, Any],
     ) -> None:
+        has_batting = self._has_league_record_year("league_batting_records", year)
+        has_pitching = self._has_league_record_year("league_pitching_records", year)
+        if has_batting and has_pitching:
+            return
         fetched_at = datetime.now(timezone.utc).isoformat()
-        self._append(
-            "league_batting_records",
-            {
-                "year": year,
-                "payload": json.dumps(batting_payload, ensure_ascii=False),
-                "fetched_at": fetched_at,
-            },
-        )
-        self._append(
-            "league_pitching_records",
-            {
-                "year": year,
-                "payload": json.dumps(pitching_payload, ensure_ascii=False),
-                "fetched_at": fetched_at,
-            },
-        )
+        if not has_batting:
+            self._append(
+                "league_batting_records",
+                {
+                    "year": year,
+                    "payload": json.dumps(batting_payload, ensure_ascii=False),
+                    "fetched_at": fetched_at,
+                },
+            )
+            self._league_record_years.setdefault("league_batting_records", set()).add(year)
+        if not has_pitching:
+            self._append(
+                "league_pitching_records",
+                {
+                    "year": year,
+                    "payload": json.dumps(pitching_payload, ensure_ascii=False),
+                    "fetched_at": fetched_at,
+                },
+            )
+            self._league_record_years.setdefault("league_pitching_records", set()).add(year)
 
     def get_existing_game_idx(self, year: int, group_code: str | None) -> set[int]:
         path = self._paths["matches"]
@@ -224,25 +233,6 @@ class CsvStorage:
             return set()
         stats_games = self._existing_stat_games()
         return {game_idx for game_idx in match_statuses if game_idx in stats_games}
-
-    def _existing_stat_games(self) -> set[int]:
-        stat_games: set[int] = set()
-        for key in ("batting_stats", "pitching_stats"):
-            path = self._paths[key]
-            if not path.exists():
-                continue
-            with path.open("r", encoding="utf-8", newline="") as handle:
-                reader = csv.DictReader(handle)
-                for row in reader:
-                    if not row:
-                        continue
-                    game_idx = row.get("game_idx")
-                    if game_idx:
-                        try:
-                            stat_games.add(int(game_idx))
-                        except ValueError:
-                            continue
-        return stat_games
 
     def _existing_stat_games(self) -> set[int]:
         stat_games: set[int] = set()
@@ -444,6 +434,33 @@ class CsvStorage:
     def _append(self, name: str, row: dict[str, Any]) -> None:
         path = self._paths[name]
         self._write_row(path, self._schemas[name], row)
+
+    def _has_league_record_year(self, key: str, year: int | None) -> bool:
+        years = self._league_record_years.get(key)
+        if years is None:
+            years = self._load_league_record_years(key)
+            self._league_record_years[key] = years
+        return year in years
+
+    def _load_league_record_years(self, key: str) -> set[int | None]:
+        path = self._paths[key]
+        years: set[int | None] = set()
+        if not path.exists():
+            return years
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                if not row:
+                    continue
+                raw_year = row.get("year")
+                if raw_year in (None, "", "None"):
+                    years.add(None)
+                    continue
+                try:
+                    years.add(int(raw_year))
+                except ValueError:
+                    continue
+        return years
 
     def _write_row(self, path: Path, fieldnames: list[str], row: dict[str, Any]) -> None:
         write_header = not path.exists() or path.stat().st_size == 0

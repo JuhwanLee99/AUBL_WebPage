@@ -22,6 +22,7 @@ from sqlalchemy import (
     create_engine,
     select,
 )
+from sqlalchemy.engine import Connection
 
 from crawler.schedule_fetcher import FINAL_STATUSES, GameSummary
 
@@ -192,6 +193,7 @@ class Storage:
     ) -> None:
         now = datetime.now(timezone.utc)
         with self._engine.begin() as conn:
+            self._delete_league_records(conn, year)
             conn.execute(
                 league_batting_records_table.insert().values(
                     year=year,
@@ -206,6 +208,22 @@ class Storage:
                     fetched_at=now,
                 )
             )
+
+    def _delete_league_records(self, conn: Connection, year: int | None) -> None:
+        if year is None:
+            conn.execute(league_batting_records_table.delete().where(
+                league_batting_records_table.c.year.is_(None)
+            ))
+            conn.execute(league_pitching_records_table.delete().where(
+                league_pitching_records_table.c.year.is_(None)
+            ))
+            return
+        conn.execute(league_batting_records_table.delete().where(
+            league_batting_records_table.c.year == year
+        ))
+        conn.execute(league_pitching_records_table.delete().where(
+            league_pitching_records_table.c.year == year
+        ))
 
     def get_existing_game_idx(self, year: int, group_code: str | None) -> set[int]:
         with self._engine.connect() as conn:

@@ -31,6 +31,7 @@ class JsonStorage:
         self._team_registry: dict[str, int] = {}
         self._seen_team_keys: set[int | str] = set()
         self._seen_player_keys: set[tuple[int | None, str, str | None]] = set()
+        self._league_record_years: dict[str, set[int | None]] = {}
         self._paths = {
             "matches": self._output_dir / "matches.jsonl",
             "teams": self._output_dir / "teams.jsonl",
@@ -74,15 +75,24 @@ class JsonStorage:
         batting_payload: dict[str, Any],
         pitching_payload: dict[str, Any],
     ) -> None:
+        has_batting = self._has_league_record_year("league_batting_records", year)
+        has_pitching = self._has_league_record_year("league_pitching_records", year)
+        if has_batting and has_pitching:
+            logger.info("league_records_skipped year=%s reason=already_stored", year)
+            return
         fetched_at = datetime.now(timezone.utc).isoformat()
-        self._append(
-            "league_batting_records",
-            {"year": year, "payload": batting_payload, "fetched_at": fetched_at},
-        )
-        self._append(
-            "league_pitching_records",
-            {"year": year, "payload": pitching_payload, "fetched_at": fetched_at},
-        )
+        if not has_batting:
+            self._append(
+                "league_batting_records",
+                {"year": year, "payload": batting_payload, "fetched_at": fetched_at},
+            )
+            self._league_record_years.setdefault("league_batting_records", set()).add(year)
+        if not has_pitching:
+            self._append(
+                "league_pitching_records",
+                {"year": year, "payload": pitching_payload, "fetched_at": fetched_at},
+            )
+            self._league_record_years.setdefault("league_pitching_records", set()).add(year)
 
     def get_existing_game_idx(self, year: int, group_code: str | None) -> set[int]:
         path = self._paths["matches"]
@@ -131,25 +141,29 @@ class JsonStorage:
                         stat_games.add(game_idx)
         return stat_games
 
-    def _existing_stat_games(self) -> set[int]:
-        stat_games: set[int] = set()
-        for key in ("batting_stats", "pitching_stats"):
-            path = self._paths[key]
-            if not path.exists():
-                continue
-            with path.open("r", encoding="utf-8") as handle:
-                for line in handle:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        row = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    game_idx = row.get("game_idx")
-                    if isinstance(game_idx, int):
-                        stat_games.add(game_idx)
-        return stat_games
+    def _has_league_record_year(self, key: str, year: int | None) -> bool:
+        years = self._league_record_years.get(key)
+        if years is None:
+            years = self._load_league_record_years(key)
+            self._league_record_years[key] = years
+        return year in years
+
+    def _load_league_record_years(self, key: str) -> set[int | None]:
+        path = self._paths[key]
+        years: set[int | None] = set()
+        if not path.exists():
+            return years
+        with path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                years.add(row.get("year"))
+        return years
 
     def update_crawl_state(self, year: int, group_code: str | None, max_game_idx: int | None) -> None:
         now = datetime.now(timezone.utc).isoformat()
