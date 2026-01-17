@@ -54,7 +54,8 @@ CRAWLER_TLS_CIPHERS=
 `CRAWLER_WEB_BASE_URL`(없으면 `CRAWLER_BASE_URL` fallback)을 사용해 HTML 페이지를
 가져오고, `HTML_JSON_SCRIPT_ID`가 있다면 해당 `<script>` 태그의 JSON을 파싱합니다.
 또한 기본적으로 리그 메인/일정/팀 랭킹/팀 공격·수비 랭킹/타자·투수 랭킹/선수 등록
-페이지를 함께 수집합니다.
+페이지를 함께 수집합니다. JSON이 없는 리그 타자/투수 랭킹 페이지는 HTML 테이블을
+직접 파싱해 레코드를 구성합니다.
 
 HTTPS 핸드셰이크에서 `DH_KEY_TOO_SMALL` 오류가 발생하면 `CRAWLER_TLS_CIPHERS`로
 보안 레벨을 낮춘 ciphersuite를 지정할 수 있습니다 (예: `DEFAULT:@SECLEVEL=1`).
@@ -95,11 +96,27 @@ Run the crawler without a database by writing JSONL output:
 python -m crawler.cli --from-year 2024 --to-year 2024 --output-json ./out
 ```
 
+`./out`에는 다음 JSONL 파일들이 생성됩니다:
+
+- `matches.jsonl`: 경기 기본 정보(스코어, 상태 등)
+- `teams.jsonl`: 팀 마스터 데이터
+- `players.jsonl`: 선수 마스터 데이터
+- `roster_players.jsonl`: 팀별 등록 선수 명단
+- `batting_stats.jsonl`: 타격 스탯
+- `pitching_stats.jsonl`: 투구 스탯
+- `crawl_state.jsonl`: 크롤링 진행 상태
+- `web_pages.jsonl`: 웹 스크래핑 페이지 원본/파싱 결과
+- `league_batting_records.jsonl`: 리그 타자 기록(연도별)
+- `league_pitching_records.jsonl`: 리그 투수 기록(연도별)
+
 Run the crawler using HTML scraping mode:
 
 ```bash
 python -m crawler.cli --from-year 2024 --to-year 2024 --data-source web
 ```
+
+리그 타자/투수 기록은 동일 연도에 대해 중복 저장되지 않으며, DB 모드에서는
+기존 연도 데이터를 덮어쓴 후 최신 데이터를 저장합니다.
 
 Limit collection to specific group codes (repeatable):
 
