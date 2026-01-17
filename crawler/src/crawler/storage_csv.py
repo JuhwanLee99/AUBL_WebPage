@@ -34,6 +34,7 @@ class CsvStorage:
             "batting_stats": self._output_dir / "batting_stats.csv",
             "pitching_stats": self._output_dir / "pitching_stats.csv",
             "crawl_state": self._output_dir / "crawl_state.csv",
+            "web_pages": self._output_dir / "web_pages.csv",
         }
         self._schemas = {
             "matches": [
@@ -109,6 +110,14 @@ class CsvStorage:
                 "last_synced_at",
                 "updated_at",
             ],
+            "web_pages": [
+                "page_key",
+                "url",
+                "year",
+                "params",
+                "payload",
+                "fetched_at",
+            ],
         }
 
     def create_tables(self) -> None:
@@ -173,6 +182,26 @@ class CsvStorage:
         self._append_players(match_data)
         self._append_batting(game, match_data)
         self._append_pitching(game, match_data)
+
+    def store_web_page(
+        self,
+        page_key: str,
+        url: str,
+        params: dict[str, Any],
+        payload: dict[str, Any],
+        year: int | None,
+    ) -> None:
+        self._append(
+            "web_pages",
+            {
+                "page_key": page_key,
+                "url": url,
+                "year": year,
+                "params": json.dumps(params, ensure_ascii=False),
+                "payload": json.dumps(payload, ensure_ascii=False),
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
 
     def _append_match(
         self,

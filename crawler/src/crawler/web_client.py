@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import ssl
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -29,12 +30,22 @@ class WebClient:
     def __init__(self, settings: Settings) -> None:
         base_url = settings.web_base_url or settings.base_url
         self._settings = settings
+        tls_ciphers = settings.tls_ciphers.strip()
+        ssl_context = None
+        if tls_ciphers:
+            ssl_context = ssl.create_default_context()
+            ssl_context.set_ciphers(tls_ciphers)
         self._client = httpx.Client(
             base_url=base_url or None,
             timeout=settings.request_timeout_seconds,
             headers={"User-Agent": settings.user_agent},
+            verify=ssl_context,
         )
         self._last_request_at: float | None = None
+
+    @property
+    def base_url(self) -> httpx.URL:
+        return self._client.base_url
 
     def close(self) -> None:
         self._client.close()
