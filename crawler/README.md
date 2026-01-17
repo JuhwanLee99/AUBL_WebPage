@@ -57,7 +57,9 @@ CRAWLER_TLS_CIPHERS=
 페이지를 함께 수집합니다.
 
 HTTPS 핸드셰이크에서 `DH_KEY_TOO_SMALL` 오류가 발생하면 `CRAWLER_TLS_CIPHERS`로
-보안 레벨을 낮춘 ciphersuite를 지정할 수 있습니다 (예: `DEFAULT@SECLEVEL=1`).
+보안 레벨을 낮춘 ciphersuite를 지정할 수 있습니다 (예: `DEFAULT:@SECLEVEL=1`).
+값이 비어 있을 때 해당 오류가 발생하면 자동으로 `DEFAULT:@SECLEVEL=1`을 적용해
+재시도합니다.
 
 `config/.env`를 다른 위치에서 읽으려면 `CRAWLER_ENV_FILE`을 설정하세요:
 
