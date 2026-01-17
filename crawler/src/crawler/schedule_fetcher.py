@@ -7,7 +7,9 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 from crawler.api_client import ApiClient
+from crawler.html_parser import parse_html_json
 from crawler.settings import Settings, iter_group_codes
+from crawler.web_client import WebClient
 
 logger = logging.getLogger(__name__)
 
@@ -47,14 +49,23 @@ def _is_final_status(status: str) -> bool:
     return status.lower() in FINAL_STATUSES
 
 
-def fetch_schedule_games(client: ApiClient, settings: Settings, year: int) -> list[GameSummary]:
+def fetch_schedule_games(
+    client: ApiClient | WebClient,
+    settings: Settings,
+    year: int,
+    data_source: str = "api",
+) -> list[GameSummary]:
     games: list[GameSummary] = []
     for group_code in iter_group_codes(settings.group_codes):
         params = {"lig_idx": settings.lig_idx, "year": year}
         if group_code:
             params["group_code"] = group_code
-        response = client.request("GET", settings.schedule_endpoint, params=params)
-        payload = response.json()
+        if data_source == "web":
+            response = client.request("GET", settings.schedule_page_path, params=params)
+            payload = parse_html_json(response.text, settings.html_json_script_id)
+        else:
+            response = client.request("GET", settings.schedule_endpoint, params=params)
+            payload = response.json()
         group_games = 0
         for item in _extract_games(payload):
             game_idx = item.get("game_idx") or item.get("gameIdx")

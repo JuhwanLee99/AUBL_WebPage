@@ -1,26 +1,55 @@
 """Configuration for the crawler package."""
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterable
 
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 
 def _load_dotenv() -> None:
     env_path = os.getenv("CRAWLER_ENV_FILE", "")
     if env_path:
-        load_dotenv(env_path)
-    else:
-        load_dotenv()
+        resolved = _resolve_env_path(env_path)
+        if resolved:
+            load_dotenv(resolved)
+        else:
+            logger.warning("CRAWLER_ENV_FILE not found: %s", env_path)
+            load_dotenv()
+        return
+    resolved = _resolve_env_path("config/.env")
+    if resolved:
+        load_dotenv(resolved)
+        return
+    load_dotenv()
+
+
+def _resolve_env_path(env_path: str) -> str | None:
+    candidate = Path(env_path).expanduser()
+    if candidate.exists():
+        return str(candidate)
+    for parent in Path(__file__).resolve().parents:
+        for option in (parent / env_path, parent / "config/.env", parent / "crawler/config/.env"):
+            if option.exists():
+                return str(option)
+    return None
 
 
 @dataclass(frozen=True)
 class Settings:
+    data_source: str
     base_url: str
+    web_base_url: str
     schedule_endpoint: str
     boxscore_endpoint: str
+    schedule_page_path: str
+    boxscore_page_path: str
+    html_json_script_id: str
     lig_idx: int
     group_codes: tuple[str, ...]
     requests_per_minute: int
@@ -44,9 +73,14 @@ def _parse_group_codes(raw: str | None) -> tuple[str, ...]:
 def load_settings() -> Settings:
     _load_dotenv()
     return Settings(
+        data_source=os.getenv("CRAWLER_DATA_SOURCE", "api").lower(),
         base_url=os.getenv("CRAWLER_BASE_URL", "").rstrip("/"),
+        web_base_url=os.getenv("CRAWLER_WEB_BASE_URL", "").rstrip("/"),
         schedule_endpoint=os.getenv("SCHEDULE_LIST_ENDPOINT", "/schedule/list"),
         boxscore_endpoint=os.getenv("BOXSCORE_ENDPOINT", "/game/boxscore"),
+        schedule_page_path=os.getenv("SCHEDULE_PAGE_PATH", "/schedule"),
+        boxscore_page_path=os.getenv("BOXSCORE_PAGE_PATH", "/game/boxscore"),
+        html_json_script_id=os.getenv("HTML_JSON_SCRIPT_ID", ""),
         lig_idx=int(os.getenv("LIG_IDX", "972")),
         group_codes=_parse_group_codes(os.getenv("GROUP_CODES")),
         requests_per_minute=int(os.getenv("REQUESTS_PER_MINUTE", "60")),
