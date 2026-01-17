@@ -1,8 +1,10 @@
 """Schedule fetcher for collecting game indexes."""
 from __future__ import annotations
 
+import html
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Iterable
 
@@ -14,6 +16,12 @@ from crawler.web_client import WebClient
 logger = logging.getLogger(__name__)
 
 FINAL_STATUSES = {"final", "finalized", "finished", "f"}
+SCHEDULE_CONTENT_PATH = "/league/schedule/content/all"
+IFRAME_SRC_PATTERN = re.compile(
+    r"<iframe[^>]+src=[\"'](?P<src>/league/schedule/content/all[^\"']*)[\"']",
+    re.IGNORECASE,
+)
+GAME_IDX_PATTERN = re.compile(r"game_idx=(\d+)", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -49,6 +57,48 @@ def _is_final_status(status: str) -> bool:
     return status.lower() in FINAL_STATUSES
 
 
+def _extract_iframe_src(html_text: str) -> str | None:
+    match = IFRAME_SRC_PATTERN.search(html_text)
+    if not match:
+        return None
+    return html.unescape(match.group("src"))
+
+
+def _extract_game_ids_from_html(html_text: str) -> list[int]:
+    seen: set[int] = set()
+    game_ids: list[int] = []
+    for match in GAME_IDX_PATTERN.finditer(html_text):
+        game_idx = int(match.group(1))
+        if game_idx in seen:
+            continue
+        seen.add(game_idx)
+        game_ids.append(game_idx)
+    return game_ids
+
+
+def _fetch_schedule_content_html(
+    client: WebClient,
+    settings: Settings,
+    year: int,
+    group_code: str | None,
+    schedule_page_html: str,
+) -> str:
+    iframe_src = _extract_iframe_src(schedule_page_html)
+    if iframe_src:
+        return client.request("GET", iframe_src).text
+    params = {
+        "lig_idx": settings.lig_idx,
+        "year": year,
+        "season": year,
+        "month": "all",
+        "group_code": group_code or 0,
+        "part_code": 0,
+        "club_idx": 0,
+        "outside": "",
+    }
+    return client.request("GET", SCHEDULE_CONTENT_PATH, params=params).text
+
+
 def fetch_schedule_games(
     client: ApiClient | WebClient,
     settings: Settings,
@@ -62,7 +112,38 @@ def fetch_schedule_games(
             params["group_code"] = group_code
         if data_source == "web":
             response = client.request("GET", settings.schedule_page_path, params=params)
-            payload = parse_html_json(response.text, settings.html_json_script_id)
+            try:
+                payload = parse_html_json(response.text, settings.html_json_script_id)
+            except ValueError:
+                schedule_html = _fetch_schedule_content_html(
+                    client,
+                    settings,
+                    year,
+                    group_code,
+                    response.text,
+                )
+                game_ids = _extract_game_ids_from_html(schedule_html)
+                for game_idx in game_ids:
+                    games.append(
+                        GameSummary(
+                            game_idx=game_idx,
+                            status="final",
+                            group_code=group_code,
+                        )
+                    )
+                logger.info(
+                    json.dumps(
+                        {
+                            "event": "schedule_fetched",
+                            "year": year,
+                            "group_code": group_code,
+                            "games_found": len(game_ids),
+                            "source": "schedule_html",
+                        },
+                        sort_keys=True,
+                    )
+                )
+                continue
         else:
             response = client.request("GET", settings.schedule_endpoint, params=params)
             payload = response.json()
