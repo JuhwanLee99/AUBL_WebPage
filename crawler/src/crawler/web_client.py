@@ -14,6 +14,7 @@ from tenacity import RetryCallState, retry, retry_if_exception, stop_after_attem
 from crawler.settings import Settings
 
 logger = logging.getLogger(__name__)
+_DEFAULT_TLS_CIPHERS = "DEFAULT:@SECLEVEL=1"
 
 
 @dataclass
@@ -30,17 +31,9 @@ class WebClient:
     def __init__(self, settings: Settings) -> None:
         base_url = settings.web_base_url or settings.base_url
         self._settings = settings
-        tls_ciphers = settings.tls_ciphers.strip()
-        ssl_context = None
-        if tls_ciphers:
-            ssl_context = ssl.create_default_context()
-            ssl_context.set_ciphers(tls_ciphers)
-        self._client = httpx.Client(
-            base_url=base_url or None,
-            timeout=settings.request_timeout_seconds,
-            headers={"User-Agent": settings.user_agent},
-            verify=ssl_context,
-        )
+        self._base_url = base_url or None
+        self._tls_ciphers_override: str | None = None
+        self._client = self._build_client()
         self._last_request_at: float | None = None
 
     @property
@@ -49,6 +42,33 @@ class WebClient:
 
     def close(self) -> None:
         self._client.close()
+
+    def _build_client(self) -> httpx.Client:
+        tls_ciphers = (self._tls_ciphers_override or self._settings.tls_ciphers).strip()
+        ssl_context = None
+        if tls_ciphers:
+            ssl_context = ssl.create_default_context()
+            ssl_context.set_ciphers(tls_ciphers)
+        return httpx.Client(
+            base_url=self._base_url,
+            timeout=self._settings.request_timeout_seconds,
+            headers={"User-Agent": self._settings.user_agent},
+            verify=ssl_context,
+        )
+
+    def _downgrade_tls_if_needed(self, exc: Exception) -> None:
+        if self._tls_ciphers_override or self._settings.tls_ciphers.strip():
+            return
+        if "dh key too small" not in str(exc).lower():
+            return
+        logger.warning(
+            "TLS handshake failed with DH_KEY_TOO_SMALL; retrying with weaker ciphers "
+            "(%s). Configure CRAWLER_TLS_CIPHERS to override.",
+            _DEFAULT_TLS_CIPHERS,
+        )
+        self._tls_ciphers_override = _DEFAULT_TLS_CIPHERS
+        self._client.close()
+        self._client = self._build_client()
 
     def _sleep_if_needed(self) -> None:
         min_interval = self._settings.min_interval_seconds
@@ -94,6 +114,7 @@ class WebClient:
             return response
         except Exception as exc:  # noqa: BLE001
             error = str(exc)
+            self._downgrade_tls_if_needed(exc)
             raise
         finally:
             duration_ms = int((time.monotonic() - start) * 1000)
