@@ -68,12 +68,20 @@ cp config/.env.example config/.env
 `config/.env` 파일에 Gameone API 설정을 채워 주세요.
 
 ```bash
+CRAWLER_DATA_SOURCE=api
 CRAWLER_BASE_URL=https://<gameone-base-url>
+CRAWLER_WEB_BASE_URL=
 SCHEDULE_LIST_ENDPOINT=/schedule/list
 BOXSCORE_ENDPOINT=/game/boxscore
+SCHEDULE_PAGE_PATH=/schedule
+BOXSCORE_PAGE_PATH=/game/boxscore
+HTML_JSON_SCRIPT_ID=
 LIG_IDX=972
 GROUP_CODES= # 필요 시 쉼표로 구분된 group_code 입력
 ```
+
+`CRAWLER_DATA_SOURCE`는 `api` 또는 `web`을 지정할 수 있습니다. `web` 모드에서는
+`CRAWLER_WEB_BASE_URL`(없으면 `CRAWLER_BASE_URL` fallback)에서 HTML을 받아 JSON을 파싱합니다.
 
 ### 3) 로컬 DB 준비 및 연결 문자열 설정
 
@@ -94,6 +102,12 @@ export DATABASE_URL=postgresql://postgres:aubl@localhost:5432/aubl
 
 ```bash
 python -m crawler.cli --from-year 2024 --to-year 2024
+```
+
+HTML 페이지 스크래핑 모드로 실행하려면:
+
+```bash
+python -m crawler.cli --from-year 2024 --to-year 2024 --data-source web
 ```
 
 필요하면 그룹 코드만 수집하도록 `--group-code` 옵션을 여러 번 사용할 수 있습니다.
