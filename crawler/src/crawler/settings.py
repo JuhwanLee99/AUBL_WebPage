@@ -87,7 +87,7 @@ def load_settings() -> Settings:
         web_base_url=os.getenv("CRAWLER_WEB_BASE_URL", "").rstrip("/"),
         schedule_endpoint=os.getenv("SCHEDULE_LIST_ENDPOINT", "/schedule/list"),
         boxscore_endpoint=os.getenv("BOXSCORE_ENDPOINT", "/game/boxscore"),
-        schedule_page_path=os.getenv("SCHEDULE_PAGE_PATH", "/schedule"),
+        schedule_page_path=os.getenv("SCHEDULE_PAGE_PATH", "/league/schedule/all"),
         boxscore_page_path=os.getenv("BOXSCORE_PAGE_PATH", "/game/boxscore"),
         league_page_path=os.getenv("LEAGUE_PAGE_PATH", "/league/"),
         schedule_all_page_path=os.getenv("SCHEDULE_ALL_PAGE_PATH", "/league/schedule/all"),
