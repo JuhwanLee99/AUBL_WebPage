@@ -22,7 +22,7 @@ from sqlalchemy import (
     select,
 )
 
-from crawler.schedule_fetcher import GameSummary
+from crawler.schedule_fetcher import FINAL_STATUSES, GameSummary
 
 logger = logging.getLogger(__name__)
 
@@ -723,6 +723,9 @@ def _team_id_for_side(
         return away_team_id
     return None
 
+
+def _is_final_status(status: str) -> bool:
+    return status.lower() in FINAL_STATUSES
 
 
 def validate_match_integrity(match_data: MatchPayload) -> list[str]:

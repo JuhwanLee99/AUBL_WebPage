@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from crawler.schedule_fetcher import GameSummary
+from crawler.schedule_fetcher import FINAL_STATUSES, GameSummary
 from crawler.storage import (
     BattingEntry,
     MatchPayload,
@@ -151,6 +151,25 @@ class CsvStorage:
             return set()
         stats_games = self._existing_stat_games()
         return {game_idx for game_idx in match_statuses if game_idx in stats_games}
+
+    def _existing_stat_games(self) -> set[int]:
+        stat_games: set[int] = set()
+        for key in ("batting_stats", "pitching_stats"):
+            path = self._paths[key]
+            if not path.exists():
+                continue
+            with path.open("r", encoding="utf-8", newline="") as handle:
+                reader = csv.DictReader(handle)
+                for row in reader:
+                    if not row:
+                        continue
+                    game_idx = row.get("game_idx")
+                    if game_idx:
+                        try:
+                            stat_games.add(int(game_idx))
+                        except ValueError:
+                            continue
+        return stat_games
 
     def _existing_stat_games(self) -> set[int]:
         stat_games: set[int] = set()
@@ -363,3 +382,7 @@ class CsvStorage:
                 writer.writeheader()
             if row:
                 writer.writerow({key: row.get(key) for key in fieldnames})
+
+
+def _is_final_status(status: str) -> bool:
+    return status.lower() in FINAL_STATUSES

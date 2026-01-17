@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from crawler.schedule_fetcher import GameSummary
+from crawler.schedule_fetcher import FINAL_STATUSES, GameSummary
 from crawler.storage import (
     BattingEntry,
     MatchPayload,
@@ -67,6 +67,26 @@ class JsonStorage:
             return set()
         stats_games = self._existing_stat_games()
         return {game_idx for game_idx in match_statuses if game_idx in stats_games}
+
+    def _existing_stat_games(self) -> set[int]:
+        stat_games: set[int] = set()
+        for key in ("batting_stats", "pitching_stats"):
+            path = self._paths[key]
+            if not path.exists():
+                continue
+            with path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        row = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    game_idx = row.get("game_idx")
+                    if isinstance(game_idx, int):
+                        stat_games.add(game_idx)
+        return stat_games
 
     def _existing_stat_games(self) -> set[int]:
         stat_games: set[int] = set()
@@ -268,3 +288,7 @@ class JsonStorage:
         path = self._paths[name]
         with path.open("a", encoding="utf-8") as handle:
             handle.write(f"{json.dumps(row, ensure_ascii=False)}\n")
+
+
+def _is_final_status(status: str) -> bool:
+    return status.lower() in FINAL_STATUSES
