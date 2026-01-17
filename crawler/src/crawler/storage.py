@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
@@ -130,6 +131,24 @@ web_pages_table = Table(
     Column("fetched_at", DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)),
 )
 
+league_batting_records_table = Table(
+    "league_batting_records",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("year", Integer, nullable=True),
+    Column("payload", JSON, nullable=True),
+    Column("fetched_at", DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)),
+)
+
+league_pitching_records_table = Table(
+    "league_pitching_records",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("year", Integer, nullable=True),
+    Column("payload", JSON, nullable=True),
+    Column("fetched_at", DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)),
+)
+
 
 @dataclass(frozen=True)
 class TeamInfo:
@@ -150,9 +169,43 @@ class PlayerInfo:
 class Storage:
     def __init__(self, database_url: str) -> None:
         self._engine = create_engine(database_url)
+        self._team_registry: dict[str, int] = {}
 
     def create_tables(self) -> None:
         metadata.create_all(self._engine)
+
+    def set_team_registry(self, registry: dict[str, int]) -> None:
+        self._team_registry = registry
+
+    def store_roster(self, entries: Iterable[RosterEntry]) -> None:
+        with self._engine.begin() as conn:
+            for entry in entries:
+                team_id = self._upsert_team(conn, entry.team)
+                for player in entry.players:
+                    self._upsert_player(conn, player, team_id)
+
+    def store_league_records(
+        self,
+        year: int | None,
+        batting_payload: dict[str, Any],
+        pitching_payload: dict[str, Any],
+    ) -> None:
+        now = datetime.now(timezone.utc)
+        with self._engine.begin() as conn:
+            conn.execute(
+                league_batting_records_table.insert().values(
+                    year=year,
+                    payload=batting_payload,
+                    fetched_at=now,
+                )
+            )
+            conn.execute(
+                league_pitching_records_table.insert().values(
+                    year=year,
+                    payload=pitching_payload,
+                    fetched_at=now,
+                )
+            )
 
     def get_existing_game_idx(self, year: int, group_code: str | None) -> set[int]:
         with self._engine.connect() as conn:
@@ -220,6 +273,7 @@ class Storage:
         payload: dict[str, Any],
     ) -> None:
         match_data = _extract_match_payload(payload, game)
+        match_data = _apply_team_registry(match_data, self._team_registry)
         errors = validate_match_integrity(match_data)
         if errors:
             logger.error(
@@ -234,8 +288,8 @@ class Storage:
             )
             return
         with self._engine.begin() as conn:
-            home_team_id = self._upsert_team(conn, match_data.home_team)
-            away_team_id = self._upsert_team(conn, match_data.away_team)
+            home_team_id = self._find_team_id(conn, match_data.home_team)
+            away_team_id = self._find_team_id(conn, match_data.away_team)
             match_id = self._upsert_match(
                 conn,
                 game,
@@ -290,6 +344,14 @@ class Storage:
         )
         return int(result.inserted_primary_key[0])
 
+    def _find_team_id(self, conn, team: TeamInfo | None) -> int | None:
+        if team is None or team.team_idx is None:
+            return None
+        row = conn.execute(
+            select(teams_table.c.id).where(teams_table.c.team_idx == team.team_idx)
+        ).fetchone()
+        return int(row.id) if row else None
+
     def _upsert_player(
         self,
         conn,
@@ -319,6 +381,21 @@ class Storage:
             )
         )
         return int(result.inserted_primary_key[0])
+
+    def _find_player_id(
+        self,
+        conn,
+        player: PlayerInfo | None,
+        team_id: int | None,
+    ) -> int | None:
+        if player is None or not player.name or team_id is None:
+            return None
+        row = conn.execute(
+            select(players_table.c.id).where(
+                (players_table.c.name == player.name) & (players_table.c.team_id == team_id)
+            )
+        ).fetchone()
+        return int(row.id) if row else None
 
     def _upsert_match(
         self,
@@ -371,7 +448,7 @@ class Storage:
             return
         for entry in match_data.batting_stats:
             team_id = _team_id_for_side(entry.team_side, home_team_id, away_team_id)
-            player_id = self._upsert_player(conn, entry.player, team_id)
+            player_id = self._find_player_id(conn, entry.player, team_id)
             conn.execute(
                 batting_stats_table.insert().values(
                     game_id=match_id,
@@ -399,7 +476,7 @@ class Storage:
             return
         for entry in match_data.pitching_stats:
             team_id = _team_id_for_side(entry.team_side, home_team_id, away_team_id)
-            player_id = self._upsert_player(conn, entry.player, team_id)
+            player_id = self._find_player_id(conn, entry.player, team_id)
             conn.execute(
                 pitching_stats_table.insert().values(
                     game_id=match_id,
@@ -428,6 +505,12 @@ class MatchPayload:
     reported_winner: int | str | None
     batting_stats: list[BattingEntry] | None
     pitching_stats: list[PitchingEntry] | None
+
+
+@dataclass(frozen=True)
+class RosterEntry:
+    team: TeamInfo
+    players: list[PlayerInfo]
 
 
 @dataclass(frozen=True)
@@ -486,6 +569,30 @@ def _extract_team_info(payload: dict[str, Any] | None) -> TeamInfo | None:
     name = _first_string(payload, ["name", "team_name", "teamName", "club"])
     code = _first_string(payload, ["code", "team_code", "teamCode", "abbr", "short"])
     return TeamInfo(team_idx=team_idx, name=name, code=code)
+
+
+def _apply_team_registry(match_data: MatchPayload, registry: dict[str, int]) -> MatchPayload:
+    if not registry:
+        return match_data
+    home_team = _resolve_team_registry(match_data.home_team, registry)
+    away_team = _resolve_team_registry(match_data.away_team, registry)
+    if home_team is match_data.home_team and away_team is match_data.away_team:
+        return match_data
+    return replace(match_data, home_team=home_team, away_team=away_team)
+
+
+def _resolve_team_registry(team: TeamInfo | None, registry: dict[str, int]) -> TeamInfo | None:
+    if team is None or not team.name:
+        return team
+    normalized = _normalize_team_name(team.name)
+    team_idx = registry.get(normalized)
+    if team_idx is None or team.team_idx == team_idx:
+        return team
+    return TeamInfo(team_idx=team_idx, name=team.name, code=team.code)
+
+
+def _normalize_team_name(name: str) -> str:
+    return re.sub(r"\s+", "", name).lower()
 
 
 def _extract_player_info(payload: dict[str, Any] | None) -> PlayerInfo | None:

@@ -204,12 +204,14 @@ def _merge_team_identity(target: dict[str, Any], source: dict[str, Any]) -> None
     source_idx = source.get("team_idx")
     source_name = source.get("name")
     target_name = target.get("name")
+    name_matches = False
     if source_name:
         target_name_normalized = _normalize_team_name(str(target_name)) if target_name else ""
         source_name_normalized = _normalize_team_name(str(source_name))
-        if not target_name or target_name_normalized == source_name_normalized:
+        name_matches = not target_name or target_name_normalized == source_name_normalized
+        if name_matches:
             target["name"] = source_name
-    if isinstance(source_idx, int):
+    if isinstance(source_idx, int) and (name_matches or not target_name):
         target["team_idx"] = source_idx
 
 
