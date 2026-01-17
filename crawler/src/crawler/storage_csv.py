@@ -150,14 +150,26 @@ class CsvStorage:
         if not match_statuses:
             return set()
         stats_games = self._existing_stat_games()
-        existing: set[int] = set()
-        for game_idx, status in match_statuses.items():
-            if status and not _is_final_status(status):
-                existing.add(game_idx)
+        return {game_idx for game_idx in match_statuses if game_idx in stats_games}
+
+    def _existing_stat_games(self) -> set[int]:
+        stat_games: set[int] = set()
+        for key in ("batting_stats", "pitching_stats"):
+            path = self._paths[key]
+            if not path.exists():
                 continue
-            if game_idx in stats_games:
-                existing.add(game_idx)
-        return existing
+            with path.open("r", encoding="utf-8", newline="") as handle:
+                reader = csv.DictReader(handle)
+                for row in reader:
+                    if not row:
+                        continue
+                    game_idx = row.get("game_idx")
+                    if game_idx:
+                        try:
+                            stat_games.add(int(game_idx))
+                        except ValueError:
+                            continue
+        return stat_games
 
     def _existing_stat_games(self) -> set[int]:
         stat_games: set[int] = set()

@@ -186,15 +186,7 @@ class Storage:
                 ).fetchall()
             }
             stats_ids = batting_ids | pitching_ids
-            existing: set[int] = set()
-            for row in rows:
-                status = row.status
-                if status and not _is_final_status(status):
-                    existing.add(int(row.game_idx))
-                    continue
-                if row.id in stats_ids:
-                    existing.add(int(row.game_idx))
-        return existing
+            return {int(row.game_idx) for row in rows if row.id in stats_ids}
 
     def update_crawl_state(self, year: int, group_code: str | None, max_game_idx: int | None) -> None:
         now = datetime.now(timezone.utc)
