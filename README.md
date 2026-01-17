@@ -82,6 +82,7 @@ GROUP_CODES= # 필요 시 쉼표로 구분된 group_code 입력
 
 `CRAWLER_DATA_SOURCE`는 `api` 또는 `web`을 지정할 수 있습니다. `web` 모드에서는
 `CRAWLER_WEB_BASE_URL`(없으면 `CRAWLER_BASE_URL` fallback)에서 HTML을 받아 JSON을 파싱합니다.
+JSON이 없는 리그 타자/투수 랭킹 페이지는 HTML 테이블을 직접 파싱해 레코드를 구성합니다.
 
 `config/.env`를 다른 위치에서 읽으려면 `CRAWLER_ENV_FILE`을 설정하세요:
 
@@ -116,11 +117,27 @@ DB 없이 JSONL 파일로 저장하려면:
 python -m crawler.cli --from-year 2024 --to-year 2024 --output-json ./out
 ```
 
+`./out`에는 다음 JSONL 파일들이 생성됩니다:
+
+- `matches.jsonl`: 경기 기본 정보(스코어, 상태 등)
+- `teams.jsonl`: 팀 마스터 데이터
+- `players.jsonl`: 선수 마스터 데이터
+- `roster_players.jsonl`: 팀별 등록 선수 명단
+- `batting_stats.jsonl`: 타격 스탯
+- `pitching_stats.jsonl`: 투구 스탯
+- `crawl_state.jsonl`: 크롤링 진행 상태
+- `web_pages.jsonl`: 웹 스크래핑 페이지 원본/파싱 결과
+- `league_batting_records.jsonl`: 리그 타자 기록(연도별)
+- `league_pitching_records.jsonl`: 리그 투수 기록(연도별)
+
 HTML 페이지 스크래핑 모드로 실행하려면:
 
 ```bash
 python -m crawler.cli --from-year 2024 --to-year 2024 --data-source web
 ```
+
+리그 타자/투수 기록은 동일 연도에 대해 중복 저장되지 않으며, DB 모드에서는
+기존 연도 데이터를 덮어쓴 후 최신 데이터를 저장합니다.
 
 필요하면 그룹 코드만 수집하도록 `--group-code` 옵션을 여러 번 사용할 수 있습니다.
 
