@@ -4,6 +4,7 @@ from __future__ import annotations
 import html
 import logging
 import re
+from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -39,12 +40,13 @@ def fetch_roster(client: WebClient, settings: Settings, year: int) -> list[Roste
         settings.roster_page_path,
         params={"lig_idx": settings.lig_idx, "season": year},
     ).text
-    content_path = _resolve_roster_content_path(index_html)
-    content_html = client.request("GET", content_path).text
+    content_path, content_params = _resolve_roster_content_path(index_html, settings, year)
+    content_html = client.request("GET", content_path, params=content_params).text
     team_links = _extract_team_links(content_html)
     entries: list[RosterEntry] = []
     for link in team_links:
-        roster_html = client.request("GET", link.href).text
+        roster_path, roster_params = _normalize_roster_link(link.href, settings, year)
+        roster_html = client.request("GET", roster_path, params=roster_params).text
         team_name = _extract_team_name(roster_html) or link.name
         team = TeamInfo(team_idx=link.team_idx, name=team_name, code=None)
         players = _extract_players(roster_html)
@@ -68,11 +70,16 @@ class _TeamLink:
     href: str
 
 
-def _resolve_roster_content_path(index_html: str) -> str:
+def _resolve_roster_content_path(
+    index_html: str,
+    settings: Settings,
+    year: int,
+) -> tuple[str, dict[str, str]]:
     match = ROSTER_IFRAME_PATTERN.search(index_html)
     if match:
-        return html.unescape(match.group("src"))
-    return "/league/state/content/regist"
+        raw_path = html.unescape(match.group("src"))
+        return _normalize_roster_link(raw_path, settings, year)
+    return "/league/state/content/regist", {"lig_idx": str(settings.lig_idx), "season": str(year)}
 
 
 def _extract_team_links(html_text: str) -> list[_TeamLink]:
@@ -103,12 +110,17 @@ def _extract_team_name(html_text: str) -> str | None:
 
 def _extract_players(html_text: str) -> list[PlayerInfo]:
     players: list[PlayerInfo] = []
+    seen: set[tuple[str, str | None]] = set()
     for match in PLAYER_ROW_PATTERN.finditer(html_text):
         row = match.group("row")
         name = _extract_player_name(row)
         if not name:
             continue
         position = _extract_player_position(row)
+        key = (name, position)
+        if key in seen:
+            continue
+        seen.add(key)
         players.append(PlayerInfo(player_idx=None, name=name, position=position, bats=None, throws=None))
     return players
 
@@ -135,3 +147,16 @@ def _clean_html_text(raw: str) -> str:
     cleaned = re.sub(r"<[^>]+>", "", raw)
     cleaned = html.unescape(cleaned)
     return cleaned.replace("\xa0", " ").strip()
+
+
+def _normalize_roster_link(
+    href: str,
+    settings: Settings,
+    year: int,
+) -> tuple[str, dict[str, str]]:
+    parts = urlsplit(href)
+    query = parse_qs(parts.query)
+    query["lig_idx"] = [str(settings.lig_idx)]
+    query["season"] = [str(year)]
+    params = {key: value[-1] for key, value in query.items()}
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", "")) or parts.path, params

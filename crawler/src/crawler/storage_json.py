@@ -29,6 +29,8 @@ class JsonStorage:
     def __init__(self, output_dir: str | Path) -> None:
         self._output_dir = Path(output_dir)
         self._team_registry: dict[str, int] = {}
+        self._seen_team_keys: set[int | str] = set()
+        self._seen_player_keys: set[tuple[int | None, str, str | None]] = set()
         self._paths = {
             "matches": self._output_dir / "matches.jsonl",
             "teams": self._output_dir / "teams.jsonl",
@@ -51,8 +53,18 @@ class JsonStorage:
 
     def store_roster(self, entries: Iterable[RosterEntry]) -> None:
         for entry in entries:
+            team_key = entry.team.team_idx if entry.team.team_idx is not None else entry.team.name
+            if team_key in self._seen_team_keys:
+                continue
+            self._seen_team_keys.add(team_key)
             self._append_team(entry.team)
             for player in entry.players:
+                if not player.name:
+                    continue
+                player_key = (entry.team.team_idx, player.name, player.position)
+                if player_key in self._seen_player_keys:
+                    continue
+                self._seen_player_keys.add(player_key)
                 self._append_player(player, entry.team.team_idx)
 
     def store_league_records(
