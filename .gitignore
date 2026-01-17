@@ -28,3 +28,14 @@ Editor directories and files
 *.sw?
 crawler/config/.env
 *.pyc
+crawler/out/batting_stats.jsonl
+crawler/out/crawl_state.jsonl
+.gitignore
+crawler/out/matches.jsonl
+crawler/out/pitching_stats.jsonl
+crawler/out/players.jsonl
+crawler/out/teams.jsonl
+crawler/out/web_pages.jsonl
+crawler/out/league_batting_records.jsonl
+crawler/out/league_pitching_records.jsonl
+crawler/out/roster_players.jsonl
