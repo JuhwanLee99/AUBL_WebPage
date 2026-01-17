@@ -19,6 +19,10 @@ TEAM_BLOCK_PATTERN = re.compile(
     r"<dl class=\"team (?P<side>left|right)\">(?P<content>.*?)</dl>",
     re.DOTALL | re.IGNORECASE,
 )
+TEAM_LINK_PATTERN = re.compile(
+    r"<dt>\s*<a[^>]*href=[\"'][^\"']*club_idx=(?P<club_idx>\d+)[^\"']*[\"'][^>]*>(?P<name>.*?)</a>\s*</dt>",
+    re.DOTALL | re.IGNORECASE,
+)
 TEAM_NAME_PATTERN = re.compile(r"<dt>\s*<a[^>]*>(?P<name>.*?)</a>\s*</dt>", re.DOTALL)
 TEAM_SCORE_PATTERN = re.compile(r"<dd class=\"score\">\s*(?P<score>\d+)\s*</dd>")
 TEAM_IDX_PATTERN = re.compile(r"club_idx=(?P<club_idx>\d+)")
@@ -97,8 +101,11 @@ def _parse_boxscore_html(html_text: str) -> dict[str, Any]:
     for match in TEAM_BLOCK_PATTERN.finditer(html_text):
         side = match.group("side").lower()
         content = match.group("content")
-        club_idx = _extract_int(TEAM_IDX_PATTERN, content)
-        name = _extract_text(TEAM_NAME_PATTERN, content)
+        club_idx, name = _extract_team_link_info(content)
+        if club_idx is None:
+            club_idx = _extract_int(TEAM_IDX_PATTERN, content)
+        if not name:
+            name = _extract_text(TEAM_NAME_PATTERN, content)
         score = _extract_int(TEAM_SCORE_PATTERN, content)
         result = _extract_text(TEAM_RESULT_PATTERN, content)
         team_payload: dict[str, Any] = {"team_idx": club_idx, "name": name, "r": score}
@@ -143,6 +150,18 @@ def _extract_int(pattern: re.Pattern[str], text: str) -> int | None:
         return None
 
 
+def _extract_team_link_info(text: str) -> tuple[int | None, str | None]:
+    match = TEAM_LINK_PATTERN.search(text)
+    if not match:
+        return None, None
+    name = _clean_html_text(match.group("name")) or None
+    try:
+        club_idx = int(match.group("club_idx"))
+    except (TypeError, ValueError):
+        club_idx = None
+    return club_idx, name
+
+
 def _has_scores(home_team: dict[str, Any] | None, away_team: dict[str, Any] | None) -> bool:
     if not home_team or not away_team:
         return False
@@ -174,10 +193,24 @@ def _merge_boxscore_payload(payload: Any, html_text: str) -> dict[str, Any]:
             continue
         if team_key not in parsed or not isinstance(parsed.get(team_key), dict):
             continue
+        _merge_team_identity(payload[team_key], parsed[team_key])
         for stats_key in ("batting", "pitching", "batting_stats", "pitching_stats"):
             if stats_key not in payload[team_key] and stats_key in parsed[team_key]:
                 payload[team_key][stats_key] = parsed[team_key][stats_key]
     return payload
+
+
+def _merge_team_identity(target: dict[str, Any], source: dict[str, Any]) -> None:
+    source_idx = source.get("team_idx")
+    source_name = source.get("name")
+    target_name = target.get("name")
+    if source_name:
+        target_name_normalized = _normalize_team_name(str(target_name)) if target_name else ""
+        source_name_normalized = _normalize_team_name(str(source_name))
+        if not target_name or target_name_normalized == source_name_normalized:
+            target["name"] = source_name
+    if isinstance(source_idx, int):
+        target["team_idx"] = source_idx
 
 
 def _has_team_payload(payload: dict[str, Any]) -> bool:
