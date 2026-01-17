@@ -25,9 +25,14 @@ cp config/.env.example config/.env
 Fill in the Gameone API settings and rate limits in `config/.env`:
 
 ```bash
+CRAWLER_DATA_SOURCE=api
 CRAWLER_BASE_URL=https://<gameone-base-url>
+CRAWLER_WEB_BASE_URL=
 SCHEDULE_LIST_ENDPOINT=/schedule/list
 BOXSCORE_ENDPOINT=/game/boxscore
+SCHEDULE_PAGE_PATH=/schedule
+BOXSCORE_PAGE_PATH=/game/boxscore
+HTML_JSON_SCRIPT_ID=
 LIG_IDX=972
 GROUP_CODES= # 필요 시 쉼표로 구분된 group_code 입력
 REQUESTS_PER_MINUTE=60
@@ -35,6 +40,10 @@ REQUEST_TIMEOUT_SECONDS=10
 REQUEST_SLEEP_SECONDS=0
 CRAWLER_USER_AGENT=AUBL-Crawler/1.0
 ```
+
+`CRAWLER_DATA_SOURCE`는 `api`(기본값) 또는 `web`을 사용할 수 있습니다. `web` 모드에서는
+`CRAWLER_WEB_BASE_URL`(없으면 `CRAWLER_BASE_URL` fallback)을 사용해 HTML 페이지를
+가져오고, `HTML_JSON_SCRIPT_ID`가 있다면 해당 `<script>` 태그의 JSON을 파싱합니다.
 
 The crawler also requires a PostgreSQL connection string via `DATABASE_URL` (or
 `CRAWLER_DATABASE_URL`). For example:
@@ -56,6 +65,12 @@ Run the crawler for a specific year range:
 
 ```bash
 python -m crawler.cli --from-year 2024 --to-year 2024
+```
+
+Run the crawler using HTML scraping mode:
+
+```bash
+python -m crawler.cli --from-year 2024 --to-year 2024 --data-source web
 ```
 
 Limit collection to specific group codes (repeatable):

@@ -14,6 +14,7 @@ from crawler.schedule_fetcher import GameSummary, fetch_schedule_games
 from crawler.settings import Settings, load_settings
 from crawler.storage import Storage
 from crawler.storage_csv import CsvStorage
+from crawler.web_client import WebClient
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output-csv",
         help="Directory to write CSV output instead of using the database.",
+    )
+    parser.add_argument(
+        "--data-source",
+        choices=("api", "web"),
+        help="Select data source: api (default) or web (HTML scraping).",
     )
     return parser
 
@@ -61,6 +67,23 @@ def _validate_no_duplicate_games(games: list[GameSummary]) -> None:
         raise ValueError(f"duplicate game_idx values detected: {sorted(duplicates)}")
 
 
+def _resolve_data_source(settings: Settings, args: argparse.Namespace) -> str:
+    data_source = (args.data_source or settings.data_source).lower()
+    if data_source not in {"api", "web"}:
+        raise ValueError(f"Unsupported data source: {data_source}")
+    return data_source
+
+
+def _validate_source_settings(settings: Settings, data_source: str) -> None:
+    if data_source == "api":
+        if not settings.base_url:
+            raise ValueError("CRAWLER_BASE_URL must be set for API mode")
+        return
+    base_url = settings.web_base_url or settings.base_url
+    if not base_url:
+        raise ValueError("CRAWLER_WEB_BASE_URL (or CRAWLER_BASE_URL) must be set for web mode")
+
+
 def run_sync() -> None:
     logging.basicConfig(level=logging.INFO)
     parser = _build_parser()
@@ -69,6 +92,8 @@ def run_sync() -> None:
     settings = load_settings()
     group_codes = _resolve_group_codes(settings, args)
     sync_settings = replace(settings, group_codes=group_codes)
+    data_source = _resolve_data_source(sync_settings, args)
+    _validate_source_settings(sync_settings, data_source)
 
     start_year, end_year = _resolve_years(args)
 
@@ -80,11 +105,11 @@ def run_sync() -> None:
             raise ValueError("DATABASE_URL or CRAWLER_DATABASE_URL must be set")
         storage = Storage(database_url)
     storage.create_tables()
-    client = ApiClient(sync_settings)
+    client = ApiClient(sync_settings) if data_source == "api" else WebClient(sync_settings)
 
     try:
         for year in range(start_year, end_year + 1):
-            schedule_games = fetch_schedule_games(client, sync_settings, year)
+            schedule_games = fetch_schedule_games(client, sync_settings, year, data_source)
             _validate_no_duplicate_games(schedule_games)
 
             for group_code in group_codes or (None,):
@@ -100,13 +125,14 @@ def run_sync() -> None:
                             "group_code": group_code,
                             "existing_games": len(existing),
                             "games_to_fetch": len(to_fetch),
+                            "data_source": data_source,
                         },
                         sort_keys=True,
                     )
                 )
 
                 for game in to_fetch:
-                    payload = fetch_boxscore(client, sync_settings, game.game_idx)
+                    payload = fetch_boxscore(client, sync_settings, game.game_idx, data_source)
                     storage.store_boxscore(game, year, payload)
 
                 max_game_idx = max((game.game_idx for game in group_games), default=None)
