@@ -56,14 +56,6 @@ def _extract_games(payload: Any) -> Iterable[dict[str, Any]]:
 def _is_final_status(status: str) -> bool:
     return status.lower() in FINAL_STATUSES
 
-
-def _extract_iframe_src(html_text: str) -> str | None:
-    match = IFRAME_SRC_PATTERN.search(html_text)
-    if not match:
-        return None
-    return html.unescape(match.group("src"))
-
-
 def _extract_game_ids_from_html(html_text: str) -> list[int]:
     seen: set[int] = set()
     game_ids: list[int] = []
@@ -83,9 +75,8 @@ def _fetch_schedule_content_html(
     group_code: str | None,
     schedule_page_html: str,
 ) -> str:
-    iframe_src = _extract_iframe_src(schedule_page_html)
-    if iframe_src:
-        return client.request("GET", iframe_src).text
+    iframe_src = IFRAME_SRC_PATTERN.search(schedule_page_html)
+    path = iframe_src.group("src") if iframe_src else SCHEDULE_CONTENT_PATH
     params = {
         "lig_idx": settings.lig_idx,
         "year": year,
@@ -96,7 +87,7 @@ def _fetch_schedule_content_html(
         "club_idx": 0,
         "outside": "",
     }
-    return client.request("GET", SCHEDULE_CONTENT_PATH, params=params).text
+    return client.request("GET", path, params=params).text
 
 
 def fetch_schedule_games(
@@ -114,7 +105,7 @@ def fetch_schedule_games(
             response = client.request("GET", settings.schedule_page_path, params=params)
             try:
                 payload = parse_html_json(response.text, settings.html_json_script_id)
-            except ValueError:
+            except (ValueError, json.JSONDecodeError):
                 schedule_html = _fetch_schedule_content_html(
                     client,
                     settings,
