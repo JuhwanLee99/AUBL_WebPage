@@ -67,6 +67,12 @@ Run the crawler for a specific year range:
 python -m crawler.cli --from-year 2024 --to-year 2024
 ```
 
+Run the crawler without a database by writing JSONL output:
+
+```bash
+python -m crawler.cli --from-year 2024 --to-year 2024 --output-json ./out
+```
+
 Run the crawler using HTML scraping mode:
 
 ```bash
@@ -81,8 +87,8 @@ python -m crawler.cli --from-year 2024 --to-year 2024 --group-code A --group-cod
 
 ## CSV quick checks (DB export)
 
-The crawler currently stores to PostgreSQL only. For a quick local check, export
-tables to CSV using `psql`:
+The default storage is PostgreSQL, but `--output-json`/`--output-csv` allow local
+files. For a quick local check, export tables to CSV using `psql`:
 
 ```bash
 psql "$DATABASE_URL" -c "\\copy matches TO 'matches.csv' CSV HEADER"
@@ -94,9 +100,9 @@ psql "$DATABASE_URL" -c "\\copy pitching_stats TO 'pitching_stats.csv' CSV HEADE
 
 ## DB 없이 동작 확인하기 (API 응답 JSON 저장)
 
-현재 CLI(`crawler.cli`)는 DB 연결이 필수입니다. DB 없이 동작 여부와 결과 포맷을
-빠르게 확인하려면 아래처럼 파이썬 스크립트로 스케줄/박스스코어를 가져와
-JSON 파일로 저장할 수 있습니다.
+CLI는 `--output-json`/`--output-csv`로 DB 없이 실행할 수 있습니다. API 응답
+구조를 빠르게 확인하려면 아래처럼 파이썬 스크립트로 스케줄/박스스코어를
+가져와 JSON 파일로 저장할 수도 있습니다.
 
 ```bash
 python - <<'PY'
