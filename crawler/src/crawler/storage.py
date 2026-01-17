@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
@@ -150,9 +151,20 @@ class PlayerInfo:
 class Storage:
     def __init__(self, database_url: str) -> None:
         self._engine = create_engine(database_url)
+        self._team_registry: dict[str, int] = {}
 
     def create_tables(self) -> None:
         metadata.create_all(self._engine)
+
+    def set_team_registry(self, registry: dict[str, int]) -> None:
+        self._team_registry = registry
+
+    def store_roster(self, entries: Iterable[RosterEntry]) -> None:
+        with self._engine.begin() as conn:
+            for entry in entries:
+                team_id = self._upsert_team(conn, entry.team)
+                for player in entry.players:
+                    self._upsert_player(conn, player, team_id)
 
     def get_existing_game_idx(self, year: int, group_code: str | None) -> set[int]:
         with self._engine.connect() as conn:
@@ -220,6 +232,7 @@ class Storage:
         payload: dict[str, Any],
     ) -> None:
         match_data = _extract_match_payload(payload, game)
+        match_data = _apply_team_registry(match_data, self._team_registry)
         errors = validate_match_integrity(match_data)
         if errors:
             logger.error(
@@ -431,6 +444,12 @@ class MatchPayload:
 
 
 @dataclass(frozen=True)
+class RosterEntry:
+    team: TeamInfo
+    players: list[PlayerInfo]
+
+
+@dataclass(frozen=True)
 class BattingEntry:
     team_side: str | None
     player: PlayerInfo | None
@@ -486,6 +505,30 @@ def _extract_team_info(payload: dict[str, Any] | None) -> TeamInfo | None:
     name = _first_string(payload, ["name", "team_name", "teamName", "club"])
     code = _first_string(payload, ["code", "team_code", "teamCode", "abbr", "short"])
     return TeamInfo(team_idx=team_idx, name=name, code=code)
+
+
+def _apply_team_registry(match_data: MatchPayload, registry: dict[str, int]) -> MatchPayload:
+    if not registry:
+        return match_data
+    home_team = _resolve_team_registry(match_data.home_team, registry)
+    away_team = _resolve_team_registry(match_data.away_team, registry)
+    if home_team is match_data.home_team and away_team is match_data.away_team:
+        return match_data
+    return replace(match_data, home_team=home_team, away_team=away_team)
+
+
+def _resolve_team_registry(team: TeamInfo | None, registry: dict[str, int]) -> TeamInfo | None:
+    if team is None or not team.name:
+        return team
+    normalized = _normalize_team_name(team.name)
+    team_idx = registry.get(normalized)
+    if team_idx is None or team.team_idx == team_idx:
+        return team
+    return TeamInfo(team_idx=team_idx, name=team.name, code=team.code)
+
+
+def _normalize_team_name(name: str) -> str:
+    return re.sub(r"\s+", "", name).lower()
 
 
 def _extract_player_info(payload: dict[str, Any] | None) -> PlayerInfo | None:

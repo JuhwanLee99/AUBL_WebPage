@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 from crawler.api_client import ApiClient
 from crawler.boxscore_fetcher import fetch_boxscore
+from crawler.roster_fetcher import build_team_registry, fetch_roster
 from crawler.schedule_fetcher import GameSummary, fetch_schedule_games
 from crawler.settings import Settings, load_settings
 from crawler.storage import Storage
@@ -115,9 +116,13 @@ def run_sync() -> None:
         storage = Storage(database_url)
     storage.create_tables()
     client = ApiClient(sync_settings) if data_source == "api" else WebClient(sync_settings)
+    roster_client = client if data_source == "web" else WebClient(sync_settings)
 
     try:
         for year in range(start_year, end_year + 1):
+            roster_entries = fetch_roster(roster_client, sync_settings, year)
+            storage.store_roster(roster_entries)
+            storage.set_team_registry(build_team_registry(roster_entries))
             if data_source == "web":
                 web_pages = fetch_web_pages(client, sync_settings, year)
                 for page in web_pages:
@@ -157,6 +162,8 @@ def run_sync() -> None:
                 max_game_idx = max((game.game_idx for game in group_games), default=None)
                 storage.update_crawl_state(year, group_code, max_game_idx)
     finally:
+        if roster_client is not client:
+            roster_client.close()
         client.close()
 
 
