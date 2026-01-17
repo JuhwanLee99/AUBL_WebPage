@@ -16,6 +16,7 @@ from crawler.storage import Storage
 from crawler.storage_csv import CsvStorage
 from crawler.storage_json import JsonStorage
 from crawler.web_client import WebClient
+from crawler.web_pages_fetcher import fetch_web_pages
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +118,16 @@ def run_sync() -> None:
 
     try:
         for year in range(start_year, end_year + 1):
+            if data_source == "web":
+                web_pages = fetch_web_pages(client, sync_settings, year)
+                for page in web_pages:
+                    storage.store_web_page(
+                        page.page_key,
+                        page.url,
+                        page.params,
+                        page.payload,
+                        page.year,
+                    )
             schedule_games = fetch_schedule_games(client, sync_settings, year, data_source)
             _validate_no_duplicate_games(schedule_games)
 
