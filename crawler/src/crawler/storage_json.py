@@ -37,6 +37,8 @@ class JsonStorage:
             "pitching_stats": self._output_dir / "pitching_stats.jsonl",
             "crawl_state": self._output_dir / "crawl_state.jsonl",
             "web_pages": self._output_dir / "web_pages.jsonl",
+            "league_batting_records": self._output_dir / "league_batting_records.jsonl",
+            "league_pitching_records": self._output_dir / "league_pitching_records.jsonl",
         }
 
     def create_tables(self) -> None:
@@ -52,6 +54,22 @@ class JsonStorage:
             self._append_team(entry.team)
             for player in entry.players:
                 self._append_player(player, entry.team.team_idx)
+
+    def store_league_records(
+        self,
+        year: int | None,
+        batting_payload: dict[str, Any],
+        pitching_payload: dict[str, Any],
+    ) -> None:
+        fetched_at = datetime.now(timezone.utc).isoformat()
+        self._append(
+            "league_batting_records",
+            {"year": year, "payload": batting_payload, "fetched_at": fetched_at},
+        )
+        self._append(
+            "league_pitching_records",
+            {"year": year, "payload": pitching_payload, "fetched_at": fetched_at},
+        )
 
     def get_existing_game_idx(self, year: int, group_code: str | None) -> set[int]:
         path = self._paths["matches"]
@@ -151,9 +169,6 @@ class JsonStorage:
             return
 
         self._append_match(game, year, payload, match_data)
-        self._append_team(match_data.home_team)
-        self._append_team(match_data.away_team)
-        self._append_players(match_data)
         self._append_batting(game, match_data)
         self._append_pitching(game, match_data)
 

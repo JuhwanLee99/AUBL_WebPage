@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 from crawler.api_client import ApiClient
 from crawler.boxscore_fetcher import fetch_boxscore
+from crawler.league_records_fetcher import fetch_league_records
 from crawler.roster_fetcher import build_team_registry, fetch_roster
 from crawler.schedule_fetcher import GameSummary, fetch_schedule_games
 from crawler.settings import Settings, load_settings
@@ -123,6 +124,12 @@ def run_sync() -> None:
             roster_entries = fetch_roster(roster_client, sync_settings, year)
             storage.store_roster(roster_entries)
             storage.set_team_registry(build_team_registry(roster_entries))
+            batting_payload, pitching_payload = fetch_league_records(
+                roster_client,
+                sync_settings,
+                year,
+            )
+            storage.store_league_records(year, batting_payload, pitching_payload)
             if data_source == "web":
                 web_pages = fetch_web_pages(client, sync_settings, year)
                 for page in web_pages:

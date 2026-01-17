@@ -131,6 +131,24 @@ web_pages_table = Table(
     Column("fetched_at", DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)),
 )
 
+league_batting_records_table = Table(
+    "league_batting_records",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("year", Integer, nullable=True),
+    Column("payload", JSON, nullable=True),
+    Column("fetched_at", DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)),
+)
+
+league_pitching_records_table = Table(
+    "league_pitching_records",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("year", Integer, nullable=True),
+    Column("payload", JSON, nullable=True),
+    Column("fetched_at", DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)),
+)
+
 
 @dataclass(frozen=True)
 class TeamInfo:
@@ -165,6 +183,29 @@ class Storage:
                 team_id = self._upsert_team(conn, entry.team)
                 for player in entry.players:
                     self._upsert_player(conn, player, team_id)
+
+    def store_league_records(
+        self,
+        year: int | None,
+        batting_payload: dict[str, Any],
+        pitching_payload: dict[str, Any],
+    ) -> None:
+        now = datetime.now(timezone.utc)
+        with self._engine.begin() as conn:
+            conn.execute(
+                league_batting_records_table.insert().values(
+                    year=year,
+                    payload=batting_payload,
+                    fetched_at=now,
+                )
+            )
+            conn.execute(
+                league_pitching_records_table.insert().values(
+                    year=year,
+                    payload=pitching_payload,
+                    fetched_at=now,
+                )
+            )
 
     def get_existing_game_idx(self, year: int, group_code: str | None) -> set[int]:
         with self._engine.connect() as conn:
@@ -247,8 +288,8 @@ class Storage:
             )
             return
         with self._engine.begin() as conn:
-            home_team_id = self._upsert_team(conn, match_data.home_team)
-            away_team_id = self._upsert_team(conn, match_data.away_team)
+            home_team_id = self._find_team_id(conn, match_data.home_team)
+            away_team_id = self._find_team_id(conn, match_data.away_team)
             match_id = self._upsert_match(
                 conn,
                 game,
@@ -303,6 +344,14 @@ class Storage:
         )
         return int(result.inserted_primary_key[0])
 
+    def _find_team_id(self, conn, team: TeamInfo | None) -> int | None:
+        if team is None or team.team_idx is None:
+            return None
+        row = conn.execute(
+            select(teams_table.c.id).where(teams_table.c.team_idx == team.team_idx)
+        ).fetchone()
+        return int(row.id) if row else None
+
     def _upsert_player(
         self,
         conn,
@@ -332,6 +381,21 @@ class Storage:
             )
         )
         return int(result.inserted_primary_key[0])
+
+    def _find_player_id(
+        self,
+        conn,
+        player: PlayerInfo | None,
+        team_id: int | None,
+    ) -> int | None:
+        if player is None or not player.name or team_id is None:
+            return None
+        row = conn.execute(
+            select(players_table.c.id).where(
+                (players_table.c.name == player.name) & (players_table.c.team_id == team_id)
+            )
+        ).fetchone()
+        return int(row.id) if row else None
 
     def _upsert_match(
         self,
@@ -384,7 +448,7 @@ class Storage:
             return
         for entry in match_data.batting_stats:
             team_id = _team_id_for_side(entry.team_side, home_team_id, away_team_id)
-            player_id = self._upsert_player(conn, entry.player, team_id)
+            player_id = self._find_player_id(conn, entry.player, team_id)
             conn.execute(
                 batting_stats_table.insert().values(
                     game_id=match_id,
@@ -412,7 +476,7 @@ class Storage:
             return
         for entry in match_data.pitching_stats:
             team_id = _team_id_for_side(entry.team_side, home_team_id, away_team_id)
-            player_id = self._upsert_player(conn, entry.player, team_id)
+            player_id = self._find_player_id(conn, entry.player, team_id)
             conn.execute(
                 pitching_stats_table.insert().values(
                     game_id=match_id,
