@@ -130,7 +130,7 @@ class CsvStorage:
         path = self._paths["matches"]
         if not path.exists():
             return set()
-        existing: set[int] = set()
+        match_statuses: dict[int, str | None] = {}
         with path.open("r", encoding="utf-8", newline="") as handle:
             reader = csv.DictReader(handle)
             for row in reader:
@@ -144,10 +144,32 @@ class CsvStorage:
                 game_idx = row.get("game_idx")
                 if game_idx:
                     try:
-                        existing.add(int(game_idx))
+                        match_statuses[int(game_idx)] = row.get("status")
                     except ValueError:
                         continue
-        return existing
+        if not match_statuses:
+            return set()
+        stats_games = self._existing_stat_games()
+        return {game_idx for game_idx in match_statuses if game_idx in stats_games}
+
+    def _existing_stat_games(self) -> set[int]:
+        stat_games: set[int] = set()
+        for key in ("batting_stats", "pitching_stats"):
+            path = self._paths[key]
+            if not path.exists():
+                continue
+            with path.open("r", encoding="utf-8", newline="") as handle:
+                reader = csv.DictReader(handle)
+                for row in reader:
+                    if not row:
+                        continue
+                    game_idx = row.get("game_idx")
+                    if game_idx:
+                        try:
+                            stat_games.add(int(game_idx))
+                        except ValueError:
+                            continue
+        return stat_games
 
     def update_crawl_state(self, year: int, group_code: str | None, max_game_idx: int | None) -> None:
         now = datetime.now(timezone.utc)
