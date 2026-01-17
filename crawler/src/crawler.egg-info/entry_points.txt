@@ -1,0 +1,2 @@
+[console_scripts]
+crawler-sync = crawler.cli:main

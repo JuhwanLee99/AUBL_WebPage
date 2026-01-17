@@ -26,3 +26,5 @@ Editor directories and files
 *.njsproj
 *.sln
 *.sw?
+crawler/config/.env
+*.pyc
