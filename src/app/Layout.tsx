@@ -14,6 +14,10 @@ export default function Layout() {
     document.documentElement.setAttribute('data-preview-mode', previewMode);
   }, [previewMode]);
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0 });
+  }, [location.pathname]);
+
   const navItems = [
     { path: '/intro', label: '리그 소개' },
     { path: '/records', label: '기록' },
