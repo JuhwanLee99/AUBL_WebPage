@@ -116,7 +116,7 @@ export default function LandingPage() {
           borderRadius: '32px',
           padding: '56px',
           background:
-            'radial-gradient(circle at 18% 22%, rgba(59,130,246,0.2), transparent 32%), radial-gradient(circle at 90% 0%, rgba(12,74,110,0.22), transparent 30%), linear-gradient(140deg, #0a1a3f 0%, #0f2f8f 100%)',
+            'radial-gradient(circle at 18% 22%, rgba(59,130,246,0.24), transparent 32%), radial-gradient(circle at 90% 0%, rgba(12,74,110,0.18), transparent 30%), linear-gradient(140deg, #0b1f46 0%, #0d2f7f 100%)',
           boxShadow: '0 24px 60px rgba(6, 15, 40, 0.55)',
           isolation: 'isolate',
         }}
@@ -198,11 +198,12 @@ export default function LandingPage() {
           style={{
             position: 'absolute',
             inset: 0,
-            background:
-              "url('https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1200&q=80')",
-            backgroundSize: 'cover',
+            background: "url('/assets/aubl_clean.png')",
+            backgroundSize: 'contain',
             backgroundPosition: 'center',
-            opacity: 0.14,
+            backgroundRepeat: 'no-repeat',
+            opacity: 0.32,
+            pointerEvents: 'none',
           }}
         />
       </section>
