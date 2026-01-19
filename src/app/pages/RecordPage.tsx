@@ -1,8 +1,8 @@
-// src/pages/RecordPage.tsx
+// src/app/pages/RecordPage.tsx
 import { useEffect, useMemo, useRef, useState } from 'react';
 import gsap from 'gsap';
-import { TEAM_RECORDS, TEAMS } from '../shared/lib/mockData';
-import type { TeamSeasonRecord } from '../shared/types';
+import { TEAM_RECORDS, TEAMS } from '../../shared/lib/mockData';
+import type { TeamSeasonRecord } from '../../shared/types';
 
 interface EnrichedRecord extends TeamSeasonRecord {
   teamName: string;
