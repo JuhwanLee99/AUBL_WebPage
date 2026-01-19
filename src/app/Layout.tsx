@@ -21,64 +21,51 @@ export default function Layout() {
   ];
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div className="app-shell">
       {!isLiveOverlay && (
-        <header
-          style={{
-            position: 'sticky',
-            top: 0,
-            zIndex: 50,
-            backdropFilter: 'blur(12px)',
-            background: 'rgba(17, 24, 39, 0.7)',
-            borderBottom: '1px solid rgba(148, 163, 184, 0.2)',
-          }}
-        >
-          <div
-            style={{
-              maxWidth: '1600px',
-              margin: '0 auto',
-              padding: '0 24px',
-              height: '72px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
-          >
-            <Link to="/" style={{ fontSize: '24px', fontWeight: 900, letterSpacing: '-0.03em', color: '#c084fc' }}>
+        <header className="app-header">
+          <div className="app-header__inner">
+            <Link
+              to="/"
+              style={{
+                fontSize: 'clamp(20px, 4vw, 24px)',
+                fontWeight: 900,
+                letterSpacing: '-0.03em',
+                color: '#c084fc',
+                whiteSpace: 'nowrap',
+              }}
+            >
               AUBL<span style={{ color: '#f97316' }}>.</span>
             </Link>
-            <nav style={{ display: 'flex', gap: '28px' }}>
-              {navItems.map((item) => {
-                const isActive = location.pathname === item.path;
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    style={{
-                      fontSize: '15px',
-                      fontWeight: 600,
-                      color: isActive ? '#f97316' : '#cbd5e1',
-                      transition: 'color 120ms ease',
-                    }}
-                  >
-                    {item.label}
-                  </Link>
-                );
-              })}
+            <nav className="nav-scroll" style={{ marginLeft: 'auto', flex: 1, minWidth: 0 }}>
+              <div className="nav-scroll__rail">
+                {navItems.map((item) => {
+                  const isActive = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      style={{
+                        fontSize: 'var(--nav-font-size)',
+                        fontWeight: 700,
+                        color: isActive ? '#f97316' : '#cbd5e1',
+                        transition: 'color 120ms ease',
+                        whiteSpace: 'nowrap',
+                        scrollSnapAlign: 'start',
+                        padding: '10px 0',
+                      }}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
             </nav>
           </div>
         </header>
       )}
 
-      <main
-        style={{
-          flex: 1,
-          width: '100%',
-          maxWidth: isLiveOverlay ? '100%' : '1600px',
-          margin: isLiveOverlay ? '0' : '0 auto',
-          padding: isLiveOverlay ? 0 : '40px 24px 72px',
-        }}
-      >
+      <main className="app-main" style={isLiveOverlay ? { maxWidth: '100%', margin: 0, padding: 0 } : undefined}>
         <Outlet />
       </main>
 
