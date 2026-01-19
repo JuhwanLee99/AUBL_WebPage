@@ -45,7 +45,7 @@ export default function Layout() {
             >
               AUBL<span style={{ color: '#f97316' }}>.</span>
             </Link>
-            <nav className="nav-scroll" style={{ marginLeft: 'auto', flex: 1, minWidth: 0 }}>
+            <nav className="nav-scroll" style={{ marginLeft: 'auto', flex: 1, minWidth: 0, paddingLeft: '18px' }}>
               <div className="nav-scroll__rail">
                 {navItems.map((item) => {
                   const isActive = location.pathname === item.path;
