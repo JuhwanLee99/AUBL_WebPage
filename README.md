@@ -46,6 +46,118 @@ npm run dev
 
 브라우저에서 http://localhost:5173 (포트는 변경될 수 있음)으로 접속하여 확인합니다.
 
+## 🧭 크롤러(Gameone) 세팅 및 실행
+
+크롤러는 `crawler/` 디렉토리의 독립 패키지로 관리됩니다. 현재 구현은 **DB 저장소(PostgreSQL) 필수**이며, `DATABASE_URL`(또는 `CRAWLER_DATABASE_URL`)이 없으면 실행되지 않습니다.
+
+### 1) 파이썬 가상환경 및 의존성 설치
+
+```bash
+cd crawler
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+### 2) 환경변수 준비
+
+```bash
+cp config/.env.example config/.env
+```
+
+`config/.env` 파일에 Gameone API 설정을 채워 주세요.
+
+```bash
+CRAWLER_DATA_SOURCE=api
+CRAWLER_BASE_URL=https://<gameone-base-url>
+CRAWLER_WEB_BASE_URL=
+SCHEDULE_LIST_ENDPOINT=/schedule/list
+BOXSCORE_ENDPOINT=/game/boxscore
+SCHEDULE_PAGE_PATH=/league/schedule/all
+BOXSCORE_PAGE_PATH=/game/boxscore
+HTML_JSON_SCRIPT_ID=
+LIG_IDX=972
+GROUP_CODES= # 필요 시 쉼표로 구분된 group_code 입력
+```
+
+`CRAWLER_DATA_SOURCE`는 `api` 또는 `web`을 지정할 수 있습니다. `web` 모드에서는
+`CRAWLER_WEB_BASE_URL`(없으면 `CRAWLER_BASE_URL` fallback)에서 HTML을 받아 JSON을 파싱합니다.
+JSON이 없는 리그 타자/투수 랭킹 페이지는 HTML 테이블을 직접 파싱해 레코드를 구성합니다.
+
+`config/.env`를 다른 위치에서 읽으려면 `CRAWLER_ENV_FILE`을 설정하세요:
+
+```bash
+CRAWLER_ENV_FILE=./crawler/config/.env
+```
+
+### 3) 로컬 DB 준비 및 연결 문자열 설정
+
+PostgreSQL이 필요합니다. 로컬에 준비되어 있지 않다면 Docker로 임시 실행할 수 있습니다.
+
+```bash
+docker run --name aubl-postgres -e POSTGRES_PASSWORD=aubl -e POSTGRES_DB=aubl \
+  -p 5432:5432 -d postgres:15
+```
+
+DB 연결 문자열을 환경변수로 설정합니다.
+
+```bash
+export DATABASE_URL=postgresql://postgres:aubl@localhost:5432/aubl
+```
+
+### 4) 크롤러 실행
+
+```bash
+python -m crawler.cli --from-year 2024 --to-year 2024
+```
+
+DB 없이 JSONL 파일로 저장하려면:
+
+```bash
+python -m crawler.cli --from-year 2024 --to-year 2024 --output-json ./out
+```
+
+`./out`에는 다음 JSONL 파일들이 생성됩니다:
+
+- `matches.jsonl`: 경기 기본 정보(스코어, 상태 등)
+- `teams.jsonl`: 팀 마스터 데이터
+- `players.jsonl`: 선수 마스터 데이터
+- `roster_players.jsonl`: 팀별 등록 선수 명단
+- `batting_stats.jsonl`: 타격 스탯
+- `pitching_stats.jsonl`: 투구 스탯
+- `crawl_state.jsonl`: 크롤링 진행 상태
+- `web_pages.jsonl`: 웹 스크래핑 페이지 원본/파싱 결과
+- `league_batting_records.jsonl`: 리그 타자 기록(연도별)
+- `league_pitching_records.jsonl`: 리그 투수 기록(연도별)
+
+HTML 페이지 스크래핑 모드로 실행하려면:
+
+```bash
+python -m crawler.cli --from-year 2024 --to-year 2024 --data-source web
+```
+
+리그 타자/투수 기록은 동일 연도에 대해 중복 저장되지 않으며, DB 모드에서는
+기존 연도 데이터를 덮어쓴 후 최신 데이터를 저장합니다.
+
+필요하면 그룹 코드만 수집하도록 `--group-code` 옵션을 여러 번 사용할 수 있습니다.
+
+```bash
+python -m crawler.cli --from-year 2024 --to-year 2024 --group-code A --group-code B
+```
+
+### 5) CSV로 임시 확인하기 (DB에서 추출)
+
+기본 저장소는 DB이지만 `--output-json` 또는 `--output-csv`로 로컬 파일 출력도 가능합니다. DB에서
+빠르게 확인하려면 PostgreSQL에서 CSV로 내보낼 수 있습니다.
+
+```bash
+psql "$DATABASE_URL" -c "\\copy matches TO 'matches.csv' CSV HEADER"
+psql "$DATABASE_URL" -c "\\copy teams TO 'teams.csv' CSV HEADER"
+psql "$DATABASE_URL" -c "\\copy players TO 'players.csv' CSV HEADER"
+psql "$DATABASE_URL" -c "\\copy batting_stats TO 'batting_stats.csv' CSV HEADER"
+psql "$DATABASE_URL" -c "\\copy pitching_stats TO 'pitching_stats.csv' CSV HEADER"
+```
+
 ## 📂 페이지 구성
 
 /: 랜딩 페이지 (리그 뉴스, 공지)
