@@ -35,9 +35,6 @@ export default function Layout() {
     { path: '/standings', label: '순위' },
     { path: '/prediction', label: '승부예측' },
     { path: '/schedule', label: '경기 일정' },
-    { path: '/scoreboard', label: '전광판' },
-    { path: '/scoreboard-text', label: '문자중계' },
-    { path: '/live-overlay', label: '라이브 오버레이' },
     { path: '/scorekeeper', label: '기록원' },
   ];
   const [hoveredMenu, setHoveredMenu] = useState<string | null>(null);
