@@ -19,6 +19,10 @@ export default function ScoreboardPanel({
   const { state } = useDemoStore();
   const homeTeam = useMemo(() => TEAMS.find((t) => t.id === state.homeTeamId), [state.homeTeamId]);
   const awayTeam = useMemo(() => TEAMS.find((t) => t.id === state.awayTeamId), [state.awayTeamId]);
+  const activeMatch = useMemo(
+    () => state.matches.find((match) => match.id === state.activeMatchId),
+    [state.matches, state.activeMatchId],
+  );
 
   const inningHalf = state.half === 'top' ? '▲' : '▼';
   const inning = state.inning;
@@ -26,6 +30,18 @@ export default function ScoreboardPanel({
   const strike = state.strikes;
   const out = state.outs;
   const bases = state.bases;
+  const summaryTime = useMemo(() => {
+    if (!activeMatch?.startTime) return '일시 미정';
+    const date = new Date(activeMatch.startTime);
+    if (Number.isNaN(date.getTime())) return '일시 미정';
+    return date.toLocaleString('ko-KR', {
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }, [activeMatch?.startTime]);
+  const summaryVenue = activeMatch?.venue || '경기장 미정';
 
   return (
     <div
@@ -45,32 +61,58 @@ export default function ScoreboardPanel({
         ...style,
       }}
     >
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr 1fr',
-          gap: 'clamp(10px, 1.4vw, 16px)',
-          alignItems: 'center',
-          textAlign: 'center',
-        }}
-      >
-        <ScoreCell label={state.teamNames.home || homeTeam?.name || 'HOME'} value={state.score.home} />
+      <div style={{ display: 'grid', gap: 'clamp(8px, 1.3vw, 12px)' }}>
         <div
           style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '10px',
             background: '#0b1220',
-            border: '2px solid #111827',
+            border: '1px solid #1f2937',
             borderRadius: '12px',
-            padding: 'clamp(14px, 2vw, 22px) clamp(10px, 1.6vw, 18px)',
-            fontWeight: 900,
-            fontSize: 'clamp(22px, 3.2vw, 38px)',
-            color: '#facc15',
-            textShadow: '0 0 14px rgba(250, 204, 21, 0.4)',
+            padding: '10px 14px',
+            color: '#cbd5e1',
+            fontWeight: 800,
+            fontSize: 'clamp(12px, 1.8vw, 14px)',
+            textAlign: 'left',
           }}
         >
-          {inningHalf}
-          {inning}
+          <span style={{ color: '#f8fafc', fontWeight: 900 }}>
+            {state.teamNames.home || homeTeam?.name || 'HOME'} vs {state.teamNames.away || awayTeam?.name || 'AWAY'}
+          </span>
+          <span style={{ color: '#94a3b8', fontWeight: 700 }}>
+            {summaryTime} · {summaryVenue}
+          </span>
         </div>
-        <ScoreCell label={state.teamNames.away || awayTeam?.name || 'AWAY'} value={state.score.away} />
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr 1fr',
+            gap: 'clamp(10px, 1.4vw, 16px)',
+            alignItems: 'center',
+            textAlign: 'center',
+          }}
+        >
+          <ScoreCell label={state.teamNames.home || homeTeam?.name || 'HOME'} value={state.score.home} />
+          <div
+            style={{
+              background: '#0b1220',
+              border: '2px solid #111827',
+              borderRadius: '12px',
+              padding: 'clamp(14px, 2vw, 22px) clamp(10px, 1.6vw, 18px)',
+              fontWeight: 900,
+              fontSize: 'clamp(22px, 3.2vw, 38px)',
+              color: '#facc15',
+              textShadow: '0 0 14px rgba(250, 204, 21, 0.4)',
+            }}
+          >
+            {inningHalf}
+            {inning}
+          </div>
+          <ScoreCell label={state.teamNames.away || awayTeam?.name || 'AWAY'} value={state.score.away} />
+        </div>
       </div>
 
       <div
