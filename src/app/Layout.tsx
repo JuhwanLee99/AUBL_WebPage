@@ -1,12 +1,13 @@
 // **`src/app/Layout.tsx`**
 
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 export default function Layout() {
   const location = useLocation();
   const isLiveOverlay = location.pathname === '/live-overlay';
   const headerInnerRef = useRef<HTMLDivElement>(null);
+  const linkRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>(() =>
     typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'mobile' : 'desktop',
   );
@@ -39,110 +40,174 @@ export default function Layout() {
     { path: '/scorekeeper', label: '기록원' },
   ];
   const [hoveredMenu, setHoveredMenu] = useState<string | null>(null);
-  const isRecordsRoute = location.pathname.startsWith('/records');
-  const showRecordSubnav = isRecordsRoute || hoveredMenu === '/records';
+
+  const activeParentPath = useMemo(() => {
+    if (hoveredMenu) {
+      const hoveredHasChildren = navItems.some((item) => item.path === hoveredMenu && item.children);
+      if (hoveredHasChildren) return hoveredMenu;
+    }
+
+    const matched = navItems.find((item) => {
+      if (item.children?.some((child) => location.pathname === child.path || location.pathname.startsWith(child.path))) return true;
+      if (item.children && location.pathname === item.path) return true; // 부모 경로 자체를 방문했을 때도 유지
+      return false;
+    });
+
+    return matched?.path ?? null;
+  }, [hoveredMenu, location.pathname, navItems]);
+
+  const activeChildren = useMemo(() => navItems.find((item) => item.path === activeParentPath)?.children ?? [], [activeParentPath, navItems]);
+  const showSubnav = activeChildren.length > 0;
+  const [subnavAnchor, setSubnavAnchor] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!showSubnav || !activeParentPath) {
+      setSubnavAnchor(null);
+      return;
+    }
+
+    const recalcAnchor = () => {
+      const parentEl = linkRefs.current[activeParentPath];
+      const headerEl = headerInnerRef.current;
+      if (!parentEl || !headerEl) return;
+
+      const parentRect = parentEl.getBoundingClientRect();
+      const headerRect = headerEl.getBoundingClientRect();
+      setSubnavAnchor(parentRect.left + parentRect.width / 2 - headerRect.left);
+    };
+
+    recalcAnchor();
+    window.addEventListener('resize', recalcAnchor);
+    return () => window.removeEventListener('resize', recalcAnchor);
+  }, [showSubnav, activeParentPath, location.pathname]);
 
   return (
     <div className="app-shell">
       {!isLiveOverlay && (
         <header className="app-header">
-          <div className="app-header__inner" ref={headerInnerRef} style={{ position: 'relative' }}>
-            <Link
-              to="/"
+          <div
+            className="app-header__inner"
+            ref={headerInnerRef}
+            onMouseLeave={() => setHoveredMenu(null)}
+            style={{
+              position: 'relative',
+              alignItems: 'center',
+              height: showSubnav ? 'calc(var(--header-height) + 32px)' : 'var(--header-height)',
+              transition: 'height 180ms ease',
+              padding: 0,
+            }}
+          >
+            <div
               style={{
-                fontSize: 'clamp(20px, 4vw, 24px)',
-                fontWeight: 900,
-                letterSpacing: '-0.03em',
-                color: '#c084fc',
-                whiteSpace: 'nowrap',
+                position: 'absolute',
+                inset: 0,
+                height: 'var(--header-height)',
+                display: 'flex',
+                alignItems: 'center',
+                padding: 'var(--header-padding)',
+                boxSizing: 'border-box',
+                gap: '12px',
               }}
             >
-              AUBL<span style={{ color: '#f97316' }}>.</span>
-            </Link>
-            <nav className="nav-scroll" style={{ marginLeft: 'auto', flex: 1, minWidth: 0, paddingLeft: '18px', position: 'relative' }}>
-              <div className="nav-scroll__rail">
-                {navItems.map((item) => {
-                  const isActive =
-                    location.pathname === item.path ||
-                    (item.path === '/records' && isRecordsRoute);
-                  return (
-                    <Link
-                      key={item.path}
-                      to={item.path}
-                      style={{
-                        fontSize: 'var(--nav-font-size)',
-                        fontWeight: 700,
-                        color: isActive ? '#f97316' : '#cbd5e1',
-                        transition: 'color 120ms ease',
-                        whiteSpace: 'nowrap',
-                        scrollSnapAlign: 'start',
-                        padding: '10px 0',
-                      }}
-                      onMouseEnter={() => setHoveredMenu(item.path)}
-                      onMouseLeave={() => {
-                        if (!item.children) setHoveredMenu((prev) => (prev === item.path ? null : prev));
-                      }}
-                    >
-                      {item.label}
-                    </Link>
-                  );
-                })}
-              </div>
-            </nav>
+              <Link
+                to="/"
+                style={{
+                  fontSize: 'clamp(20px, 4vw, 24px)',
+                  fontWeight: 900,
+                  letterSpacing: '-0.03em',
+                  color: '#c084fc',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                AUBL<span style={{ color: '#f97316' }}>.</span>
+              </Link>
+              <nav className="nav-scroll" style={{ marginLeft: 'auto', flex: 1, minWidth: 0, paddingLeft: '18px', position: 'relative' }}>
+                <div className="nav-scroll__rail">
+                  {navItems.map((item) => {
+                    const isActive = location.pathname === item.path || activeParentPath === item.path;
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        style={{
+                          fontSize: 'var(--nav-font-size)',
+                          fontWeight: 700,
+                          color: isActive ? '#f97316' : '#cbd5e1',
+                          transition: 'color 120ms ease',
+                          whiteSpace: 'nowrap',
+                          scrollSnapAlign: 'start',
+                          padding: '10px 0',
+                        }}
+                        ref={(el) => {
+                          linkRefs.current[item.path] = el;
+                        }}
+                        onMouseEnter={() => setHoveredMenu(item.children ? item.path : null)}
+                        onFocus={() => setHoveredMenu(item.children ? item.path : null)}
+                        onClick={() => item.children && setHoveredMenu(item.path)}
+                      >
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </nav>
+            </div>
 
             <div
-              onMouseEnter={() => setHoveredMenu('/records')}
+              onMouseEnter={() => activeParentPath && setHoveredMenu(activeParentPath)}
               onMouseLeave={() => setHoveredMenu(null)}
               style={{
                 position: 'absolute',
-                top: '100%',
+                top: 'calc(var(--header-height) - 6px)',
                 left: 0,
                 width: '100%',
-                overflow: 'hidden',
-                maxHeight: showRecordSubnav ? '72px' : '0px',
-                opacity: showRecordSubnav ? 1 : 0,
-                pointerEvents: showRecordSubnav ? 'auto' : 'none',
-                transition: 'max-height 180ms ease, opacity 160ms ease',
+                height: showSubnav ? '32px' : '0px',
+                overflow: 'visible',
+                pointerEvents: showSubnav ? 'auto' : 'none',
+                opacity: showSubnav ? 1 : 0,
+                transform: showSubnav ? 'translateY(0px)' : 'translateY(-4px)',
+                transition: 'opacity 140ms ease, transform 160ms ease',
                 zIndex: 20,
               }}
             >
               <div
                 style={{
-                  marginTop: '2px',
-                  padding: '8px 18px',
-                  background:
-                    'linear-gradient(180deg, rgba(15,23,42,0.94) 0%, rgba(15,23,42,0.86) 100%), radial-gradient(circle at 12% 20%, rgba(249,115,22,0.12), transparent 38%), radial-gradient(circle at 78% 0%, rgba(59,130,246,0.10), transparent 30%)',
-                  borderTop: '1px solid rgba(148,163,184,0.28)',
-                  borderBottom: '1px solid rgba(148,163,184,0.18)',
+                  position: 'absolute',
+                  left: subnavAnchor !== null ? `${subnavAnchor}px` : '50%',
+                  transform: 'translateX(-50%)',
                   display: 'flex',
-                  gap: '14px',
+                  gap: '3px',
+                  padding: '1px 4px',
+                  background: 'transparent',
+                  border: 'none',
+                  borderRadius: 0,
+                  boxShadow: 'none',
+                  backdropFilter: 'none',
                   alignItems: 'center',
-                  boxShadow: '0 14px 32px rgba(0,0,0,0.32)',
-                  backdropFilter: 'blur(6px)',
+                  minHeight: '10px',
+                  whiteSpace: 'nowrap',
                 }}
               >
-                {navItems
-                  .find((item) => item.path === '/records')
-                  ?.children?.map((child) => {
-                    const isActiveChild = location.pathname === child.path;
-                    return (
-                      <Link
-                        key={child.path}
-                        to={child.path}
-                        style={{
-                          fontWeight: 800,
-                          fontSize: '13px',
-                          color: isActiveChild ? '#f97316' : '#e2e8f0',
-                          padding: '6px 4px',
-                          borderBottom: isActiveChild ? '2px solid #f97316' : '2px solid transparent',
-                          transition: 'color 120ms ease, border-color 120ms ease',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {child.label}
-                      </Link>
-                    );
-                  })}
+                {activeChildren.map((child) => {
+                  const isActiveChild = location.pathname === child.path;
+                  return (
+                    <Link
+                      key={child.path}
+                      to={child.path}
+                      style={{
+                        fontWeight: 800,
+                        fontSize: '13px',
+                        color: isActiveChild ? '#f97316' : '#e2e8f0',
+                        padding: '6px 4px',
+                        borderBottom: isActiveChild ? '2px solid #f97316' : '2px solid transparent',
+                        transition: 'color 120ms ease, border-color 120ms ease',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {child.label}
+                    </Link>
+                  );
+                })}
               </div>
             </div>
           </div>
