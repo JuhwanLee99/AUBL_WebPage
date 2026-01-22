@@ -592,6 +592,45 @@ export default function MatchSchedulePage() {
         </button>
       </header>
 
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: '10px',
+          border: '1px solid rgba(148,163,184,0.25)',
+          borderRadius: '14px',
+          padding: '12px',
+          background: 'rgba(15,23,42,0.4)',
+        }}
+      >
+        {[
+          { path: '/schedule/results', label: '경기 결과', desc: '종료 경기 모아보기' },
+          { path: '/schedule/groups', label: '조별 일정', desc: '조(으뜸/버금)별 캘린더' },
+          { path: '/schedule/manage', label: '일정 관리', desc: '데모용 더미 등록 & 상태 변경' },
+        ].map((item) => (
+          <button
+            key={item.path}
+            type="button"
+            onClick={() => navigate(item.path)}
+            style={{
+              display: 'grid',
+              gap: '4px',
+              alignItems: 'start',
+              textAlign: 'left',
+              padding: '10px 12px',
+              borderRadius: '12px',
+              border: '1px solid rgba(148,163,184,0.3)',
+              background: 'rgba(255,255,255,0.03)',
+              color: '#e2e8f0',
+              cursor: 'pointer',
+            }}
+          >
+            <span style={{ fontWeight: 900, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>{item.label}</span>
+            <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>{item.desc}</span>
+          </button>
+        ))}
+      </div>
+
       {showForm && (
         <form
           onSubmit={handleFormSubmit}

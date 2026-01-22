@@ -25,6 +25,15 @@ export default function Layout() {
   const navItems = [
     { path: '/intro', label: '리그 소개' },
     {
+      path: '/schedule',
+      label: '경기 일정',
+      children: [
+        { path: '/schedule/results', label: '경기 결과' },
+        { path: '/schedule/groups', label: '조별 일정' },
+        { path: '/schedule/manage', label: '일정 관리' },
+      ],
+    },
+    {
       path: '/records',
       label: '기록',
       children: [
@@ -35,7 +44,6 @@ export default function Layout() {
     { path: '/community', label: '커뮤니티' },
     { path: '/standings', label: '순위' },
     { path: '/prediction', label: '승부예측' },
-    { path: '/schedule', label: '경기 일정' },
     { path: '/scorekeeper', label: '기록원' },
   ];
   const [hoveredMenu, setHoveredMenu] = useState<string | null>(null);
@@ -132,6 +140,7 @@ export default function Layout() {
                 <div className="nav-scroll__rail">
                   {navItems.map((item) => {
                     const isActive = location.pathname === item.path || activeParentPath === item.path;
+                    const isHovering = hoveredMenu === item.path;
                     return (
                       <Link
                         key={item.path}
@@ -139,7 +148,7 @@ export default function Layout() {
                         style={{
                           fontSize: 'var(--nav-font-size)',
                           fontWeight: 700,
-                          color: isActive ? '#f97316' : '#cbd5e1',
+                          color: isActive || isHovering ? '#f97316' : '#cbd5e1',
                           transition: 'color 120ms ease',
                           whiteSpace: 'nowrap',
                           scrollSnapAlign: 'start',
@@ -148,8 +157,9 @@ export default function Layout() {
                         ref={(el) => {
                           linkRefs.current[item.path] = el;
                         }}
-                        onMouseEnter={() => setHoveredMenu(item.children ? item.path : null)}
-                        onFocus={() => setHoveredMenu(item.children ? item.path : null)}
+                        onMouseEnter={() => setHoveredMenu(item.path)}
+                        onMouseLeave={() => setHoveredMenu(null)}
+                        onFocus={() => setHoveredMenu(item.path)}
                         onClick={() => item.children && setHoveredMenu(item.path)}
                       >
                         {item.label}
@@ -247,19 +257,27 @@ export default function Layout() {
               >
                 {activeChildren.map((child) => {
                   const isActiveChild = location.pathname === child.path;
+                  const isHoveringChild = hoveredMenu === child.path;
                   return (
                     <Link
                       key={child.path}
                       to={child.path}
                       style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
                         fontWeight: 800,
                         fontSize: '13px',
-                        color: isActiveChild ? '#f97316' : '#e2e8f0',
-                        padding: '6px 4px',
+                        color: isActiveChild || isHoveringChild ? '#f97316' : '#e2e8f0',
+                        padding: '6px 6px',
                         borderBottom: isActiveChild ? '2px solid #f97316' : '2px solid transparent',
-                        transition: 'color 120ms ease, border-color 120ms ease',
+                        transition: 'color 120ms ease, border-color 120ms ease, transform 120ms ease',
                         whiteSpace: 'nowrap',
+                        transform: isActiveChild ? 'translateY(-1px)' : 'translateY(0)',
                       }}
+                      onMouseEnter={() => setHoveredMenu(child.path)}
+                      onMouseLeave={() => setHoveredMenu(null)}
+                      onFocus={() => setHoveredMenu(child.path)}
                     >
                       {child.label}
                     </Link>
