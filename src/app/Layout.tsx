@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 export default function Layout() {
   const location = useLocation();
   const isLiveOverlay = location.pathname === '/live-overlay';
+  const isLanding = location.pathname === '/';
   const headerInnerRef = useRef<HTMLDivElement>(null);
   const linkRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>(() =>
@@ -115,11 +116,19 @@ export default function Layout() {
                   fontSize: 'clamp(20px, 4vw, 24px)',
                   fontWeight: 900,
                   letterSpacing: '-0.03em',
-                  color: '#c084fc',
+                  color: isLanding ? '#c084fc' : '#60a5fa',
                   whiteSpace: 'nowrap',
                 }}
               >
-                AUBL<span style={{ color: '#f97316' }}>.</span>
+                AUBL
+                <span
+                  style={{
+                    color: isLanding ? '#f97316' : '#3b82f6',
+                    transition: 'color 140ms ease',
+                  }}
+                >
+                  .
+                </span>
               </Link>
               <nav className="nav-scroll" style={{ marginLeft: 'auto', flex: 1, minWidth: 0, paddingLeft: '18px', position: 'relative' }}>
                 <div className="nav-scroll__rail">
