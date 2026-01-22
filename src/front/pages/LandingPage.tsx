@@ -1,7 +1,8 @@
 // **`src/front/pages/LandingPage.tsx`**
-import { useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useRef } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
+import { useDemoStore } from '../../shared/state/demoStore';
 
 const tickerItems = [
   '📢 [공지] 1월 25일 으뜸 토너먼트 4강전: 세종대 vs 경희대국제 / 연세대 vs 서울시립대 경기 예정',
@@ -66,10 +67,39 @@ const snapshotCards = [
   },
 ];
 
+const formatLiveTime = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '시간 미정';
+  const dayLabel = date.toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', weekday: 'short' });
+  const timeLabel = date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+  return `${dayLabel} · ${timeLabel}`;
+};
+
+const safeMatchTime = (value: string) => {
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? 0 : time;
+};
+
+const scoreOrDash = (score?: number | null) => (typeof score === 'number' && Number.isFinite(score) ? score : '-');
+
 export default function LandingPage() {
+  const { state, actions } = useDemoStore();
+  const navigate = useNavigate();
   const heroRef = useRef<HTMLDivElement>(null);
   const highlightRefs = useRef<HTMLDivElement[]>([]);
   const snapshotRef = useRef<HTMLDivElement>(null);
+  const liveMatches = useMemo(
+    () =>
+      state.matches
+        .filter((match) => match.status === 'inProgress')
+        .sort((a, b) => safeMatchTime(a.startTime) - safeMatchTime(b.startTime)),
+    [state.matches],
+  );
+
+  const handleOpenMatch = (matchId: string, path: '/scoreboard' | '/scoreboard-text') => {
+    actions.selectMatch(matchId);
+    navigate(path);
+  };
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -277,6 +307,234 @@ export default function LandingPage() {
             </span>
           ))}
         </div>
+      </section>
+
+      {/* Live Games Snapshot */}
+      <section
+        style={{
+          borderRadius: 'var(--surface-radius-md)',
+          padding: '18px 18px 14px',
+          border: '1px solid rgba(56, 189, 248, 0.22)',
+          background: 'linear-gradient(135deg, rgba(8,47,73,0.72), rgba(15,23,42,0.92))',
+          boxShadow: '0 18px 50px rgba(0, 0, 0, 0.32)',
+          display: 'grid',
+          gap: '14px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span
+              aria-hidden
+              style={{
+                width: '10px',
+                height: '10px',
+                borderRadius: '999px',
+                backgroundColor: '#38bdf8',
+                boxShadow: '0 0 0 6px rgba(56, 189, 248, 0.18)',
+              }}
+            />
+            <div style={{ display: 'grid', gap: '4px' }}>
+              <p style={{ margin: 0, fontWeight: 900, letterSpacing: '0.05em', fontSize: '13px', color: '#cbd5e1' }}>실시간 경기 상황</p>
+              <p style={{ margin: 0, color: '#94a3b8', fontWeight: 700, fontSize: '13px' }}>지금 {liveMatches.length}경기 진행 중</p>
+            </div>
+          </div>
+          <Link
+            to="/scoreboard"
+            style={{
+              padding: '12px 14px',
+              borderRadius: '12px',
+              background: 'rgba(15, 23, 42, 0.6)',
+              color: '#e2e8f0',
+              border: '1px solid rgba(148, 163, 184, 0.35)',
+              fontWeight: 800,
+              fontSize: '13px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            라이브 전광판 전체보기 →
+          </Link>
+        </div>
+
+        {liveMatches.length ? (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+              gap: '12px',
+            }}
+          >
+            {liveMatches.map((match) => (
+              <div
+                key={match.id}
+                style={{
+                  borderRadius: '16px',
+                  padding: '14px',
+                  border: '1px solid rgba(96, 165, 250, 0.24)',
+                  background: 'linear-gradient(140deg, rgba(56,189,248,0.12), rgba(99,102,241,0.08))',
+                  display: 'grid',
+                  gap: '12px',
+                  position: 'relative',
+                  overflow: 'hidden',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '999px',
+                        background: 'rgba(248, 113, 113, 0.16)',
+                        color: '#fca5a5',
+                        fontWeight: 900,
+                        fontSize: '12px',
+                        letterSpacing: '0.05em',
+                        border: '1px solid rgba(248, 113, 113, 0.36)',
+                      }}
+                    >
+                      LIVE
+                    </span>
+                    <span style={{ color: '#cbd5e1', fontWeight: 700, fontSize: '13px' }}>
+                      {formatLiveTime(match.startTime)} · {match.venue || '장소 미정'}
+                    </span>
+                  </div>
+                  {match.notes && (
+                    <span
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '999px',
+                        background: 'rgba(34, 197, 94, 0.12)',
+                        color: '#86efac',
+                        fontWeight: 800,
+                        fontSize: '11px',
+                        border: '1px solid rgba(34, 197, 94, 0.3)',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {match.notes}
+                    </span>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr auto 1fr',
+                    gap: '10px',
+                    alignItems: 'center',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                    <span
+                      aria-hidden
+                      style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '999px',
+                        backgroundColor: '#38bdf8',
+                        boxShadow: '0 0 0 6px rgba(56, 189, 248, 0.12)',
+                        flexShrink: 0,
+                      }}
+                    />
+                    <span style={{ fontWeight: 800, color: '#e2e8f0', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {match.homeTeamName}
+                    </span>
+                  </div>
+                  <div style={{ fontWeight: 900, fontSize: '22px', color: '#f8fafc', letterSpacing: '0.04em' }}>
+                    {scoreOrDash(match.homeScore)} : {scoreOrDash(match.awayScore)}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end', minWidth: 0 }}>
+                    <span style={{ fontWeight: 800, color: '#e2e8f0', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'right' }}>
+                      {match.awayTeamName}
+                    </span>
+                    <span
+                      aria-hidden
+                      style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '999px',
+                        backgroundColor: '#f97316',
+                        boxShadow: '0 0 0 6px rgba(249, 115, 22, 0.12)',
+                        flexShrink: 0,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenMatch(match.id, '/scoreboard')}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '12px',
+                      background: 'rgba(15, 23, 42, 0.75)',
+                      color: '#e2e8f0',
+                      border: '1px solid rgba(148, 163, 184, 0.35)',
+                      fontWeight: 800,
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    전광판 열기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenMatch(match.id, '/scoreboard-text')}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '12px',
+                      background: 'rgba(255, 255, 255, 0.06)',
+                      color: '#dbeafe',
+                      border: '1px solid rgba(99, 102, 241, 0.35)',
+                      fontWeight: 800,
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    문자 중계 보기
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div
+            style={{
+              borderRadius: '14px',
+              padding: '14px',
+              border: '1px dashed rgba(148, 163, 184, 0.35)',
+              background: 'rgba(15, 23, 42, 0.7)',
+              color: '#cbd5e1',
+              display: 'grid',
+              gap: '8px',
+              fontSize: '14px',
+            }}
+          >
+            <span style={{ fontWeight: 800 }}>현재 진행 중인 경기가 없습니다.</span>
+            <span style={{ color: '#94a3b8' }}>경기 일정에서 기록할 경기를 선택하거나 새 경기를 시작하면 실시간으로 표시됩니다.</span>
+            <div>
+              <Link
+                to="/schedule"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '10px 12px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(96, 165, 250, 0.3)',
+                  color: '#bfdbfe',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                  background: 'rgba(96, 165, 250, 0.08)',
+                }}
+              >
+                경기 일정 바로가기 →
+              </Link>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Key Value Propositions */}
