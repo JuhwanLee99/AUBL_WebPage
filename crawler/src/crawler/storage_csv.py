@@ -65,6 +65,7 @@ class CsvStorage:
                 "team_idx",
                 "name",
                 "code",
+                "year",
             ],
             "players": [
                 "player_idx",
@@ -146,7 +147,8 @@ class CsvStorage:
             ],
         }
         self._team_registry: dict[str, int] = {}
-        self._seen_team_keys: set[int | str] = set()
+        # Track teams per season to keep a historical list.
+        self._seen_team_keys: set[tuple[int | str | None, int | None]] = set()
         self._seen_player_keys: set[tuple[int | None, str, str | None]] = set()
         self._league_record_years: dict[str, set[int | None]] = {}
 
@@ -161,10 +163,11 @@ class CsvStorage:
 
     def store_roster(self, entries: Iterable[RosterEntry], year: int | None) -> None:
         for entry in entries:
-            team_key = entry.team.team_idx if entry.team.team_idx is not None else entry.team.name
+            raw_team_key = entry.team.team_idx if entry.team.team_idx is not None else entry.team.name
+            team_key = (raw_team_key, year)
             if team_key not in self._seen_team_keys:
                 self._seen_team_keys.add(team_key)
-                self._append_team(entry.team)
+                self._append_team(entry.team, year)
             for player in entry.players:
                 if not player.name:
                     continue
@@ -337,7 +340,7 @@ class CsvStorage:
         }
         self._append("matches", row)
 
-    def _append_team(self, team: TeamInfo | None) -> None:
+    def _append_team(self, team: TeamInfo | None, year: int | None) -> None:
         if team is None:
             return
         self._append(
@@ -346,6 +349,7 @@ class CsvStorage:
                 "team_idx": team.team_idx,
                 "name": team.name,
                 "code": team.code,
+                "year": year,
             },
         )
 

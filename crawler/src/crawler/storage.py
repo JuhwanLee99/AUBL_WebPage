@@ -41,6 +41,16 @@ teams_table = Table(
     UniqueConstraint("team_idx", name="teams_team_idx_unique"),
 )
 
+team_seasons_table = Table(
+    "team_seasons",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("team_id", Integer, ForeignKey("teams.id"), nullable=False),
+    Column("year", Integer, nullable=True),
+    Column("created_at", DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)),
+    UniqueConstraint("team_id", "year", name="team_seasons_team_year_unique"),
+)
+
 players_table = Table(
     "players",
     metadata,
@@ -196,6 +206,7 @@ class Storage:
         with self._engine.begin() as conn:
             for entry in entries:
                 team_id = self._upsert_team(conn, entry.team)
+                self._upsert_team_season(conn, team_id, year)
                 for player in entry.players:
                     player_id = self._upsert_player(conn, player, team_id)
                     self._upsert_roster_player(conn, team_id, player_id, year)
@@ -376,6 +387,25 @@ class Storage:
             )
         )
         return int(result.inserted_primary_key[0])
+
+    def _upsert_team_season(self, conn, team_id: int | None, year: int | None) -> None:
+        if team_id is None:
+            return
+        query = select(team_seasons_table.c.id).where(team_seasons_table.c.team_id == team_id)
+        if year is None:
+            query = query.where(team_seasons_table.c.year.is_(None))
+        else:
+            query = query.where(team_seasons_table.c.year == year)
+        row = conn.execute(query).fetchone()
+        if row:
+            return
+        conn.execute(
+            team_seasons_table.insert().values(
+                team_id=team_id,
+                year=year,
+                created_at=datetime.now(timezone.utc),
+            )
+        )
 
     def _find_team_id(self, conn, team: TeamInfo | None) -> int | None:
         if team is None or team.team_idx is None:

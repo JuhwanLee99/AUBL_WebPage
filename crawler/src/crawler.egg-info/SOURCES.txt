@@ -5,12 +5,15 @@ src/crawler/api_client.py
 src/crawler/boxscore_fetcher.py
 src/crawler/cli.py
 src/crawler/html_parser.py
+src/crawler/league_records_fetcher.py
+src/crawler/roster_fetcher.py
 src/crawler/schedule_fetcher.py
 src/crawler/settings.py
 src/crawler/storage.py
 src/crawler/storage_csv.py
 src/crawler/storage_json.py
 src/crawler/web_client.py
+src/crawler/web_pages_fetcher.py
 src/crawler.egg-info/PKG-INFO
 src/crawler.egg-info/SOURCES.txt
 src/crawler.egg-info/dependency_links.txt
