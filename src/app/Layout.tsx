@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 export default function Layout() {
   const location = useLocation();
   const isLiveOverlay = location.pathname === '/live-overlay';
+  const isScoreboardText = location.pathname === '/scoreboard-text';
   const isLanding = location.pathname === '/';
   const headerInnerRef = useRef<HTMLDivElement>(null);
   const linkRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
@@ -157,6 +158,56 @@ export default function Layout() {
                   })}
                 </div>
               </nav>
+
+              {isScoreboardText && (
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '8px',
+                    alignItems: 'center',
+                    marginLeft: '12px',
+                    background: 'rgba(148,163,184,0.12)',
+                    borderRadius: '999px',
+                    padding: '6px 8px',
+                    flexShrink: 0,
+                  }}
+                >
+                  <Link
+                    to="/scoreboard-text"
+                    aria-current="page"
+                    style={{
+                      border: 'none',
+                      background: '#f97316',
+                      color: '#0b0f1a',
+                      fontWeight: 800,
+                      fontSize: '13px',
+                      borderRadius: '999px',
+                      padding: '6px 12px',
+                      textDecoration: 'none',
+                      boxShadow: '0 8px 18px rgba(249,115,22,0.35)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    문자중계
+                  </Link>
+                  <Link
+                    to="/live-overlay"
+                    style={{
+                      border: 'none',
+                      background: 'rgba(148,163,184,0.25)',
+                      color: '#e2e8f0',
+                      fontWeight: 800,
+                      fontSize: '13px',
+                      borderRadius: '999px',
+                      padding: '6px 12px',
+                      textDecoration: 'none',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    라이브 오버레이
+                  </Link>
+                </div>
+              )}
             </div>
 
             <div
