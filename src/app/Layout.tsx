@@ -21,7 +21,8 @@ export default function Layout() {
   const navItems = [
     { path: '/intro', label: '리그 소개' },
     { path: '/records', label: '기록' },
-    { path: '/record-room', label: '기록실' },
+    { path: '/records/pitchers', label: '투수 기록' },
+    { path: '/records/batters', label: '타자 기록' },
     { path: '/community', label: '커뮤니티' },
     { path: '/standings', label: '순위' },
     { path: '/prediction', label: '승부예측' },
