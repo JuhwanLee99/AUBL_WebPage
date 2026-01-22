@@ -355,6 +355,7 @@ export default function MatchSchedulePage() {
     const displayStatus = deriveDisplayStatus(match);
     const badge = statusLabel(displayStatus);
     const isActive = state.activeMatchId === match.id;
+    const hasLiveOverlay = Boolean((state.liveVideoUrl || '').trim());
     const goTo = (path: string) => {
       actions.selectMatch(match.id);
       navigate(path);
@@ -372,6 +373,13 @@ export default function MatchSchedulePage() {
       fontSize: '12px',
       cursor: 'pointer',
       transition: 'border-color 120ms ease, transform 120ms ease, background 120ms ease',
+    };
+    const quickActionDisabledStyle: CSSProperties = {
+      ...quickActionStyle,
+      border: '1px dashed rgba(248, 113, 113, 0.6)',
+      color: '#f87171',
+      background: 'rgba(248, 113, 113, 0.08)',
+      cursor: 'not-allowed',
     };
     return (
       <div
@@ -424,9 +432,15 @@ export default function MatchSchedulePage() {
                 <span aria-hidden>💬</span>
                 문자중계
               </button>
-              <button type="button" onClick={() => goTo('/live-overlay')} style={quickActionStyle} title="라이브 오버레이">
-                <span aria-hidden>🛰️</span>
-                라이브 오버레이
+              <button
+                type="button"
+                onClick={() => hasLiveOverlay && goTo('/live-overlay')}
+                style={hasLiveOverlay ? quickActionStyle : quickActionDisabledStyle}
+                title={hasLiveOverlay ? '라이브 오버레이' : '기록원에서 유튜브 링크 미입력'}
+                disabled={!hasLiveOverlay}
+              >
+                <span aria-hidden>{hasLiveOverlay ? '🛰️' : '🚫'}</span>
+                {hasLiveOverlay ? '라이브 오버레이' : '라이브 없음'}
               </button>
               <button type="button" onClick={() => goTo('/scorekeeper')} style={quickActionStyle} title="기록원">
                 <span aria-hidden>📝</span>
