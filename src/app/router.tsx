@@ -14,6 +14,9 @@ import PitcherRecordPage from './pages/PitcherRecordPage';
 import BatterRecordPage from './pages/BatterRecordPage';
 import PlayerDetailPage from './pages/PlayerDetailPage';
 import MatchSchedulePage from './pages/MatchSchedulePage';
+import ScheduleResultsPage from './pages/ScheduleResultsPage';
+import ScheduleGroupsPage from './pages/ScheduleGroupsPage';
+import ScheduleManagePage from './pages/ScheduleManagePage';
 
 export const router = createBrowserRouter([
   {
@@ -43,6 +46,18 @@ export const router = createBrowserRouter([
       {
         path: 'schedule',
         element: <MatchSchedulePage />,
+      },
+      {
+        path: 'schedule/results',
+        element: <ScheduleResultsPage />,
+      },
+      {
+        path: 'schedule/groups',
+        element: <ScheduleGroupsPage />,
+      },
+      {
+        path: 'schedule/manage',
+        element: <ScheduleManagePage />,
       },
       {
         path: 'records',
