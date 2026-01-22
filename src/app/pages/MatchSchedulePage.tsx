@@ -148,6 +148,13 @@ function statusLabel(status: MatchStatus) {
   }
 }
 
+const deriveDisplayStatus = (match: MatchSchedule): MatchStatus => {
+  if (match.status === 'completed' || match.status === 'inProgress') return match.status;
+  const startTime = getSafeTime(match.startTime);
+  if (startTime > 0 && startTime < Date.now()) return 'completed';
+  return 'scheduled';
+};
+
 const getSafeTime = (value: string) => {
   const time = new Date(value).getTime();
   return Number.isNaN(time) ? 0 : time;
@@ -345,7 +352,8 @@ export default function MatchSchedulePage() {
   };
 
   const renderMatchCard = (match: MatchSchedule) => {
-    const badge = statusLabel(match.status);
+    const displayStatus = deriveDisplayStatus(match);
+    const badge = statusLabel(displayStatus);
     const isActive = state.activeMatchId === match.id;
     return (
       <div
@@ -876,7 +884,8 @@ export default function MatchSchedulePage() {
                       </div>
                       <div style={{ display: 'grid', gap: '6px' }}>
                         {dayMatches.map((match) => {
-                          const badge = statusLabel(match.status);
+                          const displayStatus = deriveDisplayStatus(match);
+                          const badge = statusLabel(displayStatus);
                           return (
                             <button
                               key={match.id}
