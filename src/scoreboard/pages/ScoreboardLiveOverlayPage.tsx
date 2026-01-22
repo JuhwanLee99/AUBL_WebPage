@@ -1,9 +1,11 @@
+import { useNavigate } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
 
 const defaultLiveSrc = 'https://www.youtube.com/embed/live_stream?channel=YOUR_CHANNEL_ID';
 
 export default function ScoreboardLiveOverlayPage() {
   const { state } = useDemoStore();
+  const navigate = useNavigate();
   if (!state.activeMatchId) {
     return (
       <div
@@ -62,6 +64,54 @@ export default function ScoreboardLiveOverlayPage() {
           pointerEvents: 'none',
         }}
       >
+        <div
+          style={{
+            position: 'absolute',
+            top: 24,
+            right: 24,
+            display: 'flex',
+            gap: '8px',
+            pointerEvents: 'auto',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => navigate('/scoreboard-text')}
+            style={{
+              border: 'none',
+              background: 'rgba(15,23,42,0.9)',
+              color: '#e2e8f0',
+              fontWeight: 800,
+              fontSize: '13px',
+              borderRadius: '999px',
+              padding: '8px 14px',
+              borderInline: '1px solid rgba(148,163,184,0.35)',
+              cursor: 'pointer',
+              boxShadow: '0 8px 20px rgba(0,0,0,0.35)',
+            }}
+          >
+            문자중계로 이동
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/scoreboard')}
+            style={{
+              border: 'none',
+              background: 'rgba(15,23,42,0.9)',
+              color: '#e2e8f0',
+              fontWeight: 800,
+              fontSize: '13px',
+              borderRadius: '999px',
+              padding: '8px 14px',
+              borderInline: '1px solid rgba(148,163,184,0.35)',
+              cursor: 'pointer',
+              boxShadow: '0 8px 20px rgba(0,0,0,0.35)',
+            }}
+          >
+            전광판 보기
+          </button>
+        </div>
+
         <div
           style={{
             position: 'absolute',

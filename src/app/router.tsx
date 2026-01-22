@@ -10,9 +10,13 @@ import ScoreboardPage from '../scoreboard/pages/ScoreboardPage';
 import ScoreboardTextPage from '../scoreboard/pages/ScoreboardTextPage';
 import ScoreboardLiveOverlayPage from '../scoreboard/pages/ScoreboardLiveOverlayPage';
 import ScorekeeperPage from '../scorekeeper/pages/ScorekeeperPage';
-import RecordRoomPage from './pages/RecordRoomPage';
+import PitcherRecordPage from './pages/PitcherRecordPage';
+import BatterRecordPage from './pages/BatterRecordPage';
 import PlayerDetailPage from './pages/PlayerDetailPage';
 import MatchSchedulePage from './pages/MatchSchedulePage';
+import ScheduleResultsPage from './pages/ScheduleResultsPage';
+import ScheduleGroupsPage from './pages/ScheduleGroupsPage';
+import ScheduleManagePage from './pages/ScheduleManagePage';
 
 export const router = createBrowserRouter([
   {
@@ -44,12 +48,28 @@ export const router = createBrowserRouter([
         element: <MatchSchedulePage />,
       },
       {
+        path: 'schedule/results',
+        element: <ScheduleResultsPage />,
+      },
+      {
+        path: 'schedule/groups',
+        element: <ScheduleGroupsPage />,
+      },
+      {
+        path: 'schedule/manage',
+        element: <ScheduleManagePage />,
+      },
+      {
         path: 'records',
         element: <RecordPage />,
       },
       {
-        path: 'record-room',
-        element: <RecordRoomPage />,
+        path: 'records/pitchers',
+        element: <PitcherRecordPage />,
+      },
+      {
+        path: 'records/batters',
+        element: <BatterRecordPage />,
       },
       {
         path: 'scoreboard',

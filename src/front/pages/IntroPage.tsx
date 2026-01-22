@@ -123,7 +123,7 @@ const teamNames = [
 const heroMetrics = [
   { label: '2026 HOST', value: '중앙대학교(서울)', note: '제46회 AUBL 운영' },
   { label: '참가 규모', value: '약 40개 대학', note: 'A~H조 조별 예선 후 으뜸·버금' },
-  { label: '핵심 가치', value: '실시간 기록 · 중계 · 디지털화', note: '정흥영 회장 / 이주환 기록부장(웹개발 리드)' },
+  { label: '핵심 가치', value: '실시간 기록 · 중계 · 디지털화', note: '모바일 친화 기록/중계로 모두가 같은 정보를 공유' },
 ];
 
 export default function IntroPage() {
@@ -151,8 +151,8 @@ export default function IntroPage() {
         style={{
           display: 'grid',
           gap: '18px',
-          padding: '34px',
-          borderRadius: '24px',
+          padding: 'clamp(24px, 6vw, 34px)',
+          borderRadius: 'var(--surface-radius-lg)',
           background:
             'radial-gradient(circle at 12% 18%, rgba(59,130,246,0.16), transparent 32%), radial-gradient(circle at 90% 0%, rgba(56,189,248,0.16), transparent 26%), linear-gradient(140deg, #0a1a3f 0%, #0f2f8f 100%)',
           border: '1px solid rgba(148, 163, 184, 0.25)',
@@ -169,7 +169,7 @@ export default function IntroPage() {
               background: 'rgba(96,165,250,0.16)',
               color: '#bfdbfe',
               border: '1px solid rgba(96, 165, 250, 0.35)',
-              fontSize: '12px',
+              fontSize: 'clamp(11px, 2.8vw, 12px)',
             }}
           >
             AUBL · LEAGUE INTRO
@@ -177,10 +177,10 @@ export default function IntroPage() {
           <span style={{ color: '#cbd5e1', fontWeight: 700 }}>46th Amateur University Baseball League · Hosted by Chung-Ang University (Seoul)</span>
         </div>
         <div style={{ display: 'grid', gap: '12px' }}>
-          <h2 style={{ margin: 0, fontSize: '34px', lineHeight: 1.2, fontWeight: 900 }}>
+          <h2 style={{ margin: 0, fontSize: 'clamp(22px, 5.5vw, 34px)', lineHeight: 1.2, fontWeight: 900 }}>
             순수 아마추어 대학 야구의 46년 — 2026년, 중앙대학교(서울)와 함께 새로운 도약을 준비합니다.
           </h2>
-          <p style={{ margin: 0, color: '#cbd5e1', lineHeight: 1.7, maxWidth: '880px' }}>
+          <p style={{ margin: 0, color: '#cbd5e1', lineHeight: 1.7, maxWidth: '880px', fontSize: 'clamp(14px, 3.6vw, 16px)' }}>
             1981년 출범한 전국대학아마추어야구연합회(AUBL)는 엘리트 선수 중심이 아닌 일반 대학생들의 땀방울로 성장했습니다.
             2026 시즌은 중앙대학교(서울)가 주최를 맡아 조별 예선과 으뜸·버금 토너먼트를 통해 리그의 전통과 혁신을 모두 보여줄 예정입니다.
           </p>
@@ -198,9 +198,9 @@ export default function IntroPage() {
                 gap: '6px',
               }}
             >
-              <p style={{ margin: 0, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.04em', fontSize: '12px' }}>{metric.label}</p>
-              <p style={{ margin: 0, fontWeight: 900, fontSize: '22px', color: '#e2e8f0' }}>{metric.value}</p>
-              <p style={{ margin: 0, color: '#cbd5e1', fontWeight: 600 }}>{metric.note}</p>
+              <p style={{ margin: 0, color: '#94a3b8', fontWeight: 700, letterSpacing: '0.04em', fontSize: 'clamp(11px, 2.8vw, 12px)' }}>{metric.label}</p>
+              <p style={{ margin: 0, fontWeight: 900, fontSize: 'clamp(18px, 4.8vw, 22px)', color: '#e2e8f0' }}>{metric.value}</p>
+              <p style={{ margin: 0, color: '#cbd5e1', fontWeight: 600, fontSize: 'clamp(13px, 3.4vw, 14px)' }}>{metric.note}</p>
             </div>
           ))}
         </div>
@@ -211,7 +211,7 @@ export default function IntroPage() {
               padding: '14px 18px',
               borderRadius: '12px',
               fontWeight: 800,
-              fontSize: '15px',
+              fontSize: 'clamp(14px, 3.6vw, 15px)',
               backgroundColor: '#60a5fa',
               color: '#0b1635',
               boxShadow: '0 16px 40px rgba(96, 165, 250, 0.28)',
@@ -225,7 +225,7 @@ export default function IntroPage() {
               padding: '14px 18px',
               borderRadius: '12px',
               fontWeight: 800,
-              fontSize: '15px',
+              fontSize: 'clamp(14px, 3.6vw, 15px)',
               backgroundColor: 'rgba(255, 255, 255, 0.08)',
               color: '#e2e8f0',
               border: '1px solid rgba(148, 163, 184, 0.3)',
@@ -253,11 +253,11 @@ export default function IntroPage() {
           <p style={{ margin: 0, fontWeight: 800, fontSize: '18px' }}>“변화와 혁신, 그리고 변하지 않는 열정으로”</p>
           <p style={{ margin: 0 }}>
             존경하는 야구 가족 여러분, 안녕하십니까. 2026년 제46대 전국대학아마추어야구연합회(AUBL) 회장을 맡게 된 <strong>정흥영(중앙대학교 서울)</strong>입니다. 1981년 시작된 AUBL은
-            46년 동안 대한민국 대학 스포츠를 대표하는 커뮤니티로 성장했습니다. 올해 저희 집행부는 <strong>“소통하는 리그, 공정한 리그, 안전한 리그”</strong>를 목표로, 경기는 치열하게 그러나 끝나면
+            46년 동안 대한민국 대학 스포츠를 대표하는 커뮤니티로 성장했습니다. 올해 저희 연합회는 <strong>“소통하는 리그, 공정한 리그, 안전한 리그”</strong>를 목표로, 경기는 치열하게 그러나 끝나면
             서로의 어깨를 두드려주는 대학 야구의 낭만을 지켜가겠습니다.
           </p>
           <p style={{ margin: 0 }}>
-            2026 시즌은 웹 플랫폼 고도화의 해입니다. 기록부장 <strong>이주환(중앙대학교 서울)</strong>이 주도하는 디지털 전환으로 선수들이 자신의 기록과 일정을 언제 어디서나 확인할 수 있도록 하고,
+            2026 시즌은 웹 플랫폼 고도화의 해입니다. 선수들이 자신의 기록과 일정을 언제 어디서나 확인할 수 있도록 실시간 기록과 중계를 강화하고,
             모든 운영진이 여러분의 땀방울이 헛되지 않도록 최선을 다하겠습니다. 부상 없는 즐거운 시즌이 되길 바랍니다.
           </p>
           <p style={{ margin: 0, color: '#a4a9b5ff', fontWeight: 700 }}>제46대 전국대학아마추어야구연합회장 정흥영</p>
