@@ -355,6 +355,24 @@ export default function MatchSchedulePage() {
     const displayStatus = deriveDisplayStatus(match);
     const badge = statusLabel(displayStatus);
     const isActive = state.activeMatchId === match.id;
+    const goTo = (path: string) => {
+      actions.selectMatch(match.id);
+      navigate(path);
+    };
+    const quickActionStyle: CSSProperties = {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '6px',
+      padding: '8px 10px',
+      borderRadius: '999px',
+      border: '1px solid rgba(148,163,184,0.35)',
+      background: 'rgba(255,255,255,0.03)',
+      color: '#e2e8f0',
+      fontWeight: 800,
+      fontSize: '12px',
+      cursor: 'pointer',
+      transition: 'border-color 120ms ease, transform 120ms ease, background 120ms ease',
+    };
     return (
       <div
         key={match.id}
@@ -397,16 +415,24 @@ export default function MatchSchedulePage() {
                 결과: {match.homeScore ?? 0} - {match.awayScore ?? 0}
               </span>
             )}
-            <button
-              type="button"
-              onClick={() => {
-                actions.selectMatch(match.id);
-                navigate('/scorekeeper');
-              }}
-              style={secondaryButtonStyle}
-            >
-              기록 선택
-            </button>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => goTo('/scoreboard')} style={quickActionStyle} title="전광판">
+                <span aria-hidden>📺</span>
+                전광판
+              </button>
+              <button type="button" onClick={() => goTo('/scoreboard-text')} style={quickActionStyle} title="문자중계">
+                <span aria-hidden>💬</span>
+                문자중계
+              </button>
+              <button type="button" onClick={() => goTo('/live-overlay')} style={quickActionStyle} title="라이브 오버레이">
+                <span aria-hidden>🛰️</span>
+                라이브 오버레이
+              </button>
+              <button type="button" onClick={() => goTo('/scorekeeper')} style={quickActionStyle} title="기록원">
+                <span aria-hidden>📝</span>
+                기록원
+              </button>
+            </div>
             <button type="button" onClick={() => handleEditLineups(match)} style={secondaryButtonStyle}>
               라인업 편집
             </button>
