@@ -85,6 +85,7 @@ docker run --name aubl-mysql -e MYSQL_ROOT_PASSWORD=aubl -e MYSQL_DATABASE=aubl 
 ### Schema notes (MySQL)
 - Added `roster_players` table with a `year` column for season-scoped rosters.
 - `batting_stats` and `pitching_stats` now include a `year` column to filter by season without joining `matches`.
+- Added `team_seasons` table to record which years each team roster was collected for.
 
 ## Usage
 
@@ -103,7 +104,7 @@ python -m crawler.cli --from-year 2024 --to-year 2024 --output-json ./out
 `./out`에는 다음 JSONL 파일들이 생성됩니다:
 
 - `matches.jsonl`: 경기 기본 정보(스코어, 상태 등)
-- `teams.jsonl`: 팀 마스터 데이터
+- `teams.jsonl`: 팀 마스터 데이터 (`year` 필드로 수집 연도 명시)
 - `players.jsonl`: 선수 마스터 데이터
 - `roster_players.jsonl`: 팀별 등록 선수 명단
 - `batting_stats.jsonl`: 타격 스탯

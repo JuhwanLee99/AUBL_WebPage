@@ -29,7 +29,8 @@ class JsonStorage:
     def __init__(self, output_dir: str | Path) -> None:
         self._output_dir = Path(output_dir)
         self._team_registry: dict[str, int] = {}
-        self._seen_team_keys: set[int | str] = set()
+        # Track teams per season so the same club can be stored for multiple years.
+        self._seen_team_keys: set[tuple[int | str | None, int | None]] = set()
         self._seen_player_keys: set[tuple[int | None, str, str | None]] = set()
         self._league_record_years: dict[str, set[int | None]] = {}
         self._paths = {
@@ -55,10 +56,11 @@ class JsonStorage:
 
     def store_roster(self, entries: Iterable[RosterEntry], year: int | None) -> None:
         for entry in entries:
-            team_key = entry.team.team_idx if entry.team.team_idx is not None else entry.team.name
+            raw_team_key = entry.team.team_idx if entry.team.team_idx is not None else entry.team.name
+            team_key = (raw_team_key, year)
             if team_key not in self._seen_team_keys:
                 self._seen_team_keys.add(team_key)
-                self._append_team(entry.team)
+                self._append_team(entry.team, year)
             for player in entry.players:
                 if not player.name:
                     continue
@@ -256,10 +258,18 @@ class JsonStorage:
             },
         )
 
-    def _append_team(self, team: TeamInfo | None) -> None:
+    def _append_team(self, team: TeamInfo | None, year: int | None) -> None:
         if team is None:
             return
-        self._append("teams", {"team_idx": team.team_idx, "name": team.name, "code": team.code})
+        self._append(
+            "teams",
+            {
+                "team_idx": team.team_idx,
+                "name": team.name,
+                "code": team.code,
+                "year": year,
+            },
+        )
 
     def _append_players(self, match_data: MatchPayload) -> None:
         for entry in (match_data.batting_stats or []) + (match_data.pitching_stats or []):
