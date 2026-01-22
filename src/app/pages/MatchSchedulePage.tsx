@@ -72,6 +72,12 @@ function formatDateTimeLabel(value: string) {
   }
 }
 
+function formatTimeLabel(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '시간 미정';
+  return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+}
+
 function parseLineup(text: string) {
   const lines = text
     .split('\n')
@@ -142,6 +148,11 @@ function statusLabel(status: MatchStatus) {
   }
 }
 
+const getSafeTime = (value: string) => {
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? 0 : time;
+};
+
 export default function MatchSchedulePage() {
   const { state, actions } = useDemoStore();
   const navigate = useNavigate();
@@ -172,6 +183,11 @@ export default function MatchSchedulePage() {
     home: createEmptyBenchInput(),
     away: createEmptyBenchInput(),
   }));
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
 
   const startTimeParts = useMemo(() => extractDateParts(form.startTime), [form.startTime]);
   const hourOptions = useMemo(() => Array.from({ length: 24 }, (_, index) => String(index).padStart(2, '0')), []);
@@ -192,14 +208,67 @@ export default function MatchSchedulePage() {
   };
 
   const sortedMatches = useMemo(() => {
-    return [...state.matches].sort((a, b) => {
-      const aTime = new Date(a.startTime).getTime();
-      const bTime = new Date(b.startTime).getTime();
-      const safeATime = Number.isNaN(aTime) ? 0 : aTime;
-      const safeBTime = Number.isNaN(bTime) ? 0 : bTime;
-      return safeATime - safeBTime;
-    });
+    return [...state.matches].sort((a, b) => getSafeTime(a.startTime) - getSafeTime(b.startTime));
   }, [state.matches]);
+
+  const categorizedMatches = useMemo(() => {
+    const now = Date.now();
+    const live = sortedMatches.filter((match) => match.status === 'inProgress');
+    const upcoming = sortedMatches.filter(
+      (match) => match.status === 'scheduled' && getSafeTime(match.startTime) >= now,
+    );
+    const past = sortedMatches.filter(
+      (match) =>
+        match.status === 'completed' || (match.status === 'scheduled' && match.status !== 'inProgress' && getSafeTime(match.startTime) < now),
+    );
+    return { live, upcoming, past };
+  }, [sortedMatches]);
+
+  const calendarWeeks = useMemo(() => {
+    const firstDay = new Date(calendarMonth.year, calendarMonth.month, 1);
+    const firstWeekday = firstDay.getDay(); // 0=일요일
+    const daysInMonth = new Date(calendarMonth.year, calendarMonth.month + 1, 0).getDate();
+    const weeks: (number | null)[][] = [];
+    let week: (number | null)[] = Array(firstWeekday).fill(null);
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      week.push(day);
+      if (week.length === 7) {
+        weeks.push(week);
+        week = [];
+      }
+    }
+    if (week.length) {
+      while (week.length < 7) week.push(null);
+      weeks.push(week);
+    }
+    return weeks;
+  }, [calendarMonth]);
+
+  const matchesByDay = useMemo(() => {
+    const map: Record<number, MatchSchedule[]> = {};
+    sortedMatches.forEach((match) => {
+      const date = new Date(match.startTime);
+      if (Number.isNaN(date.getTime())) return;
+      if (date.getFullYear() !== calendarMonth.year || date.getMonth() !== calendarMonth.month) return;
+      const day = date.getDate();
+      map[day] = map[day] ? [...map[day], match] : [match];
+    });
+    Object.values(map).forEach((list) => list.sort((a, b) => getSafeTime(a.startTime) - getSafeTime(b.startTime)));
+    return map;
+  }, [sortedMatches, calendarMonth]);
+
+  const calendarLabel = useMemo(
+    () => new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: 'long' }).format(new Date(calendarMonth.year, calendarMonth.month, 1)),
+    [calendarMonth],
+  );
+
+  const weekdayLabels = ['일', '월', '화', '수', '목', '금', '토'];
+
+  const isToday = (day: number | null) => {
+    if (!day) return false;
+    const today = new Date();
+    return today.getFullYear() === calendarMonth.year && today.getMonth() === calendarMonth.month && today.getDate() === day;
+  };
 
   const handleFormSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -274,6 +343,182 @@ export default function MatchSchedulePage() {
     actions.saveMatchLineups(matchId, trimmedLineups, trimmedBenches);
     resetEditingState();
   };
+
+  const renderMatchCard = (match: MatchSchedule) => {
+    const badge = statusLabel(match.status);
+    const isActive = state.activeMatchId === match.id;
+    return (
+      <div
+        key={match.id}
+        style={{
+          borderRadius: '16px',
+          border: isActive ? '1px solid rgba(249,115,22,0.6)' : '1px solid rgba(148,163,184,0.3)',
+          padding: '16px',
+          background: 'rgba(15,23,42,0.6)',
+          display: 'grid',
+          gap: '12px',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '18px', fontWeight: 800 }}>
+                {match.homeTeamName} vs {match.awayTeamName}
+              </span>
+              <span
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '999px',
+                  color: badge.color,
+                  background: badge.background,
+                  fontSize: '12px',
+                  fontWeight: 800,
+                }}
+              >
+                {badge.text}
+              </span>
+              {isActive && <span style={{ fontSize: '12px', color: '#f97316' }}>선택됨</span>}
+            </div>
+            <div style={{ color: '#94a3b8', marginTop: '4px', fontSize: '13px' }}>
+              {formatDateTimeLabel(match.startTime)} · {match.venue}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+            {match.status === 'completed' && (
+              <span style={{ fontWeight: 700, color: '#e2e8f0' }}>
+                결과: {match.homeScore ?? 0} - {match.awayScore ?? 0}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                actions.selectMatch(match.id);
+                navigate('/scorekeeper');
+              }}
+              style={secondaryButtonStyle}
+            >
+              기록 선택
+            </button>
+            <button type="button" onClick={() => handleEditLineups(match)} style={secondaryButtonStyle}>
+              라인업 편집
+            </button>
+          </div>
+        </div>
+
+        {match.notes && <div style={{ color: '#cbd5e1', fontSize: '13px' }}>메모: {match.notes}</div>}
+
+        {editingMatchId === match.id && (
+          <div
+            style={{
+              borderRadius: '12px',
+              border: '1px solid rgba(148,163,184,0.3)',
+              padding: '12px',
+              display: 'grid',
+              gap: '12px',
+              background: '#0b0f1a',
+            }}
+          >
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '12px' }}>
+              <ScheduleLineupEditor
+                label="홈 라인업 & 후보"
+                side="home"
+                lineup={editingLineups.home}
+                bench={editingBenches.home}
+                benchInput={editingBenchInputs.home}
+                onSetLineup={(side, index, updates) =>
+                  setEditingLineups((prev) => ({
+                    ...prev,
+                    [side]: prev[side].map((slot, idx) => (idx === index ? { ...slot, ...updates } : slot)),
+                  }))
+                }
+                onChangeBenchInput={(side, updates) =>
+                  setEditingBenchInputs((prev) => ({ ...prev, [side]: { ...prev[side], ...updates } }))
+                }
+                onAddBench={(side, player) => setEditingBenches((prev) => ({ ...prev, [side]: [...prev[side], player] }))}
+                onRemoveBench={(side, index) =>
+                  setEditingBenches((prev) => ({ ...prev, [side]: prev[side].filter((_, idx) => idx !== index) }))
+                }
+              />
+              <ScheduleLineupEditor
+                label="원정 라인업 & 후보"
+                side="away"
+                lineup={editingLineups.away}
+                bench={editingBenches.away}
+                benchInput={editingBenchInputs.away}
+                onSetLineup={(side, index, updates) =>
+                  setEditingLineups((prev) => ({
+                    ...prev,
+                    [side]: prev[side].map((slot, idx) => (idx === index ? { ...slot, ...updates } : slot)),
+                  }))
+                }
+                onChangeBenchInput={(side, updates) =>
+                  setEditingBenchInputs((prev) => ({ ...prev, [side]: { ...prev[side], ...updates } }))
+                }
+                onAddBench={(side, player) => setEditingBenches((prev) => ({ ...prev, [side]: [...prev[side], player] }))}
+                onRemoveBench={(side, index) =>
+                  setEditingBenches((prev) => ({ ...prev, [side]: prev[side].filter((_, idx) => idx !== index) }))
+                }
+              />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button type="button" onClick={resetEditingState} style={secondaryButtonStyle}>
+                취소
+              </button>
+              <button type="button" onClick={() => handleSaveLineups(match.id)} style={primaryButtonStyle}>
+                라인업 저장
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderSection = (title: string, matches: MatchSchedule[], emptyText: string) => (
+    <section
+      style={{
+        border: '1px solid rgba(148,163,184,0.2)',
+        borderRadius: '14px',
+        padding: '12px',
+        background: 'rgba(15,23,42,0.4)',
+        display: 'grid',
+        gap: '12px',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontWeight: 900, fontSize: '17px', color: '#e2e8f0' }}>{title}</span>
+          <span
+            style={{
+              padding: '4px 8px',
+              borderRadius: '999px',
+              background: 'rgba(148,163,184,0.16)',
+              color: '#cbd5e1',
+              fontWeight: 800,
+              fontSize: '12px',
+            }}
+          >
+            {matches.length} 경기
+          </span>
+        </div>
+      </div>
+      {matches.length ? (
+        <div style={{ display: 'grid', gap: '12px' }}>{matches.map(renderMatchCard)}</div>
+      ) : (
+        <div
+          style={{
+            borderRadius: '12px',
+            padding: '14px',
+            background: 'rgba(255,255,255,0.02)',
+            color: '#94a3b8',
+            fontWeight: 700,
+          }}
+        >
+          {emptyText}
+        </div>
+      )}
+    </section>
+  );
 
   return (
     <div style={{ display: 'grid', gap: '24px' }}>
@@ -490,141 +735,207 @@ export default function MatchSchedulePage() {
         </form>
       )}
 
-      <div style={{ display: 'grid', gap: '16px' }}>
-        {sortedMatches.map((match) => {
-          const badge = statusLabel(match.status);
-          const isActive = state.activeMatchId === match.id;
-          return (
-            <div
-              key={match.id}
-              style={{
-                borderRadius: '16px',
-                border: isActive ? '1px solid rgba(249,115,22,0.6)' : '1px solid rgba(148,163,184,0.3)',
-                padding: '16px',
-                background: 'rgba(15,23,42,0.6)',
-                display: 'grid',
-                gap: '12px',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '18px', fontWeight: 800 }}>
-                      {match.homeTeamName} vs {match.awayTeamName}
-                    </span>
-                    <span
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '12px',
+          flexWrap: 'wrap',
+          border: '1px solid rgba(148,163,184,0.2)',
+          borderRadius: '14px',
+          padding: '12px',
+          background: 'rgba(15,23,42,0.35)',
+        }}
+      >
+        <div style={{ display: 'grid', gap: '4px' }}>
+          <span style={{ fontWeight: 800, color: '#e2e8f0' }}>구분된 일정 보기</span>
+          <span style={{ color: '#94a3b8', fontSize: '13px' }}>
+            진행 상태별 섹션과 달력 뷰 중 원하는 방식으로 확인하세요.
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {(['list', 'calendar'] as const).map((mode) => {
+            const isActive = viewMode === mode;
+            return (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setViewMode(mode)}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: '12px',
+                  border: isActive ? '1px solid rgba(249,115,22,0.7)' : '1px solid rgba(148,163,184,0.3)',
+                  background: isActive ? 'rgba(249,115,22,0.12)' : 'rgba(255,255,255,0.02)',
+                  color: isActive ? '#f97316' : '#cbd5e1',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  minWidth: '110px',
+                }}
+              >
+                {mode === 'list' ? '목록 보기' : '달력 보기'}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {viewMode === 'list' ? (
+        <div style={{ display: 'grid', gap: '14px' }}>
+          {renderSection('진행 중 경기', categorizedMatches.live, '현재 진행 중인 경기가 없습니다.')}
+          {renderSection('예정된 경기', categorizedMatches.upcoming, '예정된 경기가 없습니다.')}
+          {renderSection('종료된 경기', categorizedMatches.past, '지난 경기가 없습니다.')}
+        </div>
+      ) : (
+        <div
+          style={{
+            border: '1px solid rgba(148,163,184,0.2)',
+            borderRadius: '14px',
+            padding: '14px',
+            background: 'rgba(15,23,42,0.35)',
+            display: 'grid',
+            gap: '12px',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'grid', gap: '2px' }}>
+              <span style={{ fontWeight: 900, color: '#e2e8f0', fontSize: '18px' }}>{calendarLabel}</span>
+              <span style={{ color: '#94a3b8', fontSize: '13px' }}>
+                날짜별 예정·진행·종료 경기를 한눈에 확인하세요.
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() =>
+                  setCalendarMonth((prev) => ({
+                    year: prev.month === 0 ? prev.year - 1 : prev.year,
+                    month: prev.month === 0 ? 11 : prev.month - 1,
+                  }))
+                }
+                style={secondaryButtonStyle}
+              >
+                이전 달
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setCalendarMonth((prev) => ({
+                    year: prev.month === 11 ? prev.year + 1 : prev.year,
+                    month: prev.month === 11 ? 0 : prev.month + 1,
+                  }))
+                }
+                style={secondaryButtonStyle}
+              >
+                다음 달
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const today = new Date();
+                  setCalendarMonth({ year: today.getFullYear(), month: today.getMonth() });
+                }}
+                style={secondaryButtonStyle}
+              >
+                이번 달
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px', textAlign: 'center', color: '#94a3b8', fontWeight: 800 }}>
+            {weekdayLabels.map((label) => (
+              <div key={label} style={{ padding: '6px 0' }}>
+                {label}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'grid', gap: '6px' }}>
+            {calendarWeeks.map((week, weekIdx) => (
+              <div key={`${weekIdx}`} style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px' }}>
+                {week.map((day, dayIdx) => {
+                  const dayMatches = day ? matchesByDay[day] ?? [] : [];
+                  const todayMark = isToday(day);
+                  return (
+                    <div
+                      key={`${weekIdx}-${dayIdx}`}
                       style={{
-                        padding: '4px 10px',
-                        borderRadius: '999px',
-                        color: badge.color,
-                        background: badge.background,
-                        fontSize: '12px',
-                        fontWeight: 800,
+                        minHeight: '110px',
+                        borderRadius: '12px',
+                        border: todayMark ? '1px solid rgba(249,115,22,0.7)' : '1px solid rgba(148,163,184,0.2)',
+                        background: todayMark ? 'rgba(249,115,22,0.08)' : 'rgba(255,255,255,0.02)',
+                        padding: '10px',
+                        display: 'grid',
+                        gap: '6px',
+                        alignContent: 'start',
                       }}
                     >
-                      {badge.text}
-                    </span>
-                    {isActive && <span style={{ fontSize: '12px', color: '#f97316' }}>선택됨</span>}
-                  </div>
-                  <div style={{ color: '#94a3b8', marginTop: '4px', fontSize: '13px' }}>
-                    {formatDateTimeLabel(match.startTime)} · {match.venue}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  {match.status === 'completed' && (
-                    <span style={{ fontWeight: 700, color: '#e2e8f0' }}>
-                      결과: {match.homeScore ?? 0} - {match.awayScore ?? 0}
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      actions.selectMatch(match.id);
-                      navigate('/scorekeeper');
-                    }}
-                    style={secondaryButtonStyle}
-                  >
-                    기록 선택
-                  </button>
-                  <button type="button" onClick={() => handleEditLineups(match)} style={secondaryButtonStyle}>
-                    라인업 편집
-                  </button>
-                </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#e2e8f0', fontWeight: 800 }}>{day ?? ''}</span>
+                        {todayMark && <span style={{ color: '#f97316', fontSize: '11px', fontWeight: 800 }}>오늘</span>}
+                      </div>
+                      <div style={{ display: 'grid', gap: '6px' }}>
+                        {dayMatches.map((match) => {
+                          const badge = statusLabel(match.status);
+                          return (
+                            <button
+                              key={match.id}
+                              type="button"
+                              onClick={() => {
+                                actions.selectMatch(match.id);
+                                navigate('/scorekeeper');
+                              }}
+                              style={{
+                                textAlign: 'left',
+                                border: '1px solid rgba(148,163,184,0.25)',
+                                borderRadius: '10px',
+                                padding: '8px',
+                                background: 'rgba(15,23,42,0.7)',
+                                color: '#e2e8f0',
+                                cursor: 'pointer',
+                                display: 'grid',
+                                gap: '4px',
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <span style={{ fontWeight: 800, fontSize: '13px' }}>
+                                  {match.homeTeamName} vs {match.awayTeamName}
+                                </span>
+                                <span
+                                  style={{
+                                    padding: '2px 8px',
+                                    borderRadius: '999px',
+                                    background: badge.background,
+                                    color: badge.color,
+                                    fontWeight: 800,
+                                    fontSize: '11px',
+                                  }}
+                                >
+                                  {badge.text}
+                                </span>
+                              </div>
+                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', color: '#94a3b8', fontSize: '12px' }}>
+                                <span>{formatTimeLabel(match.startTime)}</span>
+                                <span>· {match.venue}</span>
+                              </div>
+                              {match.status === 'completed' && (
+                                <span style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '12px' }}>
+                                  {match.homeScore ?? 0} - {match.awayScore ?? 0}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                        {!dayMatches.length && <span style={{ color: '#475569', fontSize: '12px' }}>경기 없음</span>}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-
-              {match.notes && <div style={{ color: '#cbd5e1', fontSize: '13px' }}>메모: {match.notes}</div>}
-
-              {editingMatchId === match.id && (
-                <div
-                  style={{
-                    borderRadius: '12px',
-                    border: '1px solid rgba(148,163,184,0.3)',
-                    padding: '12px',
-                    display: 'grid',
-                    gap: '12px',
-                    background: '#0b0f1a',
-                  }}
-                >
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '12px' }}>
-                    <ScheduleLineupEditor
-                      label="홈 라인업 & 후보"
-                      side="home"
-                      lineup={editingLineups.home}
-                      bench={editingBenches.home}
-                      benchInput={editingBenchInputs.home}
-                      onSetLineup={(side, index, updates) =>
-                        setEditingLineups((prev) => ({
-                          ...prev,
-                          [side]: prev[side].map((slot, idx) => (idx === index ? { ...slot, ...updates } : slot)),
-                        }))
-                      }
-                      onChangeBenchInput={(side, updates) =>
-                        setEditingBenchInputs((prev) => ({ ...prev, [side]: { ...prev[side], ...updates } }))
-                      }
-                      onAddBench={(side, player) =>
-                        setEditingBenches((prev) => ({ ...prev, [side]: [...prev[side], player] }))
-                      }
-                      onRemoveBench={(side, index) =>
-                        setEditingBenches((prev) => ({ ...prev, [side]: prev[side].filter((_, idx) => idx !== index) }))
-                      }
-                    />
-                    <ScheduleLineupEditor
-                      label="원정 라인업 & 후보"
-                      side="away"
-                      lineup={editingLineups.away}
-                      bench={editingBenches.away}
-                      benchInput={editingBenchInputs.away}
-                      onSetLineup={(side, index, updates) =>
-                        setEditingLineups((prev) => ({
-                          ...prev,
-                          [side]: prev[side].map((slot, idx) => (idx === index ? { ...slot, ...updates } : slot)),
-                        }))
-                      }
-                      onChangeBenchInput={(side, updates) =>
-                        setEditingBenchInputs((prev) => ({ ...prev, [side]: { ...prev[side], ...updates } }))
-                      }
-                      onAddBench={(side, player) =>
-                        setEditingBenches((prev) => ({ ...prev, [side]: [...prev[side], player] }))
-                      }
-                      onRemoveBench={(side, index) =>
-                        setEditingBenches((prev) => ({ ...prev, [side]: prev[side].filter((_, idx) => idx !== index) }))
-                      }
-                    />
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                    <button type="button" onClick={resetEditingState} style={secondaryButtonStyle}>
-                      취소
-                    </button>
-                    <button type="button" onClick={() => handleSaveLineups(match.id)} style={primaryButtonStyle}>
-                      라인업 저장
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
