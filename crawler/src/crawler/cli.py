@@ -122,7 +122,7 @@ def run_sync() -> None:
     try:
         for year in range(start_year, end_year + 1):
             roster_entries = fetch_roster(roster_client, sync_settings, year)
-            storage.store_roster(roster_entries)
+            storage.store_roster(roster_entries, year)
             storage.set_team_registry(build_team_registry(roster_entries))
             batting_payload, pitching_payload = fetch_league_records(
                 roster_client,
