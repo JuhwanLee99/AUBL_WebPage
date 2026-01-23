@@ -22,7 +22,6 @@ const mainButtons = [
 ];
 
 const secondaryButtons = [
-  { label: '볼넷', color: '#22c55e', action: 'walk' },
   { label: '고의4구', color: '#22c55e', action: 'intentional_walk' },
   { label: '사구', color: '#22c55e', action: 'hbp' },
   { label: '타격 방해', color: '#f97316', action: 'catcher_interference' },
