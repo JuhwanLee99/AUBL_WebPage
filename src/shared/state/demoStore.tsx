@@ -122,7 +122,6 @@ type Action =
   | { type: 'intentionalWalk' }
   | { type: 'catcherInterference' }
   | { type: 'hbp' }
-  | { type: 'batterInterference' }
   | { type: 'sac'; battedBall?: BattedBallDetails | null; sacType?: 'fly' | 'bunt' }
   | { type: 'error'; details: ErrorDetails }
   | { type: 'stealSuccess' }
@@ -744,9 +743,6 @@ function reducer(state: DemoState, action: Action): DemoState {
       break;
     case 'catcherInterference':
       nextState = applyWalk(state, '타격방해', state.pitchCount + 1);
-      break;
-    case 'batterInterference':
-      nextState = applyOut(state, '타격방해(타자 아웃)', { pitchNumber: state.pitchCount + 1 });
       break;
     case 'hbp':
       nextState = applyWalk(state, '몸에 맞는 공', state.pitchCount + 1);
@@ -2199,7 +2195,6 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       walk: () => dispatch({ type: 'walk' }),
       intentionalWalk: () => dispatch({ type: 'intentionalWalk' }),
       catcherInterference: () => dispatch({ type: 'catcherInterference' }),
-      batterInterference: () => dispatch({ type: 'batterInterference' }),
       hbp: () => dispatch({ type: 'hbp' }),
       sacFly: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'sac', battedBall, sacType: 'fly' }),
       sacBunt: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'sac', battedBall, sacType: 'bunt' }),

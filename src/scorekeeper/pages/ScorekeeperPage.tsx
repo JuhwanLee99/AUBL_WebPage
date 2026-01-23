@@ -25,7 +25,7 @@ const secondaryButtons = [
   { label: '볼넷', color: '#22c55e', action: 'walk' },
   { label: '고의4구', color: '#22c55e', action: 'intentional_walk' },
   { label: '사구', color: '#22c55e', action: 'hbp' },
-  { label: '타격 방해', color: '#f97316', action: 'batter_interference' },
+  { label: '타격 방해', color: '#f97316', action: 'catcher_interference' },
   { label: '카운트 리셋', color: '#94a3b8', action: 'resetCount' },
   { label: '주자 클리어', color: '#94a3b8', action: 'clearBases' },
   { label: '이닝 전환', color: '#94a3b8', action: 'nextHalf' },
@@ -1136,7 +1136,15 @@ export default function ScorekeeperPage() {
   const [hitWizard, setHitWizard] = useState<HitWizardState | null>(null);
   const [manualBroadcast, setManualBroadcast] = useState('');
   const [liveVideoUrlInput, setLiveVideoUrlInput] = useState(state.liveVideoUrl);
-  const [hitAdvanceModal, setHitAdvanceModal] = useState<null | { bases: 1 | 2 | 3; selections: RunnerAdvanceSelections; mode: 'hit' | 'fc'; contextNote: string }>(null);
+  const [hitAdvanceModal, setHitAdvanceModal] = useState<null | {
+    bases: 1 | 2 | 3;
+    selections: RunnerAdvanceSelections;
+    mode: 'hit' | 'fc';
+    contextNote: string;
+    fcFielder: string;
+    fcTargetBase: '1' | '2' | '3' | '홈';
+    fcOutType: 'force' | 'tag';
+  }>(null);
   const [errorOnPlayModal, setErrorOnPlayModal] = useState<null | { selections: RunnerAdvanceSelections; batterResult: 'out' | 1 | 2 | 3 | 4; errorType: string; context: string; fielder: string }>(null);
   const [showDroppedThirdStrike, setShowDroppedThirdStrike] = useState(false);
   const [battedBallType, setBattedBallType] = useState(baseBattedBallType);
@@ -1217,7 +1225,15 @@ export default function ScorekeeperPage() {
       }
       return acc;
     }, {});
-    setHitAdvanceModal({ bases, selections, mode, contextNote: '' });
+    setHitAdvanceModal({
+      bases,
+      selections,
+      mode,
+      contextNote: '',
+      fcFielder: '1',
+      fcTargetBase: '1',
+      fcOutType: 'force',
+    });
     setActionModal(null);
     setHitWizard(null);
   };
@@ -1331,9 +1347,6 @@ export default function ScorekeeperPage() {
       case 'intentional_walk':
         actions.intentionalWalk();
         break;
-      case 'catcher_interference':
-        actions.catcherInterference();
-        break;
       case 'reach_error': {
         const initialSelections = state.bases.reduce<RunnerAdvanceSelections>((acc, runner, idx) => {
           if (runner) acc[idx as 0 | 1 | 2] = 'hold';
@@ -1350,6 +1363,9 @@ export default function ScorekeeperPage() {
       }
       case 'out_three_bunt':
         actions.addOutWithMessage('쓰리번트 파울 아웃', details);
+        break;
+      case 'catcher_interference':
+        actions.catcherInterference();
         break;
       case 'sac_fly':
         actions.sacFly(details);
@@ -1436,8 +1452,8 @@ export default function ScorekeeperPage() {
       case 'hbp':
         actions.hbp();
         break;
-      case 'batter_interference':
-        actions.batterInterference();
+      case 'catcher_interference':
+        actions.catcherInterference();
         break;
       case 'out_ground':
         actions.addOutWithMessage('땅볼 아웃', battedBallDetails);
@@ -1487,9 +1503,14 @@ export default function ScorekeeperPage() {
 
   const handleConfirmHitAdvance = () => {
     if (!hitAdvanceModal) return;
-    const { bases, selections, mode, contextNote } = hitAdvanceModal;
+    const { bases, selections, mode, contextNote, fcFielder, fcTargetBase, fcOutType } = hitAdvanceModal;
     if (mode === 'fc') {
-      actions.fielderChoice(selections, battedBallDetails, contextNote);
+      const parts: string[] = [];
+      if (fcFielder) parts.push(`${fcFielder} 처리`);
+      if (fcTargetBase) parts.push(`${fcTargetBase}루 ${fcOutType === 'tag' ? '태그' : '포스'} 시도`);
+      if (contextNote?.trim()) parts.push(contextNote.trim());
+      const context = parts.join(' · ');
+      actions.fielderChoice(selections, battedBallDetails, context);
     } else {
       if (bases === 1) actions.hitSingle(selections, battedBallDetails);
       if (bases === 2) actions.hitDouble(selections, battedBallDetails);
@@ -2124,9 +2145,15 @@ export default function ScorekeeperPage() {
           basesState={state.bases}
           mode={hitAdvanceModal.mode}
           contextNote={hitAdvanceModal.contextNote}
+          fcFielder={hitAdvanceModal.fcFielder}
+          fcTargetBase={hitAdvanceModal.fcTargetBase}
+          fcOutType={hitAdvanceModal.fcOutType}
           selections={hitAdvanceModal.selections}
           onChangeSelections={(next) => setHitAdvanceModal((prev) => (prev ? { ...prev, selections: next } : prev))}
           onChangeContextNote={(text) => setHitAdvanceModal((prev) => (prev ? { ...prev, contextNote: text } : prev))}
+          onChangeFcFielder={(val) => setHitAdvanceModal((prev) => (prev ? { ...prev, fcFielder: val } : prev))}
+          onChangeFcTargetBase={(val) => setHitAdvanceModal((prev) => (prev ? { ...prev, fcTargetBase: val } : prev))}
+          onChangeFcOutType={(val) => setHitAdvanceModal((prev) => (prev ? { ...prev, fcOutType: val } : prev))}
           onClose={() => setHitAdvanceModal(null)}
           onConfirm={handleConfirmHitAdvance}
         />
@@ -2566,9 +2593,15 @@ function HitAdvanceModal({
   basesState,
   mode,
   contextNote,
+  fcFielder,
+  fcTargetBase,
+  fcOutType,
   selections,
   onChangeSelections,
   onChangeContextNote,
+  onChangeFcFielder,
+  onChangeFcTargetBase,
+  onChangeFcOutType,
   onClose,
   onConfirm,
 }: {
@@ -2576,9 +2609,15 @@ function HitAdvanceModal({
   basesState: (string | null)[];
   mode: 'hit' | 'fc';
   contextNote?: string;
+  fcFielder?: string;
+  fcTargetBase?: '1' | '2' | '3' | '홈';
+  fcOutType?: 'force' | 'tag';
   selections: RunnerAdvanceSelections;
   onChangeSelections: (next: RunnerAdvanceSelections) => void;
   onChangeContextNote?: (text: string) => void;
+  onChangeFcFielder?: (val: string) => void;
+  onChangeFcTargetBase?: (val: '1' | '2' | '3' | '홈') => void;
+  onChangeFcOutType?: (val: 'force' | 'tag') => void;
   onClose: () => void;
   onConfirm: () => void;
 }) {
@@ -2712,8 +2751,61 @@ function HitAdvanceModal({
             }}
           >
             <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '13px' }}>
-              어떤 선택이었는지 메모하세요. (예: 6-4 포스아웃 시도)
+              어떤 선택이었는지 메모하세요. (수비수 · 목적 베이스 · 포스/태그)
             </span>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
+              <select
+                value={fcFielder}
+                onChange={(e) => onChangeFcFielder?.(e.target.value)}
+                style={{
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  padding: '10px',
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                }}
+              >
+                {['1','2','3','4','5','6','7','8','9'].map((num) => (
+                  <option key={num} value={num}>
+                    {num}번
+                  </option>
+                ))}
+              </select>
+              <select
+                value={fcTargetBase}
+                onChange={(e) => onChangeFcTargetBase?.(e.target.value as '1' | '2' | '3' | '홈')}
+                style={{
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  padding: '10px',
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                }}
+              >
+                {['1','2','3','홈'].map((b) => (
+                  <option key={b} value={b}>
+                    {b}루
+                  </option>
+                ))}
+              </select>
+              <select
+                value={fcOutType}
+                onChange={(e) => onChangeFcOutType?.(e.target.value as 'force' | 'tag')}
+                style={{
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  padding: '10px',
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                }}
+              >
+                <option value="force">포스 아웃</option>
+                <option value="tag">태그 아웃</option>
+              </select>
+            </div>
             <textarea
               value={contextNote ?? ''}
               onChange={(e) => onChangeContextNote?.(e.target.value)}
