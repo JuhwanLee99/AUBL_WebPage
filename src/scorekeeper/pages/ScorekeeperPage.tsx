@@ -165,6 +165,12 @@ type HitWizardState = {
   zone: string;
   fielder: string;
 };
+
+function requiresAdvanceModal(result: BattedBallResultAction | null) {
+  return ['single', 'single_infield', 'single_bunt', 'double', 'double_ground', 'triple', 'fc'].includes(
+    result as BattedBallResultAction,
+  );
+}
 type ActionModalData =
   | { role: 'runner'; name: string; base: 0 | 1 | 2 }
   | { role: 'batter'; name: string; side: Side; lineupIndex: number }
@@ -1528,7 +1534,7 @@ const handleConfirmHitWizard = () => {
 
   const handleConfirmHitAdvance = () => {
     if (!hitAdvanceModal) return;
-    const { bases, selections, mode, contextNote, fcFielder, fcRelay, fcTargetBase, fcOutType } = hitAdvanceModal;
+    const { bases, selections, mode, contextNote, fcFielder, fcRelay, fcTargetBase, fcOutType, pathNote } = hitAdvanceModal;
     if (mode === 'fc') {
       const parts: string[] = [];
       if (fcFielder) parts.push(`${fcFielder} 처리`);
@@ -1541,6 +1547,9 @@ const handleConfirmHitWizard = () => {
       if (bases === 1) actions.hitSingle(selections, battedBallDetails);
       if (bases === 2) actions.hitDouble(selections, battedBallDetails);
       if (bases === 3) actions.hitTriple(selections, battedBallDetails);
+    }
+    if (pathNote?.trim()) {
+      actions.setPlay(`주루 메모 · ${pathNote.trim()}`);
     }
     setHitAdvanceModal(null);
   };
@@ -2201,6 +2210,12 @@ const handleConfirmHitWizard = () => {
           defaultSelections={errorOnPlayModal.selections}
           defaultBatterResult={errorOnPlayModal.batterResult}
           onClose={() => setErrorOnPlayModal(null)}
+          onBack={() => {
+            setErrorOnPlayModal(null);
+            if (lastHitWizard) {
+              setHitWizard({ ...lastHitWizard, step: 'zone' });
+            }
+          }}
           onConfirm={({ fielder, errorType, context, batterResult, selections }) => {
             actions.recordError({
               fielderPos: fielder || '수비',
@@ -2631,6 +2646,7 @@ function HitAdvanceModal({
   fcRelay,
   fcTargetBase,
   fcOutType,
+  pathNote,
   selections,
   onChangeSelections,
   onChangeContextNote,
@@ -2638,6 +2654,7 @@ function HitAdvanceModal({
   onChangeFcRelay,
   onChangeFcTargetBase,
   onChangeFcOutType,
+  onChangePathNote,
   onClose,
   onBack,
   onConfirm,
@@ -2650,6 +2667,7 @@ function HitAdvanceModal({
   fcRelay?: string;
   fcTargetBase?: '1' | '2' | '3' | '홈';
   fcOutType?: 'force' | 'tag';
+  pathNote?: string;
   selections: RunnerAdvanceSelections;
   onChangeSelections: (next: RunnerAdvanceSelections) => void;
   onChangeContextNote?: (text: string) => void;
@@ -2657,6 +2675,7 @@ function HitAdvanceModal({
   onChangeFcRelay?: (val: string) => void;
   onChangeFcTargetBase?: (val: '1' | '2' | '3' | '홈') => void;
   onChangeFcOutType?: (val: 'force' | 'tag') => void;
+  onChangePathNote?: (val: string) => void;
   onClose: () => void;
   onBack?: () => void;
   onConfirm: () => void;
@@ -2881,6 +2900,26 @@ function HitAdvanceModal({
                 resize: 'vertical',
               }}
             />
+            <div style={{ display: 'grid', gap: '4px' }}>
+              <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '13px' }}>주루 경로 메모</span>
+              <textarea
+                value={pathNote ?? ''}
+                onChange={(e) => onChangePathNote?.(e.target.value)}
+                rows={2}
+                placeholder="예) 6-2-5 런다운, 2루 주자 세이프"
+                style={{
+                  width: '100%',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                  padding: '10px',
+                  fontSize: '13px',
+                  resize: 'vertical',
+                }}
+              />
+            </div>
           </div>
         ) : null}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
@@ -2943,6 +2982,7 @@ function ErrorOnPlayModal({
   defaultErrorType,
   defaultContext,
   onClose,
+  onBack,
   onConfirm,
 }: {
   basesState: (string | null)[];
@@ -2952,6 +2992,7 @@ function ErrorOnPlayModal({
   defaultErrorType: string;
   defaultContext: string;
   onClose: () => void;
+  onBack?: () => void;
   onConfirm: (details: { fielder: string; errorType: string; context: string; batterResult: 'out' | 1 | 2 | 3 | 4; selections: RunnerAdvanceSelections }) => void;
 }) {
   const [fielder, setFielder] = useState(defaultFielder);
@@ -3164,6 +3205,21 @@ function ErrorOnPlayModal({
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={onBack || onClose}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '10px',
+              border: '1px solid rgba(148,163,184,0.35)',
+              background: 'rgba(148,163,184,0.12)',
+              color: '#cbd5e1',
+              fontWeight: 900,
+              cursor: 'pointer',
+            }}
+          >
+            이전
+          </button>
           <button
             type="button"
             onClick={onClose}
