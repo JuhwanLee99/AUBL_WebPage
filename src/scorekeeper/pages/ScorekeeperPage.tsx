@@ -59,48 +59,75 @@ const battedBallResultGroups: { key: 'count' | 'hit' | 'out' | 'sac'; label: str
 ];
 
 const baseBattedBallType = '선택 안 함';
-const hitContactTypeOptions = [
-  baseBattedBallType,
-  '내야 느린 땅볼',
-  '내야 강한 땅볼',
-  '내야 라인드라이브',
-  '외야 앞에 떨어짐',
-  '외야 직선타',
-  '외야 넘어감/장타',
-  '번트 안타',
-];
+const singleTypeOptions = [baseBattedBallType, '외야 앞에 떨어짐', '외야 강한 직선타', '갭 사이 안타', '라인 따라 안타'];
+const infieldHitTypeOptions = [baseBattedBallType, '느린 내야 땅볼', '강한 내야 땅볼', '내야 라인드라이브'];
+const buntHitTypeOptions = [baseBattedBallType, '드래그 번트 안타', '푸시 번트 안타', '기습 번트 안타'];
+const extraBaseHitTypeOptions = [baseBattedBallType, '갭 장타', '라인 장타', '펜스 직격/원바운드'];
+const groundRuleDoubleTypeOptions = [baseBattedBallType, '원바운드 담장', '관중석/펜스 이탈'];
+const hrTypeOptions = [baseBattedBallType, '오버 더 펜스', '인사이드 더 파크'];
 const sacFlyTypeOptions = [baseBattedBallType, '좌익수 희생플라이', '중견수 희생플라이', '우익수 희생플라이', '파울 플라이 희생'];
 const sacBuntTypeOptions = [baseBattedBallType, '스퀴즈 번트', '1루쪽 희생번트', '3루쪽 희생번트', '투수 앞 희생번트'];
 const groundOutTypeOptions = [baseBattedBallType, '느린 땅볼', '강한 땅볼', '바운드 조정 땅볼'];
-const flyOutTypeOptions = [baseBattedBallType, '얕은 플라이', '깊은 플라이', '팝업/인필드'];
-const lineOutTypeOptions = [baseBattedBallType, '직선타(내야)', '직선타(외야)'];
+const outfieldFlyTypeOptions = [baseBattedBallType, '얕은 플라이', '깊은 플라이', '파울 플라이(외야)'];
+const lineOutTypeOptions = [baseBattedBallType, '직선타(내야)', '직선타(외야)', '강습 라이너'];
 const infieldFlyTypeOptions = [baseBattedBallType, '인필드 플라이 선언'];
 const infieldFielderOptions = ['선택 안 함', '투수', '포수', '1루수', '2루수', '3루수', '유격수'];
 const outfieldFielderOptions = ['선택 안 함', '좌익수', '중견수', '우익수', '좌익수 파울', '우익수 파울'];
 const defaultTypeOptions = [baseBattedBallType];
 const defaultZoneOptions = [
   '선택 안 함',
-  '3루 라인/코너',
-  '좌익수 앞',
+  '좌익수 파울/라인',
+  '좌전(좌익수 앞)',
   '좌중간 갭',
-  '중견수 정면',
+  '중전(중견수 정면)',
   '우중간 갭',
-  '우익수 앞',
-  '1루 라인/코너',
-  '내야 앞/번트',
+  '우전(우익수 앞)',
+  '우익수 파울/라인',
+  '중견수 깊숙/펜스',
+];
+const infieldGroundZoneOptions = [
+  '선택 안 함',
+  '포수 앞',
+  '투수 앞',
+  '3루수 정면',
+  '유격수 정면',
+  '2루수 정면',
+  '1루수 정면',
+  '3루 라인 땅볼',
+  '1루 라인 땅볼',
+];
+const lineDriveZoneOptions = [
+  '선택 안 함',
+  '3루 강습 라이너',
+  '유격수 라이너',
+  '2루수 라이너',
+  '1루 강습 라이너',
+  '좌익수 라이너',
+  '좌중간 라이너',
+  '중견수 라이너',
+  '우중간 라이너',
+  '우익수 라이너',
 ];
 const infieldFlyZoneOptions = [
   '선택 안 함',
-  '포수 파울',
-  '1루 파울',
-  '3루 파울',
+  '포수 파울 팝업',
+  '1루 파울 팝업',
+  '3루 파울 팝업',
   '투수 앞',
-  '1루 앞',
-  '2루 앞',
-  '3루 앞',
   '마운드 뒤',
+  '1루 앞',
+  '2루 베이스 부근',
+  '3루 앞',
 ];
-const buntZoneOptions = ['선택 안 함', '1루선상', '3루선상', '포수 앞', '투수 앞', '1루 앞', '3루 앞'];
+const buntZoneOptions = [
+  '선택 안 함',
+  '1루쪽 번트',
+  '3루쪽 번트',
+  '포수 앞 짧은 번트',
+  '투수 앞 짧은 번트',
+  '1루선상 번트',
+  '3루선상 번트',
+];
 const errorTypeOptions = ['포구', '송구', '포구 후 송구', '기타'];
 type HitResultAction = Extract<(typeof battedBallResultOptions)[number]['value'], 'single' | 'single_infield' | 'single_bunt' | 'double' | 'double_ground' | 'triple' | 'hr'>;
 type BattedBallResultAction = (typeof battedBallResultOptions)[number]['value'];
@@ -176,23 +203,48 @@ function baseLabel(idx: number) {
 
 function getTypeOptionsForResult(result: BattedBallResultAction | null) {
   if (!result) return defaultTypeOptions;
-  if (['single', 'single_infield', 'single_bunt', 'double', 'double_ground', 'triple', 'hr'].includes(result)) {
-    return hitContactTypeOptions;
+  switch (result) {
+    case 'single':
+      return singleTypeOptions;
+    case 'single_infield':
+      return infieldHitTypeOptions;
+    case 'single_bunt':
+      return buntHitTypeOptions;
+    case 'double':
+    case 'triple':
+      return extraBaseHitTypeOptions;
+    case 'double_ground':
+      return groundRuleDoubleTypeOptions;
+    case 'hr':
+      return hrTypeOptions;
+    case 'sac_fly':
+      return sacFlyTypeOptions;
+    case 'sac_bunt':
+      return sacBuntTypeOptions;
+    case 'out_ground':
+    case 'out_dp2':
+    case 'out_tp3':
+      return groundOutTypeOptions;
+    case 'out_fly':
+    case 'out_outfield_fly':
+      return outfieldFlyTypeOptions;
+    case 'out_line':
+      return lineOutTypeOptions;
+    case 'out_infield_fly':
+    case 'out_infield_fly_rule':
+      return infieldFlyTypeOptions;
+    default:
+      return defaultTypeOptions;
   }
-  if (result === 'sac_fly') return sacFlyTypeOptions;
-  if (result === 'sac_bunt') return sacBuntTypeOptions;
-  if (['out_ground', 'out_dp2', 'out_tp3'].includes(result)) return groundOutTypeOptions;
-  if (['out_fly', 'out_outfield_fly'].includes(result)) return flyOutTypeOptions;
-  if (result === 'out_line') return lineOutTypeOptions;
-  if (result === 'out_infield_fly') return flyOutTypeOptions;
-  if (result === 'out_infield_fly_rule') return infieldFlyTypeOptions;
-  return defaultTypeOptions;
 }
 
 function getZoneOptionsForResult(result: BattedBallResultAction | null) {
   if (!result) return defaultZoneOptions;
   if (isInfieldFlyResult(result)) return infieldFlyZoneOptions;
   if (result === 'sac_bunt' || result === 'single_bunt') return buntZoneOptions;
+  if (result === 'single_infield' || result === 'out_ground' || result === 'out_dp2' || result === 'out_tp3')
+    return infieldGroundZoneOptions;
+  if (result === 'out_line') return lineDriveZoneOptions;
   return defaultZoneOptions;
 }
 
