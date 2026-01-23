@@ -2138,7 +2138,10 @@ interface DemoStoreValue {
     hitDouble: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) => void;
     hitTriple: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) => void;
     homeRun: (battedBall?: BattedBallDetails | null) => void;
+    fielderChoice: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null, context?: string) => void;
     walk: () => void;
+    intentionalWalk: () => void;
+    catcherInterference: () => void;
     hbp: () => void;
     sacFly: (battedBall?: BattedBallDetails | null) => void;
     sacBunt: (battedBall?: BattedBallDetails | null) => void;
@@ -2152,6 +2155,8 @@ interface DemoStoreValue {
     runnerCaught: (base: 0 | 1 | 2) => void;
     runnerPickoff: (base: 0 | 1 | 2) => void;
     runnerOut: (base: 0 | 1 | 2) => void;
+    runnerRundownOut: (base: 0 | 1 | 2) => void;
+    runnerInterference: (base: 0 | 1 | 2) => void;
     addManualLog: (message: string) => void;
     setLiveVideoUrl: (url: string) => void;
     setTeamName: (side: Side, name: string) => void;

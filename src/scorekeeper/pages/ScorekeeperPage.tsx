@@ -107,7 +107,18 @@ const infieldGroundZoneOptions = [
   '1루수 정면',
   '3루 라인 땅볼',
   '1루 라인 땅볼',
+  '내야 뜬공(포수)',
+  '내야 뜬공(1루수)',
+  '내야 뜬공(2루수)',
+  '내야 뜬공(3루수)',
+  '내야 뜬공(투수)',
 ];
+const fcZoneOptions = Array.from(
+  new Set([
+    ...infieldGroundZoneOptions,
+    ...defaultZoneOptions,
+  ]),
+);
 const lineDriveZoneOptions = [
   '선택 안 함',
   '3루 강습 라이너',
@@ -268,8 +279,14 @@ function getZoneOptionsForResult(result: BattedBallResultAction | null) {
   if (!result) return defaultZoneOptions;
   if (isInfieldFlyResult(result)) return infieldFlyZoneOptions;
   if (result === 'sac_bunt' || result === 'single_bunt') return buntZoneOptions;
-  if (result === 'single_infield' || result === 'out_ground' || result === 'out_dp2' || result === 'out_tp3')
+  if (
+    result === 'single_infield' ||
+    result === 'out_ground' ||
+    result === 'out_dp2' ||
+    result === 'out_tp3'
+  )
     return infieldGroundZoneOptions;
+  if (result === 'fc') return fcZoneOptions;
   if (result === 'out_line') return lineDriveZoneOptions;
   return defaultZoneOptions;
 }
@@ -326,9 +343,13 @@ function formatErrorAdvanceResults(error?: ErrorDetails | string | null) {
   const parts: string[] = [];
   if (error.advanceResults.batter === 'out') {
     parts.push('타자:아웃');
+  } else if (error.advanceResults.batter === 'hold') {
+    parts.push('타자:유지');
   } else {
     const batterBase = error.advanceResults.batter;
-    parts.push(`타자:${batterBase >= 4 ? '홈(득점)' : `${batterBase}루`}`);
+    if (typeof batterBase === 'number') {
+      parts.push(`타자:${batterBase >= 4 ? '홈(득점)' : `${batterBase}루`}`);
+    }
   }
   Object.entries(error.advanceResults.runners).forEach(([base, outcome]) => {
     if (!outcome) return;
@@ -1171,12 +1192,10 @@ export default function ScorekeeperPage() {
     pathNote: string;
   }>(null);
   const [lastHitWizard, setLastHitWizard] = useState<HitWizardState | null>(null);
-  const [errorOnPlayModal, setErrorOnPlayModal] = useState<null | { selections: RunnerAdvanceSelections; batterResult: 'out' | 1 | 2 | 3 | 4; errorType: string; context: string; fielder: string }>(null);
+  const [errorOnPlayModal, setErrorOnPlayModal] = useState<null | { selections: RunnerAdvanceSelections; batterResult: 'out' | 'hold' | 1 | 2 | 3 | 4; errorType: string; context: string; fielder: string }>(null);
   const [showDroppedThirdStrike, setShowDroppedThirdStrike] = useState(false);
   const [battedBallType, setBattedBallType] = useState(baseBattedBallType);
   const [battedBallZone, setBattedBallZone] = useState(defaultZoneOptions[0]);
-  const [infieldFielder, setInfieldFielder] = useState(infieldFielderOptions[0]);
-  const [outfieldFielder, setOutfieldFielder] = useState(outfieldFielderOptions[0]);
   const recordPayload = useMemo(() => buildGameRecord(state), [state]);
   const [pendingExportId, setPendingExportId] = useState<string | null>(null);
   const isGameStarted = state.gameStarted;
@@ -1343,11 +1362,6 @@ const handleSelectBattedBallType = (type: string) =>
       result as HitResultAction,
     );
 
-const requiresAdvanceModal = (result: BattedBallResultAction | null) =>
-  ['single', 'single_infield', 'single_bunt', 'double', 'double_ground', 'triple', 'fc'].includes(
-    result as BattedBallResultAction,
-  );
-
 const handleConfirmHitWizard = () => {
   if (!hitWizard?.result || controlsDisabled) {
     setHitWizard(null);
@@ -1388,7 +1402,7 @@ const handleConfirmHitWizard = () => {
         }, {});
         setErrorOnPlayModal({
           selections: initialSelections,
-          batterResult: 1,
+          batterResult: 'hold',
           errorType: errorTypeOptions[0].value,
           context: '',
           fielder: infieldFielderOptions[0],
@@ -2991,12 +3005,12 @@ function ErrorOnPlayModal({
   basesState: (string | null)[];
   defaultFielder: string;
   defaultSelections: RunnerAdvanceSelections;
-  defaultBatterResult: 'out' | 1 | 2 | 3 | 4;
+  defaultBatterResult: 'out' | 'hold' | 1 | 2 | 3 | 4;
   defaultErrorType: string;
   defaultContext: string;
   onClose: () => void;
   onBack?: () => void;
-  onConfirm: (details: { fielder: string; errorType: string; context: string; batterResult: 'out' | 1 | 2 | 3 | 4; selections: RunnerAdvanceSelections }) => void;
+  onConfirm: (details: { fielder: string; errorType: string; context: string; batterResult: 'out' | 'hold' | 1 | 2 | 3 | 4; selections: RunnerAdvanceSelections }) => void;
 }) {
   const [fielder, setFielder] = useState(defaultFielder);
   const [errorType, setErrorType] = useState(defaultErrorType);
