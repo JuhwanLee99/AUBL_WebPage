@@ -29,7 +29,8 @@ class JsonStorage:
     def __init__(self, output_dir: str | Path) -> None:
         self._output_dir = Path(output_dir)
         self._team_registry: dict[str, int] = {}
-        self._seen_team_keys: set[int | str] = set()
+        # Track teams per season so the same club can be stored for multiple years.
+        self._seen_team_keys: set[tuple[int | str | None, int | None]] = set()
         self._seen_player_keys: set[tuple[int | None, str, str | None]] = set()
         self._league_record_years: dict[str, set[int | None]] = {}
         self._paths = {
@@ -53,21 +54,28 @@ class JsonStorage:
     def set_team_registry(self, registry: dict[str, int]) -> None:
         self._team_registry = registry
 
-    def store_roster(self, entries: Iterable[RosterEntry]) -> None:
+    def store_roster(self, entries: Iterable[RosterEntry], year: int | None) -> None:
         for entry in entries:
-            team_key = entry.team.team_idx if entry.team.team_idx is not None else entry.team.name
-            if team_key in self._seen_team_keys:
-                continue
-            self._seen_team_keys.add(team_key)
-            self._append_team(entry.team)
+            raw_team_key = entry.team.team_idx if entry.team.team_idx is not None else entry.team.name
+            team_key = (raw_team_key, year)
+            if team_key not in self._seen_team_keys:
+                self._seen_team_keys.add(team_key)
+                self._append_team(entry.team, year)
             for player in entry.players:
                 if not player.name:
                     continue
-                player_key = (entry.team.team_idx, player.name, player.position)
+                player_key = (entry.team.team_idx, player.name, player.position, year)
                 if player_key in self._seen_player_keys:
                     continue
                 self._seen_player_keys.add(player_key)
-                self._append("roster_players", {"team_idx": entry.team.team_idx, **asdict(player)})
+                self._append(
+                    "roster_players",
+                    {
+                        "team_idx": entry.team.team_idx,
+                        "year": year,
+                        **asdict(player),
+                    },
+                )
 
     def store_league_records(
         self,
@@ -197,8 +205,8 @@ class JsonStorage:
 
         self._append_match(game, year, payload, match_data)
         self._append_players(match_data)
-        self._append_batting(game, match_data)
-        self._append_pitching(game, match_data)
+        self._append_batting(game, year, match_data)
+        self._append_pitching(game, year, match_data)
 
     def store_web_page(
         self,
@@ -250,10 +258,18 @@ class JsonStorage:
             },
         )
 
-    def _append_team(self, team: TeamInfo | None) -> None:
+    def _append_team(self, team: TeamInfo | None, year: int | None) -> None:
         if team is None:
             return
-        self._append("teams", {"team_idx": team.team_idx, "name": team.name, "code": team.code})
+        self._append(
+            "teams",
+            {
+                "team_idx": team.team_idx,
+                "name": team.name,
+                "code": team.code,
+                "year": year,
+            },
+        )
 
     def _append_players(self, match_data: MatchPayload) -> None:
         for entry in (match_data.batting_stats or []) + (match_data.pitching_stats or []):
@@ -273,7 +289,7 @@ class JsonStorage:
         row["team_idx"] = team_idx
         self._append("players", row)
 
-    def _append_batting(self, game: GameSummary, match_data: MatchPayload) -> None:
+    def _append_batting(self, game: GameSummary, year: int, match_data: MatchPayload) -> None:
         if not match_data.batting_stats:
             return
         for entry in match_data.batting_stats:
@@ -282,12 +298,13 @@ class JsonStorage:
                 match_data.home_team.team_idx if match_data.home_team else None,
                 match_data.away_team.team_idx if match_data.away_team else None,
             )
-            self._append("batting_stats", self._batting_row(game, entry, team_idx))
+            self._append("batting_stats", self._batting_row(game, year, entry, team_idx))
 
-    def _batting_row(self, game: GameSummary, entry: BattingEntry, team_idx: int | None) -> dict[str, Any]:
+    def _batting_row(self, game: GameSummary, year: int, entry: BattingEntry, team_idx: int | None) -> dict[str, Any]:
         player = entry.player
         return {
             "game_idx": game.game_idx,
+            "year": year,
             "team_side": entry.team_side,
             "team_idx": team_idx,
             "player_idx": player.player_idx if player else None,
@@ -304,7 +321,7 @@ class JsonStorage:
             "payload": entry.payload,
         }
 
-    def _append_pitching(self, game: GameSummary, match_data: MatchPayload) -> None:
+    def _append_pitching(self, game: GameSummary, year: int, match_data: MatchPayload) -> None:
         if not match_data.pitching_stats:
             return
         for entry in match_data.pitching_stats:
@@ -313,17 +330,19 @@ class JsonStorage:
                 match_data.home_team.team_idx if match_data.home_team else None,
                 match_data.away_team.team_idx if match_data.away_team else None,
             )
-            self._append("pitching_stats", self._pitching_row(game, entry, team_idx))
+            self._append("pitching_stats", self._pitching_row(game, year, entry, team_idx))
 
     def _pitching_row(
         self,
         game: GameSummary,
+        year: int,
         entry: PitchingEntry,
         team_idx: int | None,
     ) -> dict[str, Any]:
         player = entry.player
         return {
             "game_idx": game.game_idx,
+            "year": year,
             "team_side": entry.team_side,
             "team_idx": team_idx,
             "player_idx": player.player_idx if player else None,
