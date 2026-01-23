@@ -774,7 +774,7 @@ function groupByInning(items: DisplayItem[]) {
 
 function colorizeText(text: string) {
   const pattern =
-    /(\d+\s*안타|\d+\s*아웃|득점|점수|도루\s*성공|도루\s*실패|도루|안타|2루타|3루타|루타|홈런|볼넷|아웃|삼진|견제사)/g;
+    /(\d+\s*안타|\d+\s*아웃|득점|점수|도루\s*성공|도루\s*실패|도루|안타|2루타|3루타|루타|홈런|볼넷|몸에\s*맞는\s*공|몸에맞는공|사구|아웃|삼진|낫아웃|견제사|실책|E[1-6]|WP|PB|BK|야수선택|FC|F\.C)/g;
   const colorMap: Record<string, string> = {
     득점: '#facc15',
     점수: '#facc15',
@@ -798,6 +798,22 @@ function colorizeText(text: string) {
     루타: '#38bdf8',
     홈런: '#38bdf8',
     볼넷: '#38bdf8',
+    몸에맞는공: '#38bdf8',
+    사구: '#38bdf8',
+    낫아웃: '#f97316',
+    실책: '#f97316',
+    E1: '#f97316',
+    E2: '#f97316',
+    E3: '#f97316',
+    E4: '#f97316',
+    E5: '#f97316',
+    E6: '#f97316',
+    WP: '#f97316',
+    PB: '#f97316',
+    BK: '#f97316',
+    야수선택: '#a78bfa',
+    FC: '#a78bfa',
+    'F.C': '#a78bfa',
     아웃: '#f87171',
     '1아웃': '#f87171',
     '2아웃': '#f87171',

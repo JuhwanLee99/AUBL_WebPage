@@ -42,7 +42,7 @@ export type BattedBallDetails = {
 };
 
 export type ErrorAdvanceResults = {
-  batter: 'out' | 1 | 2 | 3 | 4;
+  batter: 'out' | 'hold' | 1 | 2 | 3 | 4;
   runners: RunnerAdvanceSelections;
 };
 
@@ -1492,7 +1492,10 @@ function applySacrifice(
 
 function applyError(state: DemoState, details: ErrorDetails): DemoState {
   const pitchNumber = Math.max(1, state.pitchCount + 1);
-  const { batterName, batterIndex } = nextBatter(state);
+  const isBatterHold = details.advanceResults.batter === 'hold';
+  const { batter, order } = currentBatterInfo(state);
+  const batterName = isBatterHold ? batter : nextBatter(state).batterName;
+  const batterIndex = isBatterHold ? state.batterIndex[hittingSide(state)] : nextBatter(state).batterIndex;
   const bases = [null, null, null] as Bases;
   const runnerMoves: { feedText: string; lastPlay: string; runnerSummary: string }[] = [];
   let runs = 0;
@@ -1533,6 +1536,8 @@ function applyError(state: DemoState, details: ErrorDetails): DemoState {
   const batterResult = details.advanceResults.batter;
   if (batterResult === 'out') {
     outs += 1;
+  } else if (batterResult === 'hold') {
+    // batter stays at plate; no movement
   } else if (batterResult >= 4) {
     runs += 1;
   } else {
@@ -1582,8 +1587,8 @@ function applyError(state: DemoState, details: ErrorDetails): DemoState {
     score,
     balls: 0,
     strikes: 0,
-    pitchCount: 0,
-    batterIndex,
+    pitchCount: isBatterHold ? state.pitchCount : 0,
+    batterIndex: isBatterHold ? state.batterIndex : batterIndex,
     outs,
     lastPlay: summary,
     feed,
