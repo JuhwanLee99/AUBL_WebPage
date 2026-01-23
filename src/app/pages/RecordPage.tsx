@@ -11,6 +11,8 @@ interface EnrichedRecord extends TeamSeasonRecord {
   founded: number;
 }
 
+type DivisionFilter = 'ALL' | 'EUTTEUM' | 'BEOGEUM';
+
 export default function RecordPage() {
   const years = useMemo(
     () =>
@@ -19,6 +21,12 @@ export default function RecordPage() {
   );
   const [selectedYear, setSelectedYear] = useState<number>(years[0]);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedDivision, setSelectedDivision] = useState<DivisionFilter>('ALL');
+  const divisionOptions: { key: DivisionFilter; label: string }[] = [
+    { key: 'ALL', label: '전체' },
+    { key: 'EUTTEUM', label: '으뜸조' },
+    { key: 'BEOGEUM', label: '버금조' },
+  ];
 
   const sectionRef = useRef<HTMLDivElement>(null);
   const cardsRef = useRef<HTMLDivElement[]>([]);
@@ -26,7 +34,13 @@ export default function RecordPage() {
 
   // 데이터 필터링 로직
   const records = useMemo<EnrichedRecord[]>(() => {
-    const filtered = TEAM_RECORDS.filter((record) => record.year === selectedYear);
+    const filtered = TEAM_RECORDS.filter((record) => {
+      const isYear = record.year === selectedYear;
+      if (!isYear) return false;
+      if (selectedDivision === 'ALL') return true;
+      const team = TEAMS.find((t) => t.id === record.teamId);
+      return team?.division === selectedDivision;
+    });
 
     let enriched = filtered.map((record) => {
       const team = TEAMS.find((t) => t.id === record.teamId);
@@ -51,7 +65,7 @@ export default function RecordPage() {
     }
 
     return enriched;
-  }, [selectedYear, searchTerm]);
+  }, [selectedYear, searchTerm, selectedDivision]);
 
   const topPlayers = useMemo(() => {
     return records
@@ -144,10 +158,10 @@ export default function RecordPage() {
         {/* 설명 텍스트 영역 (전체 너비 사용) */}
         <div className="record-hero" style={{ display: 'grid', gap: '8px' }}>
           <h2 style={{ margin: 0, fontSize: '32px', fontWeight: 900 }}>
-            기록 페이지 — 연도별 팀 스토리와 에이스 퍼포먼스를 한눈에.
+            전체 리그 현황 — 연도별 팀 스토리와 에이스 퍼포먼스를 한눈에.
           </h2>
           <p style={{ margin: 0, color: '#cbd5e1', lineHeight: 1.6 }}>
-            정규시즌 전적, 투·타 스탯, 주요 선수 WAR까지 연도 기준으로 정리했습니다. 추후 백엔드 연동 시 실시간으로 갱신되며, 팀 상세 페이지로 확장 가능합니다.
+            기본 뷰는 전체 리그 집계이며, 조(으뜸/버금)를 선택하면 해당 조에 대한 세부 개요로 전환됩니다. 정규시즌 전적, 투·타 스탯, 주요 선수 WAR까지 연도 기준으로 정리했습니다.
           </p>
         </div>
 
@@ -162,7 +176,7 @@ export default function RecordPage() {
             display: 'grid',
             gap: '16px',
           }}
-        >
+          >
           <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
             <div style={{ display: 'grid', gap: '6px', flex: '0 0 140px' }}>
               <label style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>YEAR</label>
@@ -187,6 +201,32 @@ export default function RecordPage() {
                   </option>
                 ))}
               </select>
+            </div>
+            <div style={{ display: 'grid', gap: '6px', flex: '0 0 220px' }}>
+              <label style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>조 선택</label>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {divisionOptions.map((option) => {
+                  const isActive = selectedDivision === option.key;
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => setSelectedDivision(option.key)}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '10px',
+                        border: isActive ? '1px solid #f97316' : '1px solid rgba(148, 163, 184, 0.35)',
+                        background: isActive ? 'rgba(249, 115, 22, 0.12)' : '#0f172a',
+                        color: isActive ? '#f97316' : '#e2e8f0',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             <div style={{ display: 'grid', gap: '6px', flex: 1 }}>
               <label style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>SEARCH</label>

@@ -41,6 +41,16 @@ teams_table = Table(
     UniqueConstraint("team_idx", name="teams_team_idx_unique"),
 )
 
+team_seasons_table = Table(
+    "team_seasons",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("team_id", Integer, ForeignKey("teams.id"), nullable=False),
+    Column("year", Integer, nullable=True),
+    Column("created_at", DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)),
+    UniqueConstraint("team_id", "year", name="team_seasons_team_year_unique"),
+)
+
 players_table = Table(
     "players",
     metadata,
@@ -76,10 +86,22 @@ matches_table = Table(
     UniqueConstraint("game_idx", name="matches_game_idx_unique"),
 )
 
+roster_players_table = Table(
+    "roster_players",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("team_id", Integer, ForeignKey("teams.id"), nullable=True),
+    Column("player_id", Integer, ForeignKey("players.id"), nullable=True),
+    Column("year", Integer, nullable=True),
+    Column("created_at", DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)),
+    UniqueConstraint("team_id", "player_id", "year", name="roster_team_player_year_unique"),
+)
+
 batting_stats_table = Table(
     "batting_stats",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("year", Integer, nullable=False),
     Column("game_id", Integer, ForeignKey("matches.id"), nullable=False),
     Column("team_id", Integer, ForeignKey("teams.id"), nullable=True),
     Column("player_id", Integer, ForeignKey("players.id"), nullable=True),
@@ -96,6 +118,7 @@ pitching_stats_table = Table(
     "pitching_stats",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("year", Integer, nullable=False),
     Column("game_id", Integer, ForeignKey("matches.id"), nullable=False),
     Column("team_id", Integer, ForeignKey("teams.id"), nullable=True),
     Column("player_id", Integer, ForeignKey("players.id"), nullable=True),
@@ -169,7 +192,8 @@ class PlayerInfo:
 
 class Storage:
     def __init__(self, database_url: str) -> None:
-        self._engine = create_engine(database_url)
+        # pool_pre_ping avoids stale connections (common with MySQL wait_timeout)
+        self._engine = create_engine(database_url, pool_pre_ping=True, pool_recycle=3600)
         self._team_registry: dict[str, int] = {}
 
     def create_tables(self) -> None:
@@ -178,12 +202,14 @@ class Storage:
     def set_team_registry(self, registry: dict[str, int]) -> None:
         self._team_registry = registry
 
-    def store_roster(self, entries: Iterable[RosterEntry]) -> None:
+    def store_roster(self, entries: Iterable[RosterEntry], year: int | None) -> None:
         with self._engine.begin() as conn:
             for entry in entries:
                 team_id = self._upsert_team(conn, entry.team)
+                self._upsert_team_season(conn, team_id, year)
                 for player in entry.players:
-                    self._upsert_player(conn, player, team_id)
+                    player_id = self._upsert_player(conn, player, team_id)
+                    self._upsert_roster_player(conn, team_id, player_id, year)
 
     def store_league_records(
         self,
@@ -317,8 +343,8 @@ class Storage:
                 home_team_id,
                 away_team_id,
             )
-            self._store_batting_stats(conn, match_id, home_team_id, away_team_id, match_data)
-            self._store_pitching_stats(conn, match_id, home_team_id, away_team_id, match_data)
+            self._store_batting_stats(conn, match_id, year, home_team_id, away_team_id, match_data)
+            self._store_pitching_stats(conn, match_id, year, home_team_id, away_team_id, match_data)
 
     def store_web_page(
         self,
@@ -361,6 +387,25 @@ class Storage:
             )
         )
         return int(result.inserted_primary_key[0])
+
+    def _upsert_team_season(self, conn, team_id: int | None, year: int | None) -> None:
+        if team_id is None:
+            return
+        query = select(team_seasons_table.c.id).where(team_seasons_table.c.team_id == team_id)
+        if year is None:
+            query = query.where(team_seasons_table.c.year.is_(None))
+        else:
+            query = query.where(team_seasons_table.c.year == year)
+        row = conn.execute(query).fetchone()
+        if row:
+            return
+        conn.execute(
+            team_seasons_table.insert().values(
+                team_id=team_id,
+                year=year,
+                created_at=datetime.now(timezone.utc),
+            )
+        )
 
     def _find_team_id(self, conn, team: TeamInfo | None) -> int | None:
         if team is None or team.team_idx is None:
@@ -415,6 +460,32 @@ class Storage:
         ).fetchone()
         return int(row.id) if row else None
 
+    def _upsert_roster_player(
+        self,
+        conn,
+        team_id: int | None,
+        player_id: int | None,
+        year: int | None,
+    ) -> None:
+        if team_id is None or player_id is None:
+            return
+        query = select(roster_players_table.c.id).where(
+            roster_players_table.c.team_id == team_id,
+            roster_players_table.c.player_id == player_id,
+            roster_players_table.c.year == year,
+        )
+        row = conn.execute(query).fetchone()
+        if row:
+            return
+        conn.execute(
+            roster_players_table.insert().values(
+                team_id=team_id,
+                player_id=player_id,
+                year=year,
+                created_at=datetime.now(timezone.utc),
+            )
+        )
+
     def _upsert_match(
         self,
         conn,
@@ -458,6 +529,7 @@ class Storage:
         self,
         conn,
         match_id: int,
+        year: int,
         home_team_id: int | None,
         away_team_id: int | None,
         match_data: MatchPayload,
@@ -469,6 +541,7 @@ class Storage:
             player_id = self._find_player_id(conn, entry.player, team_id)
             conn.execute(
                 batting_stats_table.insert().values(
+                    year=year,
                     game_id=match_id,
                     team_id=team_id,
                     player_id=player_id,
@@ -486,6 +559,7 @@ class Storage:
         self,
         conn,
         match_id: int,
+        year: int,
         home_team_id: int | None,
         away_team_id: int | None,
         match_data: MatchPayload,
@@ -497,6 +571,7 @@ class Storage:
             player_id = self._find_player_id(conn, entry.player, team_id)
             conn.execute(
                 pitching_stats_table.insert().values(
+                    year=year,
                     game_id=match_id,
                     team_id=team_id,
                     player_id=player_id,
