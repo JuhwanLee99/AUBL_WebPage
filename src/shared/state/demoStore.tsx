@@ -117,7 +117,10 @@ type Action =
   | { type: 'doublePlay'; battedBall?: BattedBallDetails | null }
   | { type: 'triplePlay'; battedBall?: BattedBallDetails | null }
   | { type: 'hit'; bases: 1 | 2 | 3 | 4; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null }
+  | { type: 'fielderChoice'; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null }
   | { type: 'walk' }
+  | { type: 'intentionalWalk' }
+  | { type: 'catcherInterference' }
   | { type: 'hbp' }
   | { type: 'sac'; battedBall?: BattedBallDetails | null; sacType?: 'fly' | 'bunt' }
   | { type: 'error'; details: ErrorDetails }
@@ -727,8 +730,17 @@ function reducer(state: DemoState, action: Action): DemoState {
     case 'hit':
       nextState = applyHitWithAdvances(state, action.bases, state.pitchCount + 1, action.advances, action.battedBall);
       break;
+    case 'fielderChoice':
+      nextState = applyFielderChoice(state, state.pitchCount + 1, action.advances, action.battedBall);
+      break;
     case 'walk':
       nextState = applyWalk(state, '볼넷', state.pitchCount + 1);
+      break;
+    case 'intentionalWalk':
+      nextState = applyWalk(state, '고의4구', state.pitchCount + 1);
+      break;
+    case 'catcherInterference':
+      nextState = applyWalk(state, '타격방해', state.pitchCount + 1);
       break;
     case 'hbp':
       nextState = applyWalk(state, '몸에 맞는 공', state.pitchCount + 1);
@@ -1256,6 +1268,100 @@ function applyHitWithAdvances(
 
   if (outs >= 3) {
     return changeHalf(nextState, `${result} · 3아웃 · 이닝 종료`, pitchNumber, state);
+  }
+
+  return nextState;
+}
+
+function applyFielderChoice(
+  state: DemoState,
+  pitchNumber: number,
+  advances?: RunnerAdvanceSelections,
+  battedBall?: BattedBallDetails | null,
+): DemoState {
+  const { batterName, batterIndex } = nextBatter(state);
+  const bases = [null, null, null] as Bases;
+  let runs = 0;
+  let outs = state.outs;
+  let feed = state.feed;
+  const runnerMoves: { feedText: string; lastPlay: string; runnerSummary: string }[] = [];
+
+  for (let i = 2; i >= 0; i -= 1) {
+    const runner = state.bases[i];
+    if (!runner) continue;
+    const resolved = resolveAdvanceOutcome(advances?.[i as 0 | 1 | 2], i, 1);
+    if (resolved.type === 'out') {
+      outs += 1;
+      const detail = formatRunnerMove({ runner, from: i, to: i, outcome: 'out', outsCount: outs, message: '야수선택' });
+      runnerMoves.push(detail);
+      continue;
+    }
+    if (resolved.type === 'score') {
+      runs += 1;
+      runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score', message: '야수선택' }));
+      continue;
+    }
+    if (resolved.type === 'hold') {
+      const placed = placeRunnerOnBases(bases, runner, resolved.targetBaseIndex);
+      if (placed.scored) {
+        runs += 1;
+        runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score', message: '야수선택' }));
+      } else {
+        runnerMoves.push(formatRunnerMove({ runner, from: i, to: placed.dest, outcome: 'hold', message: '야수선택' }));
+      }
+      continue;
+    }
+    const placed = placeRunnerOnBases(bases, runner, resolved.targetBaseIndex);
+    if (placed.scored) {
+      runs += 1;
+      runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score', message: '야수선택' }));
+    } else {
+      runnerMoves.push(formatRunnerMove({ runner, from: i, to: placed.dest, outcome: 'advance', message: '야수선택' }));
+    }
+  }
+
+  const placedBatter = placeRunnerOnBases(bases, batterName, 0);
+  if (placedBatter.scored) runs += 1;
+
+  const side = hittingSide(state);
+  const score =
+    side === 'home'
+      ? { ...state.score, home: state.score.home + runs }
+      : { ...state.score, away: state.score.away + runs };
+
+  runnerMoves.forEach((move) => {
+    feed = pushFeed(feed, createLogEntryForBaserunning(state, move.feedText, pitchNumber));
+  });
+  const resultLog = runs ? `야수선택 · ${runs}득점` : '야수선택';
+  feed = pushPlayFeed(state, createLogEntry(state, resultLog, pitchNumber), feed);
+
+  const eventEntry = createPlayEvent(
+    state,
+    {
+      type: 'fc',
+      runners: runnerMoves.map((move) => move.runnerSummary),
+      battedBall: battedBall ?? null,
+      notes: `야수선택 · ${batterName}`,
+    },
+    pitchNumber,
+  );
+
+  const nextState: DemoState = {
+    ...state,
+    bases,
+    score,
+    balls: 0,
+    strikes: 0,
+    pitchCount: 0,
+    batterIndex,
+    outs,
+    lastPlay: resultLog,
+    feed,
+    events: pushEvent(state.events, eventEntry),
+  };
+
+  if (outs >= 3) {
+    return changeHalf(nextState, `${resultLog} · 3아웃 · 이닝 종료`, pitchNumber, state);
   }
 
   return nextState;
@@ -2074,7 +2180,11 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       hitTriple: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) =>
         dispatch({ type: 'hit', bases: 3, advances, battedBall }),
       homeRun: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'hit', bases: 4, battedBall }),
+      fielderChoice: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) =>
+        dispatch({ type: 'fielderChoice', advances, battedBall }),
       walk: () => dispatch({ type: 'walk' }),
+      intentionalWalk: () => dispatch({ type: 'intentionalWalk' }),
+      catcherInterference: () => dispatch({ type: 'catcherInterference' }),
       hbp: () => dispatch({ type: 'hbp' }),
       sacFly: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'sac', battedBall, sacType: 'fly' }),
       sacBunt: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'sac', battedBall, sacType: 'bunt' }),

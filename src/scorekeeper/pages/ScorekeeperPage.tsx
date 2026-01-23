@@ -23,6 +23,7 @@ const mainButtons = [
 
 const secondaryButtons = [
   { label: '볼넷', color: '#22c55e', action: 'walk' },
+  { label: '고의4구', color: '#22c55e', action: 'intentional_walk' },
   { label: '사구', color: '#22c55e', action: 'hbp' },
   { label: '카운트 리셋', color: '#94a3b8', action: 'resetCount' },
   { label: '주자 클리어', color: '#94a3b8', action: 'clearBases' },
@@ -31,6 +32,10 @@ const secondaryButtons = [
 
 const battedBallResultOptions = [
   { label: '파울', color: '#facc15', value: 'foul' as const, helper: '스트라이크 누적', group: 'count' as const },
+  { label: '쓰리번트 파울', color: '#ef4444', value: 'out_three_bunt' as const, helper: '3번 번트 파울', group: 'out' as const },
+  { label: '고의4구', color: '#22c55e', value: 'intentional_walk' as const, helper: '주자 상황 유지', group: 'reach' as const },
+  { label: '타격방해', color: '#22c55e', value: 'catcher_interference' as const, helper: '포수·수비 방해 출루', group: 'reach' as const },
+  { label: '야수선택', color: '#a5b4fc', value: 'fc' as const, helper: '안타 아님 · 타자 1루', group: 'reach' as const },
   { label: '1루타', color: '#3b82f6', value: 'single' as const, helper: '타자·주자 1루', group: 'hit' as const },
   { label: '내야 안타', color: '#3b82f6', value: 'single_infield' as const, helper: '1루타 · 내야', group: 'hit' as const },
   { label: '번트 안타', color: '#3b82f6', value: 'single_bunt' as const, helper: '1루타 · 번트', group: 'hit' as const },
@@ -51,11 +56,12 @@ const battedBallResultOptions = [
   { label: '희생번트', color: '#facc15', value: 'sac_bunt' as const, helper: '주자 진루 번트', group: 'sac' as const },
 ];
 
-const battedBallResultGroups: { key: 'count' | 'hit' | 'out' | 'sac'; label: string }[] = [
+const battedBallResultGroups: { key: 'count' | 'hit' | 'out' | 'sac' | 'reach'; label: string }[] = [
   { key: 'count', label: '파울/카운트' },
-  { key: 'hit', label: '안타/출루' },
+  { key: 'hit', label: '안타' },
   { key: 'out', label: '인플레이 아웃' },
   { key: 'sac', label: '희생' },
+  { key: 'reach', label: '출루/선택' },
 ];
 
 const baseBattedBallType = '선택 안 함';
@@ -76,14 +82,18 @@ const outfieldFielderOptions = ['선택 안 함', '좌익수', '중견수', '우
 const defaultTypeOptions = [baseBattedBallType];
 const defaultZoneOptions = [
   '선택 안 함',
+  '좌선(좌익수 라인)',
   '좌익수 파울/라인',
   '좌전(좌익수 앞)',
   '좌중간 갭',
+  '좌중 펜스/깊숙',
   '중전(중견수 정면)',
+  '중견수 깊숙/펜스',
+  '우중 펜스/깊숙',
   '우중간 갭',
   '우전(우익수 앞)',
   '우익수 파울/라인',
-  '중견수 깊숙/펜스',
+  '우선(우익수 라인)',
 ];
 const infieldGroundZoneOptions = [
   '선택 안 함',
@@ -404,6 +414,8 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
     if (normalized.includes('3루타')) return '3B';
     if (normalized.includes('2루타')) return '2B';
     if (normalized.includes('1루타')) return '1B';
+    if (event.type === 'fc' || normalized.includes('야수선택') || normalized.toUpperCase().includes('F.C')) return 'FC';
+    if (normalized.includes('타격방해')) return 'CI';
     if (normalized.includes('고의') || normalized.toUpperCase().includes('IB')) return 'IB';
     if (event.type === 'walk' || normalized.includes('볼넷') || normalized.includes('4구')) return 'B';
     if (event.type === 'hbp' || normalized.includes('몸에맞는공')) return 'HP';
@@ -724,8 +736,11 @@ function classifyResult(result: string) {
   if (normalized.includes('3루타')) return 'triple' as const;
   if (normalized.includes('2루타')) return 'double' as const;
   if (normalized.includes('1루타')) return 'single' as const;
+  if (normalized.includes('고의') || normalized.toUpperCase().includes('IB')) return 'bb' as const;
   if (normalized.includes('볼넷')) return 'bb' as const;
   if (normalized.includes('몸에맞는공')) return 'hbp' as const;
+  if (normalized.includes('타격방해')) return 'ci' as const;
+  if (normalized.includes('야수선택') || normalized.toUpperCase().includes('F.C')) return 'fc' as const;
   if (normalized.includes('희생플라이')) return 'sac' as const;
   if (normalized.includes('낫아웃')) return 'so_reach' as const;
   if (normalized.includes('삼진')) return 'so' as const;
@@ -957,6 +972,20 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
           pitcherStat.bb += 1;
         }
         break;
+      case 'ci':
+        stat.pa += 1;
+        stat.bb += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+        }
+        break;
+      case 'fc':
+        stat.pa += 1;
+        stat.ab += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+        }
+        break;
       case 'hbp':
         stat.pa += 1;
         stat.hbp += 1;
@@ -1101,7 +1130,7 @@ export default function ScorekeeperPage() {
   const [hitWizard, setHitWizard] = useState<HitWizardState | null>(null);
   const [manualBroadcast, setManualBroadcast] = useState('');
   const [liveVideoUrlInput, setLiveVideoUrlInput] = useState(state.liveVideoUrl);
-  const [hitAdvanceModal, setHitAdvanceModal] = useState<null | { bases: 1 | 2 | 3; selections: RunnerAdvanceSelections }>(null);
+  const [hitAdvanceModal, setHitAdvanceModal] = useState<null | { bases: 1 | 2 | 3; selections: RunnerAdvanceSelections; mode: 'hit' | 'fc' }>(null);
   const [showDroppedThirdStrike, setShowDroppedThirdStrike] = useState(false);
   const [battedBallType, setBattedBallType] = useState(baseBattedBallType);
   const [battedBallZone, setBattedBallZone] = useState(defaultZoneOptions[0]);
@@ -1172,7 +1201,7 @@ export default function ScorekeeperPage() {
     }
   }, [pendingExportId, recordPayload, state.endedAt, state.gameOver]);
 
-  const openHitAdvanceModal = (bases: 1 | 2 | 3) => {
+  const openHitAdvanceModal = (bases: 1 | 2 | 3, mode: 'hit' | 'fc' = 'hit') => {
     if (controlsDisabled) return;
     const selections = state.bases.reduce<RunnerAdvanceSelections>((acc, runner, idx) => {
       if (runner) {
@@ -1181,7 +1210,7 @@ export default function ScorekeeperPage() {
       }
       return acc;
     }, {});
-    setHitAdvanceModal({ bases, selections });
+    setHitAdvanceModal({ bases, selections, mode });
     setActionModal(null);
     setHitWizard(null);
   };
@@ -1289,6 +1318,18 @@ export default function ScorekeeperPage() {
     }
 
     switch (hitWizard.result) {
+      case 'fc':
+        openHitAdvanceModal(1, 'fc');
+        break;
+      case 'intentional_walk':
+        actions.intentionalWalk();
+        break;
+      case 'catcher_interference':
+        actions.catcherInterference();
+        break;
+      case 'out_three_bunt':
+        actions.addOutWithMessage('쓰리번트 파울 아웃', details);
+        break;
       case 'sac_fly':
         actions.sacFly(details);
         break;
@@ -1368,6 +1409,9 @@ export default function ScorekeeperPage() {
       case 'walk':
         actions.walk();
         break;
+      case 'intentional_walk':
+        actions.intentionalWalk();
+        break;
       case 'hbp':
         actions.hbp();
         break;
@@ -1419,10 +1463,14 @@ export default function ScorekeeperPage() {
 
   const handleConfirmHitAdvance = () => {
     if (!hitAdvanceModal) return;
-    const { bases, selections } = hitAdvanceModal;
-    if (bases === 1) actions.hitSingle(selections, battedBallDetails);
-    if (bases === 2) actions.hitDouble(selections, battedBallDetails);
-    if (bases === 3) actions.hitTriple(selections, battedBallDetails);
+    const { bases, selections, mode } = hitAdvanceModal;
+    if (mode === 'fc') {
+      actions.fielderChoice(selections, battedBallDetails);
+    } else {
+      if (bases === 1) actions.hitSingle(selections, battedBallDetails);
+      if (bases === 2) actions.hitDouble(selections, battedBallDetails);
+      if (bases === 3) actions.hitTriple(selections, battedBallDetails);
+    }
     setHitAdvanceModal(null);
   };
 
@@ -2050,6 +2098,7 @@ export default function ScorekeeperPage() {
         <HitAdvanceModal
           bases={hitAdvanceModal.bases}
           basesState={state.bases}
+          mode={hitAdvanceModal.mode}
           selections={hitAdvanceModal.selections}
           onChangeSelections={(next) => setHitAdvanceModal((prev) => (prev ? { ...prev, selections: next } : prev))}
           onClose={() => setHitAdvanceModal(null)}
@@ -2469,6 +2518,7 @@ function baseLabelForIndex(baseIndex: number) {
 function HitAdvanceModal({
   bases,
   basesState,
+  mode,
   selections,
   onChangeSelections,
   onClose,
@@ -2476,12 +2526,13 @@ function HitAdvanceModal({
 }: {
   bases: 1 | 2 | 3;
   basesState: (string | null)[];
+  mode: 'hit' | 'fc';
   selections: RunnerAdvanceSelections;
   onChangeSelections: (next: RunnerAdvanceSelections) => void;
   onClose: () => void;
   onConfirm: () => void;
 }) {
-  const hitLabel = `${bases}루타 주자 선택`;
+  const hitLabel = mode === 'fc' ? '야수선택 주자 처리' : `${bases}루타 주자 선택`;
   const runners = basesState
     .map((runner, idx) => (runner ? { runner, baseIndex: idx as 0 | 1 | 2 } : null))
     .filter(Boolean) as { runner: string; baseIndex: 0 | 1 | 2 }[];
