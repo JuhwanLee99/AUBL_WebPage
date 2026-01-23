@@ -3001,7 +3001,7 @@ function ErrorOnPlayModal({
   const [fielder, setFielder] = useState(defaultFielder);
   const [errorType, setErrorType] = useState(defaultErrorType);
   const [context, setContext] = useState(defaultContext);
-  const [batterResult, setBatterResult] = useState<'out' | 1 | 2 | 3 | 4>(defaultBatterResult);
+  const [batterResult, setBatterResult] = useState<'out' | 'hold' | 1 | 2 | 3 | 4>(defaultBatterResult);
   const [selections, setSelections] = useState<RunnerAdvanceSelections>(defaultSelections);
 
   const runners = basesState
@@ -3092,15 +3092,16 @@ function ErrorOnPlayModal({
             </div>
           </div>
 
-          <div style={{ display: 'grid', gap: '6px' }}>
-            <span style={{ fontWeight: 800, color: '#cbd5e1', fontSize: '13px' }}>타자 결과</span>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px,1fr))', gap: '8px' }}>
-              {[
-                { value: 1, label: '타자 1루' },
-                { value: 2, label: '타자 2루' },
-                { value: 3, label: '타자 3루' },
-                { value: 4, label: '타자 득점' },
-                { value: 'out', label: '타자 아웃' },
+        <div style={{ display: 'grid', gap: '6px' }}>
+          <span style={{ fontWeight: 800, color: '#cbd5e1', fontSize: '13px' }}>타자 결과</span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px,1fr))', gap: '8px' }}>
+            {[
+              { value: 'hold', label: '타자 유지' },
+              { value: 1, label: '타자 1루' },
+              { value: 2, label: '타자 2루' },
+              { value: 3, label: '타자 3루' },
+              { value: 4, label: '타자 득점' },
+              { value: 'out', label: '타자 아웃' },
               ].map((opt) => {
                 const isSelected = batterResult === opt.value;
                 return (
@@ -3760,20 +3761,25 @@ function ActionModal({
 }) {
   const [errorType, setErrorType] = useState(errorTypeOptions[0].value);
   const [errorContext, setErrorContext] = useState('');
-  const [errorBatterResult, setErrorBatterResult] = useState<'out' | 1 | 2 | 3 | 4>(1);
+  const [errorBatterResult, setErrorBatterResult] = useState<'out' | 'hold' | 1 | 2 | 3 | 4>('hold');
   const [runnerSelections, setRunnerSelections] = useState<RunnerAdvanceSelections>({});
 
   useEffect(() => {
     if (data.role !== 'fielder') return;
     setErrorType(errorTypeOptions[0].value);
     setErrorContext('');
-    setErrorBatterResult(1);
+    setErrorBatterResult('hold');
     const initialSelections = bases.reduce<RunnerAdvanceSelections>((acc, runner, idx) => {
       if (runner) acc[idx as 0 | 1 | 2] = 'hold';
       return acc;
     }, {});
     setRunnerSelections(initialSelections);
   }, [bases, data.role]);
+
+  useEffect(() => {
+    const autoHold = errorType.startsWith('WP') || errorType.startsWith('PB') || errorType.startsWith('BK');
+    if (autoHold && errorBatterResult !== 'hold') setErrorBatterResult('hold');
+  }, [errorType, errorBatterResult]);
 
   const battingOrder =
     data.role === 'batter'
@@ -4067,7 +4073,9 @@ function ActionModal({
                   value={String(errorBatterResult)}
                   onChange={(e) => {
                     const value = e.target.value;
-                    setErrorBatterResult(value === 'out' ? 'out' : (Number(value) as 1 | 2 | 3 | 4));
+                    if (value === 'hold') setErrorBatterResult('hold');
+                    else if (value === 'out') setErrorBatterResult('out');
+                    else setErrorBatterResult(Number(value) as 1 | 2 | 3 | 4);
                   }}
                   style={{
                     borderRadius: '10px',
@@ -4079,6 +4087,7 @@ function ActionModal({
                     maxWidth: '220px',
                   }}
                 >
+                  <option value="hold">타자 유지</option>
                   <option value="out">아웃</option>
                   <option value="1">1루 진루</option>
                   <option value="2">2루 진루</option>
@@ -4096,13 +4105,16 @@ function ActionModal({
                     >
                       {baseLabel(idx)} 주자 · {runner}
                       <select
-                        value={runnerSelections[idx as 0 | 1 | 2] ?? 'hold'}
-                        onChange={(e) =>
+                        value={String(runnerSelections[idx as 0 | 1 | 2] ?? 'hold')}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          const parsed: RunnerAdvanceOutcome =
+                            v === 'hold' || v === 'out' || v === 'score' ? (v as RunnerAdvanceOutcome) : (Number(v) as RunnerAdvanceOutcome);
                           setRunnerSelections((prev) => ({
                             ...prev,
-                            [idx]: e.target.value as RunnerAdvanceOutcome,
-                          }))
-                        }
+                            [idx]: parsed,
+                          }));
+                        }}
                         style={{
                           borderRadius: '10px',
                           border: '1px solid rgba(148,163,184,0.35)',
@@ -4110,12 +4122,13 @@ function ActionModal({
                           color: '#e2e8f0',
                           padding: '6px 8px',
                           fontWeight: 800,
-                          maxWidth: '180px',
+                          maxWidth: '200px',
                         }}
                       >
-                        <option value="hold">유지</option>
-                        <option value="advance">진루</option>
-                        <option value="score">득점</option>
+                        <option value="hold">유지(정지)</option>
+                        <option value="2">다음 베이스(1칸)</option>
+                        <option value="3">두 베이스(2칸)</option>
+                        <option value="4">홈 득점</option>
                         <option value="out">아웃</option>
                       </select>
                     </label>
