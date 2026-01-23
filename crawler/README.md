@@ -68,19 +68,24 @@ HTTPS 핸드셰이크에서 `DH_KEY_TOO_SMALL` 오류가 발생하면 `CRAWLER_T
 CRAWLER_ENV_FILE=./crawler/config/.env
 ```
 
-The crawler also requires a PostgreSQL connection string via `DATABASE_URL` (or
+The crawler also requires a MySQL connection string via `DATABASE_URL` (or
 `CRAWLER_DATABASE_URL`). For example:
 
 ```bash
-export DATABASE_URL=postgresql://postgres:aubl@localhost:5432/aubl
+export DATABASE_URL=mysql+pymysql://root:aubl@localhost:3306/aubl
 ```
 
 If you need a quick local database with Docker:
 
 ```bash
-docker run --name aubl-postgres -e POSTGRES_PASSWORD=aubl -e POSTGRES_DB=aubl \
-  -p 5432:5432 -d postgres:15
+docker run --name aubl-mysql -e MYSQL_ROOT_PASSWORD=aubl -e MYSQL_DATABASE=aubl \
+  -p 3306:3306 -d mysql:8
 ```
+
+### Schema notes (MySQL)
+- Added `roster_players` table with a `year` column for season-scoped rosters.
+- `batting_stats` and `pitching_stats` now include a `year` column to filter by season without joining `matches`.
+- Added `team_seasons` table to record which years each team roster was collected for.
 
 ## Usage
 
@@ -99,7 +104,7 @@ python -m crawler.cli --from-year 2024 --to-year 2024 --output-json ./out
 `./out`에는 다음 JSONL 파일들이 생성됩니다:
 
 - `matches.jsonl`: 경기 기본 정보(스코어, 상태 등)
-- `teams.jsonl`: 팀 마스터 데이터
+- `teams.jsonl`: 팀 마스터 데이터 (`year` 필드로 수집 연도 명시)
 - `players.jsonl`: 선수 마스터 데이터
 - `roster_players.jsonl`: 팀별 등록 선수 명단
 - `batting_stats.jsonl`: 타격 스탯
@@ -126,15 +131,15 @@ python -m crawler.cli --from-year 2024 --to-year 2024 --group-code A --group-cod
 
 ## CSV quick checks (DB export)
 
-The default storage is PostgreSQL, but `--output-json`/`--output-csv` allow local
-files. For a quick local check, export tables to CSV using `psql`:
+The default storage is MySQL, but `--output-json`/`--output-csv` allow local
+files. For a quick local check, export tables to CSV using the MySQL client:
 
 ```bash
-psql "$DATABASE_URL" -c "\\copy matches TO 'matches.csv' CSV HEADER"
-psql "$DATABASE_URL" -c "\\copy teams TO 'teams.csv' CSV HEADER"
-psql "$DATABASE_URL" -c "\\copy players TO 'players.csv' CSV HEADER"
-psql "$DATABASE_URL" -c "\\copy batting_stats TO 'batting_stats.csv' CSV HEADER"
-psql "$DATABASE_URL" -c "\\copy pitching_stats TO 'pitching_stats.csv' CSV HEADER"
+mysql -uroot -paubl -h127.0.0.1 -e "SELECT * FROM matches" aubl > matches.csv
+mysql -uroot -paubl -h127.0.0.1 -e "SELECT * FROM teams" aubl > teams.csv
+mysql -uroot -paubl -h127.0.0.1 -e "SELECT * FROM players" aubl > players.csv
+mysql -uroot -paubl -h127.0.0.1 -e "SELECT * FROM batting_stats" aubl > batting_stats.csv
+mysql -uroot -paubl -h127.0.0.1 -e "SELECT * FROM pitching_stats" aubl > pitching_stats.csv
 ```
 
 ## DB 없이 동작 확인하기 (API 응답 JSON 저장)
