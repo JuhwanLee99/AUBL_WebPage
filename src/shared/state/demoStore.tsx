@@ -1044,6 +1044,17 @@ function createLogEntry(state: DemoState, result: string, pitch: number): PlayLo
   };
 }
 
+function createLogEntryWithBatter(state: DemoState, batter: string, order: number | null, result: string, pitch: number): PlayLog {
+  return {
+    inning: state.inning,
+    half: state.half,
+    order,
+    batter,
+    pitch,
+    result,
+  };
+}
+
 function createLogEntryForBaserunning(state: DemoState, result: string, pitch: number): PlayLog {
   return {
     inning: state.inning,
@@ -1072,6 +1083,33 @@ function createPlayEvent(
     half: state.half,
     order: info.order,
     batter: info.batter,
+    pitch,
+    type: details.type,
+    runners: details.runners ?? getRunnerNames(state.bases),
+    battedBall: details.battedBall ?? null,
+    error: details.error ?? null,
+    notes: details.notes,
+  };
+}
+
+function createPlayEventWithBatter(
+  state: DemoState,
+  details: {
+    type: string;
+    runners?: string[];
+    battedBall?: BattedBallDetails | null;
+    error?: ErrorDetails | string | null;
+    notes?: string;
+  },
+  pitch: number,
+  batter: string,
+  order: number | null,
+): PlayEvent {
+  return {
+    inning: state.inning,
+    half: state.half,
+    order,
+    batter,
     pitch,
     type: details.type,
     runners: details.runners ?? getRunnerNames(state.bases),
@@ -1288,7 +1326,10 @@ function applyFielderChoice(
   battedBall?: BattedBallDetails | null,
   context?: string,
 ): DemoState {
-  const { batterName, batterIndex } = nextBatter(state);
+  const batterInfo = currentBatterInfo(state);
+  const { batterIndex } = nextBatter(state);
+  const batterName = batterInfo.batter;
+  const batterOrder = batterInfo.order;
   const bases = [null, null, null] as Bases;
   let runs = 0;
   let outs = state.outs;
@@ -1338,14 +1379,14 @@ function applyFielderChoice(
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
 
+  const contextNote = context?.trim() ? ` (${context.trim()})` : '';
+  const resultLog = runs ? `야수선택${contextNote} · ${runs}득점` : `야수선택${contextNote}`;
+  feed = pushPlayFeed(state, createLogEntryWithBatter(state, batterName, batterOrder, resultLog, pitchNumber), feed);
   runnerMoves.forEach((move) => {
     feed = pushFeed(feed, createLogEntryForBaserunning(state, move.feedText, pitchNumber));
   });
-  const contextNote = context?.trim() ? ` (${context.trim()})` : '';
-  const resultLog = runs ? `야수선택${contextNote} · ${runs}득점` : `야수선택${contextNote}`;
-  feed = pushPlayFeed(state, createLogEntry(state, resultLog, pitchNumber), feed);
 
-  const eventEntry = createPlayEvent(
+  const eventEntry = createPlayEventWithBatter(
     state,
     {
       type: 'fc',
@@ -1354,6 +1395,8 @@ function applyFielderChoice(
       notes: `야수선택${contextNote ? ` ${contextNote}` : ''} · ${batterName}`,
     },
     pitchNumber,
+    batterName,
+    batterOrder,
   );
 
   const nextState: DemoState = {
