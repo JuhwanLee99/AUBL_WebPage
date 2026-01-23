@@ -48,7 +48,7 @@ npm run dev
 
 ## 🧭 크롤러(Gameone) 세팅 및 실행
 
-크롤러는 `crawler/` 디렉토리의 독립 패키지로 관리됩니다. 현재 구현은 **DB 저장소(PostgreSQL) 필수**이며, `DATABASE_URL`(또는 `CRAWLER_DATABASE_URL`)이 없으면 실행되지 않습니다.
+크롤러는 `crawler/` 디렉토리의 독립 패키지로 관리됩니다. 현재 구현은 **DB 저장소(MySQL) 필수**이며, `DATABASE_URL`(또는 `CRAWLER_DATABASE_URL`)이 없으면 실행되지 않습니다.
 
 ### 1) 파이썬 가상환경 및 의존성 설치
 
@@ -92,17 +92,17 @@ CRAWLER_ENV_FILE=./crawler/config/.env
 
 ### 3) 로컬 DB 준비 및 연결 문자열 설정
 
-PostgreSQL이 필요합니다. 로컬에 준비되어 있지 않다면 Docker로 임시 실행할 수 있습니다.
+MySQL 8이 필요합니다. 로컬에 준비되어 있지 않다면 Docker로 임시 실행할 수 있습니다.
 
 ```bash
-docker run --name aubl-postgres -e POSTGRES_PASSWORD=aubl -e POSTGRES_DB=aubl \
-  -p 5432:5432 -d postgres:15
+docker run --name aubl-mysql -e MYSQL_ROOT_PASSWORD=aubl -e MYSQL_DATABASE=aubl \\
+  -p 3306:3306 -d mysql:8
 ```
 
 DB 연결 문자열을 환경변수로 설정합니다.
 
 ```bash
-export DATABASE_URL=postgresql://postgres:aubl@localhost:5432/aubl
+export DATABASE_URL=mysql+pymysql://root:aubl@localhost:3306/aubl
 ```
 
 ### 4) 크롤러 실행
@@ -148,15 +148,20 @@ python -m crawler.cli --from-year 2024 --to-year 2024 --group-code A --group-cod
 ### 5) CSV로 임시 확인하기 (DB에서 추출)
 
 기본 저장소는 DB이지만 `--output-json` 또는 `--output-csv`로 로컬 파일 출력도 가능합니다. DB에서
-빠르게 확인하려면 PostgreSQL에서 CSV로 내보낼 수 있습니다.
+빠르게 확인하려면 MySQL에서 CSV로 내보낼 수 있습니다(권한이 필요할 수 있음).
 
 ```bash
-psql "$DATABASE_URL" -c "\\copy matches TO 'matches.csv' CSV HEADER"
-psql "$DATABASE_URL" -c "\\copy teams TO 'teams.csv' CSV HEADER"
-psql "$DATABASE_URL" -c "\\copy players TO 'players.csv' CSV HEADER"
-psql "$DATABASE_URL" -c "\\copy batting_stats TO 'batting_stats.csv' CSV HEADER"
-psql "$DATABASE_URL" -c "\\copy pitching_stats TO 'pitching_stats.csv' CSV HEADER"
+mysql -uroot -paubl -h127.0.0.1 -e \"SELECT * FROM matches\" aubl > matches.csv
+mysql -uroot -paubl -h127.0.0.1 -e \"SELECT * FROM teams\" aubl > teams.csv
+mysql -uroot -paubl -h127.0.0.1 -e \"SELECT * FROM players\" aubl > players.csv
+mysql -uroot -paubl -h127.0.0.1 -e \"SELECT * FROM batting_stats\" aubl > batting_stats.csv
+mysql -uroot -paubl -h127.0.0.1 -e \"SELECT * FROM pitching_stats\" aubl > pitching_stats.csv
 ```
+
+### MySQL 스키마 노트
+- `roster_players` 테이블이 추가되었고 `year` 컬럼을 포함해 팀/선수를 연도별로 조회할 수 있습니다.
+- `batting_stats`, `pitching_stats` 역시 `year` 컬럼을 포함해 시즌 단위 필터링이 쉬워졌습니다.
+- MySQL 연결 문자열 예시: `mysql+pymysql://user:password@host:3306/aubl` (SQLAlchemy 사용)
 
 ## 📂 페이지 구성
 
