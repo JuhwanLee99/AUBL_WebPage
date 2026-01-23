@@ -1159,7 +1159,9 @@ export default function ScorekeeperPage() {
     fcRelay: string;
     fcTargetBase: '1' | '2' | '3' | '홈';
     fcOutType: 'force' | 'tag';
+    pathNote: string;
   }>(null);
+  const [lastHitWizard, setLastHitWizard] = useState<HitWizardState | null>(null);
   const [errorOnPlayModal, setErrorOnPlayModal] = useState<null | { selections: RunnerAdvanceSelections; batterResult: 'out' | 1 | 2 | 3 | 4; errorType: string; context: string; fielder: string }>(null);
   const [showDroppedThirdStrike, setShowDroppedThirdStrike] = useState(false);
   const [battedBallType, setBattedBallType] = useState(baseBattedBallType);
@@ -1249,6 +1251,7 @@ export default function ScorekeeperPage() {
       fcRelay: '없음',
       fcTargetBase: '1',
       fcOutType: 'force',
+      pathNote: '',
     });
     setActionModal(null);
     setHitWizard(null);
@@ -1331,23 +1334,29 @@ const handleSelectBattedBallType = (type: string) =>
       result as HitResultAction,
     );
 
-  const handleConfirmHitWizard = () => {
-    if (!hitWizard?.result || controlsDisabled) {
-      setHitWizard(null);
-      return;
-    }
-    const details = buildBattedBallDetailsFromValues(hitWizard.type, hitWizard.zone);
+const requiresAdvanceModal = (result: BattedBallResultAction | null) =>
+  ['single', 'single_infield', 'single_bunt', 'double', 'double_ground', 'triple', 'fc'].includes(
+    result as BattedBallResultAction,
+  );
+
+const handleConfirmHitWizard = () => {
+  if (!hitWizard?.result || controlsDisabled) {
+    setHitWizard(null);
+    return;
+  }
+  const details = buildBattedBallDetailsFromValues(hitWizard.type, hitWizard.zone);
     const fielderOptions = getFielderOptionsForResult(hitWizard.result);
     const fielderNote =
       fielderOptions && hitWizard.fielder && hitWizard.fielder !== fielderOptions[0] ? ` · 포구:${hitWizard.fielder}` : '';
-    setBattedBallType(hitWizard.type);
-    setBattedBallZone(hitWizard.zone);
-    setHitWizard(null);
-    if (isHitResult(hitWizard.result)) {
-      if (hitWizard.result === 'hr') {
-        actions.homeRun(details);
-      } else if (hitWizard.result === 'double' || hitWizard.result === 'double_ground') {
-        openHitAdvanceModal(2);
+  setBattedBallType(hitWizard.type);
+  setBattedBallZone(hitWizard.zone);
+  setLastHitWizard(hitWizard);
+  setHitWizard(null);
+  if (isHitResult(hitWizard.result)) {
+    if (hitWizard.result === 'hr') {
+      actions.homeRun(details);
+    } else if (hitWizard.result === 'double' || hitWizard.result === 'double_ground') {
+      openHitAdvanceModal(2);
       } else if (hitWizard.result === 'triple') {
         openHitAdvanceModal(3);
       } else {
@@ -2163,6 +2172,7 @@ const handleSelectBattedBallType = (type: string) =>
           mode={hitAdvanceModal.mode}
           contextNote={hitAdvanceModal.contextNote}
           fcFielder={hitAdvanceModal.fcFielder}
+          fcRelay={hitAdvanceModal.fcRelay}
           fcTargetBase={hitAdvanceModal.fcTargetBase}
           fcOutType={hitAdvanceModal.fcOutType}
           selections={hitAdvanceModal.selections}
@@ -2173,6 +2183,12 @@ const handleSelectBattedBallType = (type: string) =>
           onChangeFcTargetBase={(val) => setHitAdvanceModal((prev) => (prev ? { ...prev, fcTargetBase: val } : prev))}
           onChangeFcOutType={(val) => setHitAdvanceModal((prev) => (prev ? { ...prev, fcOutType: val } : prev))}
           onClose={() => setHitAdvanceModal(null)}
+          onBack={() => {
+            setHitAdvanceModal(null);
+            if (lastHitWizard) {
+              setHitWizard({ ...lastHitWizard, step: 'zone' });
+            }
+          }}
           onConfirm={handleConfirmHitAdvance}
         />
       )}
@@ -3314,14 +3330,16 @@ function HitWizardModal({
   const fielderOptions = getFielderOptionsForResult(state.result);
   const fielderSummary =
     fielderOptions && state.fielder && state.fielder !== fielderOptions[0] ? state.fielder : null;
-  const isFinalStep = state.step === 'zone';
-  const primaryDisabled =
-    (state.step === 'result' && !state.result) ||
-    (state.step === 'type' &&
-      !isInfieldFlyResult(state.result) &&
-      getTypeOptionsForResult(state.result).length > 0 &&
-      !state.type) ||
-    (state.step === 'zone' && !state.zone);
+const willOpenAdvance = requiresAdvanceModal(state.result);
+const willOpenErrorModal = state.result === 'reach_error';
+const isFinalStep = state.step === 'zone' && !willOpenAdvance && !willOpenErrorModal;
+const primaryDisabled =
+  (state.step === 'result' && !state.result) ||
+  (state.step === 'type' &&
+    !isInfieldFlyResult(state.result) &&
+    getTypeOptionsForResult(state.result).length > 0 &&
+    !state.type) ||
+  (state.step === 'zone' && !state.zone);
 
   const renderStep = () => {
     if (state.step === 'result') {
@@ -3520,6 +3538,29 @@ function HitWizardModal({
           <div style={{ display: 'grid', gap: '4px' }}>
             <span style={{ fontWeight: 900 }}>타격 기록</span>
             <span style={{ color: '#94a3b8', fontWeight: 700 }}>결과 → 유형 → 방향 순서로 안내합니다.</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div
+                style={{
+                  flex: 1,
+                  height: '6px',
+                  borderRadius: '999px',
+                  background: 'rgba(148,163,184,0.25)',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${((currentStepIndex + 1) / steps.length) * 100}%`,
+                    height: '100%',
+                    background: 'linear-gradient(90deg, #2563eb, #22d3ee)',
+                    transition: 'width 150ms ease',
+                  }}
+                />
+              </div>
+              <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '12px' }}>
+                {currentStepIndex + 1}/{steps.length}
+              </span>
+            </div>
           </div>
           <button
             type="button"
