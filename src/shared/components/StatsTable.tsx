@@ -75,6 +75,8 @@ export default function StatsTable({ title, stats, variant, density = 'regular' 
         { key: 'triples', label: '3루타' },
         { key: 'hr', label: '홈런' },
         { key: 'bb', label: '볼넷' },
+        { key: 'ci', label: '타격방해' },
+        { key: 'fc', label: '야수선택' },
         { key: 'hbp', label: '사구' },
         { key: 'so', label: '삼진' },
         { key: 'sac', label: density === 'regular' ? '희생플라이' : '희생' },
@@ -97,8 +99,8 @@ export default function StatsTable({ title, stats, variant, density = 'regular' 
   const rows = isBatter
     ? (stats as BatterStatLine[]).map((stat) => {
         const avg = stat.ab > 0 ? stat.h / stat.ab : 0;
-        const obpDen = stat.ab + stat.bb + stat.hbp + stat.sac;
-        const obp = obpDen > 0 ? (stat.h + stat.bb + stat.hbp) / obpDen : 0;
+        const obpDen = stat.ab + stat.bb + stat.hbp + stat.sac + stat.ci;
+        const obp = obpDen > 0 ? (stat.h + stat.bb + stat.hbp + stat.ci) / obpDen : 0;
         return { ...stat, avg: stat.ab > 0 ? formatFloat(avg) : '-', obp: obpDen > 0 ? formatFloat(obp) : '-' };
       })
     : (stats as PitcherStatLine[]).map((stat) => {

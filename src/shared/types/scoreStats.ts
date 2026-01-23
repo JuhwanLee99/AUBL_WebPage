@@ -11,6 +11,8 @@ export type BatterStatLine = {
   triples: number;
   hr: number;
   bb: number;
+  ci: number;
+  fc: number;
   hbp: number;
   so: number;
   sac: number;

@@ -117,15 +117,18 @@ type Action =
   | { type: 'doublePlay'; battedBall?: BattedBallDetails | null }
   | { type: 'triplePlay'; battedBall?: BattedBallDetails | null }
   | { type: 'hit'; bases: 1 | 2 | 3 | 4; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null }
-  | { type: 'fielderChoice'; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null }
+  | { type: 'fielderChoice'; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null; context?: string }
   | { type: 'walk' }
   | { type: 'intentionalWalk' }
   | { type: 'catcherInterference' }
   | { type: 'hbp' }
+  | { type: 'batterInterference' }
   | { type: 'sac'; battedBall?: BattedBallDetails | null; sacType?: 'fly' | 'bunt' }
   | { type: 'error'; details: ErrorDetails }
   | { type: 'stealSuccess' }
   | { type: 'stealFail' }
+  | { type: 'runnerRundownOut'; base: 0 | 1 | 2 }
+  | { type: 'runnerInterference'; base: 0 | 1 | 2 }
   | { type: 'resetCount' }
   | { type: 'clearBases' }
   | { type: 'nextHalf' }
@@ -731,7 +734,7 @@ function reducer(state: DemoState, action: Action): DemoState {
       nextState = applyHitWithAdvances(state, action.bases, state.pitchCount + 1, action.advances, action.battedBall);
       break;
     case 'fielderChoice':
-      nextState = applyFielderChoice(state, state.pitchCount + 1, action.advances, action.battedBall);
+      nextState = applyFielderChoice(state, state.pitchCount + 1, action.advances, action.battedBall, action.context);
       break;
     case 'walk':
       nextState = applyWalk(state, '볼넷', state.pitchCount + 1);
@@ -742,13 +745,16 @@ function reducer(state: DemoState, action: Action): DemoState {
     case 'catcherInterference':
       nextState = applyWalk(state, '타격방해', state.pitchCount + 1);
       break;
+    case 'batterInterference':
+      nextState = applyOut(state, '타격방해(타자 아웃)', { pitchNumber: state.pitchCount + 1 });
+      break;
     case 'hbp':
       nextState = applyWalk(state, '몸에 맞는 공', state.pitchCount + 1);
       break;
     case 'sac':
       nextState = applySacrifice(state, state.pitchCount + 1, action.battedBall, action.sacType ?? 'fly');
       break;
-      case 'error':
+    case 'error':
       nextState = applyError(state, action.details);
       break;
     case 'stealSuccess':
@@ -756,6 +762,12 @@ function reducer(state: DemoState, action: Action): DemoState {
       break;
     case 'stealFail':
       nextState = applySteal(state, false);
+      break;
+    case 'runnerRundownOut':
+      nextState = applyRunnerOut(state, action.base, '런다운 아웃');
+      break;
+    case 'runnerInterference':
+      nextState = applyRunnerOut(state, action.base, '주루 방해');
       break;
     case 'resetCount':
       nextState = {
@@ -1278,6 +1290,7 @@ function applyFielderChoice(
   pitchNumber: number,
   advances?: RunnerAdvanceSelections,
   battedBall?: BattedBallDetails | null,
+  context?: string,
 ): DemoState {
   const { batterName, batterIndex } = nextBatter(state);
   const bases = [null, null, null] as Bases;
@@ -1332,7 +1345,8 @@ function applyFielderChoice(
   runnerMoves.forEach((move) => {
     feed = pushFeed(feed, createLogEntryForBaserunning(state, move.feedText, pitchNumber));
   });
-  const resultLog = runs ? `야수선택 · ${runs}득점` : '야수선택';
+  const contextNote = context?.trim() ? ` (${context.trim()})` : '';
+  const resultLog = runs ? `야수선택${contextNote} · ${runs}득점` : `야수선택${contextNote}`;
   feed = pushPlayFeed(state, createLogEntry(state, resultLog, pitchNumber), feed);
 
   const eventEntry = createPlayEvent(
@@ -1341,7 +1355,7 @@ function applyFielderChoice(
       type: 'fc',
       runners: runnerMoves.map((move) => move.runnerSummary),
       battedBall: battedBall ?? null,
-      notes: `야수선택 · ${batterName}`,
+      notes: `야수선택${contextNote ? ` ${contextNote}` : ''} · ${batterName}`,
     },
     pitchNumber,
   );
@@ -2180,17 +2194,20 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       hitTriple: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) =>
         dispatch({ type: 'hit', bases: 3, advances, battedBall }),
       homeRun: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'hit', bases: 4, battedBall }),
-      fielderChoice: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) =>
-        dispatch({ type: 'fielderChoice', advances, battedBall }),
+      fielderChoice: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null, context?: string) =>
+        dispatch({ type: 'fielderChoice', advances, battedBall, context }),
       walk: () => dispatch({ type: 'walk' }),
       intentionalWalk: () => dispatch({ type: 'intentionalWalk' }),
       catcherInterference: () => dispatch({ type: 'catcherInterference' }),
+      batterInterference: () => dispatch({ type: 'batterInterference' }),
       hbp: () => dispatch({ type: 'hbp' }),
       sacFly: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'sac', battedBall, sacType: 'fly' }),
       sacBunt: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'sac', battedBall, sacType: 'bunt' }),
       recordError: (details: ErrorDetails) => dispatch({ type: 'error', details }),
       stealSuccess: () => dispatch({ type: 'stealSuccess' }),
       stealFail: () => dispatch({ type: 'stealFail' }),
+      runnerRundownOut: (base: 0 | 1 | 2) => dispatch({ type: 'runnerRundownOut', base }),
+      runnerInterference: (base: 0 | 1 | 2) => dispatch({ type: 'runnerInterference', base }),
       resetCount: () => dispatch({ type: 'resetCount' }),
       clearBases: () => dispatch({ type: 'clearBases' }),
       nextHalf: () => dispatch({ type: 'nextHalf' }),
