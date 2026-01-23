@@ -140,7 +140,21 @@ const buntZoneOptions = [
   '1루선상 번트',
   '3루선상 번트',
 ];
-const errorTypeOptions = ['포구', '송구', '포구 후 송구', '기타'];
+const errorTypeOptions = [
+  '포구',
+  '송구',
+  '포구 후 송구',
+  'E1',
+  'E2',
+  'E3',
+  'E4',
+  'E5',
+  'E6',
+  'WP(폭투)',
+  'PB(포일)',
+  'BK(보크)',
+  '기타',
+];
 type HitResultAction = Extract<(typeof battedBallResultOptions)[number]['value'], 'single' | 'single_infield' | 'single_bunt' | 'double' | 'double_ground' | 'triple' | 'hr'>;
 type BattedBallResultAction = (typeof battedBallResultOptions)[number]['value'];
 type HitWizardStep = 'result' | 'type' | 'zone';
@@ -1142,6 +1156,7 @@ export default function ScorekeeperPage() {
     mode: 'hit' | 'fc';
     contextNote: string;
     fcFielder: string;
+    fcRelay: string;
     fcTargetBase: '1' | '2' | '3' | '홈';
     fcOutType: 'force' | 'tag';
   }>(null);
@@ -1231,6 +1246,7 @@ export default function ScorekeeperPage() {
       mode,
       contextNote: '',
       fcFielder: '1',
+      fcRelay: '없음',
       fcTargetBase: '1',
       fcOutType: 'force',
     });
@@ -1302,8 +1318,8 @@ export default function ScorekeeperPage() {
     );
   };
 
-  const handleSelectBattedBallType = (type: string) =>
-    setHitWizard((prev) => (prev ? { ...prev, type, step: 'zone' } : prev));
+const handleSelectBattedBallType = (type: string) =>
+  setHitWizard((prev) => (prev ? { ...prev, type } : prev));
 
   const handleSelectBattedBallZone = (zone: string) =>
     setHitWizard((prev) => (prev ? { ...prev, zone } : prev));
@@ -1503,10 +1519,11 @@ export default function ScorekeeperPage() {
 
   const handleConfirmHitAdvance = () => {
     if (!hitAdvanceModal) return;
-    const { bases, selections, mode, contextNote, fcFielder, fcTargetBase, fcOutType } = hitAdvanceModal;
+    const { bases, selections, mode, contextNote, fcFielder, fcRelay, fcTargetBase, fcOutType } = hitAdvanceModal;
     if (mode === 'fc') {
       const parts: string[] = [];
       if (fcFielder) parts.push(`${fcFielder} 처리`);
+      if (fcRelay && fcRelay !== '없음') parts.push(`중계 ${fcRelay}`);
       if (fcTargetBase) parts.push(`${fcTargetBase}루 ${fcOutType === 'tag' ? '태그' : '포스'} 시도`);
       if (contextNote?.trim()) parts.push(contextNote.trim());
       const context = parts.join(' · ');
@@ -2152,6 +2169,7 @@ export default function ScorekeeperPage() {
           onChangeSelections={(next) => setHitAdvanceModal((prev) => (prev ? { ...prev, selections: next } : prev))}
           onChangeContextNote={(text) => setHitAdvanceModal((prev) => (prev ? { ...prev, contextNote: text } : prev))}
           onChangeFcFielder={(val) => setHitAdvanceModal((prev) => (prev ? { ...prev, fcFielder: val } : prev))}
+          onChangeFcRelay={(val) => setHitAdvanceModal((prev) => (prev ? { ...prev, fcRelay: val } : prev))}
           onChangeFcTargetBase={(val) => setHitAdvanceModal((prev) => (prev ? { ...prev, fcTargetBase: val } : prev))}
           onChangeFcOutType={(val) => setHitAdvanceModal((prev) => (prev ? { ...prev, fcOutType: val } : prev))}
           onClose={() => setHitAdvanceModal(null)}
@@ -2574,7 +2592,7 @@ function FieldSvg() {
 
 function buildRunnerOutcomeOptions(baseIndex: 0 | 1 | 2) {
   const options: { value: RunnerAdvanceOutcome; label: string; color: string }[] = [
-    { value: 'hold', label: '정지', color: '#e2e8f0' },
+    { value: 'hold', label: '정지/세이프', color: '#e2e8f0' },
   ];
   for (let base = baseIndex + 2; base <= 3; base += 1) {
     options.push({ value: base as 2 | 3, label: `${base}루`, color: '#22c55e' });
@@ -2594,15 +2612,18 @@ function HitAdvanceModal({
   mode,
   contextNote,
   fcFielder,
+  fcRelay,
   fcTargetBase,
   fcOutType,
   selections,
   onChangeSelections,
   onChangeContextNote,
   onChangeFcFielder,
+  onChangeFcRelay,
   onChangeFcTargetBase,
   onChangeFcOutType,
   onClose,
+  onBack,
   onConfirm,
 }: {
   bases: 1 | 2 | 3;
@@ -2610,15 +2631,18 @@ function HitAdvanceModal({
   mode: 'hit' | 'fc';
   contextNote?: string;
   fcFielder?: string;
+  fcRelay?: string;
   fcTargetBase?: '1' | '2' | '3' | '홈';
   fcOutType?: 'force' | 'tag';
   selections: RunnerAdvanceSelections;
   onChangeSelections: (next: RunnerAdvanceSelections) => void;
   onChangeContextNote?: (text: string) => void;
   onChangeFcFielder?: (val: string) => void;
+  onChangeFcRelay?: (val: string) => void;
   onChangeFcTargetBase?: (val: '1' | '2' | '3' | '홈') => void;
   onChangeFcOutType?: (val: 'force' | 'tag') => void;
   onClose: () => void;
+  onBack?: () => void;
   onConfirm: () => void;
 }) {
   const hitLabel = mode === 'fc' ? '야수선택 주자 처리' : `${bases}루타 주자 선택`;
@@ -2773,6 +2797,24 @@ function HitAdvanceModal({
                 ))}
               </select>
               <select
+                value={fcRelay}
+                onChange={(e) => onChangeFcRelay?.(e.target.value)}
+                style={{
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  padding: '10px',
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                }}
+              >
+                {['없음','1','2','3','4','5','6','7','8','9'].map((num) => (
+                  <option key={num} value={num}>
+                    {num === '없음' ? '중계 없음' : `중계 ${num}번`}
+                  </option>
+                ))}
+              </select>
+              <select
                 value={fcTargetBase}
                 onChange={(e) => onChangeFcTargetBase?.(e.target.value as '1' | '2' | '3' | '홈')}
                 style={{
@@ -2826,6 +2868,21 @@ function HitAdvanceModal({
           </div>
         ) : null}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={onBack || onClose}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '10px',
+              border: '1px solid rgba(148,163,184,0.35)',
+              background: 'rgba(148,163,184,0.12)',
+              color: '#cbd5e1',
+              fontWeight: 900,
+              cursor: 'pointer',
+            }}
+          >
+            이전
+          </button>
           <button
             type="button"
             onClick={onClose}
@@ -2936,10 +2993,9 @@ function ErrorOnPlayModal({
           <div style={{ display: 'grid', gap: '6px' }}>
             <span style={{ fontWeight: 800, color: '#cbd5e1', fontSize: '13px' }}>수비수/실책 유형</span>
             <div style={{ display: 'grid', gap: '8px', gridTemplateColumns: '1fr 1fr' }}>
-              <input
+              <select
                 value={fielder}
                 onChange={(e) => setFielder(e.target.value)}
-                placeholder="예) 6 (유격수)"
                 style={{
                   borderRadius: '10px',
                   border: '1px solid rgba(148,163,184,0.35)',
@@ -2948,7 +3004,13 @@ function ErrorOnPlayModal({
                   color: '#e2e8f0',
                   fontWeight: 800,
                 }}
-              />
+              >
+                {['1','2','3','4','5','6','7','8','9','기타'].map((pos) => (
+                  <option key={pos} value={pos}>
+                    {pos === '기타' ? '기타' : `${pos}번`}
+                  </option>
+                ))}
+              </select>
               <select
                 value={errorType}
                 onChange={(e) => setErrorType(e.target.value)}
@@ -3253,7 +3315,13 @@ function HitWizardModal({
   const fielderSummary =
     fielderOptions && state.fielder && state.fielder !== fielderOptions[0] ? state.fielder : null;
   const isFinalStep = state.step === 'zone';
-  const primaryDisabled = state.step === 'result' && !state.result;
+  const primaryDisabled =
+    (state.step === 'result' && !state.result) ||
+    (state.step === 'type' &&
+      !isInfieldFlyResult(state.result) &&
+      getTypeOptionsForResult(state.result).length > 0 &&
+      !state.type) ||
+    (state.step === 'zone' && !state.zone);
 
   const renderStep = () => {
     if (state.step === 'result') {
