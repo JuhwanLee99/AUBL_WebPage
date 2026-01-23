@@ -81,6 +81,7 @@ const infieldFlyTypeOptions = [baseBattedBallType, '인필드 플라이 선언']
 const infieldFielderOptions = ['선택 안 함', '투수', '포수', '1루수', '2루수', '3루수', '유격수'];
 const outfieldFielderOptions = ['선택 안 함', '좌익수', '중견수', '우익수', '좌익수 파울', '우익수 파울'];
 const defaultTypeOptions = [baseBattedBallType];
+const defensePosOptions = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', '기타'];
 const defaultZoneOptions = [
   '선택 안 함',
   '좌선(좌익수 라인)',
@@ -140,19 +141,13 @@ const buntZoneOptions = [
   '3루선상 번트',
 ];
 const errorTypeOptions = [
-  '포구',
-  '송구',
-  '포구 후 송구',
-  'E1',
-  'E2',
-  'E3',
-  'E4',
-  'E5',
-  'E6',
-  'WP(폭투)',
-  'PB(포일)',
-  'BK(보크)',
-  '기타',
+  { value: '포구', label: '포구: 잡지 못함' },
+  { value: '송구', label: '송구: 송구 미스/빗나감' },
+  { value: '포구 후 송구', label: '포구 후 송구: 포구는 성공, 송구 실책' },
+  { value: 'WP(폭투)', label: 'WP: 폭투' },
+  { value: 'PB(포일)', label: 'PB: 포일' },
+  { value: 'BK(보크)', label: 'BK: 보크' },
+  { value: '기타', label: '기타' },
 ];
 type HitResultAction = Extract<(typeof battedBallResultOptions)[number]['value'], 'single' | 'single_infield' | 'single_bunt' | 'double' | 'double_ground' | 'triple' | 'hr'>;
 type BattedBallResultAction = (typeof battedBallResultOptions)[number]['value'];
@@ -305,6 +300,15 @@ function defensePositionNumber(pos: string) {
   };
   if (map[normalized]) return map[normalized];
   return normalized || '-';
+}
+
+function decorateErrorType(errorType: string, fielderPos: string) {
+  const specialPrefixes = ['WP', 'PB', 'BK'];
+  if (specialPrefixes.some((p) => errorType.startsWith(p))) return errorType;
+  if (errorType.startsWith('E')) return errorType;
+  const posCode = defensePositionNumber(fielderPos);
+  if (/^[1-9]$/.test(posCode)) return `E${posCode} ${errorType}`;
+  return `실책 ${errorType}`;
 }
 
 function formatRunnerOutcomeLabel(outcome: RunnerAdvanceOutcome) {
@@ -1252,7 +1256,7 @@ export default function ScorekeeperPage() {
       selections,
       mode,
       contextNote: '',
-      fcFielder: '1',
+      fcFielder: 'P',
       fcRelay: '없음',
       fcTargetBase: '1',
       fcOutType: 'force',
@@ -1385,7 +1389,7 @@ const handleConfirmHitWizard = () => {
         setErrorOnPlayModal({
           selections: initialSelections,
           batterResult: 1,
-          errorType: errorTypeOptions[0],
+          errorType: errorTypeOptions[0].value,
           context: '',
           fielder: infieldFielderOptions[0],
         });
@@ -2218,7 +2222,7 @@ const handleConfirmHitWizard = () => {
           onConfirm={({ fielder, errorType, context, batterResult, selections }) => {
             actions.recordError({
               fielderPos: fielder || '수비',
-              errorType,
+              errorType: decorateErrorType(errorType, fielder || '수비'),
               context,
               advanceResults: { batter: batterResult, runners: selections },
             });
@@ -2824,9 +2828,9 @@ function HitAdvanceModal({
                   fontWeight: 800,
                 }}
               >
-                {['1','2','3','4','5','6','7','8','9'].map((num) => (
-                  <option key={num} value={num}>
-                    {num}번
+                {defensePosOptions.map((pos) => (
+                  <option key={pos} value={pos}>
+                    {pos === '기타' ? '기타' : pos}
                   </option>
                 ))}
               </select>
@@ -2842,9 +2846,9 @@ function HitAdvanceModal({
                   fontWeight: 800,
                 }}
               >
-                {['없음','1','2','3','4','5','6','7','8','9'].map((num) => (
+                {['없음', ...defensePosOptions].map((num) => (
                   <option key={num} value={num}>
-                    {num === '없음' ? '중계 없음' : `중계 ${num}번`}
+                    {num === '없음' ? '중계 없음' : `중계 ${num}`}
                   </option>
                 ))}
               </select>
@@ -3061,30 +3065,30 @@ function ErrorOnPlayModal({
                   fontWeight: 800,
                 }}
               >
-                {['1','2','3','4','5','6','7','8','9','기타'].map((pos) => (
+                {defensePosOptions.map((pos) => (
                   <option key={pos} value={pos}>
-                    {pos === '기타' ? '기타' : `${pos}번`}
+                    {pos === '기타' ? '기타' : pos}
                   </option>
                 ))}
               </select>
-              <select
-                value={errorType}
-                onChange={(e) => setErrorType(e.target.value)}
-                style={{
-                  borderRadius: '10px',
-                  border: '1px solid rgba(148,163,184,0.35)',
-                  padding: '10px',
-                  background: '#0f172a',
-                  color: '#e2e8f0',
-                  fontWeight: 800,
-                }}
-              >
-                {errorTypeOptions.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
+          <select
+            value={errorType}
+            onChange={(e) => setErrorType(e.target.value)}
+            style={{
+              borderRadius: '10px',
+              border: '1px solid rgba(148,163,184,0.35)',
+              padding: '10px',
+              background: '#0f172a',
+              color: '#e2e8f0',
+              fontWeight: 800,
+            }}
+          >
+            {errorTypeOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
             </div>
           </div>
 
@@ -3385,16 +3389,20 @@ function HitWizardModal({
   const fielderOptions = getFielderOptionsForResult(state.result);
   const fielderSummary =
     fielderOptions && state.fielder && state.fielder !== fielderOptions[0] ? state.fielder : null;
-const willOpenAdvance = requiresAdvanceModal(state.result);
-const willOpenErrorModal = state.result === 'reach_error';
-const isFinalStep = state.step === 'zone' && !willOpenAdvance && !willOpenErrorModal;
-const primaryDisabled =
-  (state.step === 'result' && !state.result) ||
-  (state.step === 'type' &&
-    !isInfieldFlyResult(state.result) &&
-    getTypeOptionsForResult(state.result).length > 0 &&
-    !state.type) ||
-  (state.step === 'zone' && !state.zone);
+  const willOpenAdvance = requiresAdvanceModal(state.result);
+  const willOpenErrorModal = state.result === 'reach_error';
+  const isZoneStep = state.step === 'zone';
+  const isFinalStep = isZoneStep && !willOpenAdvance && !willOpenErrorModal;
+  const primaryDisabled =
+    (state.step === 'result' && !state.result) ||
+    (state.step === 'type' &&
+      !isInfieldFlyResult(state.result) &&
+      getTypeOptionsForResult(state.result).length > 0 &&
+      !state.type) ||
+    (state.step === 'zone' && !state.zone);
+
+  const primaryLabel = isZoneStep ? (isFinalStep ? '기록하기' : '다음') : isFinalStep ? '기록하기' : '다음';
+  const primaryAction = isZoneStep ? onConfirm : isFinalStep ? onConfirm : onNext;
 
   const renderStep = () => {
     if (state.step === 'result') {
@@ -3712,7 +3720,7 @@ const primaryDisabled =
             </button>
             <button
               type="button"
-              onClick={isFinalStep ? onConfirm : onNext}
+              onClick={primaryDisabled ? undefined : primaryAction}
               disabled={primaryDisabled}
               style={{
                 padding: '10px 14px',
@@ -3726,7 +3734,7 @@ const primaryDisabled =
                 boxShadow: primaryDisabled ? 'none' : '0 10px 20px rgba(37,99,235,0.25)',
               }}
             >
-              {isFinalStep ? '기록하기' : '다음'}
+              {primaryLabel}
             </button>
           </div>
         </div>
@@ -3750,14 +3758,14 @@ function ActionModal({
   bench: { name: string; pos: string; number: string; throws: string; bats: string }[];
   lineup: { name: string; pos: string; number: string; throws: string; bats: string }[];
 }) {
-  const [errorType, setErrorType] = useState(errorTypeOptions[0]);
+  const [errorType, setErrorType] = useState(errorTypeOptions[0].value);
   const [errorContext, setErrorContext] = useState('');
   const [errorBatterResult, setErrorBatterResult] = useState<'out' | 1 | 2 | 3 | 4>(1);
   const [runnerSelections, setRunnerSelections] = useState<RunnerAdvanceSelections>({});
 
   useEffect(() => {
     if (data.role !== 'fielder') return;
-    setErrorType(errorTypeOptions[0]);
+    setErrorType(errorTypeOptions[0].value);
     setErrorContext('');
     setErrorBatterResult(1);
     const initialSelections = bases.reduce<RunnerAdvanceSelections>((acc, runner, idx) => {
@@ -3817,7 +3825,7 @@ function ActionModal({
             onClick={() => {
             actions.recordError({
               fielderPos: data.pos,
-              errorType,
+              errorType: decorateErrorType(errorType, data.pos),
               context: errorContext.trim(),
               advanceResults: { batter: errorBatterResult, runners: runnerSelections },
             });
@@ -4028,11 +4036,11 @@ function ActionModal({
                     fontWeight: 800,
                   }}
                 >
-                  {errorTypeOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
+                {errorTypeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
                 </select>
               </label>
               <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1', fontSize: '12px', fontWeight: 800 }}>
