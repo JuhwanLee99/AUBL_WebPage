@@ -1,5 +1,5 @@
 export interface PowerRankingSeason {
-  year: 2021 | 2022 | 2023;
+  year: number; // 연도(시즌)
   /** 예선 승점(환산 포함) */
   prelimPoints: number;
   /** 본선 토너먼트 성적 점수 */
@@ -16,6 +16,7 @@ export interface PowerRankingRow {
 }
 
 export interface ComputedPowerRankingRow extends PowerRankingRow {
-  yearTotals: Record<PowerRankingSeason['year'], number>;
+  yearTotals: Record<number, number>;
   weightedScore: number;
+  windowYears: number[]; // 계산에 사용된 직전 3개년
 }
