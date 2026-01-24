@@ -1,32 +1,44 @@
 import { useMemo, useState } from 'react';
-import { POWER_RANKING_DATA, POWER_RANKING_WEIGHTS } from '../../features/rankings/data/powerRankings';
+import {
+  POWER_RANKING_DATA,
+  POWER_RANKING_WEIGHTS,
+  computePowerRankingRows,
+  getAvailableSeasonYears,
+} from '../../features/rankings/data/powerRankings';
 import type { ComputedPowerRankingRow } from '../../features/rankings/types';
 
-type SortKey = 'weightedScore' | '2023' | '2022' | '2021' | 'university';
+type SortKey = 'weightedScore' | number | 'university';
 
-const sortOptions: { key: SortKey; label: string }[] = [
-  { key: 'weightedScore', label: '총점(가중)' },
-  { key: '2023', label: '2023 합계' },
-  { key: '2022', label: '2022 합계' },
-  { key: '2021', label: '2021 합계' },
-  { key: 'university', label: '대학명' },
-];
-
-const formatScore = (value: number) => value.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const formatScore = (value: number | undefined) =>
+  (value ?? 0).toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 const getSortValue = (row: ComputedPowerRankingRow, key: SortKey) => {
   if (key === 'university') return row.university;
   if (key === 'weightedScore') return row.weightedScore;
-  const year = Number(key) as 2021 | 2022 | 2023;
+  const year = Number(key);
   return row.yearTotals[year] ?? 0;
 };
 
 export default function PowerRankingPage() {
+  const seasonYears = getAvailableSeasonYears(POWER_RANKING_DATA);
+  const maxSeasonYear = Math.max(...seasonYears);
+  const defaultRankingYear = maxSeasonYear + 1; // 최신 시즌 직후(현재 시즌) 기준
+
+  const [rankingYear, setRankingYear] = useState<number>(defaultRankingYear);
   const [sortKey, setSortKey] = useState<SortKey>('weightedScore');
   const [direction, setDirection] = useState<'desc' | 'asc'>('desc');
 
+  const computedRows = useMemo(() => computePowerRankingRows(rankingYear, POWER_RANKING_DATA, POWER_RANKING_WEIGHTS), [rankingYear]);
+  const windowYears = computedRows[0]?.windowYears ?? [rankingYear - 1, rankingYear - 2, rankingYear - 3];
+
+  const sortOptions: { key: SortKey; label: string }[] = [
+    { key: 'weightedScore', label: '총점(가중)' },
+    ...windowYears.map((year) => ({ key: year, label: `${year} 합계` })),
+    { key: 'university', label: '대학명' },
+  ];
+
   const sortedRows = useMemo(() => {
-    const cloned = [...POWER_RANKING_DATA];
+    const cloned = [...computedRows];
     cloned.sort((a, b) => {
       const aVal = getSortValue(a, sortKey);
       const bVal = getSortValue(b, sortKey);
@@ -39,7 +51,7 @@ export default function PowerRankingPage() {
       return direction === 'asc' ? -diff : diff;
     });
     return cloned;
-  }, [direction, sortKey]);
+  }, [computedRows, direction, sortKey]);
 
   const top3 = sortedRows.slice(0, 3);
 
@@ -83,7 +95,7 @@ export default function PowerRankingPage() {
               border: '1px solid rgba(249,115,22,0.32)',
             }}
           >
-            21·22·23 가중치 반영 (0.3 / 0.6 / 1.0)
+            직전 3개년 가중치 적용 (가까울수록 가중 ↑)
           </span>
           <span style={{ marginLeft: 'auto', color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
             숫자는 현재 데모 입력값 · 엑셀 반영 시 바로 치환됩니다.
@@ -92,15 +104,44 @@ export default function PowerRankingPage() {
 
         <div style={{ display: 'grid', gap: '8px' }}>
           <h1 style={{ margin: 0, fontSize: 'clamp(24px, 5vw, 32px)', fontWeight: 900, lineHeight: 1.25 }}>
-            최근 3개년 실적을 가중 반영한 AUBL 파워랭킹
+            {rankingYear} 시즌 기준 직전 3개년 가중 파워랭킹
           </h1>
           <p style={{ margin: 0, color: '#cbd5e1', lineHeight: 1.7, maxWidth: '860px' }}>
-            예선 승점(환산) + 본선 성적 점수를 연도별 가중치(21년 0.3, 22년 0.6, 23년 1.0)로 합산했습니다. 가중치를 조정하면
-            즉시 총점이 재정렬되도록 설계했습니다.
+            예선 승점(환산) + 본선 성적 점수를 선택 연도의 직전 3개년으로 묶어 가중 평균합니다. 새 시즌 실시간 DB가 추가되면 가장 최근
+            3개년이 자동 반영되도록 설계했습니다.
           </p>
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontWeight: 800, color: '#cbd5e1' }}>
+            기준 시즌
+            <select
+              value={rankingYear}
+              onChange={(e) => setRankingYear(Number(e.target.value))}
+              style={{
+                borderRadius: '10px',
+                border: '1px solid rgba(148, 163, 184, 0.35)',
+                background: 'rgba(15,23,42,0.8)',
+                color: '#e2e8f0',
+                padding: '8px 10px',
+                fontWeight: 800,
+              }}
+            >
+              {seasonYears
+                .filter((y) => y >= Math.min(...seasonYears) + 2) // 직전 3개년 확보를 위해 최소 2만큼 위
+                .map((mostRecentSeason) => {
+                  const targetYear = mostRecentSeason + 1; // 해당 시즌 직후 랭킹
+                  const yrs = [mostRecentSeason, mostRecentSeason - 1, mostRecentSeason - 2];
+                  return (
+                    <option key={targetYear} value={targetYear}>
+                      {targetYear} 시즌 (직전 {yrs[0]}, {yrs[1]}, {yrs[2]})
+                    </option>
+                  );
+                })
+                .reverse()}
+            </select>
+          </label>
+
           <span style={{ fontWeight: 800, color: '#cbd5e1' }}>정렬 기준</span>
           {sortOptions.map((option) => {
             const active = sortKey === option.key;
@@ -147,7 +188,7 @@ export default function PowerRankingPage() {
         </div>
 
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          {([2023, 2022, 2021] as const).map((year) => (
+          {windowYears.map((year, idx) => (
             <div
               key={year}
               style={{
@@ -164,7 +205,7 @@ export default function PowerRankingPage() {
               }}
             >
               <span style={{ color: '#f97316' }}>{year}</span>
-              <span style={{ color: '#e2e8f0' }}>× {POWER_RANKING_WEIGHTS[year]}</span>
+              <span style={{ color: '#e2e8f0' }}>× {POWER_RANKING_WEIGHTS[idx] ?? 0}</span>
               <span style={{ color: '#94a3b8', fontWeight: 700 }}>합계 = 예선 승점 환산 + 본선 점수</span>
             </div>
           ))}
@@ -222,10 +263,10 @@ export default function PowerRankingPage() {
                 <p style={{ margin: 0, color: '#cbd5e1', fontWeight: 700 }}>총점 {formatScore(row.weightedScore)}</p>
               </div>
               <div style={{ display: 'grid', gap: '6px' }}>
-                {[2023, 2022, 2021].map((year) => (
+                {windowYears.map((year) => (
                   <div key={year} style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8', fontWeight: 700 }}>
                     <span>{year}</span>
-                    <span style={{ color: '#e2e8f0' }}>{formatScore(row.yearTotals[year as 2021 | 2022 | 2023])}</span>
+                    <span style={{ color: '#e2e8f0' }}>{formatScore(row.yearTotals[year])}</span>
                   </div>
                 ))}
               </div>
@@ -248,10 +289,12 @@ export default function PowerRankingPage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#cbd5e1' }}>
             <span style={{ fontWeight: 800, fontSize: '13px', letterSpacing: '0.04em' }}>POWER RANKING TABLE</span>
-            <span style={{ color: '#94a3b8', fontSize: '12px' }}>예선 승점 환산 + 본선 점수 → 연도 가중 합산</span>
+            <span style={{ color: '#94a3b8', fontSize: '12px' }}>
+              예선 승점 환산 + 본선 점수 → 직전 3개년 가중 합산 (기준 시즌 {rankingYear})
+            </span>
           </div>
           <span style={{ color: '#94a3b8', fontSize: '12px' }}>
-            가중치 {POWER_RANKING_WEIGHTS[2021]} · {POWER_RANKING_WEIGHTS[2022]} · {POWER_RANKING_WEIGHTS[2023]}
+            가중치 {POWER_RANKING_WEIGHTS[0]} (최근) · {POWER_RANKING_WEIGHTS[1]} · {POWER_RANKING_WEIGHTS[2]}
           </span>
         </div>
         <div style={{ overflowX: 'auto' }}>
@@ -260,9 +303,11 @@ export default function PowerRankingPage() {
               <tr style={{ background: 'rgba(255,255,255,0.03)', textAlign: 'left', fontSize: '13px', color: '#cbd5e1' }}>
                 <th style={{ padding: '12px 16px' }}>순위</th>
                 <th style={{ padding: '12px 16px' }}>대학</th>
-                <th style={{ padding: '12px 16px', textAlign: 'right' }}>2023</th>
-                <th style={{ padding: '12px 16px', textAlign: 'right' }}>2022</th>
-                <th style={{ padding: '12px 16px', textAlign: 'right' }}>2021</th>
+                {windowYears.map((year) => (
+                  <th key={year} style={{ padding: '12px 16px', textAlign: 'right' }}>
+                    {year}
+                  </th>
+                ))}
                 <th style={{ padding: '12px 16px', textAlign: 'right' }}>총점(가중)</th>
                 <th style={{ padding: '12px 16px', textAlign: 'left' }}>메모</th>
               </tr>
@@ -278,9 +323,9 @@ export default function PowerRankingPage() {
                       {row.division ?? '리그'}
                     </span>
                   </td>
-                  {[2023, 2022, 2021].map((year) => (
+                  {windowYears.map((year) => (
                     <td key={year} style={{ padding: '12px 16px', textAlign: 'right', color: '#e2e8f0', fontWeight: 700 }}>
-                      {formatScore(row.yearTotals[year as 2021 | 2022 | 2023])}
+                      {formatScore(row.yearTotals[year] ?? 0)}
                     </td>
                   ))}
                   <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 900, color: '#f97316' }}>
@@ -310,7 +355,7 @@ export default function PowerRankingPage() {
           <li>예선 승점: 승 3점, 무 1점, 패 0점. 조별 경기 수가 다른 경우 4경기 기준으로 환산(3경기 × 1.33).</li>
           <li>본선 점수: 우승 25 / 준우승 20 / 4강 15 / 8강·버금우승 10 / 16강·버금준우승 5 / 예선 탈락 0.</li>
           <li>연도 합계 = 예선 승점 환산 + 본선 점수.</li>
-          <li>총점(파워랭킹) = 2021 합계 × 0.3 + 2022 합계 × 0.6 + 2023 합계 × 1.0.</li>
+          <li>총점(파워랭킹) = 기준 시즌의 직전 3개년 합계 × 가중치(최근→과거 = 1.0 / 0.6 / 0.3).</li>
         </ul>
       </section>
     </div>
