@@ -1,194 +1,76 @@
-import type { ComputedPowerRankingRow, PowerRankingRow } from '../types';
+import type {
+  ComputedPowerRankingRow,
+  FinalsStage,
+  PowerRankingRow,
+  TeamSeasonPowerInput,
+} from '../types';
+import type { Team } from '../../shared/types';
 
 // 직전 3개년 가중치(최근연도 → 1.0, -1년 → 0.6, -2년 → 0.3)
 export const POWER_RANKING_WEIGHTS: number[] = [1, 0.6, 0.3];
 
-// ✅ DB 연동 시 이 배열을 치환/확장하면 됩니다.
-const basePowerRanking: PowerRankingRow[] = [
-  {
-    id: 'hanyang-bulse',
-    university: '한양대학교',
-    nickname: '불새',
-    division: '으뜸',
-    seasons: [
-      // 오래된 시즌도 대비: 2015~2024 샘플
-      { year: 2019, prelimPoints: 10, finalsPoints: 10 },
-      { year: 2020, prelimPoints: 11, finalsPoints: 12 },
-      { year: 2021, prelimPoints: 12, finalsPoints: 20 },
-      { year: 2022, prelimPoints: 12, finalsPoints: 25 },
-      { year: 2023, prelimPoints: 24, finalsPoints: 25 },
-      { year: 2024, prelimPoints: 20, finalsPoints: 22 },
-    ],
-    note: '2022·2023 연속 우승, 3년 연속 결승 진출',
-  },
-  {
-    id: 'hufs-seoul',
-    university: '한국외대(서울)',
-    nickname: 'UNION',
-    division: '으뜸',
-    seasons: [
-      { year: 2019, prelimPoints: 9, finalsPoints: 10 },
-      { year: 2020, prelimPoints: 10, finalsPoints: 12 },
-      { year: 2021, prelimPoints: 10, finalsPoints: 15 },
-      { year: 2022, prelimPoints: 14, finalsPoints: 18 },
-      { year: 2023, prelimPoints: 21, finalsPoints: 23 },
-      { year: 2024, prelimPoints: 19, finalsPoints: 20 },
-    ],
-    note: '23시즌 결승, 꾸준한 본선 상위권',
-  },
-  {
-    id: 'yonsei-eagles',
-    university: '연세대학교',
-    nickname: 'EAGLES',
-    division: '으뜸',
-    seasons: [
-      { year: 2019, prelimPoints: 8, finalsPoints: 9 },
-      { year: 2020, prelimPoints: 10, finalsPoints: 11 },
-      { year: 2021, prelimPoints: 11, finalsPoints: 13 },
-      { year: 2022, prelimPoints: 15, finalsPoints: 17 },
-      { year: 2023, prelimPoints: 20, finalsPoints: 23 },
-      { year: 2024, prelimPoints: 18, finalsPoints: 21 },
-    ],
-    note: '최근 2년 연속 본선 4강권',
-  },
-  {
-    id: 'skku-kingo',
-    university: '성균관대학교',
-    nickname: 'KINGO',
-    division: '으뜸',
-    seasons: [
-      { year: 2019, prelimPoints: 8, finalsPoints: 9 },
-      { year: 2020, prelimPoints: 10, finalsPoints: 10 },
-      { year: 2021, prelimPoints: 9, finalsPoints: 12 },
-      { year: 2022, prelimPoints: 14, finalsPoints: 14 },
-      { year: 2023, prelimPoints: 19, finalsPoints: 22 },
-      { year: 2024, prelimPoints: 17, finalsPoints: 19 },
-    ],
-    note: '타선 OPS 상위권',
-  },
-  {
-    id: 'sejong-kings',
-    university: '세종대학교',
-    nickname: 'KINGS',
-    division: '으뜸',
-    seasons: [
-      { year: 2019, prelimPoints: 7, finalsPoints: 8 },
-      { year: 2020, prelimPoints: 9, finalsPoints: 9 },
-      { year: 2021, prelimPoints: 10, finalsPoints: 10 },
-      { year: 2022, prelimPoints: 13, finalsPoints: 16 },
-      { year: 2023, prelimPoints: 19, finalsPoints: 21 },
-      { year: 2024, prelimPoints: 16, finalsPoints: 18 },
-    ],
-    note: '23시즌 으뜸 4강, 장타율 상승세',
-  },
-  {
-    id: 'inha-biryong',
-    university: '인하대학교',
-    nickname: '비룡',
-    division: '으뜸',
-    seasons: [
-      { year: 2019, prelimPoints: 7, finalsPoints: 8 },
-      { year: 2020, prelimPoints: 9, finalsPoints: 9 },
-      { year: 2021, prelimPoints: 9, finalsPoints: 10 },
-      { year: 2022, prelimPoints: 12, finalsPoints: 16 },
-      { year: 2023, prelimPoints: 18, finalsPoints: 22 },
-      { year: 2024, prelimPoints: 17, finalsPoints: 20 },
-    ],
-    note: '23시즌 준우승, 투수진 방어율 2점대',
-  },
-  {
-    id: 'cau-rendezvous',
-    university: '중앙대학교(서울)',
-    nickname: 'RENDEZVOUS',
-    division: '으뜸',
-    seasons: [
-      { year: 2019, prelimPoints: 6, finalsPoints: 8 },
-      { year: 2020, prelimPoints: 8, finalsPoints: 9 },
-      { year: 2021, prelimPoints: 8, finalsPoints: 12 },
-      { year: 2022, prelimPoints: 12, finalsPoints: 15 },
-      { year: 2023, prelimPoints: 18, finalsPoints: 21 },
-      { year: 2024, prelimPoints: 15, finalsPoints: 18 },
-    ],
-    note: '23시즌 8강, 2026 시즌 호스트',
-  },
-  {
-    id: 'hufs-global-union',
-    university: '한국외대(글로벌)',
-    nickname: 'UNION',
-    division: '버금',
-    seasons: [
-      { year: 2019, prelimPoints: 6, finalsPoints: 7 },
-      { year: 2020, prelimPoints: 7, finalsPoints: 9 },
-      { year: 2021, prelimPoints: 8, finalsPoints: 11 },
-      { year: 2022, prelimPoints: 12, finalsPoints: 14 },
-      { year: 2023, prelimPoints: 18, finalsPoints: 20 },
-      { year: 2024, prelimPoints: 16, finalsPoints: 18 },
-    ],
-    note: '23시즌 버금 우승',
-  },
-  {
-    id: 'ajou-abba',
-    university: '아주대학교',
-    nickname: 'ABBA',
-    division: '버금',
-    seasons: [
-      { year: 2019, prelimPoints: 6, finalsPoints: 8 },
-      { year: 2020, prelimPoints: 7, finalsPoints: 10 },
-      { year: 2021, prelimPoints: 7, finalsPoints: 12 },
-      { year: 2022, prelimPoints: 11, finalsPoints: 15 },
-      { year: 2023, prelimPoints: 17, finalsPoints: 20 },
-      { year: 2024, prelimPoints: 15, finalsPoints: 18 },
-    ],
-    note: '23시즌 버금 준우승, 예선 전승 경험',
-  },
-  {
-    id: 'kyunghee-braves',
-    university: '경희대학교(서울)',
-    nickname: 'BRAVES',
-    division: '버금',
-    seasons: [
-      { year: 2019, prelimPoints: 5, finalsPoints: 7 },
-      { year: 2020, prelimPoints: 6, finalsPoints: 8 },
-      { year: 2021, prelimPoints: 7, finalsPoints: 10 },
-      { year: 2022, prelimPoints: 10, finalsPoints: 14 },
-      { year: 2023, prelimPoints: 17, finalsPoints: 19 },
-      { year: 2024, prelimPoints: 15, finalsPoints: 17 },
-    ],
-    note: '23시즌 버금 4강, 도루 리그 1위',
-  },
-  {
-    id: 'kookmin-windmills',
-    university: '국민대학교',
-    nickname: 'WINDMILLS',
-    division: '버금',
-    seasons: [
-      { year: 2019, prelimPoints: 5, finalsPoints: 7 },
-      { year: 2020, prelimPoints: 6, finalsPoints: 8 },
-      { year: 2021, prelimPoints: 6, finalsPoints: 12 },
-      { year: 2022, prelimPoints: 10, finalsPoints: 13 },
-      { year: 2023, prelimPoints: 16, finalsPoints: 18 },
-      { year: 2024, prelimPoints: 14, finalsPoints: 16 },
-    ],
-    note: '23시즌 버금 8강, 수비 효율 상위권',
-  },
-  {
-    id: 'koreatech-winners',
-    university: '한국공학대',
-    nickname: 'WINNERS',
-    division: '버금',
-    seasons: [
-      { year: 2019, prelimPoints: 4, finalsPoints: 6 },
-      { year: 2020, prelimPoints: 5, finalsPoints: 7 },
-      { year: 2021, prelimPoints: 5, finalsPoints: 8 },
-      { year: 2022, prelimPoints: 9, finalsPoints: 12 },
-      { year: 2023, prelimPoints: 15, finalsPoints: 18 },
-      { year: 2024, prelimPoints: 13, finalsPoints: 15 },
-    ],
-    note: '23시즌 버금 준우승, 투수진 WAR 상승',
-  },
-];
+const FINALS_STAGE_POINTS: Record<FinalsStage, number> = {
+  champion: 25,
+  runnerUp: 20,
+  semis: 15,
+  quarters: 10, // 8강 / 버금우승
+  round16: 5, // 16강 / 버금준우승
+  groupOut: 0,
+  none: 0,
+};
 
-export const getAvailableSeasonYears = (rows: PowerRankingRow[] = basePowerRanking) => {
+export const finalsStageToPoints = (stage: FinalsStage | undefined, override?: number) => {
+  if (typeof override === 'number') return override;
+  if (!stage) return 0;
+  return FINALS_STAGE_POINTS[stage] ?? 0;
+};
+
+export const computePrelimPoints = (input: TeamSeasonPowerInput) => {
+  const wins = input.prelimWins ?? 0;
+  const draws = input.prelimDraws ?? 0;
+  const losses = input.prelimLosses ?? 0;
+  const gamesPlayed = input.prelimGamesPlayed ?? wins + draws + losses;
+  const baseGames = input.prelimBaseGames ?? 4; // 4경기 기준 환산
+
+  const raw = wins * 3 + draws * 1 + losses * 0;
+  if (!gamesPlayed || gamesPlayed === baseGames) return raw;
+
+  const adjustFactor = baseGames / gamesPlayed;
+  return Math.round(raw * adjustFactor * 100) / 100;
+};
+
+export const buildPowerRankingRowsFromTeamSeasons = (
+  seasons: TeamSeasonPowerInput[],
+  teams?: Team[],
+): PowerRankingRow[] => {
+  const grouped = new Map<string, PowerRankingRow>();
+
+  seasons.forEach((season) => {
+    const teamMeta = teams?.find((t) => t.id === season.teamId);
+    const prelimPoints = computePrelimPoints(season);
+    const finalsPoints = finalsStageToPoints(season.finalsStage, season.finalsPointsOverride);
+
+    if (!grouped.has(season.teamId)) {
+      grouped.set(season.teamId, {
+        id: season.teamId,
+        university: season.university ?? teamMeta?.university ?? teamMeta?.name ?? season.teamId,
+        nickname: season.nickname,
+        division: season.division ?? undefined,
+        seasons: [],
+      });
+    }
+
+    grouped.get(season.teamId)!.seasons.push({
+      year: season.year,
+      prelimPoints,
+      finalsPoints,
+    });
+  });
+
+  return Array.from(grouped.values());
+};
+
+export const getAvailableSeasonYears = (rows: PowerRankingRow[]) => {
   const years = new Set<number>();
   rows.forEach((row) => row.seasons.forEach((s) => years.add(s.year)));
   return Array.from(years).sort((a, b) => a - b);
@@ -196,7 +78,7 @@ export const getAvailableSeasonYears = (rows: PowerRankingRow[] = basePowerRanki
 
 export const computePowerRankingRows = (
   rankingYear: number,
-  rows: PowerRankingRow[] = basePowerRanking,
+  rows: PowerRankingRow[],
   weights: number[] = POWER_RANKING_WEIGHTS,
 ): ComputedPowerRankingRow[] => {
   const windowYears = [rankingYear - 1, rankingYear - 2, rankingYear - 3];
@@ -209,7 +91,7 @@ export const computePowerRankingRows = (
       yearTotals[year] = Math.round(total * 10) / 10;
     });
 
-    const weightedScore = windowYears.reduce((acc, year, idx) => acc + yearTotals[year] * (weights[idx] ?? 0), 0);
+    const weightedScore = windowYears.reduce((acc, year, idx) => acc + (yearTotals[year] ?? 0) * (weights[idx] ?? 0), 0);
 
     return {
       ...row,
@@ -220,4 +102,28 @@ export const computePowerRankingRows = (
   });
 };
 
-export const POWER_RANKING_DATA = basePowerRanking;
+// ----- Demo: DB 형태 입력을 흉내 낸 시즌별 원시 데이터 -----
+export const DEMO_TEAM_SEASONS: TeamSeasonPowerInput[] = [
+  // 한양대
+  { teamId: 'hanyang-bulse', university: '한양대학교', nickname: '불새', division: '으뜸', year: 2024, prelimWins: 6, prelimDraws: 2, prelimLosses: 0, finalsStage: 'semis' },
+  { teamId: 'hanyang-bulse', university: '한양대학교', nickname: '불새', division: '으뜸', year: 2023, prelimWins: 8, prelimDraws: 0, prelimLosses: 0, finalsStage: 'champion' },
+  { teamId: 'hanyang-bulse', university: '한양대학교', nickname: '불새', division: '으뜸', year: 2022, prelimWins: 4, prelimDraws: 0, prelimLosses: 0, finalsStage: 'champion' },
+  { teamId: 'hanyang-bulse', university: '한양대학교', nickname: '불새', division: '으뜸', year: 2021, prelimWins: 4, prelimDraws: 0, prelimLosses: 0, finalsStage: 'runnerUp' },
+  // 한국외대(서울)
+  { teamId: 'hufs-seoul', university: '한국외대(서울)', nickname: 'UNION', division: '으뜸', year: 2024, prelimWins: 6, prelimDraws: 1, prelimLosses: 1, finalsStage: 'runnerUp' },
+  { teamId: 'hufs-seoul', university: '한국외대(서울)', nickname: 'UNION', division: '으뜸', year: 2023, prelimWins: 7, prelimDraws: 0, prelimLosses: 1, finalsStage: 'runnerUp' },
+  { teamId: 'hufs-seoul', university: '한국외대(서울)', nickname: 'UNION', division: '으뜸', year: 2022, prelimWins: 5, prelimDraws: 1, prelimLosses: 0, finalsStage: 'semis' },
+  { teamId: 'hufs-seoul', university: '한국외대(서울)', nickname: 'UNION', division: '으뜸', year: 2021, prelimWins: 3, prelimDraws: 1, prelimLosses: 0, finalsStage: 'semis' },
+  // 연세대
+  { teamId: 'yonsei-eagles', university: '연세대학교', nickname: 'EAGLES', division: '으뜸', year: 2024, prelimWins: 6, prelimDraws: 1, prelimLosses: 1, finalsStage: 'semis' },
+  { teamId: 'yonsei-eagles', university: '연세대학교', nickname: 'EAGLES', division: '으뜸', year: 2023, prelimWins: 6, prelimDraws: 0, prelimLosses: 2, finalsStage: 'semis' },
+  { teamId: 'yonsei-eagles', university: '연세대학교', nickname: 'EAGLES', division: '으뜸', year: 2022, prelimWins: 5, prelimDraws: 1, prelimLosses: 0, finalsStage: 'semis' },
+  { teamId: 'yonsei-eagles', university: '연세대학교', nickname: 'EAGLES', division: '으뜸', year: 2021, prelimWins: 3, prelimDraws: 2, prelimLosses: 0, finalsStage: 'quarters' },
+  // 기타 버금/으뜸 샘플
+  { teamId: 'hufs-global-union', university: '한국외대(글로벌)', nickname: 'UNION', division: '버금', year: 2024, prelimWins: 5, prelimDraws: 2, prelimLosses: 1, finalsStage: 'champion' },
+  { teamId: 'hufs-global-union', university: '한국외대(글로벌)', nickname: 'UNION', division: '버금', year: 2023, prelimWins: 6, prelimDraws: 0, prelimLosses: 2, finalsStage: 'champion' },
+  { teamId: 'hufs-global-union', university: '한국외대(글로벌)', nickname: 'UNION', division: '버금', year: 2022, prelimWins: 4, prelimDraws: 1, prelimLosses: 1, finalsStage: 'semis' },
+  { teamId: 'hufs-global-union', university: '한국외대(글로벌)', nickname: 'UNION', division: '버금', year: 2021, prelimWins: 3, prelimDraws: 1, prelimLosses: 1, finalsStage: 'quarters' },
+];
+
+export const DEMO_POWER_RANKING_ROWS = buildPowerRankingRowsFromTeamSeasons(DEMO_TEAM_SEASONS);

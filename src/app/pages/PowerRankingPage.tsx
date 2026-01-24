@@ -1,11 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  POWER_RANKING_DATA,
   POWER_RANKING_WEIGHTS,
+  DEMO_POWER_RANKING_ROWS,
+  DEMO_TEAM_SEASONS,
+  buildPowerRankingRowsFromTeamSeasons,
   computePowerRankingRows,
   getAvailableSeasonYears,
 } from '../../features/rankings/data/powerRankings';
-import type { ComputedPowerRankingRow } from '../../features/rankings/types';
+import type { ComputedPowerRankingRow, PowerRankingRow } from '../../features/rankings/types';
 
 type SortKey = 'weightedScore' | number | 'university';
 
@@ -20,15 +22,49 @@ const getSortValue = (row: ComputedPowerRankingRow, key: SortKey) => {
 };
 
 export default function PowerRankingPage() {
-  const seasonYears = getAvailableSeasonYears(POWER_RANKING_DATA);
-  const maxSeasonYear = Math.max(...seasonYears);
-  const defaultRankingYear = maxSeasonYear + 1; // 최신 시즌 직후(현재 시즌) 기준
-
-  const [rankingYear, setRankingYear] = useState<number>(defaultRankingYear);
+  const [rows, setRows] = useState<PowerRankingRow[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [rankingYear, setRankingYear] = useState<number>(new Date().getFullYear());
   const [sortKey, setSortKey] = useState<SortKey>('weightedScore');
   const [direction, setDirection] = useState<'desc' | 'asc'>('desc');
 
-  const computedRows = useMemo(() => computePowerRankingRows(rankingYear, POWER_RANKING_DATA, POWER_RANKING_WEIGHTS), [rankingYear]);
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        // TODO: 실제 DB/API 연동 시 아래를 교체하세요.
+        // const res = await fetch('/api/power-ranking/seasons');
+        // const seasons = (await res.json()) as TeamSeasonPowerInput[];
+        const seasons = DEMO_TEAM_SEASONS;
+        const hydratedRows = buildPowerRankingRowsFromTeamSeasons(seasons);
+        setRows(hydratedRows);
+
+        const years = getAvailableSeasonYears(hydratedRows);
+        if (years.length >= 3) {
+          setRankingYear(Math.max(...years) + 1);
+        }
+      } catch (err) {
+        console.error(err);
+        setError('파워랭킹 데이터를 불러오지 못했습니다. 데모 데이터로 대체했습니다.');
+        setRows(DEMO_POWER_RANKING_ROWS);
+        const years = getAvailableSeasonYears(DEMO_POWER_RANKING_ROWS);
+        if (years.length >= 3) {
+          setRankingYear(Math.max(...years) + 1);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  const computedRows = useMemo(
+    () => (rows.length ? computePowerRankingRows(rankingYear, rows, POWER_RANKING_WEIGHTS) : []),
+    [rankingYear, rows],
+  );
+  const seasonYears = useMemo(() => getAvailableSeasonYears(rows), [rows]);
   const windowYears = computedRows[0]?.windowYears ?? [rankingYear - 1, rankingYear - 2, rankingYear - 3];
 
   const sortOptions: { key: SortKey; label: string }[] = [
@@ -54,6 +90,23 @@ export default function PowerRankingPage() {
   }, [computedRows, direction, sortKey]);
 
   const top3 = sortedRows.slice(0, 3);
+
+  if (loading) {
+    return (
+      <div style={{ padding: '32px', color: '#cbd5e1' }}>
+        <p style={{ margin: 0, fontWeight: 800 }}>파워랭킹 데이터를 불러오는 중입니다...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ padding: '32px', color: '#cbd5e1', display: 'grid', gap: '12px' }}>
+        <p style={{ margin: 0, fontWeight: 900, color: '#f97316' }}>데이터 로딩 오류</p>
+        <p style={{ margin: 0 }}>{error}</p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'grid', gap: '24px' }}>
@@ -127,18 +180,22 @@ export default function PowerRankingPage() {
                 fontWeight: 800,
               }}
             >
-              {seasonYears
-                .filter((y) => y >= Math.min(...seasonYears) + 2) // 직전 3개년 확보를 위해 최소 2만큼 위
-                .map((mostRecentSeason) => {
-                  const targetYear = mostRecentSeason + 1; // 해당 시즌 직후 랭킹
-                  const yrs = [mostRecentSeason, mostRecentSeason - 1, mostRecentSeason - 2];
-                  return (
-                    <option key={targetYear} value={targetYear}>
-                      {targetYear} 시즌 (직전 {yrs[0]}, {yrs[1]}, {yrs[2]})
-                    </option>
-                  );
-                })
-                .reverse()}
+              {seasonYears.length >= 3 ? (
+                seasonYears
+                  .filter((y) => y >= Math.min(...seasonYears) + 2) // 직전 3개년 확보를 위해 최소 2만큼 위
+                  .map((mostRecentSeason) => {
+                    const targetYear = mostRecentSeason + 1; // 해당 시즌 직후 랭킹
+                    const yrs = [mostRecentSeason, mostRecentSeason - 1, mostRecentSeason - 2];
+                    return (
+                      <option key={targetYear} value={targetYear}>
+                        {targetYear} 시즌 (직전 {yrs[0]}, {yrs[1]}, {yrs[2]})
+                      </option>
+                    );
+                  })
+                  .reverse()
+              ) : (
+                <option value={rankingYear}>데이터 대기</option>
+              )}
             </select>
           </label>
 
