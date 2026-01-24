@@ -22,8 +22,9 @@ const mainButtons = [
 ];
 
 const secondaryButtons = [
-  { label: '볼넷', color: '#22c55e', action: 'walk' },
+  { label: '고의4구', color: '#22c55e', action: 'intentional_walk' },
   { label: '사구', color: '#22c55e', action: 'hbp' },
+  { label: '타격 방해', color: '#f97316', action: 'catcher_interference' },
   { label: '카운트 리셋', color: '#94a3b8', action: 'resetCount' },
   { label: '주자 클리어', color: '#94a3b8', action: 'clearBases' },
   { label: '이닝 전환', color: '#94a3b8', action: 'nextHalf' },
@@ -31,6 +32,11 @@ const secondaryButtons = [
 
 const battedBallResultOptions = [
   { label: '파울', color: '#facc15', value: 'foul' as const, helper: '스트라이크 누적', group: 'count' as const },
+  { label: '쓰리번트 파울', color: '#ef4444', value: 'out_three_bunt' as const, helper: '3번 번트 파울', group: 'out' as const },
+  { label: '고의4구', color: '#22c55e', value: 'intentional_walk' as const, helper: '주자 상황 유지', group: 'reach' as const },
+  { label: '타격방해', color: '#22c55e', value: 'catcher_interference' as const, helper: '포수·수비 방해 출루', group: 'reach' as const },
+  { label: '실책 출루', color: '#f97316', value: 'reach_error' as const, helper: '수비 실책으로 출루', group: 'reach' as const },
+  { label: '야수선택', color: '#a5b4fc', value: 'fc' as const, helper: '안타 아님 · 타자 1루', group: 'reach' as const },
   { label: '1루타', color: '#3b82f6', value: 'single' as const, helper: '타자·주자 1루', group: 'hit' as const },
   { label: '내야 안타', color: '#3b82f6', value: 'single_infield' as const, helper: '1루타 · 내야', group: 'hit' as const },
   { label: '번트 안타', color: '#3b82f6', value: 'single_bunt' as const, helper: '1루타 · 번트', group: 'hit' as const },
@@ -51,57 +57,109 @@ const battedBallResultOptions = [
   { label: '희생번트', color: '#facc15', value: 'sac_bunt' as const, helper: '주자 진루 번트', group: 'sac' as const },
 ];
 
-const battedBallResultGroups: { key: 'count' | 'hit' | 'out' | 'sac'; label: string }[] = [
+const battedBallResultGroups: { key: 'count' | 'hit' | 'out' | 'sac' | 'reach'; label: string }[] = [
   { key: 'count', label: '파울/카운트' },
-  { key: 'hit', label: '안타/출루' },
+  { key: 'hit', label: '안타' },
   { key: 'out', label: '인플레이 아웃' },
   { key: 'sac', label: '희생' },
+  { key: 'reach', label: '출루/선택' },
 ];
 
 const baseBattedBallType = '선택 안 함';
-const hitContactTypeOptions = [
-  baseBattedBallType,
-  '내야 느린 땅볼',
-  '내야 강한 땅볼',
-  '내야 라인드라이브',
-  '외야 앞에 떨어짐',
-  '외야 직선타',
-  '외야 넘어감/장타',
-  '번트 안타',
-];
+const singleTypeOptions = [baseBattedBallType, '외야 앞에 떨어짐', '외야 강한 직선타', '갭 사이 안타', '라인 따라 안타'];
+const infieldHitTypeOptions = [baseBattedBallType, '느린 내야 땅볼', '강한 내야 땅볼', '내야 라인드라이브'];
+const buntHitTypeOptions = [baseBattedBallType, '드래그 번트 안타', '푸시 번트 안타', '기습 번트 안타'];
+const extraBaseHitTypeOptions = [baseBattedBallType, '갭 장타', '라인 장타', '펜스 직격/원바운드'];
+const groundRuleDoubleTypeOptions = [baseBattedBallType, '원바운드 담장', '관중석/펜스 이탈'];
+const hrTypeOptions = [baseBattedBallType, '오버 더 펜스', '인사이드 더 파크'];
 const sacFlyTypeOptions = [baseBattedBallType, '좌익수 희생플라이', '중견수 희생플라이', '우익수 희생플라이', '파울 플라이 희생'];
 const sacBuntTypeOptions = [baseBattedBallType, '스퀴즈 번트', '1루쪽 희생번트', '3루쪽 희생번트', '투수 앞 희생번트'];
 const groundOutTypeOptions = [baseBattedBallType, '느린 땅볼', '강한 땅볼', '바운드 조정 땅볼'];
-const flyOutTypeOptions = [baseBattedBallType, '얕은 플라이', '깊은 플라이', '팝업/인필드'];
-const lineOutTypeOptions = [baseBattedBallType, '직선타(내야)', '직선타(외야)'];
+const outfieldFlyTypeOptions = [baseBattedBallType, '얕은 플라이', '깊은 플라이', '파울 플라이(외야)'];
+const lineOutTypeOptions = [baseBattedBallType, '직선타(내야)', '직선타(외야)', '강습 라이너'];
 const infieldFlyTypeOptions = [baseBattedBallType, '인필드 플라이 선언'];
 const infieldFielderOptions = ['선택 안 함', '투수', '포수', '1루수', '2루수', '3루수', '유격수'];
 const outfieldFielderOptions = ['선택 안 함', '좌익수', '중견수', '우익수', '좌익수 파울', '우익수 파울'];
 const defaultTypeOptions = [baseBattedBallType];
+const defensePosOptions = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', '기타'];
 const defaultZoneOptions = [
   '선택 안 함',
-  '3루 라인/코너',
-  '좌익수 앞',
+  '좌선(좌익수 라인)',
+  '좌익수 파울/라인',
+  '좌전(좌익수 앞)',
   '좌중간 갭',
-  '중견수 정면',
+  '좌중 펜스/깊숙',
+  '중전(중견수 정면)',
+  '중견수 깊숙/펜스',
+  '우중 펜스/깊숙',
   '우중간 갭',
-  '우익수 앞',
-  '1루 라인/코너',
-  '내야 앞/번트',
+  '우전(우익수 앞)',
+  '우익수 파울/라인',
+  '우선(우익수 라인)',
+];
+const infieldGroundZoneOptions = [
+  '선택 안 함',
+  '포수 앞',
+  '투수 앞',
+  '3루수 정면',
+  '유격수 정면',
+  '2루수 정면',
+  '1루수 정면',
+  '3루 라인 땅볼',
+  '1루 라인 땅볼',
+  '내야 뜬공(포수)',
+  '내야 뜬공(1루수)',
+  '내야 뜬공(2루수)',
+  '내야 뜬공(3루수)',
+  '내야 뜬공(투수)',
+];
+const fcZoneOptions = Array.from(
+  new Set([
+    ...infieldGroundZoneOptions,
+    ...defaultZoneOptions,
+  ]),
+);
+const lineDriveZoneOptions = [
+  '선택 안 함',
+  '3루 강습 라이너',
+  '유격수 라이너',
+  '2루수 라이너',
+  '1루 강습 라이너',
+  '좌익수 라이너',
+  '좌중간 라이너',
+  '중견수 라이너',
+  '우중간 라이너',
+  '우익수 라이너',
 ];
 const infieldFlyZoneOptions = [
   '선택 안 함',
-  '포수 파울',
-  '1루 파울',
-  '3루 파울',
+  '포수 파울 팝업',
+  '1루 파울 팝업',
+  '3루 파울 팝업',
   '투수 앞',
-  '1루 앞',
-  '2루 앞',
-  '3루 앞',
   '마운드 뒤',
+  '1루 앞',
+  '2루 베이스 부근',
+  '3루 앞',
 ];
-const buntZoneOptions = ['선택 안 함', '1루선상', '3루선상', '포수 앞', '투수 앞', '1루 앞', '3루 앞'];
-const errorTypeOptions = ['포구', '송구', '포구 후 송구', '기타'];
+const buntZoneOptions = [
+  '선택 안 함',
+  '1루쪽 번트',
+  '3루쪽 번트',
+  '포수 앞 짧은 번트',
+  '투수 앞 짧은 번트',
+  '1루선상 번트',
+  '3루선상 번트',
+];
+const errorTypeOptions = [
+  { value: '포구', label: '포구: 잡지 못함' },
+  { value: '송구', label: '송구: 송구 미스/빗나감' },
+  { value: '포구 후 송구', label: '포구 후 송구: 포구는 성공, 송구 실책' },
+  { value: 'WP(폭투)', label: 'WP: 폭투' },
+  { value: 'PB(포일)', label: 'PB: 포일' },
+  { value: 'BK(보크)', label: 'BK: 보크' },
+  { value: '기타', label: '기타' },
+];
 type HitResultAction = Extract<(typeof battedBallResultOptions)[number]['value'], 'single' | 'single_infield' | 'single_bunt' | 'double' | 'double_ground' | 'triple' | 'hr'>;
 type BattedBallResultAction = (typeof battedBallResultOptions)[number]['value'];
 type HitWizardStep = 'result' | 'type' | 'zone';
@@ -112,6 +170,12 @@ type HitWizardState = {
   zone: string;
   fielder: string;
 };
+
+function requiresAdvanceModal(result: BattedBallResultAction | null) {
+  return ['single', 'single_infield', 'single_bunt', 'double', 'double_ground', 'triple', 'fc'].includes(
+    result as BattedBallResultAction,
+  );
+}
 type ActionModalData =
   | { role: 'runner'; name: string; base: 0 | 1 | 2 }
   | { role: 'batter'; name: string; side: Side; lineupIndex: number }
@@ -176,23 +240,54 @@ function baseLabel(idx: number) {
 
 function getTypeOptionsForResult(result: BattedBallResultAction | null) {
   if (!result) return defaultTypeOptions;
-  if (['single', 'single_infield', 'single_bunt', 'double', 'double_ground', 'triple', 'hr'].includes(result)) {
-    return hitContactTypeOptions;
+  switch (result) {
+    case 'single':
+      return singleTypeOptions;
+    case 'single_infield':
+      return infieldHitTypeOptions;
+    case 'single_bunt':
+      return buntHitTypeOptions;
+    case 'double':
+    case 'triple':
+      return extraBaseHitTypeOptions;
+    case 'double_ground':
+      return groundRuleDoubleTypeOptions;
+    case 'hr':
+      return hrTypeOptions;
+    case 'sac_fly':
+      return sacFlyTypeOptions;
+    case 'sac_bunt':
+      return sacBuntTypeOptions;
+    case 'out_ground':
+    case 'out_dp2':
+    case 'out_tp3':
+      return groundOutTypeOptions;
+    case 'out_fly':
+    case 'out_outfield_fly':
+      return outfieldFlyTypeOptions;
+    case 'out_line':
+      return lineOutTypeOptions;
+    case 'out_infield_fly':
+    case 'out_infield_fly_rule':
+      return infieldFlyTypeOptions;
+    default:
+      return defaultTypeOptions;
   }
-  if (result === 'sac_fly') return sacFlyTypeOptions;
-  if (result === 'sac_bunt') return sacBuntTypeOptions;
-  if (['out_ground', 'out_dp2', 'out_tp3'].includes(result)) return groundOutTypeOptions;
-  if (['out_fly', 'out_outfield_fly'].includes(result)) return flyOutTypeOptions;
-  if (result === 'out_line') return lineOutTypeOptions;
-  if (result === 'out_infield_fly') return flyOutTypeOptions;
-  if (result === 'out_infield_fly_rule') return infieldFlyTypeOptions;
-  return defaultTypeOptions;
 }
 
 function getZoneOptionsForResult(result: BattedBallResultAction | null) {
   if (!result) return defaultZoneOptions;
   if (isInfieldFlyResult(result)) return infieldFlyZoneOptions;
   if (result === 'sac_bunt' || result === 'single_bunt') return buntZoneOptions;
+  if (
+    result === 'single_infield' ||
+    result === 'out_ground' ||
+    result === 'out_dp2' ||
+    result === 'out_tp3'
+  )
+    return infieldGroundZoneOptions;
+  if (result === 'fc') return fcZoneOptions;
+  if (result === 'out_line') return lineDriveZoneOptions;
   return defaultZoneOptions;
 }
 
@@ -224,6 +319,15 @@ function defensePositionNumber(pos: string) {
   return normalized || '-';
 }
 
+function decorateErrorType(errorType: string, fielderPos: string) {
+  const specialPrefixes = ['WP', 'PB', 'BK'];
+  if (specialPrefixes.some((p) => errorType.startsWith(p))) return errorType;
+  if (errorType.startsWith('E')) return errorType;
+  const posCode = defensePositionNumber(fielderPos);
+  if (/^[1-9]$/.test(posCode)) return `E${posCode} ${errorType}`;
+  return `실책 ${errorType}`;
+}
+
 function formatRunnerOutcomeLabel(outcome: RunnerAdvanceOutcome) {
   if (outcome === 'advance') return '진루';
   if (outcome === 'score') return '득점';
@@ -239,9 +343,13 @@ function formatErrorAdvanceResults(error?: ErrorDetails | string | null) {
   const parts: string[] = [];
   if (error.advanceResults.batter === 'out') {
     parts.push('타자:아웃');
+  } else if (error.advanceResults.batter === 'hold') {
+    parts.push('타자:유지');
   } else {
     const batterBase = error.advanceResults.batter;
-    parts.push(`타자:${batterBase >= 4 ? '홈(득점)' : `${batterBase}루`}`);
+    if (typeof batterBase === 'number') {
+      parts.push(`타자:${batterBase >= 4 ? '홈(득점)' : `${batterBase}루`}`);
+    }
   }
   Object.entries(error.advanceResults.runners).forEach(([base, outcome]) => {
     if (!outcome) return;
@@ -352,6 +460,8 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
     if (normalized.includes('3루타')) return '3B';
     if (normalized.includes('2루타')) return '2B';
     if (normalized.includes('1루타')) return '1B';
+    if (event.type === 'fc' || normalized.includes('야수선택') || normalized.toUpperCase().includes('F.C')) return 'FC';
+    if (normalized.includes('타격방해')) return 'CI';
     if (normalized.includes('고의') || normalized.toUpperCase().includes('IB')) return 'IB';
     if (event.type === 'walk' || normalized.includes('볼넷') || normalized.includes('4구')) return 'B';
     if (event.type === 'hbp' || normalized.includes('몸에맞는공')) return 'HP';
@@ -448,11 +558,11 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   const writeHitterStats = (side: 'home' | 'away', label: string) => {
     addBlank();
     add(`실시간 타자 기록 - ${label}`);
-    add('선수', '포지션', '타석', '타수', '안타', '1루타', '2루타', '3루타', '홈런', '볼넷', '사구', '삼진', '희생', '타율', '출루율');
+    add('선수', '포지션', '타석', '타수', '안타', '1루타', '2루타', '3루타', '홈런', '볼넷', '타격방해', '야수선택', '사구', '삼진', '희생', '타율', '출루율');
     stats.hitters[side].forEach((s) => {
-      const obpDen = s.ab + s.bb + s.hbp + s.sac;
+      const obpDen = s.ab + s.bb + s.hbp + s.sac + s.ci;
       const avg = s.ab > 0 ? s.h / s.ab : 0;
-      const obp = obpDen > 0 ? (s.h + s.bb + s.hbp) / obpDen : 0;
+      const obp = obpDen > 0 ? (s.h + s.bb + s.hbp + s.ci) / obpDen : 0;
       add(
         s.name,
         s.pos,
@@ -464,6 +574,8 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
         s.triples,
         s.hr,
         s.bb,
+        s.ci,
+        s.fc,
         s.hbp,
         s.so,
         s.sac,
@@ -660,6 +772,8 @@ function ensurePlayerStat(name: string, pos?: string): PlayerStat {
     triples: 0,
     hr: 0,
     bb: 0,
+    ci: 0,
+    fc: 0,
     hbp: 0,
     so: 0,
     sac: 0,
@@ -672,8 +786,11 @@ function classifyResult(result: string) {
   if (normalized.includes('3루타')) return 'triple' as const;
   if (normalized.includes('2루타')) return 'double' as const;
   if (normalized.includes('1루타')) return 'single' as const;
+  if (normalized.includes('고의') || normalized.toUpperCase().includes('IB')) return 'bb' as const;
   if (normalized.includes('볼넷')) return 'bb' as const;
   if (normalized.includes('몸에맞는공')) return 'hbp' as const;
+  if (normalized.includes('타격방해')) return 'ci' as const;
+  if (normalized.includes('야수선택') || normalized.toUpperCase().includes('F.C')) return 'fc' as const;
   if (normalized.includes('희생플라이')) return 'sac' as const;
   if (normalized.includes('낫아웃')) return 'so_reach' as const;
   if (normalized.includes('삼진')) return 'so' as const;
@@ -905,6 +1022,20 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
           pitcherStat.bb += 1;
         }
         break;
+      case 'ci':
+        stat.pa += 1;
+        stat.bb += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+        }
+        break;
+      case 'fc':
+        stat.pa += 1;
+        stat.ab += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+        }
+        break;
       case 'hbp':
         stat.pa += 1;
         stat.hbp += 1;
@@ -1049,12 +1180,22 @@ export default function ScorekeeperPage() {
   const [hitWizard, setHitWizard] = useState<HitWizardState | null>(null);
   const [manualBroadcast, setManualBroadcast] = useState('');
   const [liveVideoUrlInput, setLiveVideoUrlInput] = useState(state.liveVideoUrl);
-  const [hitAdvanceModal, setHitAdvanceModal] = useState<null | { bases: 1 | 2 | 3; selections: RunnerAdvanceSelections }>(null);
+  const [hitAdvanceModal, setHitAdvanceModal] = useState<null | {
+    bases: 1 | 2 | 3;
+    selections: RunnerAdvanceSelections;
+    mode: 'hit' | 'fc';
+    contextNote: string;
+    fcFielder: string;
+    fcRelay: string;
+    fcTargetBase: '1' | '2' | '3' | '홈';
+    fcOutType: 'force' | 'tag';
+    pathNote: string;
+  }>(null);
+  const [lastHitWizard, setLastHitWizard] = useState<HitWizardState | null>(null);
+  const [errorOnPlayModal, setErrorOnPlayModal] = useState<null | { selections: RunnerAdvanceSelections; batterResult: 'out' | 'hold' | 1 | 2 | 3 | 4; errorType: string; context: string; fielder: string }>(null);
   const [showDroppedThirdStrike, setShowDroppedThirdStrike] = useState(false);
   const [battedBallType, setBattedBallType] = useState(baseBattedBallType);
   const [battedBallZone, setBattedBallZone] = useState(defaultZoneOptions[0]);
-  const [infieldFielder, setInfieldFielder] = useState(infieldFielderOptions[0]);
-  const [outfieldFielder, setOutfieldFielder] = useState(outfieldFielderOptions[0]);
   const recordPayload = useMemo(() => buildGameRecord(state), [state]);
   const [pendingExportId, setPendingExportId] = useState<string | null>(null);
   const isGameStarted = state.gameStarted;
@@ -1120,7 +1261,7 @@ export default function ScorekeeperPage() {
     }
   }, [pendingExportId, recordPayload, state.endedAt, state.gameOver]);
 
-  const openHitAdvanceModal = (bases: 1 | 2 | 3) => {
+  const openHitAdvanceModal = (bases: 1 | 2 | 3, mode: 'hit' | 'fc' = 'hit') => {
     if (controlsDisabled) return;
     const selections = state.bases.reduce<RunnerAdvanceSelections>((acc, runner, idx) => {
       if (runner) {
@@ -1129,7 +1270,17 @@ export default function ScorekeeperPage() {
       }
       return acc;
     }, {});
-    setHitAdvanceModal({ bases, selections });
+    setHitAdvanceModal({
+      bases,
+      selections,
+      mode,
+      contextNote: '',
+      fcFielder: 'P',
+      fcRelay: '없음',
+      fcTargetBase: '1',
+      fcOutType: 'force',
+      pathNote: '',
+    });
     setActionModal(null);
     setHitWizard(null);
   };
@@ -1198,8 +1349,8 @@ export default function ScorekeeperPage() {
     );
   };
 
-  const handleSelectBattedBallType = (type: string) =>
-    setHitWizard((prev) => (prev ? { ...prev, type, step: 'zone' } : prev));
+const handleSelectBattedBallType = (type: string) =>
+  setHitWizard((prev) => (prev ? { ...prev, type } : prev));
 
   const handleSelectBattedBallZone = (zone: string) =>
     setHitWizard((prev) => (prev ? { ...prev, zone } : prev));
@@ -1211,23 +1362,24 @@ export default function ScorekeeperPage() {
       result as HitResultAction,
     );
 
-  const handleConfirmHitWizard = () => {
-    if (!hitWizard?.result || controlsDisabled) {
-      setHitWizard(null);
-      return;
-    }
-    const details = buildBattedBallDetailsFromValues(hitWizard.type, hitWizard.zone);
+const handleConfirmHitWizard = () => {
+  if (!hitWizard?.result || controlsDisabled) {
+    setHitWizard(null);
+    return;
+  }
+  const details = buildBattedBallDetailsFromValues(hitWizard.type, hitWizard.zone);
     const fielderOptions = getFielderOptionsForResult(hitWizard.result);
     const fielderNote =
       fielderOptions && hitWizard.fielder && hitWizard.fielder !== fielderOptions[0] ? ` · 포구:${hitWizard.fielder}` : '';
-    setBattedBallType(hitWizard.type);
-    setBattedBallZone(hitWizard.zone);
-    setHitWizard(null);
-    if (isHitResult(hitWizard.result)) {
-      if (hitWizard.result === 'hr') {
-        actions.homeRun(details);
-      } else if (hitWizard.result === 'double' || hitWizard.result === 'double_ground') {
-        openHitAdvanceModal(2);
+  setBattedBallType(hitWizard.type);
+  setBattedBallZone(hitWizard.zone);
+  setLastHitWizard(hitWizard);
+  setHitWizard(null);
+  if (isHitResult(hitWizard.result)) {
+    if (hitWizard.result === 'hr') {
+      actions.homeRun(details);
+    } else if (hitWizard.result === 'double' || hitWizard.result === 'double_ground') {
+      openHitAdvanceModal(2);
       } else if (hitWizard.result === 'triple') {
         openHitAdvanceModal(3);
       } else {
@@ -1237,6 +1389,32 @@ export default function ScorekeeperPage() {
     }
 
     switch (hitWizard.result) {
+      case 'fc':
+        openHitAdvanceModal(1, 'fc');
+        break;
+      case 'intentional_walk':
+        actions.intentionalWalk();
+        break;
+      case 'reach_error': {
+        const initialSelections = state.bases.reduce<RunnerAdvanceSelections>((acc, runner, idx) => {
+          if (runner) acc[idx as 0 | 1 | 2] = 'hold';
+          return acc;
+        }, {});
+        setErrorOnPlayModal({
+          selections: initialSelections,
+          batterResult: 'hold',
+          errorType: errorTypeOptions[0].value,
+          context: '',
+          fielder: infieldFielderOptions[0],
+        });
+        break;
+      }
+      case 'out_three_bunt':
+        actions.addOutWithMessage('쓰리번트 파울 아웃', details);
+        break;
+      case 'catcher_interference':
+        actions.catcherInterference();
+        break;
       case 'sac_fly':
         actions.sacFly(details);
         break;
@@ -1316,8 +1494,14 @@ export default function ScorekeeperPage() {
       case 'walk':
         actions.walk();
         break;
+      case 'intentional_walk':
+        actions.intentionalWalk();
+        break;
       case 'hbp':
         actions.hbp();
+        break;
+      case 'catcher_interference':
+        actions.catcherInterference();
         break;
       case 'out_ground':
         actions.addOutWithMessage('땅볼 아웃', battedBallDetails);
@@ -1367,10 +1551,23 @@ export default function ScorekeeperPage() {
 
   const handleConfirmHitAdvance = () => {
     if (!hitAdvanceModal) return;
-    const { bases, selections } = hitAdvanceModal;
-    if (bases === 1) actions.hitSingle(selections, battedBallDetails);
-    if (bases === 2) actions.hitDouble(selections, battedBallDetails);
-    if (bases === 3) actions.hitTriple(selections, battedBallDetails);
+    const { bases, selections, mode, contextNote, fcFielder, fcRelay, fcTargetBase, fcOutType, pathNote } = hitAdvanceModal;
+    if (mode === 'fc') {
+      const parts: string[] = [];
+      if (fcFielder) parts.push(`${fcFielder} 처리`);
+      if (fcRelay && fcRelay !== '없음') parts.push(`중계 ${fcRelay}`);
+      if (fcTargetBase) parts.push(`${fcTargetBase}루 ${fcOutType === 'tag' ? '태그' : '포스'} 시도`);
+      if (contextNote?.trim()) parts.push(contextNote.trim());
+      const context = parts.join(' · ');
+      actions.fielderChoice(selections, battedBallDetails, context);
+    } else {
+      if (bases === 1) actions.hitSingle(selections, battedBallDetails);
+      if (bases === 2) actions.hitDouble(selections, battedBallDetails);
+      if (bases === 3) actions.hitTriple(selections, battedBallDetails);
+    }
+    if (pathNote?.trim()) {
+      actions.setPlay(`주루 메모 · ${pathNote.trim()}`);
+    }
     setHitAdvanceModal(null);
   };
 
@@ -1998,10 +2195,53 @@ export default function ScorekeeperPage() {
         <HitAdvanceModal
           bases={hitAdvanceModal.bases}
           basesState={state.bases}
+          mode={hitAdvanceModal.mode}
+          contextNote={hitAdvanceModal.contextNote}
+          fcFielder={hitAdvanceModal.fcFielder}
+          fcRelay={hitAdvanceModal.fcRelay}
+          fcTargetBase={hitAdvanceModal.fcTargetBase}
+          fcOutType={hitAdvanceModal.fcOutType}
           selections={hitAdvanceModal.selections}
           onChangeSelections={(next) => setHitAdvanceModal((prev) => (prev ? { ...prev, selections: next } : prev))}
+          onChangeContextNote={(text) => setHitAdvanceModal((prev) => (prev ? { ...prev, contextNote: text } : prev))}
+          onChangeFcFielder={(val) => setHitAdvanceModal((prev) => (prev ? { ...prev, fcFielder: val } : prev))}
+          onChangeFcRelay={(val) => setHitAdvanceModal((prev) => (prev ? { ...prev, fcRelay: val } : prev))}
+          onChangeFcTargetBase={(val) => setHitAdvanceModal((prev) => (prev ? { ...prev, fcTargetBase: val } : prev))}
+          onChangeFcOutType={(val) => setHitAdvanceModal((prev) => (prev ? { ...prev, fcOutType: val } : prev))}
           onClose={() => setHitAdvanceModal(null)}
+          onBack={() => {
+            setHitAdvanceModal(null);
+            if (lastHitWizard) {
+              setHitWizard({ ...lastHitWizard, step: 'zone' });
+            }
+          }}
           onConfirm={handleConfirmHitAdvance}
+        />
+      )}
+      {errorOnPlayModal && (
+        <ErrorOnPlayModal
+          basesState={state.bases}
+          defaultFielder={errorOnPlayModal.fielder}
+          defaultErrorType={errorOnPlayModal.errorType}
+          defaultContext={errorOnPlayModal.context}
+          defaultSelections={errorOnPlayModal.selections}
+          defaultBatterResult={errorOnPlayModal.batterResult}
+          onClose={() => setErrorOnPlayModal(null)}
+          onBack={() => {
+            setErrorOnPlayModal(null);
+            if (lastHitWizard) {
+              setHitWizard({ ...lastHitWizard, step: 'zone' });
+            }
+          }}
+          onConfirm={({ fielder, errorType, context, batterResult, selections }) => {
+            actions.recordError({
+              fielderPos: fielder || '수비',
+              errorType: decorateErrorType(errorType, fielder || '수비'),
+              context,
+              advanceResults: { batter: batterResult, runners: selections },
+            });
+            setErrorOnPlayModal(null);
+          }}
         />
       )}
       {showDroppedThirdStrike && (
@@ -2400,7 +2640,7 @@ function FieldSvg() {
 
 function buildRunnerOutcomeOptions(baseIndex: 0 | 1 | 2) {
   const options: { value: RunnerAdvanceOutcome; label: string; color: string }[] = [
-    { value: 'hold', label: '정지', color: '#e2e8f0' },
+    { value: 'hold', label: '정지/세이프', color: '#e2e8f0' },
   ];
   for (let base = baseIndex + 2; base <= 3; base += 1) {
     options.push({ value: base as 2 | 3, label: `${base}루`, color: '#22c55e' });
@@ -2417,19 +2657,47 @@ function baseLabelForIndex(baseIndex: number) {
 function HitAdvanceModal({
   bases,
   basesState,
+  mode,
+  contextNote,
+  fcFielder,
+  fcRelay,
+  fcTargetBase,
+  fcOutType,
+  pathNote,
   selections,
   onChangeSelections,
+  onChangeContextNote,
+  onChangeFcFielder,
+  onChangeFcRelay,
+  onChangeFcTargetBase,
+  onChangeFcOutType,
+  onChangePathNote,
   onClose,
+  onBack,
   onConfirm,
 }: {
   bases: 1 | 2 | 3;
   basesState: (string | null)[];
+  mode: 'hit' | 'fc';
+  contextNote?: string;
+  fcFielder?: string;
+  fcRelay?: string;
+  fcTargetBase?: '1' | '2' | '3' | '홈';
+  fcOutType?: 'force' | 'tag';
+  pathNote?: string;
   selections: RunnerAdvanceSelections;
   onChangeSelections: (next: RunnerAdvanceSelections) => void;
+  onChangeContextNote?: (text: string) => void;
+  onChangeFcFielder?: (val: string) => void;
+  onChangeFcRelay?: (val: string) => void;
+  onChangeFcTargetBase?: (val: '1' | '2' | '3' | '홈') => void;
+  onChangeFcOutType?: (val: 'force' | 'tag') => void;
+  onChangePathNote?: (val: string) => void;
   onClose: () => void;
+  onBack?: () => void;
   onConfirm: () => void;
 }) {
-  const hitLabel = `${bases}루타 주자 선택`;
+  const hitLabel = mode === 'fc' ? '야수선택 주자 처리' : `${bases}루타 주자 선택`;
   const runners = basesState
     .map((runner, idx) => (runner ? { runner, baseIndex: idx as 0 | 1 | 2 } : null))
     .filter(Boolean) as { runner: string; baseIndex: 0 | 1 | 2 }[];
@@ -2547,7 +2815,146 @@ function HitAdvanceModal({
             </div>
           )}
         </div>
+        {mode === 'fc' ? (
+          <div
+            style={{
+              display: 'grid',
+              gap: '6px',
+              padding: '10px 12px',
+              borderRadius: '12px',
+              border: '1px dashed rgba(148,163,184,0.35)',
+              background: 'rgba(255,255,255,0.03)',
+            }}
+          >
+            <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '13px' }}>
+              어떤 선택이었는지 메모하세요. (수비수 · 목적 베이스 · 포스/태그)
+            </span>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
+              <select
+                value={fcFielder}
+                onChange={(e) => onChangeFcFielder?.(e.target.value)}
+                style={{
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  padding: '10px',
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                }}
+              >
+                {defensePosOptions.map((pos) => (
+                  <option key={pos} value={pos}>
+                    {pos === '기타' ? '기타' : pos}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={fcRelay}
+                onChange={(e) => onChangeFcRelay?.(e.target.value)}
+                style={{
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  padding: '10px',
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                }}
+              >
+                {['없음', ...defensePosOptions].map((num) => (
+                  <option key={num} value={num}>
+                    {num === '없음' ? '중계 없음' : `중계 ${num}`}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={fcTargetBase}
+                onChange={(e) => onChangeFcTargetBase?.(e.target.value as '1' | '2' | '3' | '홈')}
+                style={{
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  padding: '10px',
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                }}
+              >
+                {['1','2','3','홈'].map((b) => (
+                  <option key={b} value={b}>
+                    {b}루
+                  </option>
+                ))}
+              </select>
+              <select
+                value={fcOutType}
+                onChange={(e) => onChangeFcOutType?.(e.target.value as 'force' | 'tag')}
+                style={{
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  padding: '10px',
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                }}
+              >
+                <option value="force">포스 아웃</option>
+                <option value="tag">태그 아웃</option>
+              </select>
+            </div>
+            <textarea
+              value={contextNote ?? ''}
+              onChange={(e) => onChangeContextNote?.(e.target.value)}
+              rows={2}
+              placeholder="예) 6-4 포스아웃, 1루 아웃 포기"
+              style={{
+                width: '100%',
+                borderRadius: '10px',
+                border: '1px solid rgba(148,163,184,0.35)',
+                background: '#0f172a',
+                color: '#e2e8f0',
+                fontWeight: 800,
+                padding: '10px',
+                fontSize: '13px',
+                resize: 'vertical',
+              }}
+            />
+            <div style={{ display: 'grid', gap: '4px' }}>
+              <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '13px' }}>주루 경로 메모</span>
+              <textarea
+                value={pathNote ?? ''}
+                onChange={(e) => onChangePathNote?.(e.target.value)}
+                rows={2}
+                placeholder="예) 6-2-5 런다운, 2루 주자 세이프"
+                style={{
+                  width: '100%',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                  padding: '10px',
+                  fontSize: '13px',
+                  resize: 'vertical',
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={onBack || onClose}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '10px',
+              border: '1px solid rgba(148,163,184,0.35)',
+              background: 'rgba(148,163,184,0.12)',
+              color: '#cbd5e1',
+              fontWeight: 900,
+              cursor: 'pointer',
+            }}
+          >
+            이전
+          </button>
           <button
             type="button"
             onClick={onClose}
@@ -2577,6 +2984,289 @@ function HitAdvanceModal({
             }}
           >
             적용하기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ErrorOnPlayModal({
+  basesState,
+  defaultFielder,
+  defaultSelections,
+  defaultBatterResult,
+  defaultErrorType,
+  defaultContext,
+  onClose,
+  onBack,
+  onConfirm,
+}: {
+  basesState: (string | null)[];
+  defaultFielder: string;
+  defaultSelections: RunnerAdvanceSelections;
+  defaultBatterResult: 'out' | 'hold' | 1 | 2 | 3 | 4;
+  defaultErrorType: string;
+  defaultContext: string;
+  onClose: () => void;
+  onBack?: () => void;
+  onConfirm: (details: { fielder: string; errorType: string; context: string; batterResult: 'out' | 'hold' | 1 | 2 | 3 | 4; selections: RunnerAdvanceSelections }) => void;
+}) {
+  const [fielder, setFielder] = useState(defaultFielder);
+  const [errorType, setErrorType] = useState(defaultErrorType);
+  const [context, setContext] = useState(defaultContext);
+  const [batterResult, setBatterResult] = useState<'out' | 'hold' | 1 | 2 | 3 | 4>(defaultBatterResult);
+  const [selections, setSelections] = useState<RunnerAdvanceSelections>(defaultSelections);
+
+  const runners = basesState
+    .map((runner, idx) => (runner ? { runner, baseIndex: idx as 0 | 1 | 2 } : null))
+    .filter(Boolean) as { runner: string; baseIndex: 0 | 1 | 2 }[];
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.6)',
+        display: 'grid',
+        placeItems: 'center',
+        zIndex: 1000,
+        padding: '20px',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 'min(640px, 100%)',
+          background: '#0f172a',
+          borderRadius: '16px',
+          border: '1px solid rgba(148, 163, 184, 0.25)',
+          padding: '18px',
+          display: 'grid',
+          gap: '12px',
+          color: '#e2e8f0',
+          boxShadow: '0 24px 60px rgba(0,0,0,0.4)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'grid', gap: '4px' }}>
+            <span style={{ fontWeight: 900 }}>실책 기록</span>
+            <span style={{ color: '#94a3b8', fontWeight: 700 }}>수비 실책으로 출루/진루를 기록합니다.</span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '18px', cursor: 'pointer', fontWeight: 800 }}
+          >
+            ✕
+          </button>
+        </div>
+
+        <div style={{ display: 'grid', gap: '10px' }}>
+          <div style={{ display: 'grid', gap: '6px' }}>
+            <span style={{ fontWeight: 800, color: '#cbd5e1', fontSize: '13px' }}>수비수/실책 유형</span>
+            <div style={{ display: 'grid', gap: '8px', gridTemplateColumns: '1fr 1fr' }}>
+              <select
+                value={fielder}
+                onChange={(e) => setFielder(e.target.value)}
+                style={{
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  padding: '10px',
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                }}
+              >
+                {defensePosOptions.map((pos) => (
+                  <option key={pos} value={pos}>
+                    {pos === '기타' ? '기타' : pos}
+                  </option>
+                ))}
+              </select>
+          <select
+            value={errorType}
+            onChange={(e) => setErrorType(e.target.value)}
+            style={{
+              borderRadius: '10px',
+              border: '1px solid rgba(148,163,184,0.35)',
+              padding: '10px',
+              background: '#0f172a',
+              color: '#e2e8f0',
+              fontWeight: 800,
+            }}
+          >
+            {errorTypeOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+            </div>
+          </div>
+
+        <div style={{ display: 'grid', gap: '6px' }}>
+          <span style={{ fontWeight: 800, color: '#cbd5e1', fontSize: '13px' }}>타자 결과</span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px,1fr))', gap: '8px' }}>
+            {[
+              { value: 'hold', label: '타자 유지' },
+              { value: 1, label: '타자 1루' },
+              { value: 2, label: '타자 2루' },
+              { value: 3, label: '타자 3루' },
+              { value: 4, label: '타자 득점' },
+              { value: 'out', label: '타자 아웃' },
+              ].map((opt) => {
+                const isSelected = batterResult === opt.value;
+                return (
+                  <button
+                    key={opt.label}
+                    type="button"
+                    onClick={() => setBatterResult(opt.value as 'out' | 1 | 2 | 3 | 4)}
+                    style={{
+                      padding: '10px',
+                      borderRadius: '10px',
+                      border: isSelected ? '1px solid rgba(249,115,22,0.7)' : '1px solid rgba(148,163,184,0.3)',
+                      background: isSelected ? 'rgba(249,115,22,0.12)' : 'rgba(255,255,255,0.03)',
+                      color: '#e2e8f0',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {runners.length ? (
+            <div style={{ display: 'grid', gap: '8px' }}>
+              <span style={{ fontWeight: 800, color: '#cbd5e1', fontSize: '13px' }}>주자 결과</span>
+              {runners.map((entry) => (
+                <div
+                  key={`${entry.baseIndex}-${entry.runner}`}
+                  style={{
+                    padding: '10px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(148,163,184,0.25)',
+                    background: 'rgba(255,255,255,0.03)',
+                    display: 'grid',
+                    gap: '8px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 900 }}>{baseLabelForIndex(entry.baseIndex)} 주자 · {entry.runner}</span>
+                    <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>기본: 정지</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px,1fr))', gap: '6px' }}>
+                    {buildRunnerOutcomeOptions(entry.baseIndex).map((opt) => {
+                      const isSelected = selections[entry.baseIndex] === opt.value;
+                      return (
+                        <button
+                          key={opt.label}
+                          type="button"
+                          onClick={() => setSelections({ ...selections, [entry.baseIndex]: opt.value })}
+                          style={{
+                            padding: '9px',
+                            borderRadius: '10px',
+                            border: isSelected ? `1px solid ${opt.color}` : '1px solid rgba(148,163,184,0.25)',
+                            background: isSelected ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)',
+                            color: opt.color,
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div
+              style={{
+                borderRadius: '10px',
+                border: '1px dashed rgba(148,163,184,0.35)',
+                padding: '12px',
+                color: '#94a3b8',
+                fontWeight: 700,
+                textAlign: 'center',
+              }}
+            >
+              주자가 없습니다. 타자만 결과가 기록됩니다.
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gap: '6px' }}>
+            <span style={{ fontWeight: 800, color: '#cbd5e1', fontSize: '13px' }}>상황 메모</span>
+            <textarea
+              value={context}
+              onChange={(e) => setContext(e.target.value)}
+              rows={2}
+              placeholder="예) 6 실책 송구, 타자 1루"
+              style={{
+                width: '100%',
+                borderRadius: '10px',
+                border: '1px solid rgba(148,163,184,0.35)',
+                background: '#0f172a',
+                color: '#e2e8f0',
+                fontWeight: 800,
+                padding: '10px',
+                fontSize: '13px',
+                resize: 'vertical',
+              }}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={onBack || onClose}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '10px',
+              border: '1px solid rgba(148,163,184,0.35)',
+              background: 'rgba(148,163,184,0.12)',
+              color: '#cbd5e1',
+              fontWeight: 900,
+              cursor: 'pointer',
+            }}
+          >
+            이전
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '10px',
+              border: '1px solid rgba(148,163,184,0.35)',
+              background: 'transparent',
+              color: '#cbd5e1',
+              fontWeight: 900,
+              cursor: 'pointer',
+            }}
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={() => onConfirm({ fielder, errorType, context, batterResult, selections })}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '10px',
+              border: '1px solid rgba(59,130,246,0.4)',
+              background: 'linear-gradient(90deg, #2563eb, #1d4ed8)',
+              color: '#f8fafc',
+              fontWeight: 900,
+              cursor: 'pointer',
+            }}
+          >
+            기록하기
           </button>
         </div>
       </div>
@@ -2714,8 +3404,20 @@ function HitWizardModal({
   const fielderOptions = getFielderOptionsForResult(state.result);
   const fielderSummary =
     fielderOptions && state.fielder && state.fielder !== fielderOptions[0] ? state.fielder : null;
-  const isFinalStep = state.step === 'zone';
-  const primaryDisabled = state.step === 'result' && !state.result;
+  const willOpenAdvance = requiresAdvanceModal(state.result);
+  const willOpenErrorModal = state.result === 'reach_error';
+  const isZoneStep = state.step === 'zone';
+  const isFinalStep = isZoneStep && !willOpenAdvance && !willOpenErrorModal;
+  const primaryDisabled =
+    (state.step === 'result' && !state.result) ||
+    (state.step === 'type' &&
+      !isInfieldFlyResult(state.result) &&
+      getTypeOptionsForResult(state.result).length > 0 &&
+      !state.type) ||
+    (state.step === 'zone' && !state.zone);
+
+  const primaryLabel = isZoneStep ? (isFinalStep ? '기록하기' : '다음') : isFinalStep ? '기록하기' : '다음';
+  const primaryAction = isZoneStep ? onConfirm : isFinalStep ? onConfirm : onNext;
 
   const renderStep = () => {
     if (state.step === 'result') {
@@ -2914,6 +3616,29 @@ function HitWizardModal({
           <div style={{ display: 'grid', gap: '4px' }}>
             <span style={{ fontWeight: 900 }}>타격 기록</span>
             <span style={{ color: '#94a3b8', fontWeight: 700 }}>결과 → 유형 → 방향 순서로 안내합니다.</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div
+                style={{
+                  flex: 1,
+                  height: '6px',
+                  borderRadius: '999px',
+                  background: 'rgba(148,163,184,0.25)',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${((currentStepIndex + 1) / steps.length) * 100}%`,
+                    height: '100%',
+                    background: 'linear-gradient(90deg, #2563eb, #22d3ee)',
+                    transition: 'width 150ms ease',
+                  }}
+                />
+              </div>
+              <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '12px' }}>
+                {currentStepIndex + 1}/{steps.length}
+              </span>
+            </div>
           </div>
           <button
             type="button"
@@ -3010,7 +3735,7 @@ function HitWizardModal({
             </button>
             <button
               type="button"
-              onClick={isFinalStep ? onConfirm : onNext}
+              onClick={primaryDisabled ? undefined : primaryAction}
               disabled={primaryDisabled}
               style={{
                 padding: '10px 14px',
@@ -3024,7 +3749,7 @@ function HitWizardModal({
                 boxShadow: primaryDisabled ? 'none' : '0 10px 20px rgba(37,99,235,0.25)',
               }}
             >
-              {isFinalStep ? '기록하기' : '다음'}
+              {primaryLabel}
             </button>
           </div>
         </div>
@@ -3048,22 +3773,27 @@ function ActionModal({
   bench: { name: string; pos: string; number: string; throws: string; bats: string }[];
   lineup: { name: string; pos: string; number: string; throws: string; bats: string }[];
 }) {
-  const [errorType, setErrorType] = useState(errorTypeOptions[0]);
+  const [errorType, setErrorType] = useState(errorTypeOptions[0].value);
   const [errorContext, setErrorContext] = useState('');
-  const [errorBatterResult, setErrorBatterResult] = useState<'out' | 1 | 2 | 3 | 4>(1);
+  const [errorBatterResult, setErrorBatterResult] = useState<'out' | 'hold' | 1 | 2 | 3 | 4>('hold');
   const [runnerSelections, setRunnerSelections] = useState<RunnerAdvanceSelections>({});
 
   useEffect(() => {
     if (data.role !== 'fielder') return;
-    setErrorType(errorTypeOptions[0]);
+    setErrorType(errorTypeOptions[0].value);
     setErrorContext('');
-    setErrorBatterResult(1);
+    setErrorBatterResult('hold');
     const initialSelections = bases.reduce<RunnerAdvanceSelections>((acc, runner, idx) => {
       if (runner) acc[idx as 0 | 1 | 2] = 'hold';
       return acc;
     }, {});
     setRunnerSelections(initialSelections);
   }, [bases, data.role]);
+
+  useEffect(() => {
+    const autoHold = errorType.startsWith('WP') || errorType.startsWith('PB') || errorType.startsWith('BK');
+    if (autoHold && errorBatterResult !== 'hold') setErrorBatterResult('hold');
+  }, [errorType, errorBatterResult]);
 
   const battingOrder =
     data.role === 'batter'
@@ -3101,6 +3831,8 @@ function ActionModal({
           <RunnerActionButton label="도루자 아웃" color="#ef4444" onClick={handleRunnerAction(() => actions.runnerCaught(data.base))} />
           <RunnerActionButton label="견제사" color="#ef4444" onClick={handleRunnerAction(() => actions.runnerPickoff(data.base))} />
           <RunnerActionButton label="주루사" color="#ef4444" onClick={handleRunnerAction(() => actions.runnerOut(data.base))} />
+          <RunnerActionButton label="런다운 아웃" color="#ef4444" onClick={handleRunnerAction(() => actions.runnerRundownOut(data.base))} />
+          <RunnerActionButton label="주루 방해" color="#f97316" onClick={handleRunnerAction(() => actions.runnerInterference(data.base))} />
         </>
       );
     }
@@ -3113,7 +3845,7 @@ function ActionModal({
             onClick={() => {
             actions.recordError({
               fielderPos: data.pos,
-              errorType,
+              errorType: decorateErrorType(errorType, data.pos),
               context: errorContext.trim(),
               advanceResults: { batter: errorBatterResult, runners: runnerSelections },
             });
@@ -3324,11 +4056,11 @@ function ActionModal({
                     fontWeight: 800,
                   }}
                 >
-                  {errorTypeOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
+                {errorTypeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
                 </select>
               </label>
               <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1', fontSize: '12px', fontWeight: 800 }}>
@@ -3355,7 +4087,9 @@ function ActionModal({
                   value={String(errorBatterResult)}
                   onChange={(e) => {
                     const value = e.target.value;
-                    setErrorBatterResult(value === 'out' ? 'out' : (Number(value) as 1 | 2 | 3 | 4));
+                    if (value === 'hold') setErrorBatterResult('hold');
+                    else if (value === 'out') setErrorBatterResult('out');
+                    else setErrorBatterResult(Number(value) as 1 | 2 | 3 | 4);
                   }}
                   style={{
                     borderRadius: '10px',
@@ -3367,6 +4101,7 @@ function ActionModal({
                     maxWidth: '220px',
                   }}
                 >
+                  <option value="hold">타자 유지</option>
                   <option value="out">아웃</option>
                   <option value="1">1루 진루</option>
                   <option value="2">2루 진루</option>
@@ -3384,13 +4119,16 @@ function ActionModal({
                     >
                       {baseLabel(idx)} 주자 · {runner}
                       <select
-                        value={runnerSelections[idx as 0 | 1 | 2] ?? 'hold'}
-                        onChange={(e) =>
+                        value={String(runnerSelections[idx as 0 | 1 | 2] ?? 'hold')}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          const parsed: RunnerAdvanceOutcome =
+                            v === 'hold' || v === 'out' || v === 'score' ? (v as RunnerAdvanceOutcome) : (Number(v) as RunnerAdvanceOutcome);
                           setRunnerSelections((prev) => ({
                             ...prev,
-                            [idx]: e.target.value as RunnerAdvanceOutcome,
-                          }))
-                        }
+                            [idx]: parsed,
+                          }));
+                        }}
                         style={{
                           borderRadius: '10px',
                           border: '1px solid rgba(148,163,184,0.35)',
@@ -3398,12 +4136,13 @@ function ActionModal({
                           color: '#e2e8f0',
                           padding: '6px 8px',
                           fontWeight: 800,
-                          maxWidth: '180px',
+                          maxWidth: '200px',
                         }}
                       >
-                        <option value="hold">유지</option>
-                        <option value="advance">진루</option>
-                        <option value="score">득점</option>
+                        <option value="hold">유지(정지)</option>
+                        <option value="2">다음 베이스(1칸)</option>
+                        <option value="3">두 베이스(2칸)</option>
+                        <option value="4">홈 득점</option>
                         <option value="out">아웃</option>
                       </select>
                     </label>
