@@ -8,7 +8,7 @@ import { useAdmin } from '../shared/auth/useAdmin';
 export default function Layout() {
   const location = useLocation();
   const { user, logout, initializing } = useAuth();
-  const { isAdmin } = useAdmin();
+  const { isAdmin, roleLabel, roleDetail } = useAdmin();
   const isLiveOverlay = location.pathname === '/live-overlay';
   const isScoreboardText = location.pathname === '/scoreboard-text';
   const isLanding = location.pathname === '/';
@@ -306,6 +306,24 @@ export default function Layout() {
                   <span style={{ color: '#cbd5e1', fontSize: '13px' }}>로그인 확인 중...</span>
                 ) : user ? (
                   <>
+                    <span
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '10px',
+                        background: isAdmin
+                          ? 'linear-gradient(120deg, rgba(249,115,22,0.3), rgba(253,186,116,0.35))'
+                          : 'rgba(148,163,184,0.18)',
+                        color: isAdmin ? '#f97316' : '#e2e8f0',
+                        fontWeight: 800,
+                        fontSize: '12px',
+                        border: isAdmin ? '1px solid rgba(249,115,22,0.6)' : '1px solid rgba(148,163,184,0.35)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.02em',
+                      }}
+                      title={`권한: ${roleLabel} (${roleDetail})`}
+                    >
+                      {roleLabel}
+                    </span>
                     <span
                       style={{
                         padding: '8px 12px',
