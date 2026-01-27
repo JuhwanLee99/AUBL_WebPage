@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
 import type { MatchSchedule, MatchStatus } from '../../shared/state/demoStore';
+import { useAdmin } from '../../shared/auth/useAdmin';
 
 const emptyForm = {
   homeTeamName: '',
@@ -163,6 +164,8 @@ const getSafeTime = (value: string) => {
 export default function MatchSchedulePage() {
   const { state, actions } = useDemoStore();
   const navigate = useNavigate();
+  const { isAdmin } = useAdmin();
+  const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [formLineups, setFormLineups] = useState<{ home: PlayerSlot[]; away: PlayerSlot[] }>(() => ({
@@ -230,6 +233,16 @@ export default function MatchSchedulePage() {
     );
     return { live, upcoming, past };
   }, [sortedMatches]);
+
+  const showBlockedTooltip = (el: HTMLElement | null) => {
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setTooltip({
+      text: '관리자 로그인이 필요합니다',
+      x: rect.left + rect.width / 2,
+      y: rect.bottom,
+    });
+  };
 
   const calendarWeeks = useMemo(() => {
     const firstDay = new Date(calendarMonth.year, calendarMonth.month, 1);
@@ -360,6 +373,14 @@ export default function MatchSchedulePage() {
       actions.selectMatch(match.id);
       navigate(path);
     };
+    const goToScorekeeper = (buttonEl: HTMLButtonElement | null) => {
+      if (!isAdmin) {
+        showBlockedTooltip(buttonEl);
+        return;
+      }
+      setTooltip(null);
+      goTo('/scorekeeper');
+    };
     const quickActionStyle: CSSProperties = {
       display: 'inline-flex',
       alignItems: 'center',
@@ -442,7 +463,24 @@ export default function MatchSchedulePage() {
                 <span aria-hidden>{hasLiveOverlay ? '🛰️' : '🚫'}</span>
                 {hasLiveOverlay ? '라이브 오버레이' : '라이브 없음'}
               </button>
-              <button type="button" onClick={() => goTo('/scorekeeper')} style={quickActionStyle} title="기록원">
+              <button
+                type="button"
+                onClick={(e) => goToScorekeeper(e.currentTarget)}
+                onMouseEnter={(e) => {
+                  if (!isAdmin) showBlockedTooltip(e.currentTarget);
+                }}
+                onMouseLeave={() => setTooltip(null)}
+                onFocus={(e) => {
+                  if (!isAdmin) showBlockedTooltip(e.currentTarget);
+                }}
+                onBlur={() => setTooltip(null)}
+                style={{
+                  ...quickActionStyle,
+                  cursor: isAdmin ? 'pointer' : 'not-allowed',
+                  color: isAdmin ? quickActionStyle.color : 'rgba(203,213,225,0.6)',
+                }}
+                title="기록원"
+              >
                 <span aria-hidden>📝</span>
                 기록원
               </button>
@@ -570,6 +608,28 @@ export default function MatchSchedulePage() {
 
   return (
     <div style={{ display: 'grid', gap: '24px' }}>
+      {tooltip && (
+        <div
+          style={{
+            position: 'fixed',
+            left: tooltip.x,
+            top: tooltip.y + 10,
+            transform: 'translate(-50%, 0)',
+            background: 'rgba(15,23,42,0.95)',
+            color: '#f97316',
+            padding: '8px 12px',
+            borderRadius: '10px',
+            border: '1px solid rgba(148,163,184,0.35)',
+            fontSize: '12px',
+            fontWeight: 700,
+            whiteSpace: 'nowrap',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+            zIndex: 2000,
+          }}
+        >
+          {tooltip.text}
+        </div>
+      )}
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h1 style={{ fontSize: '28px', fontWeight: 900, marginBottom: '8px' }}>경기 일정 및 결과</h1>
