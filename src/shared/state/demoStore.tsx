@@ -1,4 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
+import { collection, doc, onSnapshot, orderBy, query, setDoc, writeBatch } from 'firebase/firestore';
+import { auth, firestore } from '../firebase/client';
 import { MATCHES, TEAMS } from '../lib/mockData';
 
 type Half = 'top' | 'bottom';
@@ -106,6 +108,8 @@ interface DemoState extends DemoSnapshot {
   history: DemoSnapshot[];
 }
 
+type SharedGameState = Omit<DemoSnapshot, 'matches'> & { updatedAt?: number };
+
 type Action =
   | { type: 'ball' }
   | { type: 'strike' }
@@ -151,6 +155,8 @@ type Action =
   | { type: 'addMatch'; match: MatchSchedule }
   | { type: 'updateMatch'; matchId: string; updates: Partial<MatchSchedule> }
   | { type: 'selectMatch'; matchId: string | null }
+  | { type: 'setMatches'; matches: MatchSchedule[] }
+  | { type: 'syncActiveMatch'; matchId: string | null }
   | {
       type: 'saveMatchLineups';
       matchId: string;
@@ -624,6 +630,8 @@ function shouldTrackHistory(actionType: Action['type']) {
     'updateMatch',
     'saveMatchLineups',
     'selectMatch',
+    'setMatches',
+    'syncActiveMatch',
     'hydrate',
     'resetGame',
     'startGame',
@@ -654,6 +662,8 @@ function reducer(state: DemoState, action: Action): DemoState {
     'updateMatch',
     'saveMatchLineups',
     'selectMatch',
+    'setMatches',
+    'syncActiveMatch',
   ];
   if (!state.gameStarted && !setupActions.includes(action.type)) {
     return state;
@@ -936,6 +946,16 @@ function reducer(state: DemoState, action: Action): DemoState {
       nextState = resetGameForMatch(state, selected);
       break;
     }
+    case 'setMatches':
+      nextState = {
+        ...state,
+        matches: action.matches,
+      };
+      break;
+    case 'syncActiveMatch':
+      if (action.matchId === state.activeMatchId) return state;
+      nextState = { ...state, activeMatchId: action.matchId };
+      break;
     default:
       nextState = state;
   }
@@ -2198,6 +2218,15 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     }
   });
   const skipSyncRef = useRef(false);
+  const stateRef = useRef(state);
+  const skipFirestoreWriteRef = useRef(false);
+  const skipMatchesWriteRef = useRef(false);
+  const lastStateKeyRef = useRef('');
+  const lastMatchesKeyRef = useRef('');
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -2227,6 +2256,123 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, []);
+
+  // Subscribe to schedule collection for spectators (read-only) and admins.
+  useEffect(() => {
+    const q = query(collection(firestore, 'matches'), orderBy('startTime', 'asc'));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const incoming = snap.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Partial<MatchSchedule>),
+        }));
+        const normalized = normalizeMatches(incoming);
+        skipMatchesWriteRef.current = true;
+        dispatch({ type: 'setMatches', matches: normalized });
+      },
+      () => {
+        // ignore snapshot errors for now
+      },
+    );
+    return () => unsub();
+  }, []);
+
+  // Listen to current active match pointer so spectators know which match to watch.
+  useEffect(() => {
+    const currentRef = doc(firestore, 'app', 'current');
+    const unsub = onSnapshot(
+      currentRef,
+      (snap) => {
+        const data = snap.data();
+        if (!data) return;
+        const nextId = typeof data.activeMatchId === 'string' ? data.activeMatchId : null;
+        if (nextId === stateRef.current.activeMatchId) return;
+        dispatch({ type: 'syncActiveMatch', matchId: nextId });
+      },
+      () => {
+        // ignore errors
+      },
+    );
+    return () => unsub();
+  }, []);
+
+  // Live subscribe to the active match state.
+  useEffect(() => {
+    const matchId = state.activeMatchId;
+    if (!matchId) return;
+    const stateDoc = doc(firestore, 'matchStates', matchId);
+    const unsub = onSnapshot(
+      stateDoc,
+      (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data() as SharedGameState;
+        skipFirestoreWriteRef.current = true;
+        dispatch({
+          type: 'hydrate',
+          state: normalizeState(initialState, {
+            ...stateRef.current,
+            ...data,
+            matches: stateRef.current.matches,
+          }),
+        });
+      },
+      () => {
+        // ignore snapshot errors
+      },
+    );
+    return () => unsub();
+  }, [state.activeMatchId]);
+
+  // Push game state to Firestore when admin updates locally.
+  useEffect(() => {
+    const matchId = state.activeMatchId;
+    if (!matchId) return;
+    if (!auth.currentUser) return;
+    if (skipFirestoreWriteRef.current) {
+      skipFirestoreWriteRef.current = false;
+      return;
+    }
+    const snapshot = snapshotState(state);
+    const { matches, ...rest } = snapshot;
+    const key = `${matchId}:${rest.inning}:${rest.half}:${rest.score.home}:${rest.score.away}:${rest.pitchCount}:${rest.feed.length}:${rest.events.length}:${rest.gameStarted}:${rest.gameOver}`;
+    if (key === lastStateKeyRef.current) return;
+    lastStateKeyRef.current = key;
+    void setDoc(
+      doc(firestore, 'matchStates', matchId),
+      { ...rest, updatedAt: Date.now() },
+      { merge: true },
+    ).catch(() => {});
+  }, [state]);
+
+  // Sync schedule changes to Firestore (admin routes only; spectators skip via flag/auth).
+  useEffect(() => {
+    if (!auth.currentUser) return;
+    if (skipMatchesWriteRef.current) {
+      skipMatchesWriteRef.current = false;
+      return;
+    }
+    const key = JSON.stringify(state.matches.map((m) => [m.id, m.status, m.startTime, m.homeScore, m.awayScore, m.notes]));
+    if (key === lastMatchesKeyRef.current) return;
+    lastMatchesKeyRef.current = key;
+    const syncMatches = async () => {
+      const batch = writeBatch(firestore);
+      state.matches.forEach((match) => {
+        batch.set(doc(firestore, 'matches', match.id), match, { merge: true });
+      });
+      await batch.commit();
+    };
+    void syncMatches().catch(() => {});
+  }, [state.matches]);
+
+  const updateCurrentMatchPointer = (matchId: string | null) => {
+    if (!auth.currentUser) return;
+    void setDoc(
+      doc(firestore, 'app', 'current'),
+      { activeMatchId: matchId, updatedAt: Date.now() },
+      { merge: true },
+    ).catch(() => {});
+  };
 
   const actions = useMemo(
     () => ({
@@ -2288,7 +2434,10 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         lineups: { home: PlayerSlot[]; away: PlayerSlot[] },
         benches: { home: PlayerSlot[]; away: PlayerSlot[] },
       ) => dispatch({ type: 'saveMatchLineups', matchId, lineups, benches }),
-      selectMatch: (matchId: string | null) => dispatch({ type: 'selectMatch', matchId }),
+      selectMatch: (matchId: string | null) => {
+        dispatch({ type: 'selectMatch', matchId });
+        updateCurrentMatchPointer(matchId);
+      },
     }),
     [],
   );
