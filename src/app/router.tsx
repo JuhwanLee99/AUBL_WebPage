@@ -17,6 +17,7 @@ import MatchSchedulePage from './pages/MatchSchedulePage';
 import ScheduleResultsPage from './pages/ScheduleResultsPage';
 import ScheduleGroupsPage from './pages/ScheduleGroupsPage';
 import ScheduleManagePage from './pages/ScheduleManagePage';
+import PowerRankingPage from './pages/PowerRankingPage';
 
 export const router = createBrowserRouter([
   {
@@ -34,6 +35,10 @@ export const router = createBrowserRouter([
       {
         path: 'standings',
         element: <StandingsPage />,
+      },
+      {
+        path: 'standings/power-ranking',
+        element: <PowerRankingPage />,
       },
       {
         path: 'prediction',

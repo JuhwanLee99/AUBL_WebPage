@@ -42,7 +42,11 @@ export default function Layout() {
       ],
     },
     { path: '/community', label: '커뮤니티' },
-    { path: '/standings', label: '순위' },
+    {
+      path: '/standings',
+      label: '순위',
+      children: [{ path: '/standings/power-ranking', label: '파워랭킹' }],
+    },
     { path: '/prediction', label: '승부예측' },
     { path: '/scorekeeper', label: '기록원' },
   ];
