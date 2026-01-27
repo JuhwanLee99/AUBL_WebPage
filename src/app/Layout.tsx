@@ -3,10 +3,12 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../shared/auth/AuthProvider';
+import { useAdmin } from '../shared/auth/useAdmin';
 
 export default function Layout() {
   const location = useLocation();
   const { user, logout, initializing } = useAuth();
+  const { isAdmin } = useAdmin();
   const isLiveOverlay = location.pathname === '/live-overlay';
   const isScoreboardText = location.pathname === '/scoreboard-text';
   const isLanding = location.pathname === '/';
@@ -32,7 +34,7 @@ export default function Layout() {
       children: [
         { path: '/schedule/results', label: '경기 결과' },
         { path: '/schedule/groups', label: '조별 일정' },
-        { path: '/schedule/manage', label: '일정 관리' },
+        { path: '/schedule/manage', label: '일정 관리', requiresAdmin: true },
       ],
     },
     {
@@ -50,26 +52,31 @@ export default function Layout() {
       children: [{ path: '/standings/power-ranking', label: '파워랭킹' }],
     },
     { path: '/prediction', label: '승부예측' },
-    { path: '/scorekeeper', label: '기록원' },
+    { path: '/scorekeeper', label: '기록원', requiresAdmin: true },
   ];
   const [hoveredMenu, setHoveredMenu] = useState<string | null>(null);
 
+  const filteredNavItems = useMemo(() => navItems.filter((item) => !item.requiresAdmin || isAdmin), [navItems, isAdmin]);
+
   const activeParentPath = useMemo(() => {
     if (hoveredMenu) {
-      const hoveredHasChildren = navItems.some((item) => item.path === hoveredMenu && item.children);
+      const hoveredHasChildren = filteredNavItems.some((item) => item.path === hoveredMenu && item.children);
       if (hoveredHasChildren) return hoveredMenu;
     }
 
-    const matched = navItems.find((item) => {
+    const matched = filteredNavItems.find((item) => {
       if (item.children?.some((child) => location.pathname === child.path || location.pathname.startsWith(child.path))) return true;
       if (item.children && location.pathname === item.path) return true; // 부모 경로 자체를 방문했을 때도 유지
       return false;
     });
 
     return matched?.path ?? null;
-  }, [hoveredMenu, location.pathname, navItems]);
+  }, [hoveredMenu, location.pathname, filteredNavItems]);
 
-  const activeChildren = useMemo(() => navItems.find((item) => item.path === activeParentPath)?.children ?? [], [activeParentPath, navItems]);
+  const activeChildren = useMemo(() => {
+    const parent = filteredNavItems.find((item) => item.path === activeParentPath);
+    return parent?.children?.filter((child) => !child.requiresAdmin || isAdmin) ?? [];
+  }, [activeParentPath, filteredNavItems, isAdmin]);
   const showSubnav = activeChildren.length > 0;
   const [subnavAnchor, setSubnavAnchor] = useState<number | null>(null);
 
@@ -144,7 +151,7 @@ export default function Layout() {
               </Link>
               <nav className="nav-scroll" style={{ marginLeft: 'auto', flex: 1, minWidth: 0, paddingLeft: '18px', position: 'relative' }}>
                 <div className="nav-scroll__rail">
-                  {navItems.map((item) => {
+                  {filteredNavItems.map((item) => {
                     const isActive = location.pathname === item.path || activeParentPath === item.path;
                     const isHovering = hoveredMenu === item.path;
                     return (
