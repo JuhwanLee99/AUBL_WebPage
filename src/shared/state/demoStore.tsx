@@ -17,6 +17,58 @@ interface PlayerSlot {
   order?: number | null;
 }
 
+export type PostGameLineScore = { innings: number[]; home: number[]; away: number[] };
+
+export type PostGameTotals = {
+  home: { runs: number; hits: number; errors: number; lob?: number };
+  away: { runs: number; hits: number; errors: number; lob?: number };
+};
+
+export type PostGameBatterLine = {
+  name: string;
+  pos?: string;
+  order?: number | null;
+  slot?: string; // e.g., 대타/대주 표기
+  innings?: (string | null | undefined)[];
+  ab?: number;
+  h?: number;
+  rbi?: number;
+  r?: number;
+  sb?: number;
+  avg?: number;
+  seasonAvg?: number;
+};
+
+export type PostGamePitcherLine = {
+  name: string;
+  result?: string; // 승/패/세/홀드 등
+  ip?: number;
+  bf?: number;
+  ab?: number;
+  h?: number;
+  hr?: number;
+  bb?: number;
+  hbp?: number;
+  so?: number;
+  r?: number;
+  er?: number;
+  pitches?: number;
+  wp?: number;
+  bk?: number;
+  sh?: number; // 희생타 허용
+  sf?: number; // 희생플라이 허용
+  era?: number;
+};
+
+export type PostGameRecord = {
+  lineScore: PostGameLineScore;
+  totals: PostGameTotals;
+  teamBatterSummary?: { home?: { ab?: number; h?: number; r?: number; rbi?: number; sb?: number }; away?: { ab?: number; h?: number; r?: number; rbi?: number; sb?: number } };
+  batters?: { home?: PostGameBatterLine[]; away?: PostGameBatterLine[] };
+  pitchers?: { home?: PostGamePitcherLine[]; away?: PostGamePitcherLine[] };
+  note?: string;
+};
+
 export type MatchStatus = 'scheduled' | 'inProgress' | 'completed';
 
 export interface MatchSchedule {
@@ -33,6 +85,7 @@ export interface MatchSchedule {
   lineups?: { home: PlayerSlot[]; away: PlayerSlot[] };
   benches?: { home: PlayerSlot[]; away: PlayerSlot[] };
   notes?: string;
+  postGame?: PostGameRecord;
 }
 
 export type RunnerAdvanceOutcome = 'hold' | 'advance' | 'out' | 'score' | 1 | 2 | 3 | 4;
@@ -461,6 +514,146 @@ function normalizeBenches(benches: unknown): { home: PlayerSlot[]; away: PlayerS
   return { home, away };
 }
 
+const asNumber = (value: unknown) => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+};
+
+function normalizeLineScore(lineScore: unknown): PostGameLineScore | undefined {
+  if (!lineScore || typeof lineScore !== 'object') return undefined;
+  const ls = lineScore as Partial<PostGameLineScore>;
+  const innings = Array.isArray(ls.innings) ? ls.innings.map(asNumber).filter((n): n is number => n !== undefined) : [];
+  const home = Array.isArray(ls.home) ? ls.home.map(asNumber).filter((n): n is number => n !== undefined) : [];
+  const away = Array.isArray(ls.away) ? ls.away.map(asNumber).filter((n): n is number => n !== undefined) : [];
+  if (!innings.length || !home.length || !away.length) return undefined;
+  return { innings, home, away };
+}
+
+function normalizeTotals(totals: unknown): PostGameTotals | undefined {
+  if (!totals || typeof totals !== 'object') return undefined;
+  const t = totals as PostGameTotals;
+  const pick = (side: 'home' | 'away') => {
+    const src = (t as any)[side] ?? {};
+    const runs = asNumber(src.runs);
+    const hits = asNumber(src.hits);
+    const errors = asNumber(src.errors);
+    if (runs === undefined || hits === undefined || errors === undefined) return undefined;
+    const lob = asNumber(src.lob);
+    return lob !== undefined ? { runs, hits, errors, lob } : { runs, hits, errors };
+  };
+  const home = pick('home');
+  const away = pick('away');
+  if (!home || !away) return undefined;
+  return { home, away };
+}
+
+function normalizePitcherLine(entry: unknown): PostGamePitcherLine | null {
+  if (!entry || typeof entry !== 'object') return null;
+  const p = entry as Partial<PostGamePitcherLine>;
+  if (typeof p.name !== 'string' || !p.name.trim()) return null;
+  const fields: (keyof PostGamePitcherLine)[] = [
+    'name',
+    'result',
+    'ip',
+    'bf',
+    'ab',
+    'h',
+    'hr',
+    'bb',
+    'hbp',
+    'so',
+    'r',
+    'er',
+    'pitches',
+    'wp',
+    'bk',
+    'sh',
+    'sf',
+    'era',
+  ];
+  const out: Partial<PostGamePitcherLine> = { name: p.name.trim() };
+  fields.forEach((key) => {
+    if (key === 'name' || key === 'result') return;
+    const val = asNumber((p as any)[key]);
+    if (val !== undefined) (out as any)[key] = val;
+  });
+  if (typeof p.result === 'string' && p.result.trim()) out.result = p.result.trim();
+  return out as PostGamePitcherLine;
+}
+
+function normalizePitchers(pitchers: unknown): PostGameRecord['pitchers'] | undefined {
+  if (!pitchers || typeof pitchers !== 'object') return undefined;
+  const src = pitchers as { home?: unknown; away?: unknown };
+  const normalizeSide = (side: unknown) =>
+    Array.isArray(side)
+      ? side
+          .map(normalizePitcherLine)
+          .filter((p): p is PostGamePitcherLine => Boolean(p && p.name))
+      : [];
+  const home = normalizeSide(src.home);
+  const away = normalizeSide(src.away);
+  if (!home.length && !away.length) return undefined;
+  return { home, away };
+}
+
+function normalizeBatterLine(entry: unknown): PostGameBatterLine | null {
+  if (!entry || typeof entry !== 'object') return null;
+  const b = entry as Partial<PostGameBatterLine>;
+  if (typeof b.name !== 'string' || !b.name.trim()) return null;
+  const out: Partial<PostGameBatterLine> = { name: b.name.trim() };
+  if (typeof b.pos === 'string' && b.pos.trim()) out.pos = b.pos.trim();
+  if (typeof b.slot === 'string' && b.slot.trim()) out.slot = b.slot.trim();
+  if (typeof b.order === 'number' && Number.isFinite(b.order)) out.order = b.order;
+  if (Array.isArray(b.innings)) {
+    out.innings = b.innings.map((v) => (typeof v === 'string' ? v : v == null ? null : String(v)));
+  }
+  ['ab', 'h', 'rbi', 'r', 'sb', 'avg', 'seasonAvg'].forEach((k) => {
+    const key = k as keyof PostGameBatterLine;
+    const val = asNumber((b as any)[key]);
+    if (val !== undefined) (out as any)[key] = val;
+  });
+  return out as PostGameBatterLine;
+}
+
+function normalizeBatters(batters: unknown): PostGameRecord['batters'] | undefined {
+  if (!batters || typeof batters !== 'object') return undefined;
+  const src = batters as { home?: unknown; away?: unknown };
+  const normalizeSide = (side: unknown) =>
+    Array.isArray(side)
+      ? side
+          .map(normalizeBatterLine)
+          .filter((b): b is PostGameBatterLine => Boolean(b && b.name))
+      : [];
+  const home = normalizeSide(src.home);
+  const away = normalizeSide(src.away);
+  if (!home.length && !away.length) return undefined;
+  return { home, away };
+}
+
+function normalizePostGame(pg: unknown): PostGameRecord | undefined {
+  if (!pg || typeof pg !== 'object') return undefined;
+  const record = pg as Partial<PostGameRecord>;
+  const lineScore = normalizeLineScore(record.lineScore);
+  const totals = normalizeTotals(record.totals);
+  if (!lineScore || !totals) return undefined;
+  const teamBatterSummary = record.teamBatterSummary;
+  const batters = normalizeBatters(record.batters);
+  const pitchers = normalizePitchers(record.pitchers);
+  const note = typeof record.note === 'string' ? record.note : undefined;
+  return {
+    lineScore,
+    totals,
+    teamBatterSummary,
+    batters,
+    pitchers,
+    note,
+  };
+}
+
 function normalizeMatches(matches: unknown): MatchSchedule[] {
   if (!Array.isArray(matches)) return [];
   return matches.map((entry) => {
@@ -489,6 +682,7 @@ function normalizeMatches(matches: unknown): MatchSchedule[] {
       lineups: normalizeLineups(match.lineups),
       benches: normalizeBenches(match.benches),
       notes: typeof match.notes === 'string' ? match.notes : undefined,
+      postGame: normalizePostGame(match.postGame),
     };
   });
 }
@@ -1068,7 +1262,7 @@ function createLogEntryWithBatter(state: DemoState, batter: string, order: numbe
   return {
     inning: state.inning,
     half: state.half,
-    order,
+    order: order ?? 0,
     batter,
     pitch,
     result,
@@ -1128,7 +1322,7 @@ function createPlayEventWithBatter(
   return {
     inning: state.inning,
     half: state.half,
-    order,
+    order: order ?? 0,
     batter,
     pitch,
     type: details.type,
@@ -1556,7 +1750,7 @@ function applySacrifice(
 function applyError(state: DemoState, details: ErrorDetails): DemoState {
   const pitchNumber = Math.max(1, state.pitchCount + 1);
   const isBatterHold = details.advanceResults.batter === 'hold';
-  const { batter, order } = currentBatterInfo(state);
+  const { batter } = currentBatterInfo(state);
   const batterName = isBatterHold ? batter : nextBatter(state).batterName;
   const batterIndex = isBatterHold ? state.batterIndex[hittingSide(state)] : nextBatter(state).batterIndex;
   const bases = [null, null, null] as Bases;
@@ -1651,7 +1845,9 @@ function applyError(state: DemoState, details: ErrorDetails): DemoState {
     balls: 0,
     strikes: 0,
     pitchCount: isBatterHold ? state.pitchCount : 0,
-    batterIndex: isBatterHold ? state.batterIndex : batterIndex,
+    batterIndex: isBatterHold
+      ? state.batterIndex
+      : { ...state.batterIndex, [hittingSide(state)]: batterIndex },
     outs,
     lastPlay: summary,
     feed,
@@ -2002,37 +2198,6 @@ function changeHalf(state: DemoState, message: string, pitchNumber = 0, logState
   };
 }
 
-function advanceBases(currentBases: Bases, steps: number, batterName: string) {
-  let runs = 0;
-  const bases = [...currentBases] as Bases;
-
-  for (let i = 2; i >= 0; i -= 1) {
-    if (bases[i]) {
-      const runner = bases[i];
-      bases[i] = null;
-      const dest = i + steps;
-      if (dest >= 3) {
-        runs += 1;
-      } else {
-        bases[dest] = runner;
-      }
-    }
-  }
-
-  if (steps >= 4) {
-    runs += 1;
-  } else {
-    const dest = steps - 1;
-    if (dest >= 3) {
-      runs += 1;
-    } else {
-      bases[dest] = batterName;
-    }
-  }
-
-  return { bases, runs };
-}
-
 function resolveAdvanceOutcome(
   outcome: RunnerAdvanceOutcome | undefined,
   fromBase: number,
@@ -2271,8 +2436,9 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         skipMatchesWriteRef.current = true;
         dispatch({ type: 'setMatches', matches: normalized });
       },
-      () => {
-        // ignore snapshot errors for now
+      (error) => {
+        // eslint-disable-next-line no-console
+        console.error('[firestore] matches snapshot error', error);
       },
     );
     return () => unsub();
