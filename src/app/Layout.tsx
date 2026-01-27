@@ -442,7 +442,7 @@ export default function Layout() {
           }}
         >
           <div style={{ maxWidth: '1600px', margin: '0 auto', padding: '0 24px' }}>
-            &copy; 2025 Amateur University Baseball League. All rights reserved.
+            &copy; 2026 Amateur University Baseball League. All rights reserved.
           </div>
           <div className="preview-toggle-inline">
             <span className="preview-toggle-inline__label">보기 전환</span>

@@ -166,6 +166,7 @@ export default function MatchSchedulePage() {
   const navigate = useNavigate();
   const { isAdmin } = useAdmin();
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
+  const canEdit = isAdmin;
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [formLineups, setFormLineups] = useState<{ home: PlayerSlot[]; away: PlayerSlot[] }>(() => ({
@@ -292,6 +293,7 @@ export default function MatchSchedulePage() {
 
   const handleFormSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!canEdit) return;
     const homeLineup = form.homeLineup.trim();
     const awayLineup = form.awayLineup.trim();
     const lineupsFromText =
@@ -332,6 +334,7 @@ export default function MatchSchedulePage() {
   };
 
   const handleEditLineups = (match: MatchSchedule) => {
+    if (!canEdit) return;
     setEditingLineups({
       home: normalizeLineupForEditing(match.lineups?.home),
       away: normalizeLineupForEditing(match.lineups?.away),
@@ -352,6 +355,7 @@ export default function MatchSchedulePage() {
   };
 
   const handleSaveLineups = (matchId: string) => {
+    if (!canEdit) return;
     const trimmedLineups = {
       home: editingLineups.home.filter(hasMeaningfulPlayerData).map(normalizePlayerSlot),
       away: editingLineups.away.filter(hasMeaningfulPlayerData).map(normalizePlayerSlot),
@@ -485,7 +489,31 @@ export default function MatchSchedulePage() {
                 기록원
               </button>
             </div>
-            <button type="button" onClick={() => handleEditLineups(match)} style={secondaryButtonStyle}>
+            <button
+              type="button"
+              onClick={(e) => {
+                if (!canEdit) {
+                  showBlockedTooltip(e.currentTarget);
+                  return;
+                }
+                handleEditLineups(match);
+              }}
+              onMouseEnter={(e) => {
+                if (!canEdit) showBlockedTooltip(e.currentTarget);
+              }}
+              onMouseLeave={() => setTooltip(null)}
+              onFocus={(e) => {
+                if (!canEdit) showBlockedTooltip(e.currentTarget);
+              }}
+              onBlur={() => setTooltip(null)}
+              style={{
+                ...secondaryButtonStyle,
+                cursor: canEdit ? 'pointer' : 'not-allowed',
+                color: canEdit ? secondaryButtonStyle.color : 'rgba(203,213,225,0.65)',
+                border: canEdit ? secondaryButtonStyle.border : '1px solid rgba(148,163,184,0.35)',
+                background: canEdit ? secondaryButtonStyle.background : 'rgba(255,255,255,0.04)',
+              }}
+            >
               라인업 편집
             </button>
           </div>
@@ -637,15 +665,33 @@ export default function MatchSchedulePage() {
         </div>
         <button
           type="button"
-          onClick={() => setShowForm((prev) => !prev)}
+          onClick={(e) => {
+            if (!canEdit) {
+              showBlockedTooltip(e.currentTarget);
+              return;
+            }
+            setShowForm((prev) => !prev);
+          }}
+          onMouseEnter={(e) => {
+            if (!canEdit) showBlockedTooltip(e.currentTarget);
+          }}
+          onMouseLeave={() => setTooltip(null)}
+          onFocus={(e) => {
+            if (!canEdit) showBlockedTooltip(e.currentTarget);
+          }}
+          onBlur={() => setTooltip(null)}
           style={{
             borderRadius: '999px',
             padding: '10px 18px',
             border: '1px solid rgba(148,163,184,0.4)',
-            background: showForm ? 'rgba(148,163,184,0.2)' : 'linear-gradient(90deg, #f97316, #f59e0b)',
-            color: showForm ? '#e2e8f0' : '#0b0f1a',
+            background: canEdit
+              ? showForm
+                ? 'rgba(148,163,184,0.2)'
+                : 'linear-gradient(90deg, #f97316, #f59e0b)'
+              : 'rgba(148,163,184,0.15)',
+            color: canEdit ? (showForm ? '#e2e8f0' : '#0b0f1a') : 'rgba(203,213,225,0.7)',
             fontWeight: 800,
-            cursor: 'pointer',
+            cursor: canEdit ? 'pointer' : 'not-allowed',
           }}
         >
           {showForm ? '추가 폼 닫기' : '경기 추가'}
@@ -691,7 +737,7 @@ export default function MatchSchedulePage() {
         ))}
       </div>
 
-      {showForm && (
+      {canEdit && showForm && (
         <form
           onSubmit={handleFormSubmit}
           style={{
