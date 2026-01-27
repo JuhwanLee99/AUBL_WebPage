@@ -2,7 +2,7 @@ import type { CSSProperties, FormEvent } from 'react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
-import type { MatchSchedule, MatchStatus } from '../../shared/state/demoStore';
+import type { MatchSchedule, MatchStatus, PostGameRecord } from '../../shared/state/demoStore';
 import { useAdmin } from '../../shared/auth/useAdmin';
 
 const emptyForm = {
@@ -20,6 +20,8 @@ const emptyForm = {
 
 type Side = 'home' | 'away';
 type PlayerSlot = NonNullable<MatchSchedule['lineups']>['home'][number];
+type PostGamePitcher = PostGameRecord['pitchers'] extends { home?: (infer P)[] } ? P : never;
+type PostGameBatter = PostGameRecord['batters'] extends { home?: (infer B)[] } ? B : never;
 
 const defaultPlayerSlot: PlayerSlot = {
   name: '',
@@ -373,6 +375,7 @@ export default function MatchSchedulePage() {
     const badge = statusLabel(displayStatus);
     const isActive = state.activeMatchId === match.id;
     const hasLiveOverlay = Boolean((state.liveVideoUrl || '').trim());
+    const textButtonLabel = match.status === 'completed' ? '세부 결과' : '문자중계';
     const goTo = (path: string) => {
       actions.selectMatch(match.id);
       navigate(path);
@@ -453,9 +456,9 @@ export default function MatchSchedulePage() {
                 <span aria-hidden>📺</span>
                 전광판
               </button>
-              <button type="button" onClick={() => goTo('/scoreboard-text')} style={quickActionStyle} title="문자중계">
+              <button type="button" onClick={() => goTo('/scoreboard-text')} style={quickActionStyle} title={textButtonLabel}>
                 <span aria-hidden>💬</span>
-                문자중계
+                {textButtonLabel}
               </button>
               <button
                 type="button"
@@ -520,6 +523,8 @@ export default function MatchSchedulePage() {
         </div>
 
         {match.notes && <div style={{ color: '#cbd5e1', fontSize: '13px' }}>메모: {match.notes}</div>}
+
+        {match.status === 'completed' && match.postGame && <CompletedResultCard match={match} />}
 
         {editingMatchId === match.id && (
           <div
@@ -1130,6 +1135,277 @@ export default function MatchSchedulePage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function CompletedResultCard({ match }: { match: MatchSchedule }) {
+  const detail = match.postGame as PostGameRecord | undefined;
+  if (!detail) return null;
+  const teams = { home: match.homeTeamName, away: match.awayTeamName };
+  return (
+    <div
+      style={{
+        border: '1px solid rgba(148,163,184,0.3)',
+        borderRadius: '12px',
+        padding: '12px',
+        background: 'rgba(255,255,255,0.02)',
+        display: 'grid',
+        gap: '10px',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'grid', gap: '4px' }}>
+          <span style={{ fontWeight: 900, color: '#e2e8f0' }}>세부 결과</span>
+          <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>박스스코어와 투수·타자 기록을 바로 확인하세요.</span>
+        </div>
+        {detail.note && <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>{detail.note}</span>}
+      </div>
+
+      <LineScoreCompact teams={teams} detail={detail} />
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
+        <TeamTotalsPill title={`${teams.home} 타격 요약`} totals={detail.teamBatterSummary?.home} color="#f97316" />
+        <TeamTotalsPill title={`${teams.away} 타격 요약`} totals={detail.teamBatterSummary?.away} color="#60a5fa" />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '8px' }}>
+        <PitchingMiniTable title={`${teams.home} 투수`} color="#f97316" pitchers={detail.pitchers?.home ?? []} />
+        <PitchingMiniTable title={`${teams.away} 투수`} color="#60a5fa" pitchers={detail.pitchers?.away ?? []} />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '8px' }}>
+        <BattingMiniTable title={`${teams.home} 타자`} color="#f97316" batters={detail.batters?.home ?? []} />
+        <BattingMiniTable title={`${teams.away} 타자`} color="#60a5fa" batters={detail.batters?.away ?? []} />
+      </div>
+    </div>
+  );
+}
+
+function LineScoreCompact({ teams, detail }: { teams: { home: string; away: string }; detail: PostGameRecord }) {
+  if (!detail.lineScore) return null;
+  const innings = detail.lineScore.innings || [];
+  const header = ['팀', ...innings, 'R', 'H', 'E', 'LOB'];
+  const row = (label: string, scores: number[] = [], totals?: { runs?: number; hits?: number; errors?: number; lob?: number }, color?: string) => [
+    { text: label, bold: true, color },
+    ...innings.map((_, idx) => ({ text: scores[idx] != null ? String(scores[idx]) : '-' })),
+    { text: totals?.runs != null ? String(totals.runs) : '-', bold: true },
+    { text: totals?.hits != null ? String(totals.hits) : '-' },
+    { text: totals?.errors != null ? String(totals.errors) : '-' },
+    { text: totals?.lob != null ? String(totals.lob) : '-' },
+  ];
+  const rows = [
+    row(teams.home, detail.lineScore.home, detail.totals?.home, '#f97316'),
+    row(teams.away, detail.lineScore.away, detail.totals?.away, '#60a5fa'),
+  ];
+  return (
+    <div
+      style={{
+        border: '1px solid rgba(148,163,184,0.25)',
+        borderRadius: '10px',
+        overflow: 'hidden',
+      }}
+    >
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${header.length}, minmax(0, 1fr))`, background: 'rgba(255,255,255,0.03)' }}>
+        {header.map((h) => (
+          <div key={h} style={{ padding: '6px', textAlign: 'center', fontWeight: 900, color: '#e2e8f0', fontSize: '12px' }}>
+            {h}
+          </div>
+        ))}
+      </div>
+      {rows.map((cells, ridx) => (
+        <div key={ridx} style={{ display: 'grid', gridTemplateColumns: `repeat(${header.length}, minmax(0, 1fr))`, borderTop: '1px solid rgba(148,163,184,0.2)' }}>
+          {cells.map((cell, cidx) => (
+            <div
+              key={cidx}
+              style={{
+                padding: '6px',
+                textAlign: 'center',
+                color: cell.color ?? '#cbd5e1',
+                fontWeight: cell.bold ? 800 : 700,
+                fontSize: '12px',
+              }}
+            >
+              {cell.text}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TeamTotalsPill({
+  title,
+  totals,
+  color,
+}: {
+  title: string;
+  totals?: { ab?: number; h?: number; rbi?: number; r?: number; sb?: number };
+  color: string;
+}) {
+  const items = [
+    { label: '타수', value: totals?.ab },
+    { label: '안타', value: totals?.h },
+    { label: '득점', value: totals?.r },
+    { label: '타점', value: totals?.rbi },
+    { label: '도루', value: totals?.sb },
+  ].filter((item) => item.value != null);
+  return (
+    <div
+      style={{
+        border: '1px solid rgba(148,163,184,0.25)',
+        borderRadius: '10px',
+        padding: '10px',
+        background: 'rgba(255,255,255,0.02)',
+        display: 'grid',
+        gap: '6px',
+      }}
+    >
+      <span style={{ fontWeight: 800, color: '#e2e8f0' }}>{title}</span>
+      {items.length ? (
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          {items.map((item) => (
+            <span
+              key={item.label}
+              style={{
+                padding: '6px 10px',
+                borderRadius: '10px',
+                border: `1px solid ${color}55`,
+                background: 'rgba(255,255,255,0.03)',
+                color,
+                fontWeight: 800,
+                fontSize: '12px',
+              }}
+            >
+              {item.label}: {item.value}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <span style={{ color: '#94a3b8', fontSize: '12px' }}>요약 없음</span>
+      )}
+    </div>
+  );
+}
+
+function PitchingMiniTable({
+  title,
+  pitchers,
+  color,
+}: {
+  title: string;
+  pitchers: PostGamePitcher[];
+  color: string;
+}) {
+  const header = ['투수', 'IP', 'BF', 'H', 'HR', 'BB', 'HBP', 'SO', 'R', 'ER', 'NP'];
+  const value = (v: unknown) => (v == null ? '-' : v);
+  return (
+    <div
+      style={{
+        border: '1px solid rgba(148,163,184,0.25)',
+        borderRadius: '10px',
+        padding: '10px',
+        background: 'rgba(255,255,255,0.02)',
+        display: 'grid',
+        gap: '6px',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontWeight: 800, color: '#e2e8f0' }}>{title}</span>
+        <span style={{ color: '#94a3b8', fontSize: '12px' }}>{pitchers.length}명</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${header.length}, minmax(40px, 1fr))`, gap: '4px' }}>
+        {header.map((h) => (
+          <div key={h} style={{ textAlign: 'center', fontWeight: 800, color: '#cbd5e1', fontSize: '11px' }}>
+            {h}
+          </div>
+        ))}
+        {pitchers.map((p) =>
+          [p.name, p.ip, p.bf, p.h, p.hr, p.bb, p.hbp, p.so, p.r, p.er, p.pitches].map((v, idx) => (
+            <div
+              key={`${p.name}-${idx}`}
+              style={{
+                textAlign: 'center',
+                color: idx === 0 ? color : '#e2e8f0',
+                fontWeight: idx === 0 ? 800 : 700,
+                fontSize: '12px',
+              }}
+            >
+              {value(v)}
+            </div>
+          )),
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BattingMiniTable({
+  title,
+  batters,
+  color,
+}: {
+  title: string;
+  batters: PostGameBatter[];
+  color: string;
+}) {
+  if (!batters.length) return null;
+  const header = ['순번', '선수', '포지션', 'AB', 'H', 'R', 'RBI', 'SB', 'AVG', '시즌'];
+  const value = (v: unknown) => (v == null ? '-' : v);
+  const formatAvg = (n?: number) => {
+    if (n == null) return '-';
+    const fixed = Number(n).toFixed(3);
+    return fixed.startsWith('0') ? fixed.slice(1) : fixed;
+  };
+  return (
+    <div
+      style={{
+        border: '1px solid rgba(148,163,184,0.25)',
+        borderRadius: '10px',
+        padding: '10px',
+        background: 'rgba(255,255,255,0.02)',
+        display: 'grid',
+        gap: '6px',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontWeight: 800, color: '#e2e8f0' }}>{title}</span>
+        <span style={{ color: '#94a3b8', fontSize: '12px' }}>{batters.length}명</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${header.length}, minmax(48px, 1fr))`, gap: '4px' }}>
+        {header.map((h) => (
+          <div key={h} style={{ textAlign: 'center', fontWeight: 800, color: '#cbd5e1', fontSize: '11px' }}>
+            {h}
+          </div>
+        ))}
+        {batters.map((b) =>
+          [
+            b.order ?? '-',
+            b.name,
+            b.pos ?? b.slot ?? '-',
+            b.ab,
+            b.h,
+            b.r,
+            b.rbi,
+            b.sb,
+            formatAvg(typeof b.avg === 'number' ? b.avg : (b.avg as unknown as number)),
+            formatAvg(typeof b.seasonAvg === 'number' ? b.seasonAvg : (b.seasonAvg as unknown as number)),
+          ].map((v, idx) => (
+            <div
+              key={`${b.name}-${idx}`}
+              style={{
+                textAlign: 'center',
+                color: idx === 1 ? color : '#e2e8f0',
+                fontWeight: idx <= 2 ? 800 : 700,
+                fontSize: '12px',
+              }}
+            >
+              {value(v)}
+            </div>
+          )),
+        )}
+      </div>
     </div>
   );
 }
