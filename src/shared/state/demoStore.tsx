@@ -69,7 +69,7 @@ export type PostGameRecord = {
   note?: string;
 };
 
-export type MatchStatus = 'scheduled' | 'inProgress' | 'completed';
+export type MatchStatus = 'scheduled' | 'inProgress' | 'completed' | 'canceled';
 
 export interface MatchSchedule {
   id: string;
