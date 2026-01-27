@@ -18,6 +18,8 @@ import ScheduleResultsPage from './pages/ScheduleResultsPage';
 import ScheduleGroupsPage from './pages/ScheduleGroupsPage';
 import ScheduleManagePage from './pages/ScheduleManagePage';
 import PowerRankingPage from './pages/PowerRankingPage';
+import LoginPage from './pages/LoginPage';
+import AccessDeniedPage from './pages/AccessDeniedPage';
 
 export const router = createBrowserRouter([
   {
@@ -95,6 +97,14 @@ export const router = createBrowserRouter([
       {
         path: 'player/:name',
         element: <PlayerDetailPage />,
+      },
+      {
+        path: 'login',
+        element: <LoginPage />,
+      },
+      {
+        path: 'access-denied',
+        element: <AccessDeniedPage />,
       },
     ],
   },
