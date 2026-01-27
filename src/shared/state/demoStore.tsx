@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
-import { collection, doc, onSnapshot, orderBy, query, setDoc, writeBatch } from 'firebase/firestore';
+import { collection, doc, onSnapshot, orderBy, query, setDoc, writeBatch, deleteDoc } from 'firebase/firestore';
 import { auth, firestore } from '../firebase/client';
 import { MATCHES, TEAMS } from '../lib/mockData';
 
@@ -207,6 +207,7 @@ type Action =
   | { type: 'hydrate'; state: DemoState }
   | { type: 'addMatch'; match: MatchSchedule }
   | { type: 'updateMatch'; matchId: string; updates: Partial<MatchSchedule> }
+  | { type: 'deleteMatch'; matchId: string }
   | { type: 'selectMatch'; matchId: string | null }
   | { type: 'setMatches'; matches: MatchSchedule[] }
   | { type: 'syncActiveMatch'; matchId: string | null }
@@ -1121,6 +1122,15 @@ function reducer(state: DemoState, action: Action): DemoState {
         matches: updateMatchSchedule(state.matches, action.matchId, action.updates),
       };
       break;
+    case 'deleteMatch': {
+      const filtered = state.matches.filter((m) => m.id !== action.matchId);
+      nextState = {
+        ...state,
+        matches: filtered,
+        activeMatchId: state.activeMatchId === action.matchId ? null : state.activeMatchId,
+      };
+      break;
+    }
     case 'saveMatchLineups':
       nextState = {
         ...state,
@@ -2359,6 +2369,7 @@ interface DemoStoreValue {
     triplePlay: (battedBall?: BattedBallDetails | null) => void;
     addMatch: (match: MatchSchedule) => void;
     updateMatch: (matchId: string, updates: Partial<MatchSchedule>) => void;
+    deleteMatch: (matchId: string) => void;
     saveMatchLineups: (
       matchId: string,
       lineups: { home: PlayerSlot[]; away: PlayerSlot[] },
@@ -2595,6 +2606,15 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       undo: () => dispatch({ type: 'undo' }),
       addMatch: (match: MatchSchedule) => dispatch({ type: 'addMatch', match }),
       updateMatch: (matchId: string, updates: Partial<MatchSchedule>) => dispatch({ type: 'updateMatch', matchId, updates }),
+      deleteMatch: (matchId: string) => {
+        dispatch({ type: 'deleteMatch', matchId });
+        if (stateRef.current.activeMatchId === matchId) {
+          updateCurrentMatchPointer(null);
+        }
+        if (auth.currentUser) {
+          void deleteDoc(doc(firestore, 'matches', matchId)).catch(() => {});
+        }
+      },
       saveMatchLineups: (
         matchId: string,
         lineups: { home: PlayerSlot[]; away: PlayerSlot[] },
