@@ -1,6 +1,5 @@
 import {
   GoogleAuthProvider,
-  User,
   browserLocalPersistence,
   createUserWithEmailAndPassword,
   getIdToken,
@@ -10,6 +9,7 @@ import {
   signInWithPopup,
   signOut,
 } from 'firebase/auth';
+import type { User } from 'firebase/auth';
 import { PropsWithChildren, createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { auth } from '../firebase/client';
 
