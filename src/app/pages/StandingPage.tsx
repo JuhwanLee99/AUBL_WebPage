@@ -92,6 +92,20 @@ export default function StandingsPage() {
               >
                 리그 소개 보기
               </Link>
+              <Link
+                to="/standings/power-ranking"
+                style={{
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  fontWeight: 800,
+                  fontSize: '14px',
+                  background: 'linear-gradient(90deg, #f97316, #a855f7)',
+                  color: '#0b1220',
+                  boxShadow: '0 14px 32px rgba(168, 85, 247, 0.25)',
+                }}
+              >
+                파워랭킹 보기
+              </Link>
             </div>
           </div>
 
