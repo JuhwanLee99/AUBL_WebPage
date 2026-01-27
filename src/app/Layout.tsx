@@ -52,11 +52,22 @@ export default function Layout() {
       children: [{ path: '/standings/power-ranking', label: '파워랭킹' }],
     },
     { path: '/prediction', label: '승부예측' },
-    { path: '/scorekeeper', label: '기록원', requiresAdmin: true },
+    // 기록원: 항상 보이지만 비관리자는 클릭 시 안내 버블만 노출
+    { path: '/scorekeeper', label: '기록원', requiresAdmin: true, showWhenBlocked: true },
   ];
   const [hoveredMenu, setHoveredMenu] = useState<string | null>(null);
+  const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
 
-  const filteredNavItems = useMemo(() => navItems.filter((item) => !item.requiresAdmin || isAdmin), [navItems, isAdmin]);
+  const filteredNavItems = useMemo(
+    () =>
+      navItems.filter((item) => {
+        if (item.requiresAdmin && !isAdmin) {
+          return item.showWhenBlocked === true;
+        }
+        return true;
+      }),
+    [navItems, isAdmin],
+  );
 
   const activeParentPath = useMemo(() => {
     if (hoveredMenu) {
@@ -154,26 +165,54 @@ export default function Layout() {
                   {filteredNavItems.map((item) => {
                     const isActive = location.pathname === item.path || activeParentPath === item.path;
                     const isHovering = hoveredMenu === item.path;
+                    const blocked = item.requiresAdmin && !isAdmin;
+                    const handleBlockedHover = (el: HTMLAnchorElement | null) => {
+                      if (!blocked || !el) return;
+                      const rect = el.getBoundingClientRect();
+                      setTooltip({
+                        text: '관리자 로그인이 필요합니다',
+                        x: rect.left + rect.width / 2,
+                        y: rect.bottom,
+                      });
+                    };
                     return (
                       <Link
                         key={item.path}
-                        to={item.path}
+                        to={blocked ? location.pathname : item.path}
                         style={{
                           fontSize: 'var(--nav-font-size)',
                           fontWeight: 700,
-                          color: isActive || isHovering ? '#f97316' : '#cbd5e1',
+                          color: blocked ? 'rgba(203,213,225,0.55)' : isActive || isHovering ? '#f97316' : '#cbd5e1',
                           transition: 'color 120ms ease',
                           whiteSpace: 'nowrap',
                           scrollSnapAlign: 'start',
                           padding: '10px 0',
+                          cursor: blocked ? 'not-allowed' : 'pointer',
                         }}
                         ref={(el) => {
                           linkRefs.current[item.path] = el;
                         }}
-                        onMouseEnter={() => setHoveredMenu(item.path)}
-                        onMouseLeave={() => setHoveredMenu(null)}
-                        onFocus={() => setHoveredMenu(item.path)}
-                        onClick={() => item.children && setHoveredMenu(item.path)}
+                        onMouseEnter={() => {
+                          setHoveredMenu(item.path);
+                          handleBlockedHover(linkRefs.current[item.path]);
+                        }}
+                        onMouseLeave={() => {
+                          setHoveredMenu(null);
+                          setTooltip(null);
+                        }}
+                        onFocus={() => {
+                          setHoveredMenu(item.path);
+                          handleBlockedHover(linkRefs.current[item.path]);
+                        }}
+                        onBlur={() => setTooltip(null)}
+                        onClick={(e) => {
+                          if (blocked) {
+                            e.preventDefault();
+                            handleBlockedHover(linkRefs.current[item.path]);
+                            return;
+                          }
+                          if (item.children) setHoveredMenu(item.path);
+                        }}
                       >
                         {item.label}
                       </Link>
@@ -181,6 +220,29 @@ export default function Layout() {
                   })}
                 </div>
               </nav>
+
+              {tooltip && (
+                <div
+                  style={{
+                    position: 'fixed',
+                    left: tooltip.x,
+                    top: tooltip.y + 10,
+                    transform: 'translate(-50%, 0)',
+                    background: 'rgba(15,23,42,0.95)',
+                    color: '#f97316',
+                    padding: '8px 12px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(148,163,184,0.35)',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    whiteSpace: 'nowrap',
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+                    zIndex: 2000,
+                  }}
+                >
+                  {tooltip.text}
+                </div>
+              )}
 
               {isScoreboardText && (
                 <div
