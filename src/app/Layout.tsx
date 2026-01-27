@@ -2,9 +2,11 @@
 
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAuth } from '../shared/auth/AuthProvider';
 
 export default function Layout() {
   const location = useLocation();
+  const { user, logout, initializing } = useAuth();
   const isLiveOverlay = location.pathname === '/live-overlay';
   const isScoreboardText = location.pathname === '/scoreboard-text';
   const isLanding = location.pathname === '/';
@@ -222,6 +224,68 @@ export default function Layout() {
                   </Link>
                 </div>
               )}
+
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  marginLeft: isScoreboardText ? '8px' : '12px',
+                }}
+              >
+                {initializing ? (
+                  <span style={{ color: '#cbd5e1', fontSize: '13px' }}>로그인 확인 중...</span>
+                ) : user ? (
+                  <>
+                    <span
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: '999px',
+                        background: 'rgba(148,163,184,0.16)',
+                        color: '#e2e8f0',
+                        fontWeight: 700,
+                        fontSize: '13px',
+                        maxWidth: '180px',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                      title={user.email ?? user.uid}
+                    >
+                      {user.email ?? user.uid}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={logout}
+                      style={{
+                        background: 'rgba(148,163,184,0.25)',
+                        color: '#e2e8f0',
+                        padding: '8px 12px',
+                        borderRadius: '12px',
+                        fontSize: '13px',
+                        fontWeight: 800,
+                      }}
+                    >
+                      로그아웃
+                    </button>
+                  </>
+                ) : (
+                  <Link
+                    to="/login"
+                    style={{
+                      background: 'linear-gradient(120deg, #f97316, #f59e0b)',
+                      color: '#0b0f1a',
+                      padding: '10px 14px',
+                      borderRadius: '12px',
+                      fontWeight: 900,
+                      fontSize: '13px',
+                      boxShadow: '0 10px 24px rgba(249,115,22,0.35)',
+                    }}
+                  >
+                    로그인
+                  </Link>
+                )}
+              </div>
             </div>
 
             <div
