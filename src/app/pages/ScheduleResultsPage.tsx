@@ -15,6 +15,7 @@ const gradientCard = (color: string) => ({
 const statusLabel = (match: MatchSchedule) => {
   if (match.status === 'inProgress') return { text: '진행 중', color: '#38bdf8', bg: 'rgba(56,189,248,0.14)' };
   if (match.status === 'completed') return { text: '경기 종료', color: '#f97316', bg: 'rgba(249,115,22,0.14)' };
+  if (match.status === 'canceled') return { text: '취소', color: '#94a3b8', bg: 'rgba(148,163,184,0.18)' };
   return { text: '예정', color: '#22c55e', bg: 'rgba(34,197,94,0.14)' };
 };
 
@@ -27,7 +28,7 @@ export default function ScheduleResultsPage() {
   const results = useMemo(
     () =>
       [...state.matches]
-        .filter((m) => m.status === 'completed' || new Date(m.startTime).getTime() < Date.now())
+        .filter((m) => m.status === 'completed' || m.status === 'canceled' || new Date(m.startTime).getTime() < Date.now())
         .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
         .slice(0, 8),
     [state.matches],

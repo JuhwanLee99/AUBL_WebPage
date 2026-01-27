@@ -146,13 +146,15 @@ function statusLabel(status: MatchStatus) {
       return { text: '경기 종료', color: '#f97316', background: 'rgba(249,115,22,0.15)' };
     case 'inProgress':
       return { text: '진행 중', color: '#38bdf8', background: 'rgba(56,189,248,0.15)' };
+    case 'canceled':
+      return { text: '취소', color: '#94a3b8', background: 'rgba(148,163,184,0.18)' };
     default:
       return { text: '예정', color: '#22c55e', background: 'rgba(34,197,94,0.15)' };
   }
 }
 
 const deriveDisplayStatus = (match: MatchSchedule): MatchStatus => {
-  if (match.status === 'completed' || match.status === 'inProgress') return match.status;
+  if (match.status === 'completed' || match.status === 'inProgress' || match.status === 'canceled') return match.status;
   const startTime = getSafeTime(match.startTime);
   if (startTime > 0 && startTime < Date.now()) return 'completed';
   return 'scheduled';
@@ -232,7 +234,9 @@ export default function MatchSchedulePage() {
     );
     const past = sortedMatches.filter(
       (match) =>
-        match.status === 'completed' || (match.status === 'scheduled' && match.status !== 'inProgress' && getSafeTime(match.startTime) < now),
+        match.status === 'completed' ||
+        match.status === 'canceled' ||
+        (match.status === 'scheduled' && match.status !== 'inProgress' && getSafeTime(match.startTime) < now),
     );
     return { live, upcoming, past };
   }, [sortedMatches]);
@@ -375,7 +379,7 @@ export default function MatchSchedulePage() {
     const badge = statusLabel(displayStatus);
     const isActive = state.activeMatchId === match.id;
     const hasLiveOverlay = Boolean((state.liveVideoUrl || '').trim());
-    const textButtonLabel = match.status === 'completed' ? '세부 결과' : '문자중계';
+    const textButtonLabel = match.status === 'completed' ? '세부 결과' : match.status === 'canceled' ? '취소됨' : '문자중계';
     const goTo = (path: string) => {
       actions.selectMatch(match.id);
       navigate(path);
@@ -836,6 +840,8 @@ export default function MatchSchedulePage() {
               >
                 <option value="scheduled">경기 예정</option>
                 <option value="completed">경기 종료</option>
+                <option value="canceled">경기 취소</option>
+                <option value="inProgress">경기 진행 중</option>
               </select>
             </label>
             {form.status === 'completed' && (

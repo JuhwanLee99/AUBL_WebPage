@@ -19,6 +19,7 @@ const statusText: Record<MatchStatus, string> = {
   scheduled: '예정',
   inProgress: '진행 중',
   completed: '종료',
+  canceled: '취소',
 };
 
 export default function ScheduleManagePage() {
@@ -148,7 +149,7 @@ export default function ScheduleManagePage() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  {(['scheduled', 'inProgress', 'completed'] as MatchStatus[]).map((status) => (
+                  {(['scheduled', 'inProgress', 'completed', 'canceled'] as MatchStatus[]).map((status) => (
                     <button
                       key={status}
                       type="button"
