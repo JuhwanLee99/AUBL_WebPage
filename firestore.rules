@@ -1,18 +1,34 @@
-rules_version='2'
+rules_version = '2';
 
 service cloud.firestore {
+  function isAdmin() {
+    return request.auth != null
+      && (request.auth.token.admin == true
+        || request.auth.token.email in ['aublcau@gmail.com', 'example@ecam.com']);
+  }
+
   match /databases/{database}/documents {
+    // App-wide metadata (currently just the active match pointer)
+    match /app/current {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Public schedule
+    match /matches/{matchId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Live match state (scoreboard / 문자중계 데이터)
+    match /matchStates/{matchId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Deny anything else by default.
     match /{document=**} {
-      // This rule allows anyone with your database reference to view, edit,
-      // and delete all data in your database. It is useful for getting
-      // started, but it is configured to expire after 30 days because it
-      // leaves your app open to attackers. At that time, all client
-      // requests to your database will be denied.
-      //
-      // Make sure to write security rules for your app before that time, or
-      // else all client requests to your database will be denied until you
-      // update your rules.
-      allow read, write: if request.time < timestamp.date(2026, 2, 26);
+      allow read, write: if false;
     }
   }
 }
