@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const serviceAccount = require('../serviceAccountKey.json');
 
 // ---------- 여기를 경기별로 수정 ----------
-const matchId = '20250125-falcons-eagles';
+const matchId = '20260125-falcons-eagles';
 
 // 경기 기본 정보 + 박스스코어 (투수/타자 세부 기록 포함)
 const matchData = {
@@ -18,7 +18,7 @@ const matchData = {
   homeTeamName: '서울시립대학교 FALCONS',
   awayTeamId: 'yonsei-eagles',
   awayTeamName: '연세대학교 EAGLES',
-  startTime: '2025-01-25T04:30:00Z', // 13:30 KST → 04:30 UTC
+  startTime: '2026-01-25T04:30:00Z', // 13:30 KST → 04:30 UTC
   venue: '유신고등학교 야구장',
   status: 'completed',
   homeScore: 5,
@@ -60,11 +60,11 @@ const matchData = {
 
   // 경기 종료 후 박스스코어
   postGame: {
-    note: '2025-01-25 GameOne 박스스코어 (서울시립대 5-4 연세대)',
+    note: '2026-01-25 GameOne 박스스코어 (서울시립대 5-4 연세대)',
     lineScore: {
       innings: [1, 2, 3, 4, 5, 6, 7, 8, 9],
-      home: [2, 0, 0, 0, 0, 0, 0, 1, 2],
-      away: [1, 0, 0, 1, 0, 0, 2, 0, 0],
+      home: [2, 0, 0, 0, 2, 0, 0, 1, ],
+      away: [1, 0, 0, 1, 0, 0, 2, 0, ],
     },
     totals: {
       home: { runs: 5, hits: 7, errors: 3, lob: 4 },
