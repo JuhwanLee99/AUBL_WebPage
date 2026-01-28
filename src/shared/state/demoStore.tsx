@@ -1228,7 +1228,24 @@ function reducer(state: DemoState, action: Action): DemoState {
       }
       const selected = state.matches.find((match) => match.id === action.matchId);
       if (!selected) return state;
-      nextState = resetGameForMatch(state, selected);
+      if (selected.status === 'completed') {
+        nextState = {
+          ...state,
+          activeMatchId: selected.id,
+          teamNames: { home: selected.homeTeamName, away: selected.awayTeamName },
+          homeTeamId: selected.homeTeamId ?? state.homeTeamId,
+          awayTeamId: selected.awayTeamId ?? state.awayTeamId,
+          score: {
+            home: typeof selected.homeScore === 'number' ? selected.homeScore : state.score.home,
+            away: typeof selected.awayScore === 'number' ? selected.awayScore : state.score.away,
+          },
+          gameStarted: true,
+          gameOver: true,
+          lastPlay: '경기 기록 불러오는 중...',
+        };
+      } else {
+        nextState = resetGameForMatch(state, selected);
+      }
       break;
     }
     case 'setMatches':
