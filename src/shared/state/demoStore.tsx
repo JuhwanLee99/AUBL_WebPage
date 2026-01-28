@@ -5,6 +5,7 @@ import {
   doc,
   onSnapshot,
   orderBy,
+  limit,
   query,
   setDoc,
   writeBatch,
@@ -21,6 +22,8 @@ const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
   .split(',')
   .map((email: string) => email.trim().toLowerCase())
   .filter(Boolean);
+const FEED_LIMIT = 50; // 관중 뷰 기본 구독 크기
+const SCORER_FEED_LIMIT = 200; // 기록원 재접속 시 충분한 버퍼
 
 // Firestore는 undefined를 허용하지 않으므로 중첩 객체/배열에서 undefined를 제거한다.
 function pruneUndefined<T>(value: T): T {
@@ -206,7 +209,34 @@ interface DemoState extends DemoSnapshot {
   history: DemoSnapshot[];
 }
 
-type SharedGameState = Omit<DemoSnapshot, 'matches'> & { updatedAt?: number };
+type SharedGameState = Pick<
+  DemoSnapshot,
+  | 'inning'
+  | 'half'
+  | 'balls'
+  | 'strikes'
+  | 'outs'
+  | 'pitchCount'
+  | 'bases'
+  | 'score'
+  | 'lastPlay'
+  | 'homeTeamId'
+  | 'awayTeamId'
+  | 'batterIndex'
+  | 'lineups'
+  | 'benches'
+  | 'teamNames'
+  | 'gameStarted'
+  | 'gameOver'
+  | 'endedAt'
+  | 'liveVideoUrl'
+  | 'activeMatchId'
+  | 'scorerUid'
+  | 'scorerName'
+  | 'scorerEmail'
+  | 'scorerLockedAt'
+  | 'scorerRole'
+> & { updatedAt?: number };
 
 type Action =
   | { type: 'ball' }
@@ -264,7 +294,9 @@ type Action =
       matchId: string;
       lineups: { home: PlayerSlot[]; away: PlayerSlot[] };
       benches: { home: PlayerSlot[]; away: PlayerSlot[] };
-    };
+    }
+  | { type: 'setFeed'; feed: PlayLog[] }
+  | { type: 'setEvents'; events: PlayEvent[] };
 
 const demoLineups: { home: PlayerSlot[]; away: PlayerSlot[] } = {
   home: [
@@ -849,6 +881,8 @@ function shouldTrackHistory(actionType: Action['type']) {
     'resetGame',
     'startGame',
     'setLiveVideoUrl',
+    'setFeed',
+    'setEvents',
   ].includes(actionType);
 }
 
@@ -919,6 +953,16 @@ function reducer(state: DemoState, action: Action): DemoState {
   let nextState = state;
 
   switch (action.type) {
+    case 'setFeed':
+      return {
+        ...state,
+        feed: normalizeFeed(action.feed, { inning: state.inning, half: state.half }),
+      };
+    case 'setEvents':
+      return {
+        ...state,
+        events: normalizeEvents(action.events, { inning: state.inning, half: state.half }),
+      };
     case 'ball':
       if (state.balls >= 3) {
         nextState = applyWalk(state, '볼넷', state.pitchCount + 1);
@@ -2501,12 +2545,22 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   const skipMatchesWriteRef = useRef(false);
   const lastStateKeyRef = useRef('');
   const lastMatchesKeyRef = useRef('');
+  const lastFeedLengthRef = useRef(0);
+  const lastEventsLengthRef = useRef(0);
   const notifiedMatchStartRef = useRef<Set<string>>(new Set());
   const matchesReadyRef = useRef(false);
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  // 새 경기로 전환될 때 이전 feed/events 잔상을 비운다.
+  useEffect(() => {
+    dispatch({ type: 'setFeed', feed: [] });
+    dispatch({ type: 'setEvents', events: [] });
+    lastFeedLengthRef.current = 0;
+    lastEventsLengthRef.current = 0;
+  }, [state.activeMatchId]);
 
   // Subscribe to schedule collection for spectators (read-only) and admins.
   useEffect(() => {
@@ -2625,6 +2679,65 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     return () => unsub();
   }, [state.activeMatchId]);
 
+  // Subscribe to feed/events subcollections (최근 N개만).
+  useEffect(() => {
+    const matchId = state.activeMatchId;
+    if (!matchId) return;
+
+    const isScorer = stateRef.current.scorerUid && stateRef.current.scorerUid === (auth.currentUser?.uid ?? null);
+    const maxEntries = isScorer ? SCORER_FEED_LIMIT : FEED_LIMIT;
+
+    const feedQuery = query(
+      collection(firestore, 'matchStates', matchId, 'feed'),
+      orderBy('createdAt', 'desc'),
+      limit(maxEntries),
+    );
+    const eventsQuery = query(
+      collection(firestore, 'matchStates', matchId, 'events'),
+      orderBy('createdAt', 'desc'),
+      limit(maxEntries),
+    );
+
+    const unsubFeed = onSnapshot(
+      feedQuery,
+      (snap) => {
+        const fallback = { inning: stateRef.current.inning, half: stateRef.current.half as Half };
+        const feedEntries = normalizeFeed(
+          snap.docs.map((d) => d.data()),
+          fallback,
+        );
+        skipFirestoreWriteRef.current = true;
+        lastFeedLengthRef.current = feedEntries.length;
+        dispatch({ type: 'setFeed', feed: feedEntries });
+      },
+      () => {
+        // ignore feed snapshot errors
+      },
+    );
+
+    const unsubEvents = onSnapshot(
+      eventsQuery,
+      (snap) => {
+        const fallback = { inning: stateRef.current.inning, half: stateRef.current.half as Half };
+        const eventsEntries = normalizeEvents(
+          snap.docs.map((d) => d.data()),
+          fallback,
+        );
+        skipFirestoreWriteRef.current = true;
+        lastEventsLengthRef.current = eventsEntries.length;
+        dispatch({ type: 'setEvents', events: eventsEntries });
+      },
+      () => {
+        // ignore events snapshot errors
+      },
+    );
+
+    return () => {
+      unsubFeed();
+      unsubEvents();
+    };
+  }, [state.activeMatchId, state.scorerUid]);
+
   // Attempt to acquire scorer lock for the active match.
   useEffect(() => {
     const matchId = state.activeMatchId;
@@ -2678,24 +2791,70 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   // Push game state to Firestore when admin updates locally.
   useEffect(() => {
     const matchId = state.activeMatchId;
-    if (!matchId) return;
     const currentUid = auth.currentUser?.uid ?? null;
-    if (!currentUid) return;
+    if (!matchId || !currentUid) return;
     if (state.scorerUid && state.scorerUid !== currentUid) return;
     if (skipFirestoreWriteRef.current) {
       skipFirestoreWriteRef.current = false;
+      lastStateKeyRef.current = '';
+      lastFeedLengthRef.current = state.feed.length;
+      lastEventsLengthRef.current = state.events.length;
       return;
     }
     const snapshot = snapshotState(state);
-    const { matches, ...rest } = snapshot;
-    const key = `${matchId}:${rest.inning}:${rest.half}:${rest.score.home}:${rest.score.away}:${rest.pitchCount}:${rest.feed.length}:${rest.events.length}:${rest.gameStarted}:${rest.gameOver}`;
-    if (key === lastStateKeyRef.current) return;
-    lastStateKeyRef.current = key;
-    void setDoc(
-      doc(firestore, 'matchStates', matchId),
-      { ...rest, updatedAt: Date.now() },
-      { merge: true },
-    ).catch(() => {});
+    const { matches: _matches, feed: _feed, events: _events, ...core } = snapshot;
+    const key = JSON.stringify({ matchId, core });
+
+    if (key !== lastStateKeyRef.current) {
+      lastStateKeyRef.current = key;
+      void setDoc(
+        doc(firestore, 'matchStates', matchId),
+        { ...core, updatedAt: Date.now() },
+        { merge: true },
+      ).catch(() => {});
+    }
+
+    const newFeedCount = state.feed.length - lastFeedLengthRef.current;
+    const newEventCount = state.events.length - lastEventsLengthRef.current;
+
+    if (newFeedCount <= 0 && newEventCount <= 0) {
+      lastFeedLengthRef.current = state.feed.length;
+      lastEventsLengthRef.current = state.events.length;
+      return;
+    }
+
+    const batch = writeBatch(firestore);
+    const now = Date.now();
+
+    if (newFeedCount > 0) {
+      const newEntries = state.feed.slice(0, newFeedCount);
+      newEntries.forEach((entry, idx) => {
+        batch.set(
+          doc(collection(firestore, 'matchStates', matchId, 'feed')),
+          pruneUndefined({ ...entry, createdAt: now + idx }),
+        );
+      });
+    }
+
+    if (newEventCount > 0) {
+      const newEntries = state.events.slice(0, newEventCount);
+      newEntries.forEach((entry, idx) => {
+        batch.set(
+          doc(collection(firestore, 'matchStates', matchId, 'events')),
+          pruneUndefined({ ...entry, createdAt: now + idx }),
+        );
+      });
+    }
+
+    void batch
+      .commit()
+      .then(() => {
+        lastFeedLengthRef.current = state.feed.length;
+        lastEventsLengthRef.current = state.events.length;
+      })
+      .catch(() => {
+        // ignore sync errors; will retry on next state change
+      });
   }, [state]);
 
   // Sync schedule changes to Firestore (admin routes only; spectators skip via flag/auth).
