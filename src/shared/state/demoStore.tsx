@@ -1,10 +1,26 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
-import { collection, doc, onSnapshot, orderBy, query, setDoc, writeBatch, deleteDoc, getDoc } from 'firebase/firestore';
+import { getIdTokenResult } from 'firebase/auth';
+import {
+  collection,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  setDoc,
+  writeBatch,
+  deleteDoc,
+  getDoc,
+  runTransaction,
+} from 'firebase/firestore';
 import { auth, firestore } from '../firebase/client';
 import { TEAMS } from '../lib/mockData';
 import type { LeagueDivision } from '../types';
 
 const TRASH_RETENTION_MS = 1000 * 60 * 60 * 24 * 30; // 30일 보관
+const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
+  .split(',')
+  .map((email: string) => email.trim().toLowerCase())
+  .filter(Boolean);
 
 // Firestore는 undefined를 허용하지 않으므로 중첩 객체/배열에서 undefined를 제거한다.
 function pruneUndefined<T>(value: T): T {
@@ -179,6 +195,11 @@ interface DemoSnapshot {
   liveVideoUrl: string;
   matches: MatchSchedule[];
   activeMatchId: string | null;
+  scorerUid: string | null;
+  scorerName: string | null;
+  scorerEmail: string | null;
+  scorerLockedAt: number | null;
+  scorerRole: string | null;
 }
 
 interface DemoState extends DemoSnapshot {
@@ -365,6 +386,11 @@ const initialState: DemoState = {
   history: [],
   matches: [],
   activeMatchId: null,
+  scorerUid: null,
+  scorerName: null,
+  scorerEmail: null,
+  scorerLockedAt: null,
+  scorerRole: null,
 };
 
 function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }): PlayLog[] {
@@ -707,6 +733,11 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
     gameStarted,
     liveVideoUrl: typeof merged.liveVideoUrl === 'string' ? merged.liveVideoUrl : base.liveVideoUrl,
     activeMatchId: typeof merged.activeMatchId === 'string' ? merged.activeMatchId : merged.activeMatchId === null ? null : base.activeMatchId,
+    scorerUid: typeof merged.scorerUid === 'string' ? merged.scorerUid : null,
+    scorerName: typeof merged.scorerName === 'string' ? merged.scorerName : null,
+    scorerEmail: typeof merged.scorerEmail === 'string' ? merged.scorerEmail : null,
+    scorerLockedAt: typeof merged.scorerLockedAt === 'number' ? merged.scorerLockedAt : null,
+    scorerRole: typeof merged.scorerRole === 'string' ? merged.scorerRole : null,
   };
 }
 
@@ -721,6 +752,10 @@ export interface GameRecord {
     gameStarted: boolean;
     gameOver: boolean;
     endedAt: string | null;
+    scorerUid: string | null;
+    scorerName: string | null;
+    scorerEmail: string | null;
+    scorerRole: string | null;
   };
   score: DemoState['score'];
   counts: { balls: number; strikes: number; outs: number; pitchCount: number };
@@ -743,10 +778,14 @@ export function buildGameRecord(state: DemoState): GameRecord {
       awayTeamName: state.teamNames.away,
       inning: state.inning,
       half: state.half,
-      gameStarted: state.gameStarted,
-      gameOver: state.gameOver,
-      endedAt: state.endedAt,
-    },
+    gameStarted: state.gameStarted,
+    gameOver: state.gameOver,
+    endedAt: state.endedAt,
+    scorerUid: state.scorerUid,
+    scorerName: state.scorerName,
+    scorerEmail: state.scorerEmail,
+    scorerRole: state.scorerRole,
+  },
     score: { ...state.score },
     counts: { balls: state.balls, strikes: state.strikes, outs: state.outs, pitchCount: state.pitchCount },
     bases: [...state.bases],
@@ -834,6 +873,14 @@ function syncActiveMatchScore(nextState: DemoState): DemoState {
   };
 }
 
+function isLockedByOther(state: DemoState): boolean {
+  const owner = state.scorerUid;
+  const current = auth.currentUser?.uid ?? null;
+  if (!owner) return false;
+  if (!current) return true;
+  return owner !== current;
+}
+
 function reducer(state: DemoState, action: Action): DemoState {
   if (action.type === 'hydrate') {
     return normalizeState(initialState, action.state);
@@ -860,6 +907,10 @@ function reducer(state: DemoState, action: Action): DemoState {
     'setMatches',
     'syncActiveMatch',
   ];
+  const lockBypass: Action['type'][] = ['selectMatch', 'setMatches', 'syncActiveMatch', 'hydrate'];
+  if (isLockedByOther(state) && !lockBypass.includes(action.type)) {
+    return state;
+  }
   if (!state.gameStarted && !setupActions.includes(action.type)) {
     return state;
   }
@@ -2178,6 +2229,11 @@ function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
     removed: { home: [], away: [] },
     matches: state.matches,
     activeMatchId: match.id,
+    scorerUid: state.scorerUid,
+    scorerName: state.scorerName,
+    scorerEmail: state.scorerEmail,
+    scorerLockedAt: state.scorerLockedAt,
+    scorerRole: state.scorerRole,
   };
 }
 
@@ -2212,6 +2268,11 @@ function createNewGame(state: DemoState): DemoState {
     removed: { home: [], away: [] },
     matches: state.matches,
     activeMatchId: state.activeMatchId,
+    scorerUid: state.scorerUid,
+    scorerName: state.scorerName,
+    scorerEmail: state.scorerEmail,
+    scorerLockedAt: state.scorerLockedAt,
+    scorerRole: state.scorerRole,
   };
 }
 
@@ -2547,10 +2608,63 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     return () => unsub();
   }, [state.activeMatchId]);
 
+  // Attempt to acquire scorer lock for the active match.
+  useEffect(() => {
+    const matchId = state.activeMatchId;
+    const user = auth.currentUser;
+    if (!matchId || !user) return;
+    const run = async () => {
+      const stateDoc = doc(firestore, 'matchStates', matchId);
+      const now = Date.now();
+      const roleLabel = await resolveUserRole(user);
+      await runTransaction(firestore, async (tx) => {
+        const snap = await tx.get(stateDoc);
+        const data = snap.exists()
+          ? (snap.data() as SharedGameState & { scorerUid?: string | null; scorerName?: string | null; scorerEmail?: string | null; scorerLockedAt?: number | null; scorerRole?: string | null })
+          : null;
+        const owner = data?.scorerUid;
+        if (owner && owner !== user.uid) {
+          return;
+        }
+        tx.set(
+          stateDoc,
+          {
+            scorerUid: user.uid,
+            scorerName: user.displayName ?? null,
+            scorerEmail: user.email ?? null,
+            scorerLockedAt: data?.scorerLockedAt ?? now,
+            scorerRole: data?.scorerRole ?? roleLabel,
+          },
+          { merge: true },
+        );
+      });
+      if (stateRef.current.activeMatchId !== matchId) return;
+      skipFirestoreWriteRef.current = true;
+      dispatch({
+        type: 'hydrate',
+        state: normalizeState(initialState, {
+          ...stateRef.current,
+          scorerUid: user.uid,
+          scorerName: user.displayName ?? null,
+          scorerEmail: user.email ?? null,
+          scorerLockedAt: stateRef.current.scorerLockedAt ?? now,
+          scorerRole: stateRef.current.scorerRole ?? roleLabel,
+          matches: stateRef.current.matches,
+        }),
+      });
+    };
+    void run().catch(() => {
+      // ignore lock acquisition errors
+    });
+  }, [state.activeMatchId, auth.currentUser?.uid]);
+
   // Push game state to Firestore when admin updates locally.
   useEffect(() => {
     const matchId = state.activeMatchId;
     if (!matchId) return;
+    const currentUid = auth.currentUser?.uid ?? null;
+    if (!currentUid) return;
+    if (state.scorerUid && state.scorerUid !== currentUid) return;
     if (skipFirestoreWriteRef.current) {
       skipFirestoreWriteRef.current = false;
       return;
@@ -2750,4 +2864,16 @@ export function useDemoStore() {
     throw new Error('DemoStoreProvider가 설정되지 않았습니다.');
   }
   return ctx;
+}
+async function resolveUserRole(user: typeof auth.currentUser): Promise<string | null> {
+  if (!user) return null;
+  try {
+    const token = await getIdTokenResult(user, true);
+    if ((token.claims as Record<string, unknown>).admin) return '관리자';
+  } catch {
+    // ignore token fetch errors; fall back to email list
+  }
+  const email = user.email?.toLowerCase();
+  if (email && ADMIN_EMAILS.includes(email)) return '관리자';
+  return '일반';
 }
