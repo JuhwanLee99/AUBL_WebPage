@@ -24,6 +24,16 @@ service cloud.firestore {
     match /matchStates/{matchId} {
       allow read: if true;
       allow write: if isAdmin();
+
+      // 최근 feed/events 서브컬렉션
+      match /feed/{entryId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+      match /events/{entryId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
     }
 
     // Deny anything else by default.
