@@ -24,6 +24,7 @@ const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
   .filter(Boolean);
 const FEED_LIMIT = 50; // 관중 뷰 기본 구독 크기
 const SCORER_FEED_LIMIT = 200; // 기록원 재접속 시 충분한 버퍼
+const WRITE_DEBOUNCE_MS = 300; // 기록원 상태 동기화 디바운스 (투구 간 평균 간격을 고려해 write 수 최소화)
 
 // Firestore는 undefined를 허용하지 않으므로 중첩 객체/배열에서 undefined를 제거한다.
 function pruneUndefined<T>(value: T): T {
@@ -2547,6 +2548,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   const lastMatchesKeyRef = useRef('');
   const lastFeedLengthRef = useRef(0);
   const lastEventsLengthRef = useRef(0);
+  const writeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const notifiedMatchStartRef = useRef<Set<string>>(new Set());
   const matchesReadyRef = useRef(false);
 
@@ -2801,60 +2803,72 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       lastEventsLengthRef.current = state.events.length;
       return;
     }
-    const snapshot = snapshotState(state);
-    const { matches: _matches, feed: _feed, events: _events, ...core } = snapshot;
-    const key = JSON.stringify({ matchId, core });
+    // 디바운스: 잦은 pitch 입력 시 write 폭주 방지
+    if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
 
-    if (key !== lastStateKeyRef.current) {
-      lastStateKeyRef.current = key;
-      void setDoc(
-        doc(firestore, 'matchStates', matchId),
-        { ...core, updatedAt: Date.now() },
-        { merge: true },
-      ).catch(() => {});
-    }
+    writeTimerRef.current = setTimeout(() => {
+      const snapshot = snapshotState(stateRef.current);
+      const { matches: _matches, feed: _feed, events: _events, ...core } = snapshot;
+      const key = JSON.stringify({ matchId, core });
 
-    const newFeedCount = state.feed.length - lastFeedLengthRef.current;
-    const newEventCount = state.events.length - lastEventsLengthRef.current;
+      if (key !== lastStateKeyRef.current) {
+        lastStateKeyRef.current = key;
+        void setDoc(
+          doc(firestore, 'matchStates', matchId),
+          { ...core, updatedAt: Date.now() },
+          { merge: true },
+        ).catch(() => {});
+      }
 
-    if (newFeedCount <= 0 && newEventCount <= 0) {
-      lastFeedLengthRef.current = state.feed.length;
-      lastEventsLengthRef.current = state.events.length;
-      return;
-    }
+      const newFeedCount = stateRef.current.feed.length - lastFeedLengthRef.current;
+      const newEventCount = stateRef.current.events.length - lastEventsLengthRef.current;
 
-    const batch = writeBatch(firestore);
-    const now = Date.now();
+      if (newFeedCount <= 0 && newEventCount <= 0) {
+        lastFeedLengthRef.current = stateRef.current.feed.length;
+        lastEventsLengthRef.current = stateRef.current.events.length;
+        return;
+      }
 
-    if (newFeedCount > 0) {
-      const newEntries = state.feed.slice(0, newFeedCount);
-      newEntries.forEach((entry, idx) => {
-        batch.set(
-          doc(collection(firestore, 'matchStates', matchId, 'feed')),
-          pruneUndefined({ ...entry, createdAt: now + idx }),
-        );
-      });
-    }
+      const batch = writeBatch(firestore);
+      const now = Date.now();
 
-    if (newEventCount > 0) {
-      const newEntries = state.events.slice(0, newEventCount);
-      newEntries.forEach((entry, idx) => {
-        batch.set(
-          doc(collection(firestore, 'matchStates', matchId, 'events')),
-          pruneUndefined({ ...entry, createdAt: now + idx }),
-        );
-      });
-    }
+      if (newFeedCount > 0) {
+        const newEntries = stateRef.current.feed.slice(0, newFeedCount);
+        newEntries.forEach((entry, idx) => {
+          batch.set(
+            doc(collection(firestore, 'matchStates', matchId, 'feed')),
+            pruneUndefined({ ...entry, createdAt: now + idx }),
+          );
+        });
+      }
 
-    void batch
-      .commit()
-      .then(() => {
-        lastFeedLengthRef.current = state.feed.length;
-        lastEventsLengthRef.current = state.events.length;
-      })
-      .catch(() => {
-        // ignore sync errors; will retry on next state change
-      });
+      if (newEventCount > 0) {
+        const newEntries = stateRef.current.events.slice(0, newEventCount);
+        newEntries.forEach((entry, idx) => {
+          batch.set(
+            doc(collection(firestore, 'matchStates', matchId, 'events')),
+            pruneUndefined({ ...entry, createdAt: now + idx }),
+          );
+        });
+      }
+
+      void batch
+        .commit()
+        .then(() => {
+          lastFeedLengthRef.current = stateRef.current.feed.length;
+          lastEventsLengthRef.current = stateRef.current.events.length;
+        })
+        .catch(() => {
+          // ignore sync errors; will retry on next state change
+        });
+    }, WRITE_DEBOUNCE_MS);
+
+    return () => {
+      if (writeTimerRef.current) {
+        clearTimeout(writeTimerRef.current);
+        writeTimerRef.current = null;
+      }
+    };
   }, [state]);
 
   // Sync schedule changes to Firestore (admin routes only; spectators skip via flag/auth).
