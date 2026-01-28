@@ -22,6 +22,15 @@ export default function Layout() {
     document.documentElement.setAttribute('data-preview-mode', previewMode);
   }, [previewMode]);
 
+  // Ask for notification permission on first visit/login so match-start alerts aren't silently filtered.
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof Notification === 'undefined') return;
+    if (Notification.permission !== 'default') return;
+    void Notification.requestPermission().catch(() => {
+      // Ignore errors (e.g., browser blocks silent requests); match-start logic will attempt again if still default.
+    });
+  }, []);
+
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0 });
   }, [location.pathname]);
