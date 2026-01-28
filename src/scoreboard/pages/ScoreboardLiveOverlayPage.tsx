@@ -1,30 +1,14 @@
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
 
 const defaultLiveSrc = 'https://www.youtube.com/embed/live_stream?channel=YOUR_CHANNEL_ID';
 
 export default function ScoreboardLiveOverlayPage() {
-  const { state } = useDemoStore();
+  const { state, actions } = useDemoStore();
   const navigate = useNavigate();
-  if (!state.activeMatchId) {
-    return (
-      <div
-        style={{
-          display: 'grid',
-          placeItems: 'center',
-          height: '100vh',
-          background: '#020617',
-          color: '#e2e8f0',
-          fontSize: '18px',
-          fontWeight: 700,
-          textAlign: 'center',
-          padding: '24px',
-        }}
-      >
-        기록원에서 경기를 선택해야 라이브 오버레이가 반영됩니다.
-      </div>
-    );
-  }
+  const matches = useMemo(() => state.matches.filter((m) => !m.deleted), [state.matches]);
+
   const youtubeLiveSrc = (state.liveVideoUrl || '').trim() || defaultLiveSrc;
   const battingSide = state.half === 'top' ? 'away' : 'home';
   const inningHalfIcon = state.half === 'top' ? '▲' : '▼';
@@ -72,8 +56,34 @@ export default function ScoreboardLiveOverlayPage() {
             display: 'flex',
             gap: '8px',
             pointerEvents: 'auto',
+            alignItems: 'center',
+            flexWrap: 'wrap',
           }}
         >
+          <select
+            value={state.activeMatchId ?? ''}
+            onChange={(e) => actions.selectMatch(e.target.value || null)}
+            style={{
+              padding: '8px 10px',
+              borderRadius: '10px',
+              border: '1px solid rgba(148,163,184,0.35)',
+              background: 'rgba(15,23,42,0.9)',
+              color: '#e2e8f0',
+              minWidth: '220px',
+              pointerEvents: 'auto',
+            }}
+          >
+            {!state.activeMatchId ? (
+              <option value="" disabled>
+                중계로 볼 경기 선택
+              </option>
+            ) : null}
+            {matches.map((match) => (
+              <option key={match.id} value={match.id}>
+                {match.homeTeamName} vs {match.awayTeamName} {match.status === 'inProgress' ? '· 진행중' : ''}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             onClick={() => navigate('/scoreboard-text')}
@@ -90,7 +100,7 @@ export default function ScoreboardLiveOverlayPage() {
               boxShadow: '0 8px 20px rgba(0,0,0,0.35)',
             }}
           >
-            문자중계로 이동
+            문자중계
           </button>
           <button
             type="button"
@@ -108,7 +118,7 @@ export default function ScoreboardLiveOverlayPage() {
               boxShadow: '0 8px 20px rgba(0,0,0,0.35)',
             }}
           >
-            전광판 보기
+            전광판
           </button>
         </div>
 
