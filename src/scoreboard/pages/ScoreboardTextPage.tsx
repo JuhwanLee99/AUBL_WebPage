@@ -56,6 +56,7 @@ export default function ScoreboardTextPage() {
     () => state.matches.find((m) => m.id === state.activeMatchId) ?? null,
     [state.matches, state.activeMatchId],
   );
+  const hasLiveOverlay = useMemo(() => Boolean((activeMatch?.liveVideoUrl || '').trim()), [activeMatch?.liveVideoUrl]);
   const noActiveMatch = !state.activeMatchId;
   const feed = useMemo(() => state.feed, [state.feed]);
   const hittingSide = state.half === 'top' ? 'away' : 'home';
@@ -234,18 +235,54 @@ export default function ScoreboardTextPage() {
           ) : (
             <>
               <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '12px',
-                }}
-              >
-                <span style={{ fontWeight: 900, fontSize: '18px' }}>문자 중계</span>
-                <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>총 {feed.length}건</span>
-              </div>
-              <LiveFeed sections={sections} collapsedMap={collapsedMap} gameOverInfo={gameOverInfo} />
-            </>
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+            }}
+          >
+            <span style={{ fontWeight: 900, fontSize: '18px' }}>문자 중계</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>총 {feed.length}건</span>
+              {hasLiveOverlay ? (
+                <button
+                  type="button"
+                  onClick={() => navigate('/live-overlay')}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(148,163,184,0.5)',
+                    background: 'rgba(148,163,184,0.12)',
+                    color: '#e2e8f0',
+                    fontWeight: 800,
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                  }}
+                  title="라이브 오버레이 보기"
+                >
+                  라이브 오버레이
+                </button>
+              ) : (
+                <span
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: '10px',
+                    border: '1px dashed rgba(248,113,113,0.6)',
+                    background: 'rgba(248,113,113,0.08)',
+                    color: '#fca5a5',
+                    fontWeight: 800,
+                    fontSize: '12px',
+                  }}
+                  title="이 경기에는 라이브 영상 링크가 없습니다"
+                >
+                  라이브 없음
+                </span>
+              )}
+            </div>
+          </div>
+          <LiveFeed sections={sections} collapsedMap={collapsedMap} gameOverInfo={gameOverInfo} />
+        </>
           )}
         </div>
       </div>
