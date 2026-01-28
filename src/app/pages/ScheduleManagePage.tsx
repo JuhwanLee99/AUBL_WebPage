@@ -2,6 +2,7 @@ import type React from 'react';
 import { useMemo } from 'react';
 import { useDemoStore } from '../../shared/state/demoStore';
 import type { MatchStatus, MatchSchedule } from '../../shared/state/demoStore';
+import type { LeagueDivision } from '../../shared/types';
 import { TEAMS } from '../../shared/lib/mockData';
 
 const inputStyle: React.CSSProperties = {
@@ -53,6 +54,7 @@ export default function ScheduleManagePage() {
       awayTeamId: away.id,
       homeTeamName: home.name,
       awayTeamName: away.name,
+      division: home.division === away.division ? home.division : undefined,
       startTime: start.toISOString(),
       venue: 'AUBL 임시구장',
       status: 'scheduled',
@@ -158,7 +160,25 @@ export default function ScheduleManagePage() {
                       <span>· {match.venue}</span>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
+                    <select
+                      value={match.division ?? 'auto'}
+                      onChange={(e) =>
+                        actions.updateMatch(match.id, {
+                          division: e.target.value === 'auto' ? undefined : (e.target.value as LeagueDivision),
+                        })
+                      }
+                      style={{
+                        ...inputStyle,
+                        width: '130px',
+                        padding: '8px 10px',
+                        background: 'rgba(255,255,255,0.06)',
+                      }}
+                    >
+                      <option value="auto">구분: 자동</option>
+                      <option value="EUTTEUM">으뜸</option>
+                      <option value="BEOGEUM">버금</option>
+                    </select>
                     {(['scheduled', 'inProgress', 'completed', 'canceled'] as MatchStatus[]).map((status) => (
                       <button
                         key={status}
