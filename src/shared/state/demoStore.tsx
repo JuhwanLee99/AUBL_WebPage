@@ -382,7 +382,7 @@ const initialState: DemoState = {
   gameStarted: false,
   gameOver: false,
   endedAt: null,
-  liveVideoUrl: 'https://www.youtube.com/embed/live_stream?channel=YOUR_CHANNEL_ID',
+  liveVideoUrl: '',
   history: [],
   matches: [],
   activeMatchId: null,
