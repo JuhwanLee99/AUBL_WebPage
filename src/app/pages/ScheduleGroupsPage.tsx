@@ -44,8 +44,9 @@ export default function ScheduleGroupsPage() {
   };
 
   const divisionMatches = useMemo(() => {
+    const alive = state.matches.filter((m) => !m.deleted);
     const byDiv: Record<LeagueDivision, typeof state.matches> = { EUTTEUM: [], BEOGEUM: [] };
-    state.matches.forEach((match) => {
+    alive.forEach((match) => {
       const division = deriveDivision(match);
       if (!division) return;
       byDiv[division] = [...byDiv[division], match];

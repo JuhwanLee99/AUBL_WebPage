@@ -28,7 +28,11 @@ export default function ScheduleResultsPage() {
   const results = useMemo(
     () =>
       [...state.matches]
-        .filter((m) => m.status === 'completed' || m.status === 'canceled' || new Date(m.startTime).getTime() < Date.now())
+        .filter(
+          (m) =>
+            !m.deleted &&
+            (m.status === 'completed' || m.status === 'canceled' || new Date(m.startTime).getTime() < Date.now()),
+        )
         .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
         .slice(0, 8),
     [state.matches],
