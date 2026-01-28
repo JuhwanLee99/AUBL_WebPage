@@ -1,10 +1,14 @@
 // **`src/app/Layout.tsx`**
 
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../shared/auth/AuthProvider';
 import { useAdmin } from '../shared/auth/useAdmin';
 import { useDemoStore } from '../shared/state/demoStore';
+
+const NOTIFICATION_PROMPT_KEY = 'aubl:notificationPrompt:v1';
+const NOTIFICATION_PROMPT_SNOOZE_MS = 1000 * 60 * 60 * 24; // 24시간 동안 재등장 방지
+const NOTIFICATION_PROMPT_SNOOZE_WEEK_MS = NOTIFICATION_PROMPT_SNOOZE_MS * 7; // 1주일 동안 재등장 방지
 
 export default function Layout() {
   const location = useLocation();
@@ -19,23 +23,137 @@ export default function Layout() {
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>(() =>
     typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'mobile' : 'desktop',
   );
+  const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
+  const [notificationRequesting, setNotificationRequesting] = useState(false);
+  const [notificationBlocked, setNotificationBlocked] = useState(false);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-preview-mode', previewMode);
   }, [previewMode]);
 
-  // Ask for notification permission on first visit/login so match-start alerts aren't silently filtered.
+  // 첫 방문 시에만 노출되는 경기 시작 알림 CTA (사용자 제스처로 권한 요청)
   useEffect(() => {
     if (typeof window === 'undefined' || typeof Notification === 'undefined') return;
-    if (Notification.permission !== 'default') return;
-    void Notification.requestPermission().catch(() => {
-      // Ignore errors (e.g., browser blocks silent requests); match-start logic will attempt again if still default.
-    });
-  }, []);
+    if (isLiveOverlay) return; // 오버레이 뷰에서는 불필요
+
+    const now = Date.now();
+    const stored = window.localStorage.getItem(NOTIFICATION_PROMPT_KEY);
+    let snoozedUntil = 0;
+    let blockedSnoozedUntil = 0;
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as {
+          snoozedAt?: number;
+          snoozedUntil?: number;
+          blockedSnoozedUntil?: number;
+          permission?: NotificationPermission;
+        };
+        if (parsed.permission === 'granted') {
+          setShowNotificationPrompt(false);
+          setNotificationBlocked(false);
+          return;
+        }
+        if (typeof parsed.snoozedUntil === 'number') {
+          snoozedUntil = parsed.snoozedUntil;
+        } else if (typeof parsed.snoozedAt === 'number') {
+          // backward compatibility with previous single-day snooze
+          snoozedUntil = parsed.snoozedAt + NOTIFICATION_PROMPT_SNOOZE_MS;
+        }
+        if (typeof parsed.blockedSnoozedUntil === 'number') {
+          blockedSnoozedUntil = parsed.blockedSnoozedUntil;
+        }
+      } catch {
+        // ignore malformed cache
+      }
+    }
+
+    if (Notification.permission === 'granted') {
+      window.localStorage.setItem(NOTIFICATION_PROMPT_KEY, JSON.stringify({ permission: 'granted', updatedAt: now }));
+      setShowNotificationPrompt(false);
+      setNotificationBlocked(false);
+      return;
+    }
+
+    if (Notification.permission === 'denied') {
+      if (now < blockedSnoozedUntil) {
+        setNotificationBlocked(false);
+        setShowNotificationPrompt(false);
+        return;
+      }
+      window.localStorage.setItem(NOTIFICATION_PROMPT_KEY, JSON.stringify({ permission: 'denied', updatedAt: now }));
+      setNotificationBlocked(true);
+      setShowNotificationPrompt(false);
+      return;
+    }
+
+    if (now < snoozedUntil) {
+      setShowNotificationPrompt(false);
+      return;
+    }
+
+    setShowNotificationPrompt(true);
+    setNotificationBlocked(false);
+  }, [isLiveOverlay]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0 });
   }, [location.pathname]);
+
+  const handleRequestNotification = useCallback(async () => {
+    if (typeof window === 'undefined' || typeof Notification === 'undefined') return;
+    setNotificationRequesting(true);
+    try {
+      const result = await Notification.requestPermission();
+      const now = Date.now();
+      const payload: { permission: NotificationPermission; updatedAt: number; snoozedUntil?: number } = {
+        permission: result,
+        updatedAt: now,
+      };
+      if (result === 'default') payload.snoozedUntil = now + NOTIFICATION_PROMPT_SNOOZE_MS; // 사용자가 닫은 경우 24시간 백오프
+      window.localStorage.setItem(NOTIFICATION_PROMPT_KEY, JSON.stringify(payload));
+      setNotificationBlocked(result === 'denied');
+      setShowNotificationPrompt(false);
+    } catch {
+      // ignore
+    } finally {
+      setNotificationRequesting(false);
+    }
+  }, []);
+
+  const handleSnoozeNotification = useCallback((durationMs: number = NOTIFICATION_PROMPT_SNOOZE_MS) => {
+    if (typeof window === 'undefined') return;
+    const now = Date.now();
+    window.localStorage.setItem(
+      NOTIFICATION_PROMPT_KEY,
+      JSON.stringify({ permission: 'default', updatedAt: now, snoozedUntil: now + durationMs }),
+    );
+    setShowNotificationPrompt(false);
+  }, []);
+
+  const handleSnoozeBlocked = useCallback((durationMs: number = NOTIFICATION_PROMPT_SNOOZE_WEEK_MS) => {
+    if (typeof window === 'undefined') return;
+    const now = Date.now();
+    window.localStorage.setItem(
+      NOTIFICATION_PROMPT_KEY,
+      JSON.stringify({ permission: 'denied', updatedAt: now, blockedSnoozedUntil: now + durationMs }),
+    );
+    setNotificationBlocked(false);
+    setShowNotificationPrompt(false);
+  }, []);
+
+  useEffect(() => {
+    const syncPermission = () => {
+      if (typeof window === 'undefined' || typeof Notification === 'undefined') return;
+      if (Notification.permission === 'granted') {
+        const now = Date.now();
+        window.localStorage.setItem(NOTIFICATION_PROMPT_KEY, JSON.stringify({ permission: 'granted', updatedAt: now }));
+        setNotificationBlocked(false);
+        setShowNotificationPrompt(false);
+      }
+    };
+    window.addEventListener('focus', syncPermission);
+    return () => window.removeEventListener('focus', syncPermission);
+  }, []);
 
   const activeMatch = useMemo(() => state.matches.find((m) => m.id === state.activeMatchId), [state.matches, state.activeMatchId]);
   const hasLiveOverlay = Boolean((activeMatch?.liveVideoUrl || '').trim());
@@ -482,6 +600,153 @@ export default function Layout() {
       )}
 
       <main className="app-main" style={isLiveOverlay ? { maxWidth: '100%', margin: 0, padding: 0 } : undefined}>
+        {!isLiveOverlay && showNotificationPrompt && typeof Notification !== 'undefined' && (
+          <div
+            style={{
+              display: 'flex',
+              gap: '14px',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              padding: '16px 18px',
+              marginBottom: '18px',
+              borderRadius: '18px',
+              border: '1px solid rgba(96,165,250,0.28)',
+              background: 'linear-gradient(120deg, rgba(59,130,246,0.16), rgba(249,115,22,0.16))',
+              boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
+            }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: '220px' }}>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  letterSpacing: '0.04em',
+                  color: '#cbd5e1',
+                  textTransform: 'uppercase',
+                }}
+              >
+                <span style={{ fontSize: '18px' }}>🔔</span>
+                경기 시작 알림
+              </span>
+              <div style={{ fontSize: '15px', fontWeight: 800, color: '#e2e8f0' }}>
+                첫 방문이라면 &ldquo;알림 허용&rdquo;을 눌러 경기 시작 푸시를 받아보세요.
+              </div>
+              <div style={{ fontSize: '13px', color: '#cbd5e1', lineHeight: 1.5 }}>
+                버튼을 누르는 사용자 제스처가 있어야 크롬의 조용한 알림 모드에서도 권한 팝업이 바로 뜹니다. 거부하거나 닫으면 24시간,
+                &ldquo;일주일 뒤 묻기&rdquo;를 누르면 7일 동안 다시 묻지 않아요.
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={handleRequestNotification}
+                disabled={notificationRequesting}
+                style={{
+                  background: 'linear-gradient(120deg, #f97316, #f59e0b)',
+                  color: '#0b0f1a',
+                  padding: '12px 16px',
+                  fontWeight: 900,
+                  fontSize: '14px',
+                  minWidth: '140px',
+                  opacity: notificationRequesting ? 0.75 : 1,
+                  cursor: notificationRequesting ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {notificationRequesting ? '요청 중...' : '알림 허용'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSnoozeNotification(NOTIFICATION_PROMPT_SNOOZE_MS)}
+                style={{
+                  background: 'rgba(15,23,42,0.65)',
+                  color: '#cbd5e1',
+                  border: '1px solid rgba(148,163,184,0.45)',
+                  padding: '12px 14px',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                }}
+              >
+                하루 뒤 묻기
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSnoozeNotification(NOTIFICATION_PROMPT_SNOOZE_WEEK_MS)}
+                style={{
+                  background: 'rgba(15,23,42,0.65)',
+                  color: '#cbd5e1',
+                  border: '1px solid rgba(148,163,184,0.45)',
+                  padding: '12px 14px',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                }}
+              >
+                일주일 뒤 묻기
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!isLiveOverlay && notificationBlocked && (
+          <div
+            style={{
+              display: 'flex',
+              gap: '12px',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              padding: '14px 16px',
+              marginBottom: '18px',
+              borderRadius: '14px',
+              border: '1px solid rgba(248,113,113,0.5)',
+              background: 'linear-gradient(120deg, rgba(248,113,113,0.12), rgba(248,113,113,0.22))',
+              color: '#fecdd3',
+            }}
+          >
+            <div style={{ flex: 1, minWidth: '220px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ fontWeight: 800, fontSize: '14px' }}>알림이 브라우저에서 차단되어 있어 경기 시작 알림을 보낼 수 없습니다.</div>
+              <div style={{ fontSize: '13px', color: '#ffe4e6' }}>
+                주소창 왼쪽의 자물쇠(🔒) 또는 종(🔔) 아이콘 → 알림 → &ldquo;허용&rdquo;으로 변경한 뒤 새로고침 해주세요.
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setNotificationBlocked(false);
+                  if (typeof Notification !== 'undefined' && Notification.permission === 'default') setShowNotificationPrompt(true);
+                }}
+                style={{
+                  background: 'rgba(255,255,255,0.12)',
+                  color: '#0b1220',
+                  fontWeight: 900,
+                  fontSize: '13px',
+                  padding: '10px 14px',
+                }}
+              >
+                설정 완료
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSnoozeBlocked(NOTIFICATION_PROMPT_SNOOZE_WEEK_MS)}
+                style={{
+                  background: 'rgba(15,23,42,0.7)',
+                  color: '#ffe4e6',
+                  border: '1px solid rgba(252,165,165,0.55)',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                  padding: '10px 14px',
+                }}
+              >
+                일주일 동안 보지 않기
+              </button>
+            </div>
+          </div>
+        )}
+
         <Outlet />
       </main>
 
