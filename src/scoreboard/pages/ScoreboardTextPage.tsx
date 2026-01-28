@@ -55,22 +55,7 @@ export default function ScoreboardTextPage() {
     () => state.matches.find((m) => m.id === state.activeMatchId) ?? null,
     [state.matches, state.activeMatchId],
   );
-  if (!state.activeMatchId) {
-    return (
-      <div
-        style={{
-          borderRadius: '16px',
-          border: '1px solid rgba(148,163,184,0.3)',
-          padding: '32px',
-          textAlign: 'center',
-          color: '#cbd5e1',
-          background: '#0b0f1a',
-        }}
-      >
-        현재 선택된 경기가 없습니다. 경기 일정에서 기록할 경기를 선택해 주세요.
-      </div>
-    );
-  }
+  const noActiveMatch = !state.activeMatchId;
   const feed = useMemo(() => state.feed, [state.feed]);
   const hittingSide = state.half === 'top' ? 'away' : 'home';
   const defenseSide = hittingSide === 'home' ? 'away' : 'home';
@@ -114,6 +99,23 @@ export default function ScoreboardTextPage() {
       resultText,
     };
   }, [state.gameOver, state.score.away, state.score.home, state.teamNames.away, state.teamNames.home]);
+
+  if (noActiveMatch) {
+    return (
+      <div
+        style={{
+          borderRadius: '16px',
+          border: '1px solid rgba(148,163,184,0.3)',
+          padding: '32px',
+          textAlign: 'center',
+          color: '#cbd5e1',
+          background: '#0b0f1a',
+        }}
+      >
+        현재 선택된 경기가 없습니다. 경기 일정에서 기록할 경기를 선택해 주세요.
+      </div>
+    );
+  }
 
   return (
     <div
