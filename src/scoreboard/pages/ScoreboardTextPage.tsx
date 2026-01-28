@@ -51,6 +51,7 @@ type DisplayItem =
 
 export default function ScoreboardTextPage() {
   const { state } = useDemoStore();
+  const [showReplay, setShowReplay] = useState(false);
   const activeMatch = useMemo(
     () => state.matches.find((m) => m.id === state.activeMatchId) ?? null,
     [state.matches, state.activeMatchId],
@@ -155,23 +156,81 @@ export default function ScoreboardTextPage() {
         </div>
         <div
           style={{
-        display: 'grid',
-        gridTemplateRows: 'auto 1fr',
-        gap: '12px',
-        padding: '16px',
-        borderRadius: '16px',
+            display: 'grid',
+            gridTemplateRows: state.gameOver ? 'auto 1fr' : 'auto 1fr',
+            gap: '12px',
+            padding: '16px',
+            borderRadius: '16px',
             border: '1px solid rgba(148, 163, 184, 0.25)',
-        background: '#0b0f1a',
-        color: '#e2e8f0',
-        minHeight: 0,
-        height: 'min(90vh, 925px)',
-        overflow: 'hidden',
-      }}
-    >
-          {state.gameOver && postGameDetail ? (
-            <PostGameDetailSection detail={postGameDetail} teams={{ home: state.teamNames.home, away: state.teamNames.away }} />
-          ) : state.gameOver ? (
-            <PostGameSummary summary={postSummary} />
+            background: '#0b0f1a',
+            color: '#e2e8f0',
+            minHeight: 0,
+            height: 'min(90vh, 925px)',
+            overflow: 'hidden',
+          }}
+        >
+          {state.gameOver ? (
+            <>
+              {postGameDetail ? (
+                <PostGameDetailSection detail={postGameDetail} teams={{ home: state.teamNames.home, away: state.teamNames.away }} />
+              ) : (
+                <PostGameSummary summary={postSummary} />
+              )}
+              <div
+                style={{
+                  border: '1px solid rgba(148,163,184,0.3)',
+                  borderRadius: '12px',
+                  padding: '8px 10px',
+                  background: 'rgba(255,255,255,0.02)',
+                  display: 'grid',
+                  gridTemplateRows: 'auto 1fr',
+                  gap: '6px',
+                  minHeight: 0,
+                  maxHeight: showReplay ? '560px' : '260px',
+                  transition: 'max-height 180ms ease',
+                  overflow: 'hidden',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ display: 'grid', gap: '4px' }}>
+                    <span style={{ fontWeight: 900, fontSize: '14px', color: '#e2e8f0' }}>문자중계 다시보기</span>
+                    <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>경기 종료 후 기록 전체를 확인할 수 있습니다.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowReplay((v) => !v)}
+                    style={{
+                      padding: '8px 10px',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(148,163,184,0.35)',
+                      background: 'rgba(255,255,255,0.05)',
+                      color: '#e2e8f0',
+                      fontWeight: 800,
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {showReplay ? '접기' : '펼치기'}
+                  </button>
+                </div>
+                {showReplay ? (
+                  <div
+                    style={{
+                      borderRadius: '10px',
+                      border: '1px solid rgba(148,163,184,0.25)',
+                      background: 'rgba(15,23,42,0.55)',
+                      padding: '8px',
+                      minHeight: 0,
+                      maxHeight: '420px',
+                      overflowY: 'auto',
+                      alignSelf: 'stretch',
+                    }}
+                  >
+                    <LiveFeed sections={sections} collapsedMap={collapsedMap} gameOverInfo={gameOverInfo} />
+                  </div>
+                ) : null}
+              </div>
+            </>
           ) : (
             <>
               <div
