@@ -1207,7 +1207,7 @@ export default function ScorekeeperPage() {
   const isGameStarted = state.gameStarted;
   const isGameOver = state.gameOver;
   const hasActiveMatch = Boolean(state.activeMatchId);
-  const LOCK_TTL_MS = 180_000; // UI-side TTL (demoStore와 동일)
+  const LOCK_TTL_MS = 300_000; // UI-side TTL (demoStore와 동일)
   const formatMs = useCallback((ms: number) => {
     const totalSeconds = Math.max(0, Math.floor(ms / 1000));
     const m = Math.floor(totalSeconds / 60)
@@ -1879,7 +1879,7 @@ const handleConfirmHitWizard = () => {
                 {/* 하단: 락 설명 + 카운트다운 + 잠금 해제 한 줄 배치 */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>
-                    락은 입력 중 3분 동안 유지되고 60초마다 갱신됩니다. 락 소유자만 기록 가능합니다.{' '}
+                    락은 입력 중 5분 동안 유지되고 60초마다 갱신됩니다. 락 소유자만 기록 가능합니다.{' '}
                     <span style={{ color: lockCountdownColor }}>{lockCountdownLabel}</span>
                   </span>
                   {!lockedByOther && state.scorerUid === (user?.uid ?? null) ? (
