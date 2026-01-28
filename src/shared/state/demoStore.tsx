@@ -2412,6 +2412,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   const skipMatchesWriteRef = useRef(false);
   const lastStateKeyRef = useRef('');
   const lastMatchesKeyRef = useRef('');
+  const notifiedMatchStartRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     stateRef.current = state;
@@ -2430,6 +2431,32 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         const normalized = normalizeMatches(incoming);
         skipMatchesWriteRef.current = true;
         dispatch({ type: 'setMatches', matches: normalized });
+
+        // Notify locally when a 경기 status becomes inProgress (start).
+        if (typeof window !== 'undefined' && typeof Notification !== 'undefined') {
+          const started = normalized.filter((m) => m.status === 'inProgress');
+          started.forEach((match) => {
+            if (notifiedMatchStartRef.current.has(match.id)) return;
+            const permission = Notification.permission;
+            const show = () => {
+              const title = '경기 시작';
+              const body = `${match.homeTeamName} vs ${match.awayTeamName} · ${new Date(match.startTime).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`;
+              try {
+                new Notification(title, { body });
+                notifiedMatchStartRef.current.add(match.id);
+              } catch {
+                // ignore notification failures
+              }
+            };
+            if (permission === 'granted') {
+              show();
+            } else if (permission === 'default') {
+              void Notification.requestPermission().then((result) => {
+                if (result === 'granted') show();
+              });
+            }
+          });
+        }
       },
       (error) => {
         // eslint-disable-next-line no-console
