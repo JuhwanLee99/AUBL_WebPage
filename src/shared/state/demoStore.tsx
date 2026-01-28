@@ -27,7 +27,7 @@ const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
 const FEED_LIMIT = 50; // 관중 뷰 기본 구독 크기
 const SCORER_FEED_LIMIT = 200; // 기록원 재접속 시 충분한 버퍼
 const WRITE_DEBOUNCE_MS = 300; // 기록원 상태 동기화 디바운스 (투구 간 평균 간격을 고려해 write 수 최소화)
-const SCORER_LOCK_TTL_MS = 180_000; // 3분 후 락 만료 (이닝 교대 대비 여유)
+const SCORER_LOCK_TTL_MS = 300_000; // 5분 후 락 만료 (이닝 교대 대비 여유)
 const SCORER_LOCK_HEARTBEAT_MS = 60_000; // 60초마다 하트비트 갱신
 
 // Firestore는 undefined를 허용하지 않으므로 중첩 객체/배열에서 undefined를 제거한다.
