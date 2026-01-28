@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { getIdTokenResult } from 'firebase/auth';
+import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState, useCallback } from 'react';
+import { getIdTokenResult, onIdTokenChanged } from 'firebase/auth';
 import {
   collection,
   doc,
@@ -26,6 +26,7 @@ const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
   .filter(Boolean);
 const FEED_LIMIT = 50; // 관중 뷰 기본 구독 크기
 const SCORER_FEED_LIMIT = 200; // 기록원 재접속 시 충분한 버퍼
+const FEED_DOC_LIMIT = 120; // matchStates 문서에 함께 싣는 최대 feed/event 개수 (관중권한 fallback)
 const WRITE_DEBOUNCE_MS = 300; // 기록원 상태 동기화 디바운스 (투구 간 평균 간격을 고려해 write 수 최소화)
 const SCORER_LOCK_TTL_MS = 300_000; // 5분 후 락 만료 (이닝 교대 대비 여유)
 const SCORER_LOCK_HEARTBEAT_MS = 60_000; // 60초마다 하트비트 갱신
@@ -2600,10 +2601,61 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   const matchesReadyRef = useRef(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const STORAGE_KEY = 'aubl-demo-state';
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  // Snapshot to localStorage whenever meaningful changes occur.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!state.activeMatchId) return;
+    // Avoid excessive writes: only persist when gameStarted or feed/events have entries.
+    if (!state.gameStarted && state.feed.length === 0 && state.events.length === 0) return;
+    const snapshot = snapshotState(state);
+    // Limit persisted feed/events to reduce payload.
+    const trimmed: DemoSnapshot = {
+      ...snapshot,
+      feed: snapshot.feed.slice(0, 150),
+      events: snapshot.events.slice(0, 150),
+    };
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+    } catch {
+      // ignore storage quota errors
+    }
+  }, [state]);
+
+  const pushMatchUpdate = useCallback((matchId: string, overrides: Partial<MatchSchedule> = {}) => {
+    const current = stateRef.current.matches.find((m) => m.id === matchId);
+    if (!current) return Promise.resolve();
+    matchesReadyRef.current = true;
+    const payload = pruneUndefined({ ...current, ...overrides });
+    return setDoc(doc(firestore, 'matches', matchId), payload, { merge: true });
+  }, []);
+
+  // Local persistence fallback to keep score state across navigation/refresh.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Partial<DemoSnapshot>;
+      if (!parsed.activeMatchId) return;
+      skipFirestoreWriteRef.current = true;
+      dispatch({
+        type: 'hydrate',
+        state: normalizeState(initialState, {
+          ...stateRef.current,
+          ...parsed,
+          matches: parsed.matches ?? stateRef.current.matches,
+        } as DemoState),
+      });
+    } catch {
+      // ignore corrupt cache
+    }
+  }, []);
 
   // Determine admin (for schedule write privileges & full subscription)
   useEffect(() => {
@@ -2638,12 +2690,10 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     lastEventsLengthRef.current = 0;
   }, [state.activeMatchId]);
 
-  // Subscribe to schedule: admins get 전체, 관중은 inProgress만 구독.
+  // Subscribe to schedule for everyone; non-admin은 민감 필드만 제거한 projected 데이터를 사용.
   useEffect(() => {
     const matchesCol = collection(firestore, 'matches');
-    const liveQuery = isAdmin
-      ? query(matchesCol, orderBy('startTime', 'asc'))
-      : query(matchesCol, where('status', '==', 'inProgress'));
+    const liveQuery = query(matchesCol, orderBy('startTime', 'asc'));
 
     const unsub = onSnapshot(
       liveQuery,
@@ -2652,7 +2702,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
           id: docSnap.id,
           ...(docSnap.data() as Partial<MatchSchedule>),
         }));
-        const normalized = normalizeMatches(incoming);
+        const normalized = normalizeMatches(incoming).filter((m) => !m.deleted);
         const projected = isAdmin ? normalized : normalized.map(projectSpectatorMatch);
         const merged = isAdmin
           ? projected
@@ -2664,6 +2714,15 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         skipMatchesWriteRef.current = true;
         matchesReadyRef.current = true;
         dispatch({ type: 'setMatches', matches: merged });
+
+        // If spectators can't read app/current (권한 제한), auto-follow 첫 진행중 경기.
+        if (!stateRef.current.activeMatchId) {
+          const live = merged.find((m) => m.status === 'inProgress');
+          if (live) {
+            skipFirestoreWriteRef.current = true;
+            dispatch({ type: 'syncActiveMatch', matchId: live.id });
+          }
+        }
 
         // Notify locally when a 경기 status becomes inProgress (start).
         if (typeof window !== 'undefined' && typeof Notification !== 'undefined') {
@@ -2785,6 +2844,30 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       orderBy('createdAt', 'desc'),
       limit(maxEntries),
     );
+
+    // One-time fetch to prefill feed/events for spectators so 기존 기록이 즉시 보임.
+    const prime = async () => {
+      try {
+        const [feedSnap, eventsSnap] = await Promise.all([getDocs(feedQuery), getDocs(eventsQuery)]);
+        const fallback = { inning: stateRef.current.inning, half: stateRef.current.half as Half };
+        const feedEntries = normalizeFeed(
+          feedSnap.docs.map((d) => d.data()),
+          fallback,
+        );
+        const eventEntries = normalizeEvents(
+          eventsSnap.docs.map((d) => d.data()),
+          fallback,
+        );
+        skipFirestoreWriteRef.current = true;
+        lastFeedLengthRef.current = feedEntries.length;
+        lastEventsLengthRef.current = eventEntries.length;
+        dispatch({ type: 'setFeed', feed: feedEntries });
+        dispatch({ type: 'setEvents', events: eventEntries });
+      } catch {
+        // ignore prefetch errors; realtime listener below will retry on updates
+      }
+    };
+    void prime();
 
     const unsubFeed = onSnapshot(
       feedQuery,
@@ -2928,14 +3011,16 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
 
     writeTimerRef.current = setTimeout(() => {
       const snapshot = snapshotState(stateRef.current);
-      const { matches: _matches, feed: _feed, events: _events, ...core } = snapshot;
-      const key = JSON.stringify({ matchId, core });
+      const trimmedFeed = snapshot.feed.slice(0, FEED_DOC_LIMIT);
+      const trimmedEvents = snapshot.events.slice(0, FEED_DOC_LIMIT);
+      const { matches: _matches, ...core } = snapshot;
+      const key = JSON.stringify({ matchId, core, trimmedFeed, trimmedEvents });
 
       if (key !== lastStateKeyRef.current) {
         lastStateKeyRef.current = key;
         void setDoc(
           doc(firestore, 'matchStates', matchId),
-          { ...core, updatedAt: Date.now() },
+          { ...core, feed: trimmedFeed, events: trimmedEvents, updatedAt: Date.now() },
           { merge: true },
         ).catch(() => {});
       }
@@ -3081,8 +3166,25 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       substitute: (side: Side, benchIndex: number, lineupIndex: number) =>
         dispatch({ type: 'substitute', side, benchIndex, lineupIndex }),
       setPlay: (message: string) => dispatch({ type: 'setPlay', message }),
-      startGame: () => dispatch({ type: 'startGame' }),
-      endGame: (endedAt: string) => dispatch({ type: 'endGame', endedAt }),
+      startGame: () => {
+        dispatch({ type: 'startGame' });
+        const matchId = stateRef.current.activeMatchId;
+        if (matchId) {
+          void pushMatchUpdate(matchId, { status: 'inProgress' }).catch(() => {});
+        }
+      },
+      endGame: (endedAt: string) => {
+        dispatch({ type: 'endGame', endedAt });
+        const matchId = stateRef.current.activeMatchId;
+        if (matchId) {
+          const snapshot = stateRef.current;
+          void pushMatchUpdate(matchId, {
+            status: 'completed',
+            homeScore: snapshot.score.home,
+            awayScore: snapshot.score.away,
+          }).catch(() => {});
+        }
+      },
       resetGame: () => dispatch({ type: 'resetGame' }),
       undo: () => dispatch({ type: 'undo' }),
       addMatch: (match: MatchSchedule) => {
@@ -3165,14 +3267,14 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
           const snap = await getDocs(
             query(
               collection(firestore, 'matches'),
-              where('status', 'in', ['scheduled', 'completed', 'canceled']),
+              where('status', 'in', ['scheduled', 'inProgress', 'completed', 'canceled']),
             ),
           );
           const incoming = snap.docs.map((docSnap) => ({
             id: docSnap.id,
             ...(docSnap.data() as Partial<MatchSchedule>),
           }));
-          const normalized = normalizeMatches(incoming);
+          const normalized = normalizeMatches(incoming).filter((m) => !m.deleted);
           const projected = isAdmin ? normalized : normalized.map(projectSpectatorMatch);
           skipMatchesWriteRef.current = true;
           matchesReadyRef.current = true;
@@ -3198,6 +3300,19 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     }),
     [isAdmin],
   );
+
+  // Preload 전체 일정(예정/종료) once per actions ref to avoid 빈 목록 when 첫 진입.
+  useEffect(() => {
+    void actions.loadFullSchedule();
+  }, [actions]);
+
+  // Re-fetch schedule after auth state changes so 새로고침 직후에도 전체 일정이 복원된다.
+  useEffect(() => {
+    const unsub = onIdTokenChanged(auth, () => {
+      void actions.loadFullSchedule();
+    });
+    return () => unsub();
+  }, [actions]);
 
   const value = useMemo(() => ({ state, actions }), [state, actions]);
 
