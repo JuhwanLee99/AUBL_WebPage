@@ -1,5 +1,42 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
-import { MATCHES, TEAMS } from '../lib/mockData';
+import { getIdTokenResult } from 'firebase/auth';
+import {
+  collection,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  setDoc,
+  writeBatch,
+  deleteDoc,
+  getDoc,
+  runTransaction,
+} from 'firebase/firestore';
+import { auth, firestore } from '../firebase/client';
+import { TEAMS } from '../lib/mockData';
+import type { LeagueDivision } from '../types';
+
+const TRASH_RETENTION_MS = 1000 * 60 * 60 * 24 * 30; // 30일 보관
+const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
+  .split(',')
+  .map((email: string) => email.trim().toLowerCase())
+  .filter(Boolean);
+
+// Firestore는 undefined를 허용하지 않으므로 중첩 객체/배열에서 undefined를 제거한다.
+function pruneUndefined<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((v) => pruneUndefined(v)) as unknown as T;
+  }
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).reduce<Record<string, unknown>>((acc, [k, v]) => {
+      if (v === undefined) return acc;
+      acc[k] = pruneUndefined(v);
+      return acc;
+    }, {});
+    return entries as unknown as T;
+  }
+  return value;
+}
 
 type Half = 'top' | 'bottom';
 
@@ -15,7 +52,59 @@ interface PlayerSlot {
   order?: number | null;
 }
 
-export type MatchStatus = 'scheduled' | 'inProgress' | 'completed';
+export type PostGameLineScore = { innings: number[]; home: number[]; away: number[] };
+
+export type PostGameTotals = {
+  home: { runs: number; hits: number; errors: number; lob?: number };
+  away: { runs: number; hits: number; errors: number; lob?: number };
+};
+
+export type PostGameBatterLine = {
+  name: string;
+  pos?: string;
+  order?: number | null;
+  slot?: string; // e.g., 대타/대주 표기
+  innings?: (string | null | undefined)[];
+  ab?: number;
+  h?: number;
+  rbi?: number;
+  r?: number;
+  sb?: number;
+  avg?: number;
+  seasonAvg?: number;
+};
+
+export type PostGamePitcherLine = {
+  name: string;
+  result?: string; // 승/패/세/홀드 등
+  ip?: number;
+  bf?: number;
+  ab?: number;
+  h?: number;
+  hr?: number;
+  bb?: number;
+  hbp?: number;
+  so?: number;
+  r?: number;
+  er?: number;
+  pitches?: number;
+  wp?: number;
+  bk?: number;
+  sh?: number; // 희생타 허용
+  sf?: number; // 희생플라이 허용
+  era?: number;
+};
+
+export type PostGameRecord = {
+  lineScore: PostGameLineScore;
+  totals: PostGameTotals;
+  teamBatterSummary?: { home?: { ab?: number; h?: number; r?: number; rbi?: number; sb?: number }; away?: { ab?: number; h?: number; r?: number; rbi?: number; sb?: number } };
+  batters?: { home?: PostGameBatterLine[]; away?: PostGameBatterLine[] };
+  pitchers?: { home?: PostGamePitcherLine[]; away?: PostGamePitcherLine[] };
+  note?: string;
+};
+
+export type MatchStatus = 'scheduled' | 'inProgress' | 'completed' | 'canceled';
 
 export interface MatchSchedule {
   id: string;
@@ -26,11 +115,17 @@ export interface MatchSchedule {
   startTime: string;
   venue: string;
   status: MatchStatus;
+  division?: LeagueDivision; // 으뜸/버금 구분 (관리자 지정)
   homeScore?: number | null;
   awayScore?: number | null;
   lineups?: { home: PlayerSlot[]; away: PlayerSlot[] };
   benches?: { home: PlayerSlot[]; away: PlayerSlot[] };
   notes?: string;
+  postGame?: PostGameRecord;
+  deleted?: boolean;
+  deletedAt?: number;
+  purgeAt?: number;
+  deletedBy?: string;
 }
 
 export type RunnerAdvanceOutcome = 'hold' | 'advance' | 'out' | 'score' | 1 | 2 | 3 | 4;
@@ -100,11 +195,18 @@ interface DemoSnapshot {
   liveVideoUrl: string;
   matches: MatchSchedule[];
   activeMatchId: string | null;
+  scorerUid: string | null;
+  scorerName: string | null;
+  scorerEmail: string | null;
+  scorerLockedAt: number | null;
+  scorerRole: string | null;
 }
 
 interface DemoState extends DemoSnapshot {
   history: DemoSnapshot[];
 }
+
+type SharedGameState = Omit<DemoSnapshot, 'matches'> & { updatedAt?: number };
 
 type Action =
   | { type: 'ball' }
@@ -150,7 +252,13 @@ type Action =
   | { type: 'hydrate'; state: DemoState }
   | { type: 'addMatch'; match: MatchSchedule }
   | { type: 'updateMatch'; matchId: string; updates: Partial<MatchSchedule> }
+  | { type: 'deleteMatch'; matchId: string }
+  | { type: 'moveMatchToTrash'; matchId: string; entry: MatchSchedule }
+  | { type: 'restoreMatch'; matchId: string }
+  | { type: 'purgeTrash'; matchId: string }
   | { type: 'selectMatch'; matchId: string | null }
+  | { type: 'setMatches'; matches: MatchSchedule[] }
+  | { type: 'syncActiveMatch'; matchId: string | null }
   | {
       type: 'saveMatchLineups';
       matchId: string;
@@ -158,9 +266,6 @@ type Action =
       benches: { home: PlayerSlot[]; away: PlayerSlot[] };
     };
 
-const STORAGE_KEY = 'aubl-demo-store';
-
-const initialMatch = MATCHES[0];
 const demoLineups: { home: PlayerSlot[]; away: PlayerSlot[] } = {
   home: [
     { name: '김지찬', pos: '2B', number: '1', throws: 'R', bats: 'L' },
@@ -229,77 +334,22 @@ const ensureCompleteLineups = (lineups: { home: PlayerSlot[]; away: PlayerSlot[]
   away: ensureLineupFilled(lineups.away),
 });
 
-const teamNameById = (teamId?: string) => TEAMS.find((team) => team.id === teamId)?.name ?? '미정';
-
-const initialScheduledMatches: MatchSchedule[] = [
-  {
-    id: 'schedule-1',
-    homeTeamId: 'team-1',
-    awayTeamId: 'team-2',
-    homeTeamName: teamNameById('team-1'),
-    awayTeamName: teamNameById('team-2'),
-    startTime: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
-    venue: 'AUBL 메인구장',
-    status: 'scheduled',
-    lineups: cloneLineups(demoLineups),
-    notes: '라인업 사전 등록 완료',
-  },
-  {
-    id: 'schedule-2',
-    homeTeamId: 'team-3',
-    awayTeamId: 'team-4',
-    homeTeamName: teamNameById('team-3'),
-    awayTeamName: teamNameById('team-4'),
-    startTime: new Date(Date.now() + 1000 * 60 * 60 * 48).toISOString(),
-    venue: 'AUBL 보조구장',
-    status: 'scheduled',
-  },
-  {
-    id: 'schedule-3',
-    homeTeamId: 'team-5',
-    awayTeamId: 'team-1',
-    homeTeamName: teamNameById('team-5'),
-    awayTeamName: teamNameById('team-1'),
-    startTime: new Date(Date.now() + 1000 * 60 * 60 * 72).toISOString(),
-    venue: 'Epsilon Field',
-    status: 'scheduled',
-    notes: '버금/EUTTEUM 간 인기 매치업',
-  },
-  {
-    id: 'schedule-4',
-    homeTeamId: 'team-4',
-    awayTeamId: 'team-3',
-    homeTeamName: teamNameById('team-4'),
-    awayTeamName: teamNameById('team-3'),
-    startTime: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
-    venue: 'Delta Dome',
-    status: 'inProgress',
-  },
-  {
-    id: 'schedule-5',
-    homeTeamId: 'team-2',
-    awayTeamId: 'team-5',
-    homeTeamName: teamNameById('team-2'),
-    awayTeamName: teamNameById('team-5'),
-    startTime: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
-    venue: 'Beta Stadium',
-    status: 'completed',
-    homeScore: 4,
-    awayScore: 6,
-  },
-  ...MATCHES.slice(0, 1).map((match, index) => ({
-    id: `result-${index + 1}`,
-    homeTeamId: match.homeTeamId,
-    awayTeamId: match.awayTeamId,
-    homeTeamName: teamNameById(match.homeTeamId),
-    awayTeamName: teamNameById(match.awayTeamId),
-    startTime: new Date(Date.now() - 1000 * 60 * 60 * 24 * (index + 1)).toISOString(),
-    venue: 'AUBL 기록실',
-    status: 'completed' as const,
-    homeScore: match.homeScore,
-    awayScore: match.awayScore,
-  })),
-];
+const teamDivisionById = (teamId?: string): LeagueDivision | undefined => TEAMS.find((team) => team.id === teamId)?.division;
+const deriveMatchDivision = (
+  division: unknown,
+  homeTeamId?: string,
+  awayTeamId?: string,
+): LeagueDivision | undefined => {
+  const normalized =
+    typeof division === 'string' ? division.trim().toUpperCase() : undefined;
+  if (normalized === 'EUTTEUM' || normalized === 'BEOGEUM') return normalized;
+  const homeDiv = teamDivisionById(homeTeamId);
+  const awayDiv = teamDivisionById(awayTeamId);
+  if (homeDiv && awayDiv && homeDiv === awayDiv) return homeDiv;
+  if (homeDiv && !awayDiv) return homeDiv;
+  if (awayDiv && !homeDiv) return awayDiv;
+  return undefined;
+};
 
 const initialState: DemoState = {
   inning: 1,
@@ -313,8 +363,8 @@ const initialState: DemoState = {
   lastPlay: '경기 대기 중',
   feed: [],
   events: [],
-  homeTeamId: initialMatch?.homeTeamId ?? 'home',
-  awayTeamId: initialMatch?.awayTeamId ?? 'away',
+  homeTeamId: 'home',
+  awayTeamId: 'away',
   batterIndex: { home: 0, away: 0 },
   lineups: demoLineups,
   benches: {
@@ -332,10 +382,15 @@ const initialState: DemoState = {
   gameStarted: false,
   gameOver: false,
   endedAt: null,
-  liveVideoUrl: 'https://www.youtube.com/embed/live_stream?channel=YOUR_CHANNEL_ID',
+  liveVideoUrl: '',
   history: [],
-  matches: initialScheduledMatches,
+  matches: [],
   activeMatchId: null,
+  scorerUid: null,
+  scorerName: null,
+  scorerEmail: null,
+  scorerLockedAt: null,
+  scorerRole: null,
 };
 
 function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }): PlayLog[] {
@@ -455,6 +510,146 @@ function normalizeBenches(benches: unknown): { home: PlayerSlot[]; away: PlayerS
   return { home, away };
 }
 
+const asNumber = (value: unknown) => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+};
+
+function normalizeLineScore(lineScore: unknown): PostGameLineScore | undefined {
+  if (!lineScore || typeof lineScore !== 'object') return undefined;
+  const ls = lineScore as Partial<PostGameLineScore>;
+  const innings = Array.isArray(ls.innings) ? ls.innings.map(asNumber).filter((n): n is number => n !== undefined) : [];
+  const home = Array.isArray(ls.home) ? ls.home.map(asNumber).filter((n): n is number => n !== undefined) : [];
+  const away = Array.isArray(ls.away) ? ls.away.map(asNumber).filter((n): n is number => n !== undefined) : [];
+  if (!innings.length || !home.length || !away.length) return undefined;
+  return { innings, home, away };
+}
+
+function normalizeTotals(totals: unknown): PostGameTotals | undefined {
+  if (!totals || typeof totals !== 'object') return undefined;
+  const t = totals as PostGameTotals;
+  const pick = (side: 'home' | 'away') => {
+    const src = (t as any)[side] ?? {};
+    const runs = asNumber(src.runs);
+    const hits = asNumber(src.hits);
+    const errors = asNumber(src.errors);
+    if (runs === undefined || hits === undefined || errors === undefined) return undefined;
+    const lob = asNumber(src.lob);
+    return lob !== undefined ? { runs, hits, errors, lob } : { runs, hits, errors };
+  };
+  const home = pick('home');
+  const away = pick('away');
+  if (!home || !away) return undefined;
+  return { home, away };
+}
+
+function normalizePitcherLine(entry: unknown): PostGamePitcherLine | null {
+  if (!entry || typeof entry !== 'object') return null;
+  const p = entry as Partial<PostGamePitcherLine>;
+  if (typeof p.name !== 'string' || !p.name.trim()) return null;
+  const fields: (keyof PostGamePitcherLine)[] = [
+    'name',
+    'result',
+    'ip',
+    'bf',
+    'ab',
+    'h',
+    'hr',
+    'bb',
+    'hbp',
+    'so',
+    'r',
+    'er',
+    'pitches',
+    'wp',
+    'bk',
+    'sh',
+    'sf',
+    'era',
+  ];
+  const out: Partial<PostGamePitcherLine> = { name: p.name.trim() };
+  fields.forEach((key) => {
+    if (key === 'name' || key === 'result') return;
+    const val = asNumber((p as any)[key]);
+    if (val !== undefined) (out as any)[key] = val;
+  });
+  if (typeof p.result === 'string' && p.result.trim()) out.result = p.result.trim();
+  return out as PostGamePitcherLine;
+}
+
+function normalizePitchers(pitchers: unknown): PostGameRecord['pitchers'] | undefined {
+  if (!pitchers || typeof pitchers !== 'object') return undefined;
+  const src = pitchers as { home?: unknown; away?: unknown };
+  const normalizeSide = (side: unknown) =>
+    Array.isArray(side)
+      ? side
+          .map(normalizePitcherLine)
+          .filter((p): p is PostGamePitcherLine => Boolean(p && p.name))
+      : [];
+  const home = normalizeSide(src.home);
+  const away = normalizeSide(src.away);
+  if (!home.length && !away.length) return undefined;
+  return { home, away };
+}
+
+function normalizeBatterLine(entry: unknown): PostGameBatterLine | null {
+  if (!entry || typeof entry !== 'object') return null;
+  const b = entry as Partial<PostGameBatterLine>;
+  if (typeof b.name !== 'string' || !b.name.trim()) return null;
+  const out: Partial<PostGameBatterLine> = { name: b.name.trim() };
+  if (typeof b.pos === 'string' && b.pos.trim()) out.pos = b.pos.trim();
+  if (typeof b.slot === 'string' && b.slot.trim()) out.slot = b.slot.trim();
+  if (typeof b.order === 'number' && Number.isFinite(b.order)) out.order = b.order;
+  if (Array.isArray(b.innings)) {
+    out.innings = b.innings.map((v) => (typeof v === 'string' ? v : v == null ? null : String(v)));
+  }
+  ['ab', 'h', 'rbi', 'r', 'sb', 'avg', 'seasonAvg'].forEach((k) => {
+    const key = k as keyof PostGameBatterLine;
+    const val = asNumber((b as any)[key]);
+    if (val !== undefined) (out as any)[key] = val;
+  });
+  return out as PostGameBatterLine;
+}
+
+function normalizeBatters(batters: unknown): PostGameRecord['batters'] | undefined {
+  if (!batters || typeof batters !== 'object') return undefined;
+  const src = batters as { home?: unknown; away?: unknown };
+  const normalizeSide = (side: unknown) =>
+    Array.isArray(side)
+      ? side
+          .map(normalizeBatterLine)
+          .filter((b): b is PostGameBatterLine => Boolean(b && b.name))
+      : [];
+  const home = normalizeSide(src.home);
+  const away = normalizeSide(src.away);
+  if (!home.length && !away.length) return undefined;
+  return { home, away };
+}
+
+function normalizePostGame(pg: unknown): PostGameRecord | undefined {
+  if (!pg || typeof pg !== 'object') return undefined;
+  const record = pg as Partial<PostGameRecord>;
+  const lineScore = normalizeLineScore(record.lineScore);
+  const totals = normalizeTotals(record.totals);
+  if (!lineScore || !totals) return undefined;
+  const teamBatterSummary = record.teamBatterSummary;
+  const batters = normalizeBatters(record.batters);
+  const pitchers = normalizePitchers(record.pitchers);
+  const note = typeof record.note === 'string' ? record.note : undefined;
+  return {
+    lineScore,
+    totals,
+    teamBatterSummary,
+    batters,
+    pitchers,
+    note,
+  };
+}
+
 function normalizeMatches(matches: unknown): MatchSchedule[] {
   if (!Array.isArray(matches)) return [];
   return matches.map((entry) => {
@@ -466,6 +661,7 @@ function normalizeMatches(matches: unknown): MatchSchedule[] {
         startTime: new Date().toISOString(),
         venue: '미정',
         status: 'scheduled',
+        division: undefined,
       } satisfies MatchSchedule;
     }
     const match = entry as Partial<MatchSchedule>;
@@ -478,11 +674,17 @@ function normalizeMatches(matches: unknown): MatchSchedule[] {
       startTime: typeof match.startTime === 'string' ? match.startTime : new Date().toISOString(),
       venue: typeof match.venue === 'string' ? match.venue : '미정',
       status: match.status === 'completed' || match.status === 'inProgress' ? match.status : 'scheduled',
+      division: deriveMatchDivision(match.division, match.homeTeamId, match.awayTeamId),
       homeScore: typeof match.homeScore === 'number' ? match.homeScore : null,
       awayScore: typeof match.awayScore === 'number' ? match.awayScore : null,
       lineups: normalizeLineups(match.lineups),
       benches: normalizeBenches(match.benches),
       notes: typeof match.notes === 'string' ? match.notes : undefined,
+      postGame: normalizePostGame(match.postGame),
+      deleted: match.deleted === true,
+      deletedAt: typeof match.deletedAt === 'number' ? match.deletedAt : undefined,
+      purgeAt: typeof match.purgeAt === 'number' ? match.purgeAt : undefined,
+      deletedBy: typeof match.deletedBy === 'string' ? match.deletedBy : undefined,
     };
   });
 }
@@ -531,6 +733,11 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
     gameStarted,
     liveVideoUrl: typeof merged.liveVideoUrl === 'string' ? merged.liveVideoUrl : base.liveVideoUrl,
     activeMatchId: typeof merged.activeMatchId === 'string' ? merged.activeMatchId : merged.activeMatchId === null ? null : base.activeMatchId,
+    scorerUid: typeof merged.scorerUid === 'string' ? merged.scorerUid : null,
+    scorerName: typeof merged.scorerName === 'string' ? merged.scorerName : null,
+    scorerEmail: typeof merged.scorerEmail === 'string' ? merged.scorerEmail : null,
+    scorerLockedAt: typeof merged.scorerLockedAt === 'number' ? merged.scorerLockedAt : null,
+    scorerRole: typeof merged.scorerRole === 'string' ? merged.scorerRole : null,
   };
 }
 
@@ -545,6 +752,10 @@ export interface GameRecord {
     gameStarted: boolean;
     gameOver: boolean;
     endedAt: string | null;
+    scorerUid: string | null;
+    scorerName: string | null;
+    scorerEmail: string | null;
+    scorerRole: string | null;
   };
   score: DemoState['score'];
   counts: { balls: number; strikes: number; outs: number; pitchCount: number };
@@ -567,10 +778,14 @@ export function buildGameRecord(state: DemoState): GameRecord {
       awayTeamName: state.teamNames.away,
       inning: state.inning,
       half: state.half,
-      gameStarted: state.gameStarted,
-      gameOver: state.gameOver,
-      endedAt: state.endedAt,
-    },
+    gameStarted: state.gameStarted,
+    gameOver: state.gameOver,
+    endedAt: state.endedAt,
+    scorerUid: state.scorerUid,
+    scorerName: state.scorerName,
+    scorerEmail: state.scorerEmail,
+    scorerRole: state.scorerRole,
+  },
     score: { ...state.score },
     counts: { balls: state.balls, strikes: state.strikes, outs: state.outs, pitchCount: state.pitchCount },
     bases: [...state.bases],
@@ -622,13 +837,48 @@ function shouldTrackHistory(actionType: Action['type']) {
     'substitute',
     'addMatch',
     'updateMatch',
+    'deleteMatch',
     'saveMatchLineups',
     'selectMatch',
+    'setMatches',
+    'moveMatchToTrash',
+    'restoreMatch',
+    'purgeTrash',
+    'syncActiveMatch',
     'hydrate',
     'resetGame',
     'startGame',
     'setLiveVideoUrl',
   ].includes(actionType);
+}
+
+function syncActiveMatchScore(nextState: DemoState): DemoState {
+  const matchId = nextState.activeMatchId;
+  if (!matchId) return nextState;
+
+  const activeMatch = nextState.matches.find((m) => m.id === matchId);
+  if (!activeMatch || activeMatch.status !== 'inProgress') return nextState;
+
+  const needsSync =
+    activeMatch.homeScore !== nextState.score.home || activeMatch.awayScore !== nextState.score.away;
+
+  if (!needsSync) return nextState;
+
+  return {
+    ...nextState,
+    matches: updateMatchSchedule(nextState.matches, matchId, {
+      homeScore: nextState.score.home,
+      awayScore: nextState.score.away,
+    }),
+  };
+}
+
+function isLockedByOther(state: DemoState): boolean {
+  const owner = state.scorerUid;
+  const current = auth.currentUser?.uid ?? null;
+  if (!owner) return false;
+  if (!current) return true;
+  return owner !== current;
 }
 
 function reducer(state: DemoState, action: Action): DemoState {
@@ -654,7 +904,13 @@ function reducer(state: DemoState, action: Action): DemoState {
     'updateMatch',
     'saveMatchLineups',
     'selectMatch',
+    'setMatches',
+    'syncActiveMatch',
   ];
+  const lockBypass: Action['type'][] = ['selectMatch', 'setMatches', 'syncActiveMatch', 'hydrate'];
+  if (isLockedByOther(state) && !lockBypass.includes(action.type)) {
+    return state;
+  }
   if (!state.gameStarted && !setupActions.includes(action.type)) {
     return state;
   }
@@ -917,6 +1173,45 @@ function reducer(state: DemoState, action: Action): DemoState {
         matches: updateMatchSchedule(state.matches, action.matchId, action.updates),
       };
       break;
+    case 'deleteMatch': {
+      const filtered = state.matches.filter((m) => m.id !== action.matchId);
+      nextState = {
+        ...state,
+        matches: filtered,
+        activeMatchId: state.activeMatchId === action.matchId ? null : state.activeMatchId,
+      };
+      break;
+    }
+    case 'moveMatchToTrash':
+      nextState = {
+        ...state,
+        matches: updateMatchSchedule(state.matches, action.matchId, {
+          ...action.entry,
+          deleted: true,
+          deletedAt: action.entry.deletedAt ?? Date.now(),
+          purgeAt: action.entry.purgeAt ?? Date.now() + TRASH_RETENTION_MS,
+        }),
+        activeMatchId: state.activeMatchId === action.matchId ? null : state.activeMatchId,
+      };
+      break;
+    case 'restoreMatch':
+      nextState = {
+        ...state,
+        matches: updateMatchSchedule(state.matches, action.matchId, {
+          deleted: false,
+          deletedAt: undefined,
+          purgeAt: undefined,
+          deletedBy: undefined,
+        }),
+      };
+      break;
+    case 'purgeTrash':
+      nextState = {
+        ...state,
+        matches: state.matches.filter((m) => m.id !== action.matchId),
+        activeMatchId: state.activeMatchId === action.matchId ? null : state.activeMatchId,
+      };
+      break;
     case 'saveMatchLineups':
       nextState = {
         ...state,
@@ -933,12 +1228,41 @@ function reducer(state: DemoState, action: Action): DemoState {
       }
       const selected = state.matches.find((match) => match.id === action.matchId);
       if (!selected) return state;
-      nextState = resetGameForMatch(state, selected);
+      if (selected.status === 'completed') {
+        nextState = {
+          ...state,
+          activeMatchId: selected.id,
+          teamNames: { home: selected.homeTeamName, away: selected.awayTeamName },
+          homeTeamId: selected.homeTeamId ?? state.homeTeamId,
+          awayTeamId: selected.awayTeamId ?? state.awayTeamId,
+          score: {
+            home: typeof selected.homeScore === 'number' ? selected.homeScore : state.score.home,
+            away: typeof selected.awayScore === 'number' ? selected.awayScore : state.score.away,
+          },
+          gameStarted: true,
+          gameOver: true,
+          lastPlay: '경기 기록 불러오는 중...',
+        };
+      } else {
+        nextState = resetGameForMatch(state, selected);
+      }
       break;
     }
+    case 'setMatches':
+      nextState = {
+        ...state,
+        matches: action.matches,
+      };
+      break;
+    case 'syncActiveMatch':
+      if (action.matchId === state.activeMatchId) return state;
+      nextState = { ...state, activeMatchId: action.matchId };
+      break;
     default:
       nextState = state;
   }
+
+  nextState = syncActiveMatchScore(nextState);
 
   if (nextState === state) return state;
   if (!shouldTrackHistory(action.type)) return nextState;
@@ -1048,7 +1372,7 @@ function createLogEntryWithBatter(state: DemoState, batter: string, order: numbe
   return {
     inning: state.inning,
     half: state.half,
-    order,
+    order: order ?? 0,
     batter,
     pitch,
     result,
@@ -1108,7 +1432,7 @@ function createPlayEventWithBatter(
   return {
     inning: state.inning,
     half: state.half,
-    order,
+    order: order ?? 0,
     batter,
     pitch,
     type: details.type,
@@ -1536,7 +1860,7 @@ function applySacrifice(
 function applyError(state: DemoState, details: ErrorDetails): DemoState {
   const pitchNumber = Math.max(1, state.pitchCount + 1);
   const isBatterHold = details.advanceResults.batter === 'hold';
-  const { batter, order } = currentBatterInfo(state);
+  const { batter } = currentBatterInfo(state);
   const batterName = isBatterHold ? batter : nextBatter(state).batterName;
   const batterIndex = isBatterHold ? state.batterIndex[hittingSide(state)] : nextBatter(state).batterIndex;
   const bases = [null, null, null] as Bases;
@@ -1631,7 +1955,9 @@ function applyError(state: DemoState, details: ErrorDetails): DemoState {
     balls: 0,
     strikes: 0,
     pitchCount: isBatterHold ? state.pitchCount : 0,
-    batterIndex: isBatterHold ? state.batterIndex : batterIndex,
+    batterIndex: isBatterHold
+      ? state.batterIndex
+      : { ...state.batterIndex, [hittingSide(state)]: batterIndex },
     outs,
     lastPlay: summary,
     feed,
@@ -1920,6 +2246,11 @@ function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
     removed: { home: [], away: [] },
     matches: state.matches,
     activeMatchId: match.id,
+    scorerUid: state.scorerUid,
+    scorerName: state.scorerName,
+    scorerEmail: state.scorerEmail,
+    scorerLockedAt: state.scorerLockedAt,
+    scorerRole: state.scorerRole,
   };
 }
 
@@ -1954,6 +2285,11 @@ function createNewGame(state: DemoState): DemoState {
     removed: { home: [], away: [] },
     matches: state.matches,
     activeMatchId: state.activeMatchId,
+    scorerUid: state.scorerUid,
+    scorerName: state.scorerName,
+    scorerEmail: state.scorerEmail,
+    scorerLockedAt: state.scorerLockedAt,
+    scorerRole: state.scorerRole,
   };
 }
 
@@ -1980,37 +2316,6 @@ function changeHalf(state: DemoState, message: string, pitchNumber = 0, logState
     lastPlay: message,
     feed,
   };
-}
-
-function advanceBases(currentBases: Bases, steps: number, batterName: string) {
-  let runs = 0;
-  const bases = [...currentBases] as Bases;
-
-  for (let i = 2; i >= 0; i -= 1) {
-    if (bases[i]) {
-      const runner = bases[i];
-      bases[i] = null;
-      const dest = i + steps;
-      if (dest >= 3) {
-        runs += 1;
-      } else {
-        bases[dest] = runner;
-      }
-    }
-  }
-
-  if (steps >= 4) {
-    runs += 1;
-  } else {
-    const dest = steps - 1;
-    if (dest >= 3) {
-      runs += 1;
-    } else {
-      bases[dest] = batterName;
-    }
-  }
-
-  return { bases, runs };
 }
 
 function resolveAdvanceOutcome(
@@ -2174,6 +2479,10 @@ interface DemoStoreValue {
     triplePlay: (battedBall?: BattedBallDetails | null) => void;
     addMatch: (match: MatchSchedule) => void;
     updateMatch: (matchId: string, updates: Partial<MatchSchedule>) => void;
+    deleteMatch: (matchId: string) => void;
+    moveMatchToTrash: (matchId: string) => void;
+    restoreMatch: (matchId: string) => void;
+    purgeTrash: (matchId: string) => void;
     saveMatchLineups: (
       matchId: string,
       lineups: { home: PlayerSlot[]; away: PlayerSlot[] },
@@ -2186,47 +2495,248 @@ interface DemoStoreValue {
 const DemoStoreContext = createContext<DemoStoreValue | null>(null);
 
 export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState, (init) => {
-    if (typeof window === 'undefined') return init;
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (!stored) return init;
-      const parsed = JSON.parse(stored) as DemoState;
-      return normalizeState(init, parsed);
-    } catch {
-      return init;
-    }
-  });
-  const skipSyncRef = useRef(false);
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const stateRef = useRef(state);
+  const skipFirestoreWriteRef = useRef(false);
+  const skipMatchesWriteRef = useRef(false);
+  const lastStateKeyRef = useRef('');
+  const lastMatchesKeyRef = useRef('');
+  const notifiedMatchStartRef = useRef<Set<string>>(new Set());
+  const matchesReadyRef = useRef(false);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (skipSyncRef.current) {
-      skipSyncRef.current = false;
-      return;
-    }
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-      // Ignore storage write failures.
-    }
+    stateRef.current = state;
   }, [state]);
 
+  // Subscribe to schedule collection for spectators (read-only) and admins.
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const onStorage = (event: StorageEvent) => {
-      if (event.key !== STORAGE_KEY || !event.newValue) return;
-      try {
-        const nextState = JSON.parse(event.newValue) as DemoState;
-        skipSyncRef.current = true;
-        dispatch({ type: 'hydrate', state: nextState });
-      } catch {
-        // Ignore invalid payloads.
-      }
-    };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    const q = query(collection(firestore, 'matches'), orderBy('startTime', 'asc'));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const incoming = snap.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Partial<MatchSchedule>),
+        }));
+        const normalized = normalizeMatches(incoming);
+        skipMatchesWriteRef.current = true;
+        matchesReadyRef.current = true;
+        dispatch({ type: 'setMatches', matches: normalized });
+
+        // Notify locally when a 경기 status becomes inProgress (start).
+        if (typeof window !== 'undefined' && typeof Notification !== 'undefined') {
+          const started = normalized.filter((m) => m.status === 'inProgress');
+          started.forEach((match) => {
+            if (notifiedMatchStartRef.current.has(match.id)) return;
+            const permission = Notification.permission;
+            const show = () => {
+              const title = '경기 시작';
+              const body = `${match.homeTeamName} vs ${match.awayTeamName} · ${new Date(match.startTime).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`;
+              try {
+                new Notification(title, { body });
+                notifiedMatchStartRef.current.add(match.id);
+              } catch {
+                // ignore notification failures
+              }
+            };
+            if (permission === 'granted') {
+              show();
+            } else if (permission === 'default') {
+              void Notification.requestPermission().then((result) => {
+                if (result === 'granted') show();
+              });
+            }
+          });
+        }
+      },
+      (error) => {
+        // eslint-disable-next-line no-console
+        console.error('[firestore] matches snapshot error', error);
+      },
+    );
+    return () => unsub();
   }, []);
+
+  // Listen to current active match pointer so spectators know which match to watch.
+  useEffect(() => {
+    const currentRef = doc(firestore, 'app', 'current');
+    const unsub = onSnapshot(
+      currentRef,
+      (snap) => {
+        const data = snap.data();
+        if (!data) return;
+        const nextId = typeof data.activeMatchId === 'string' ? data.activeMatchId : null;
+        if (nextId === stateRef.current.activeMatchId) return;
+        skipFirestoreWriteRef.current = true;
+        dispatch({ type: 'syncActiveMatch', matchId: nextId });
+      },
+      () => {
+        // ignore errors
+      },
+    );
+    return () => unsub();
+  }, []);
+
+  // Live subscribe to the active match state.
+  useEffect(() => {
+    const matchId = state.activeMatchId;
+    if (!matchId) return;
+    const stateDoc = doc(firestore, 'matchStates', matchId);
+
+    // 1) Fetch the latest state once immediately so spectators see current data without waiting for the next update.
+    void getDoc(stateDoc)
+      .then((snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data() as SharedGameState;
+        skipFirestoreWriteRef.current = true;
+        dispatch({
+          type: 'hydrate',
+          state: normalizeState(initialState, {
+            ...stateRef.current,
+            ...data,
+            matches: stateRef.current.matches,
+          }),
+        });
+      })
+      .catch(() => {
+        // ignore initial fetch errors; real-time listener below will retry on updates
+      });
+
+    // 2) Subscribe for real-time updates.
+    const unsub = onSnapshot(
+      stateDoc,
+      (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data() as SharedGameState;
+        skipFirestoreWriteRef.current = true;
+        dispatch({
+          type: 'hydrate',
+          state: normalizeState(initialState, {
+            ...stateRef.current,
+            ...data,
+            matches: stateRef.current.matches,
+          }),
+        });
+      },
+      () => {
+        // ignore snapshot errors
+      },
+    );
+    return () => unsub();
+  }, [state.activeMatchId]);
+
+  // Attempt to acquire scorer lock for the active match.
+  useEffect(() => {
+    const matchId = state.activeMatchId;
+    const user = auth.currentUser;
+    if (!matchId || !user) return;
+    const run = async () => {
+      const stateDoc = doc(firestore, 'matchStates', matchId);
+      const now = Date.now();
+      const roleLabel = await resolveUserRole(user);
+      await runTransaction(firestore, async (tx) => {
+        const snap = await tx.get(stateDoc);
+        const data = snap.exists()
+          ? (snap.data() as SharedGameState & { scorerUid?: string | null; scorerName?: string | null; scorerEmail?: string | null; scorerLockedAt?: number | null; scorerRole?: string | null })
+          : null;
+        const owner = data?.scorerUid;
+        if (owner && owner !== user.uid) {
+          return;
+        }
+        tx.set(
+          stateDoc,
+          {
+            scorerUid: user.uid,
+            scorerName: user.displayName ?? null,
+            scorerEmail: user.email ?? null,
+            scorerLockedAt: data?.scorerLockedAt ?? now,
+            scorerRole: data?.scorerRole ?? roleLabel,
+          },
+          { merge: true },
+        );
+      });
+      if (stateRef.current.activeMatchId !== matchId) return;
+      skipFirestoreWriteRef.current = true;
+      dispatch({
+        type: 'hydrate',
+        state: normalizeState(initialState, {
+          ...stateRef.current,
+          scorerUid: user.uid,
+          scorerName: user.displayName ?? null,
+          scorerEmail: user.email ?? null,
+          scorerLockedAt: stateRef.current.scorerLockedAt ?? now,
+          scorerRole: stateRef.current.scorerRole ?? roleLabel,
+          matches: stateRef.current.matches,
+        }),
+      });
+    };
+    void run().catch(() => {
+      // ignore lock acquisition errors
+    });
+  }, [state.activeMatchId, auth.currentUser?.uid]);
+
+  // Push game state to Firestore when admin updates locally.
+  useEffect(() => {
+    const matchId = state.activeMatchId;
+    if (!matchId) return;
+    const currentUid = auth.currentUser?.uid ?? null;
+    if (!currentUid) return;
+    if (state.scorerUid && state.scorerUid !== currentUid) return;
+    if (skipFirestoreWriteRef.current) {
+      skipFirestoreWriteRef.current = false;
+      return;
+    }
+    const snapshot = snapshotState(state);
+    const { matches, ...rest } = snapshot;
+    const key = `${matchId}:${rest.inning}:${rest.half}:${rest.score.home}:${rest.score.away}:${rest.pitchCount}:${rest.feed.length}:${rest.events.length}:${rest.gameStarted}:${rest.gameOver}`;
+    if (key === lastStateKeyRef.current) return;
+    lastStateKeyRef.current = key;
+    void setDoc(
+      doc(firestore, 'matchStates', matchId),
+      { ...rest, updatedAt: Date.now() },
+      { merge: true },
+    ).catch(() => {});
+  }, [state]);
+
+  // Sync schedule changes to Firestore (admin routes only; spectators skip via flag/auth).
+  useEffect(() => {
+    if (!matchesReadyRef.current) return;
+    if (skipMatchesWriteRef.current) {
+      skipMatchesWriteRef.current = false;
+      return;
+    }
+    const key = JSON.stringify(
+      state.matches.map((m) => [m.id, m.status, m.startTime, m.homeScore, m.awayScore, m.notes, m.division]),
+    );
+    if (key === lastMatchesKeyRef.current) return;
+    lastMatchesKeyRef.current = key;
+    const syncMatches = async () => {
+      const batch = writeBatch(firestore);
+      state.matches.forEach((match) => {
+        batch.set(doc(firestore, 'matches', match.id), pruneUndefined(match), { merge: true });
+      });
+      await batch.commit();
+    };
+    void syncMatches().catch(() => {});
+  }, [state.matches]);
+
+  // Auto purge expired trashed matches (deleted flag) from matches collection.
+  useEffect(() => {
+    const now = Date.now();
+    const expired = state.matches.filter((m) => m.deleted && m.purgeAt && m.purgeAt <= now);
+    if (!expired.length) return;
+    expired.forEach((entry) => {
+      void deleteDoc(doc(firestore, 'matches', entry.id)).catch(() => {});
+    });
+  }, [state.matches]);
+
+  const updateCurrentMatchPointer = (matchId: string | null) => {
+    void setDoc(
+      doc(firestore, 'app', 'current'),
+      { activeMatchId: matchId, updatedAt: Date.now() },
+      { merge: true },
+    ).catch(() => {});
+  };
 
   const actions = useMemo(
     () => ({
@@ -2281,14 +2791,81 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       endGame: (endedAt: string) => dispatch({ type: 'endGame', endedAt }),
       resetGame: () => dispatch({ type: 'resetGame' }),
       undo: () => dispatch({ type: 'undo' }),
-      addMatch: (match: MatchSchedule) => dispatch({ type: 'addMatch', match }),
-      updateMatch: (matchId: string, updates: Partial<MatchSchedule>) => dispatch({ type: 'updateMatch', matchId, updates }),
+      addMatch: (match: MatchSchedule) => {
+        matchesReadyRef.current = true;
+        dispatch({ type: 'addMatch', match });
+      },
+      updateMatch: (matchId: string, updates: Partial<MatchSchedule>) => {
+        matchesReadyRef.current = true;
+        dispatch({ type: 'updateMatch', matchId, updates });
+      },
+      deleteMatch: (matchId: string) => {
+        matchesReadyRef.current = true;
+        dispatch({ type: 'deleteMatch', matchId });
+        if (stateRef.current.activeMatchId === matchId) {
+          updateCurrentMatchPointer(null);
+        }
+      },
+      moveMatchToTrash: (matchId: string) => {
+        const target = stateRef.current.matches.find((m) => m.id === matchId);
+        if (!target) return;
+        const deletedAt = Date.now();
+        const payload: MatchSchedule = {
+          ...target,
+          deleted: true,
+          deletedAt,
+          purgeAt: deletedAt + TRASH_RETENTION_MS,
+          deletedBy: auth.currentUser?.uid,
+        };
+        matchesReadyRef.current = true;
+        dispatch({ type: 'moveMatchToTrash', matchId, entry: payload });
+        void setDoc(doc(firestore, 'matches', matchId), pruneUndefined(payload), { merge: true }).catch(() => {
+          // rollback locally if write fails
+          dispatch({ type: 'restoreMatch', matchId });
+          // eslint-disable-next-line no-alert
+          if (typeof window !== 'undefined') window.alert('삭제 권한을 확인해주세요. (휴지통 이동 실패)');
+        });
+        if (stateRef.current.activeMatchId === matchId) {
+          updateCurrentMatchPointer(null);
+        }
+      },
+      restoreMatch: (matchId: string) => {
+        const entry = stateRef.current.matches.find((t) => t.id === matchId && t.deleted);
+        if (!entry) return;
+        matchesReadyRef.current = true;
+        dispatch({ type: 'restoreMatch', matchId });
+        const restored = { ...entry };
+        delete restored.deleted;
+        delete restored.deletedAt;
+        delete restored.purgeAt;
+        delete restored.deletedBy;
+        void setDoc(doc(firestore, 'matches', matchId), pruneUndefined(restored), { merge: true }).catch(() => {
+          // rollback locally if write fails
+          dispatch({ type: 'moveMatchToTrash', matchId, entry });
+          // eslint-disable-next-line no-alert
+          if (typeof window !== 'undefined') window.alert('복원 권한을 확인해주세요. (복원 실패)');
+        });
+      },
+      purgeTrash: (matchId: string) => {
+        dispatch({ type: 'purgeTrash', matchId });
+        void deleteDoc(doc(firestore, 'matches', matchId)).catch(() => {
+          // eslint-disable-next-line no-alert
+          if (typeof window !== 'undefined') window.alert('영구 삭제 권한을 확인해주세요. (삭제 실패)');
+        });
+      },
       saveMatchLineups: (
         matchId: string,
         lineups: { home: PlayerSlot[]; away: PlayerSlot[] },
         benches: { home: PlayerSlot[]; away: PlayerSlot[] },
-      ) => dispatch({ type: 'saveMatchLineups', matchId, lineups, benches }),
-      selectMatch: (matchId: string | null) => dispatch({ type: 'selectMatch', matchId }),
+      ) => {
+        matchesReadyRef.current = true;
+        dispatch({ type: 'saveMatchLineups', matchId, lineups, benches });
+      },
+      selectMatch: (matchId: string | null) => {
+        skipFirestoreWriteRef.current = true;
+        dispatch({ type: 'selectMatch', matchId });
+        updateCurrentMatchPointer(matchId);
+      },
     }),
     [],
   );
@@ -2304,4 +2881,16 @@ export function useDemoStore() {
     throw new Error('DemoStoreProvider가 설정되지 않았습니다.');
   }
   return ctx;
+}
+async function resolveUserRole(user: typeof auth.currentUser): Promise<string | null> {
+  if (!user) return null;
+  try {
+    const token = await getIdTokenResult(user, true);
+    if ((token.claims as Record<string, unknown>).admin) return '관리자';
+  } catch {
+    // ignore token fetch errors; fall back to email list
+  }
+  const email = user.email?.toLowerCase();
+  if (email && ADMIN_EMAILS.includes(email)) return '관리자';
+  return '일반';
 }
