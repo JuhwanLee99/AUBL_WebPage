@@ -4,6 +4,24 @@ import { auth, firestore } from '../firebase/client';
 import { TEAMS } from '../lib/mockData';
 import type { LeagueDivision } from '../types';
 
+const TRASH_RETENTION_MS = 1000 * 60 * 60 * 24 * 30; // 30일 보관
+
+// Firestore는 undefined를 허용하지 않으므로 중첩 객체/배열에서 undefined를 제거한다.
+function pruneUndefined<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((v) => pruneUndefined(v)) as unknown as T;
+  }
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).reduce<Record<string, unknown>>((acc, [k, v]) => {
+      if (v === undefined) return acc;
+      acc[k] = pruneUndefined(v);
+      return acc;
+    }, {});
+    return entries as unknown as T;
+  }
+  return value;
+}
+
 type Half = 'top' | 'bottom';
 
 type Bases = (string | null)[];
@@ -88,6 +106,10 @@ export interface MatchSchedule {
   benches?: { home: PlayerSlot[]; away: PlayerSlot[] };
   notes?: string;
   postGame?: PostGameRecord;
+  deleted?: boolean;
+  deletedAt?: number;
+  purgeAt?: number;
+  deletedBy?: string;
 }
 
 export type RunnerAdvanceOutcome = 'hold' | 'advance' | 'out' | 'score' | 1 | 2 | 3 | 4;
@@ -210,6 +232,9 @@ type Action =
   | { type: 'addMatch'; match: MatchSchedule }
   | { type: 'updateMatch'; matchId: string; updates: Partial<MatchSchedule> }
   | { type: 'deleteMatch'; matchId: string }
+  | { type: 'moveMatchToTrash'; matchId: string; entry: MatchSchedule }
+  | { type: 'restoreMatch'; matchId: string }
+  | { type: 'purgeTrash'; matchId: string }
   | { type: 'selectMatch'; matchId: string | null }
   | { type: 'setMatches'; matches: MatchSchedule[] }
   | { type: 'syncActiveMatch'; matchId: string | null }
@@ -288,7 +313,6 @@ const ensureCompleteLineups = (lineups: { home: PlayerSlot[]; away: PlayerSlot[]
   away: ensureLineupFilled(lineups.away),
 });
 
-const teamNameById = (teamId?: string) => TEAMS.find((team) => team.id === teamId)?.name ?? '미정';
 const teamDivisionById = (teamId?: string): LeagueDivision | undefined => TEAMS.find((team) => team.id === teamId)?.division;
 const deriveMatchDivision = (
   division: unknown,
@@ -631,6 +655,10 @@ function normalizeMatches(matches: unknown): MatchSchedule[] {
       benches: normalizeBenches(match.benches),
       notes: typeof match.notes === 'string' ? match.notes : undefined,
       postGame: normalizePostGame(match.postGame),
+      deleted: match.deleted === true,
+      deletedAt: typeof match.deletedAt === 'number' ? match.deletedAt : undefined,
+      purgeAt: typeof match.purgeAt === 'number' ? match.purgeAt : undefined,
+      deletedBy: typeof match.deletedBy === 'string' ? match.deletedBy : undefined,
     };
   });
 }
@@ -770,9 +798,13 @@ function shouldTrackHistory(actionType: Action['type']) {
     'substitute',
     'addMatch',
     'updateMatch',
+    'deleteMatch',
     'saveMatchLineups',
     'selectMatch',
     'setMatches',
+    'moveMatchToTrash',
+    'restoreMatch',
+    'purgeTrash',
     'syncActiveMatch',
     'hydrate',
     'resetGame',
@@ -1078,6 +1110,36 @@ function reducer(state: DemoState, action: Action): DemoState {
       };
       break;
     }
+    case 'moveMatchToTrash':
+      nextState = {
+        ...state,
+        matches: updateMatchSchedule(state.matches, action.matchId, {
+          ...action.entry,
+          deleted: true,
+          deletedAt: action.entry.deletedAt ?? Date.now(),
+          purgeAt: action.entry.purgeAt ?? Date.now() + TRASH_RETENTION_MS,
+        }),
+        activeMatchId: state.activeMatchId === action.matchId ? null : state.activeMatchId,
+      };
+      break;
+    case 'restoreMatch':
+      nextState = {
+        ...state,
+        matches: updateMatchSchedule(state.matches, action.matchId, {
+          deleted: false,
+          deletedAt: undefined,
+          purgeAt: undefined,
+          deletedBy: undefined,
+        }),
+      };
+      break;
+    case 'purgeTrash':
+      nextState = {
+        ...state,
+        matches: state.matches.filter((m) => m.id !== action.matchId),
+        activeMatchId: state.activeMatchId === action.matchId ? null : state.activeMatchId,
+      };
+      break;
     case 'saveMatchLineups':
       nextState = {
         ...state,
@@ -2317,6 +2379,9 @@ interface DemoStoreValue {
     addMatch: (match: MatchSchedule) => void;
     updateMatch: (matchId: string, updates: Partial<MatchSchedule>) => void;
     deleteMatch: (matchId: string) => void;
+    moveMatchToTrash: (matchId: string) => void;
+    restoreMatch: (matchId: string) => void;
+    purgeTrash: (matchId: string) => void;
     saveMatchLineups: (
       matchId: string,
       lineups: { home: PlayerSlot[]; away: PlayerSlot[] },
@@ -2473,11 +2538,21 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     const syncMatches = async () => {
       const batch = writeBatch(firestore);
       state.matches.forEach((match) => {
-        batch.set(doc(firestore, 'matches', match.id), match, { merge: true });
+        batch.set(doc(firestore, 'matches', match.id), pruneUndefined(match), { merge: true });
       });
       await batch.commit();
     };
     void syncMatches().catch(() => {});
+  }, [state.matches]);
+
+  // Auto purge expired trashed matches (deleted flag) from matches collection.
+  useEffect(() => {
+    const now = Date.now();
+    const expired = state.matches.filter((m) => m.deleted && m.purgeAt && m.purgeAt <= now);
+    if (!expired.length) return;
+    expired.forEach((entry) => {
+      void deleteDoc(doc(firestore, 'matches', entry.id)).catch(() => {});
+    });
   }, [state.matches]);
 
   const updateCurrentMatchPointer = (matchId: string | null) => {
@@ -2555,9 +2630,53 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         if (stateRef.current.activeMatchId === matchId) {
           updateCurrentMatchPointer(null);
         }
-        if (auth.currentUser) {
-          void deleteDoc(doc(firestore, 'matches', matchId)).catch(() => {});
+      },
+      moveMatchToTrash: (matchId: string) => {
+        const target = stateRef.current.matches.find((m) => m.id === matchId);
+        if (!target) return;
+        const deletedAt = Date.now();
+        const payload: MatchSchedule = {
+          ...target,
+          deleted: true,
+          deletedAt,
+          purgeAt: deletedAt + TRASH_RETENTION_MS,
+          deletedBy: auth.currentUser?.uid,
+        };
+        matchesReadyRef.current = true;
+        dispatch({ type: 'moveMatchToTrash', matchId, entry: payload });
+        void setDoc(doc(firestore, 'matches', matchId), pruneUndefined(payload), { merge: true }).catch(() => {
+          // rollback locally if write fails
+          dispatch({ type: 'restoreMatch', matchId });
+          // eslint-disable-next-line no-alert
+          if (typeof window !== 'undefined') window.alert('삭제 권한을 확인해주세요. (휴지통 이동 실패)');
+        });
+        if (stateRef.current.activeMatchId === matchId) {
+          updateCurrentMatchPointer(null);
         }
+      },
+      restoreMatch: (matchId: string) => {
+        const entry = stateRef.current.matches.find((t) => t.id === matchId && t.deleted);
+        if (!entry) return;
+        matchesReadyRef.current = true;
+        dispatch({ type: 'restoreMatch', matchId });
+        const restored = { ...entry };
+        delete restored.deleted;
+        delete restored.deletedAt;
+        delete restored.purgeAt;
+        delete restored.deletedBy;
+        void setDoc(doc(firestore, 'matches', matchId), pruneUndefined(restored), { merge: true }).catch(() => {
+          // rollback locally if write fails
+          dispatch({ type: 'moveMatchToTrash', matchId, entry });
+          // eslint-disable-next-line no-alert
+          if (typeof window !== 'undefined') window.alert('복원 권한을 확인해주세요. (복원 실패)');
+        });
+      },
+      purgeTrash: (matchId: string) => {
+        dispatch({ type: 'purgeTrash', matchId });
+        void deleteDoc(doc(firestore, 'matches', matchId)).catch(() => {
+          // eslint-disable-next-line no-alert
+          if (typeof window !== 'undefined') window.alert('영구 삭제 권한을 확인해주세요. (삭제 실패)');
+        });
       },
       saveMatchLineups: (
         matchId: string,

@@ -240,9 +240,11 @@ export default function MatchSchedulePage() {
     });
   };
 
+  const aliveMatches = useMemo(() => state.matches.filter((m) => !m.deleted), [state.matches]);
+
   const sortedMatches = useMemo(() => {
-    return [...state.matches].sort((a, b) => getSafeTime(a.startTime) - getSafeTime(b.startTime));
-  }, [state.matches]);
+    return [...aliveMatches].sort((a, b) => getSafeTime(a.startTime) - getSafeTime(b.startTime));
+  }, [aliveMatches]);
 
   const categorizedMatches = useMemo(() => {
     const now = Date.now();
