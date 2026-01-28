@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { CSSProperties } from 'react';
 import { TEAMS } from '../../shared/lib/mockData';
 import { useDemoStore } from '../../shared/state/demoStore';
+import MatchSelectorBar from './MatchSelectorBar';
 
 const countLights = (filled: number, total: number, color: string) =>
   Array.from({ length: total }, (_, idx) => ({
@@ -62,29 +63,7 @@ export default function ScoreboardPanel({
       }}
     >
       <div style={{ display: 'grid', gap: 'clamp(8px, 1.3vw, 12px)' }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '10px',
-            background: '#0b1220',
-            border: '1px solid #1f2937',
-            borderRadius: '12px',
-            padding: '10px 14px',
-            color: '#cbd5e1',
-            fontWeight: 800,
-            fontSize: 'clamp(12px, 1.8vw, 14px)',
-            textAlign: 'left',
-          }}
-        >
-          <span style={{ color: '#f8fafc', fontWeight: 900 }}>
-            {state.teamNames.home || homeTeam?.name || 'HOME'} vs {state.teamNames.away || awayTeam?.name || 'AWAY'}
-          </span>
-          <span style={{ color: '#94a3b8', fontWeight: 700 }}>
-            {summaryTime} · {summaryVenue}
-          </span>
-        </div>
+        <MatchSelectorBar summaryTime={summaryTime} summaryVenue={summaryVenue} />
 
         <div
           style={{
