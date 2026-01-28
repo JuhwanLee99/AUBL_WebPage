@@ -209,6 +209,7 @@ interface DemoSnapshot {
   scorerEmail: string | null;
   scorerLockedAt: number | null;
   scorerRole: string | null;
+  scorerPaused: boolean;
 }
 
 interface DemoState extends DemoSnapshot {
@@ -242,6 +243,7 @@ type SharedGameState = Pick<
   | 'scorerEmail'
   | 'scorerLockedAt'
   | 'scorerRole'
+  | 'scorerPaused'
 > & { updatedAt?: number };
 
 type Action =
@@ -303,7 +305,8 @@ type Action =
     }
   | { type: 'setFeed'; feed: PlayLog[] }
   | { type: 'setEvents'; events: PlayEvent[] }
-  | { type: 'releaseLock' };
+  | { type: 'releaseLock' }
+  | { type: 'resumeLock'; payload: { scorerUid: string; scorerName: string | null; scorerEmail: string | null; scorerRole: string | null; lockedAt: number } };
 
 const demoLineups: { home: PlayerSlot[]; away: PlayerSlot[] } = {
   home: [
@@ -430,6 +433,7 @@ const initialState: DemoState = {
   scorerEmail: null,
   scorerLockedAt: null,
   scorerRole: null,
+  scorerPaused: false,
 };
 
 function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }): PlayLog[] {
@@ -807,6 +811,7 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
     scorerEmail: typeof merged.scorerEmail === 'string' ? merged.scorerEmail : null,
     scorerLockedAt: typeof merged.scorerLockedAt === 'number' ? merged.scorerLockedAt : null,
     scorerRole: typeof merged.scorerRole === 'string' ? merged.scorerRole : null,
+    scorerPaused: typeof merged.scorerPaused === 'boolean' ? merged.scorerPaused : false,
   };
 }
 
@@ -978,6 +983,8 @@ function reducer(state: DemoState, action: Action): DemoState {
     'selectMatch',
     'setMatches',
     'syncActiveMatch',
+    'releaseLock',
+    'resumeLock',
   ];
   const lockBypass: Action['type'][] = ['selectMatch', 'setMatches', 'syncActiveMatch', 'hydrate'];
   if (isLockedByOther(state) && !lockBypass.includes(action.type)) {
@@ -1009,6 +1016,21 @@ function reducer(state: DemoState, action: Action): DemoState {
         scorerEmail: null,
         scorerLockedAt: null,
         scorerRole: null,
+        scorerPaused: true,
+        lastPlay: '*기록원* - 기록원이 자리를 비웠습니다',
+        feed: pushFeed(state.feed, createLogEntryForBaserunning(state, '*기록원* - 기록원이 자리를 비웠습니다', state.pitchCount)),
+      };
+    case 'resumeLock':
+      return {
+        ...state,
+        scorerUid: action.payload.scorerUid,
+        scorerName: action.payload.scorerName,
+        scorerEmail: action.payload.scorerEmail,
+        scorerLockedAt: action.payload.lockedAt,
+        scorerRole: action.payload.scorerRole,
+        scorerPaused: false,
+        lastPlay: '*기록원* - 기록원이 기록을 재개했습니다',
+        feed: pushFeed(state.feed, createLogEntryForBaserunning(state, '*기록원* - 기록을 재개합니다', state.pitchCount)),
       };
     case 'ball':
       if (state.balls >= 3) {
@@ -2342,6 +2364,7 @@ function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
     scorerEmail: state.scorerEmail,
     scorerLockedAt: state.scorerLockedAt,
     scorerRole: state.scorerRole,
+    scorerPaused: false,
   };
 }
 
@@ -2381,6 +2404,7 @@ function createNewGame(state: DemoState): DemoState {
     scorerEmail: state.scorerEmail,
     scorerLockedAt: state.scorerLockedAt,
     scorerRole: state.scorerRole,
+    scorerPaused: false,
   };
 }
 
@@ -2582,6 +2606,7 @@ interface DemoStoreValue {
     selectMatch: (matchId: string | null) => void;
     loadFullSchedule: () => Promise<void>;
     releaseLock: () => void;
+    resumeLock: () => void;
   };
 }
 
@@ -3293,9 +3318,53 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         if (!matchId || !user) return;
         void setDoc(
           doc(firestore, 'matchStates', matchId),
-          { scorerUid: null, scorerName: null, scorerEmail: null, scorerLockedAt: null, scorerRole: null },
+          {
+            scorerUid: null,
+            scorerName: null,
+            scorerEmail: null,
+            scorerLockedAt: null,
+            scorerRole: null,
+            scorerPaused: true,
+            updatedAt: Date.now(),
+          },
           { merge: true },
         ).catch(() => {});
+      },
+      resumeLock: () => {
+        const matchId = stateRef.current.activeMatchId;
+        const user = auth.currentUser;
+        if (!matchId || !user) return;
+        const lockedAt = Date.now();
+        const payload = {
+          scorerUid: user.uid,
+          scorerName: user.displayName ?? null,
+          scorerEmail: user.email ?? null,
+          scorerLockedAt: lockedAt,
+          scorerRole: stateRef.current.scorerRole ?? null,
+          scorerPaused: false,
+        };
+        void runTransaction(firestore, async (tx) => {
+          const ref = doc(firestore, 'matchStates', matchId);
+          const snap = await tx.get(ref);
+          const data = snap.exists() ? (snap.data() as SharedGameState) : null;
+          const owner = data?.scorerUid ?? null;
+          const locked = data?.scorerLockedAt ?? 0;
+          const expired = !locked || Date.now() - locked > SCORER_LOCK_TTL_MS;
+          if (owner && owner !== user.uid && !expired) {
+            return;
+          }
+          tx.set(ref, { ...payload, updatedAt: Date.now() }, { merge: true });
+        }).catch(() => {});
+        dispatch({
+          type: 'resumeLock',
+          payload: {
+            scorerUid: user.uid,
+            scorerName: user.displayName ?? null,
+            scorerEmail: user.email ?? null,
+            scorerRole: stateRef.current.scorerRole ?? null,
+            lockedAt,
+          },
+        });
       },
     }),
     [isAdmin],

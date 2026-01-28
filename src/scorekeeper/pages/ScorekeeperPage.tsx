@@ -1222,7 +1222,7 @@ export default function ScorekeeperPage() {
     if (expired) return false;
     return state.scorerUid !== (user?.uid ?? null);
   }, [hasActiveMatch, state.scorerUid, state.scorerLockedAt, user?.uid]);
-  const controlsDisabled = isGameOver || !isGameStarted || !hasActiveMatch || lockedByOther;
+  const controlsDisabled = isGameOver || !isGameStarted || !hasActiveMatch || lockedByOther || state.scorerPaused;
   const isExporting = Boolean(pendingExportId);
   const canUndo = state.history.length > 0;
   const playerStats = useMemo(() => buildPlayerStats(recordPayload), [recordPayload]);
@@ -1882,7 +1882,7 @@ const handleConfirmHitWizard = () => {
                     락은 입력 중 5분 동안 유지되고 60초마다 갱신됩니다. 락 소유자만 기록 가능합니다.{' '}
                     <span style={{ color: lockCountdownColor }}>{lockCountdownLabel}</span>
                   </span>
-                  {!lockedByOther && state.scorerUid === (user?.uid ?? null) ? (
+                  {!lockedByOther && state.scorerUid === (user?.uid ?? null) && !state.scorerPaused ? (
                     <button
                       type="button"
                       onClick={() => actions.releaseLock()}
@@ -1898,6 +1898,24 @@ const handleConfirmHitWizard = () => {
                       }}
                     >
                       잠금 해제
+                    </button>
+                  ) : null}
+                  {state.scorerPaused ? (
+                    <button
+                      type="button"
+                      onClick={() => actions.resumeLock()}
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(52,211,153,0.5)',
+                        background: 'rgba(34,197,94,0.12)',
+                        color: '#bbf7d0',
+                        fontWeight: 900,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      기록 재개
                     </button>
                   ) : null}
                   {lockedByOther ? (
