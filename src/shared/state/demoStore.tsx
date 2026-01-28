@@ -210,6 +210,7 @@ interface DemoSnapshot {
   scorerLockedAt: number | null;
   scorerRole: string | null;
   scorerPaused: boolean;
+  followCurrent: boolean;
 }
 
 interface DemoState extends DemoSnapshot {
@@ -244,6 +245,7 @@ type SharedGameState = Pick<
   | 'scorerLockedAt'
   | 'scorerRole'
   | 'scorerPaused'
+  | 'followCurrent'
 > & { updatedAt?: number };
 
 type Action =
@@ -294,7 +296,7 @@ type Action =
   | { type: 'moveMatchToTrash'; matchId: string; entry: MatchSchedule }
   | { type: 'restoreMatch'; matchId: string }
   | { type: 'purgeTrash'; matchId: string }
-  | { type: 'selectMatch'; matchId: string | null }
+  | { type: 'selectMatch'; matchId: string | null; followCurrent?: boolean }
   | { type: 'setMatches'; matches: MatchSchedule[] }
   | { type: 'syncActiveMatch'; matchId: string | null }
   | {
@@ -434,6 +436,7 @@ const initialState: DemoState = {
   scorerLockedAt: null,
   scorerRole: null,
   scorerPaused: false,
+  followCurrent: true,
 };
 
 function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }): PlayLog[] {
@@ -812,6 +815,7 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
     scorerLockedAt: typeof merged.scorerLockedAt === 'number' ? merged.scorerLockedAt : null,
     scorerRole: typeof merged.scorerRole === 'string' ? merged.scorerRole : null,
     scorerPaused: typeof merged.scorerPaused === 'boolean' ? merged.scorerPaused : false,
+    followCurrent: typeof merged.followCurrent === 'boolean' ? merged.followCurrent : true,
   };
 }
 
@@ -1336,7 +1340,7 @@ function reducer(state: DemoState, action: Action): DemoState {
       break;
     case 'selectMatch': {
       if (!action.matchId) {
-        nextState = { ...state, activeMatchId: null };
+        nextState = { ...state, activeMatchId: null, followCurrent: typeof action.followCurrent === 'boolean' ? action.followCurrent : state.followCurrent };
         break;
       }
       const selected = state.matches.find((match) => match.id === action.matchId);
@@ -1345,6 +1349,7 @@ function reducer(state: DemoState, action: Action): DemoState {
         nextState = {
           ...state,
           activeMatchId: selected.id,
+          followCurrent: typeof action.followCurrent === 'boolean' ? action.followCurrent : state.followCurrent,
           teamNames: { home: selected.homeTeamName, away: selected.awayTeamName },
           homeTeamId: selected.homeTeamId ?? state.homeTeamId,
           awayTeamId: selected.awayTeamId ?? state.awayTeamId,
@@ -1357,7 +1362,10 @@ function reducer(state: DemoState, action: Action): DemoState {
           lastPlay: '경기 기록 불러오는 중...',
         };
       } else {
-        nextState = resetGameForMatch(state, selected);
+        nextState = {
+          ...resetGameForMatch(state, selected),
+          followCurrent: typeof action.followCurrent === 'boolean' ? action.followCurrent : state.followCurrent,
+        };
       }
       break;
     }
@@ -1368,6 +1376,7 @@ function reducer(state: DemoState, action: Action): DemoState {
       };
       break;
     case 'syncActiveMatch':
+      if (state.followCurrent === false) return state;
       if (action.matchId === state.activeMatchId) return state;
       nextState = { ...state, activeMatchId: action.matchId };
       break;
@@ -2348,23 +2357,24 @@ function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
     homeTeamId: match.homeTeamId ?? state.homeTeamId,
     awayTeamId: match.awayTeamId ?? state.awayTeamId,
     batterIndex: { home: 0, away: 0 },
-    lineups: cloneLineups(lineups),
-    benches: cloneBenches(benches),
-    teamNames: { home: match.homeTeamName, away: match.awayTeamName },
-    gameStarted: false,
-    gameOver: false,
+  lineups: cloneLineups(lineups),
+  benches: cloneBenches(benches),
+  teamNames: { home: match.homeTeamName, away: match.awayTeamName },
+  gameStarted: false,
+  gameOver: false,
     endedAt: null,
     liveVideoUrl: state.liveVideoUrl,
     history: [],
     removed: { home: [], away: [] },
     matches: state.matches,
     activeMatchId: match.id,
-    scorerUid: state.scorerUid,
-    scorerName: state.scorerName,
-    scorerEmail: state.scorerEmail,
-    scorerLockedAt: state.scorerLockedAt,
-    scorerRole: state.scorerRole,
-    scorerPaused: false,
+  scorerUid: state.scorerUid,
+  scorerName: state.scorerName,
+  scorerEmail: state.scorerEmail,
+  scorerLockedAt: state.scorerLockedAt,
+  scorerRole: state.scorerRole,
+  scorerPaused: false,
+  followCurrent: state.followCurrent,
   };
 }
 
@@ -2385,11 +2395,11 @@ function createNewGame(state: DemoState): DemoState {
     homeTeamId: state.homeTeamId,
     awayTeamId: state.awayTeamId,
     batterIndex: { home: 0, away: 0 },
-    lineups: cloneLineups(preparedLineups),
-    benches: {
-      home: state.benches.home.map((p) => ({ ...p })),
-      away: state.benches.away.map((p) => ({ ...p })),
-    },
+  lineups: cloneLineups(preparedLineups),
+  benches: {
+    home: state.benches.home.map((p) => ({ ...p })),
+    away: state.benches.away.map((p) => ({ ...p })),
+  },
     teamNames: { ...state.teamNames },
     gameStarted: false,
     gameOver: false,
@@ -2399,13 +2409,14 @@ function createNewGame(state: DemoState): DemoState {
     removed: { home: [], away: [] },
     matches: state.matches,
     activeMatchId: state.activeMatchId,
-    scorerUid: state.scorerUid,
-    scorerName: state.scorerName,
-    scorerEmail: state.scorerEmail,
-    scorerLockedAt: state.scorerLockedAt,
-    scorerRole: state.scorerRole,
-    scorerPaused: false,
-  };
+  scorerUid: state.scorerUid,
+  scorerName: state.scorerName,
+  scorerEmail: state.scorerEmail,
+  scorerLockedAt: state.scorerLockedAt,
+  scorerRole: state.scorerRole,
+  scorerPaused: false,
+  followCurrent: state.followCurrent,
+};
 }
 
 function changeHalf(state: DemoState, message: string, pitchNumber = 0, logState?: DemoState): DemoState {
@@ -3283,9 +3294,10 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'saveMatchLineups', matchId, lineups, benches });
       },
       selectMatch: (matchId: string | null) => {
+        const followCurrent = isAdmin;
         skipFirestoreWriteRef.current = true;
-        dispatch({ type: 'selectMatch', matchId });
-        updateCurrentMatchPointer(matchId);
+        dispatch({ type: 'selectMatch', matchId, followCurrent });
+        if (isAdmin) updateCurrentMatchPointer(matchId);
       },
       loadFullSchedule: async () => {
         try {
