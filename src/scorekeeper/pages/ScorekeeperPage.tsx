@@ -11,6 +11,7 @@ import type {
 import StatsTable from '../../shared/components/StatsTable';
 import RemovedPlayersPanel from '../../shared/components/RemovedPlayersPanel';
 import type { BatterStatLine, PitcherStatLine } from '../../shared/types/scoreStats';
+import { useAuth } from '../../shared/auth/AuthProvider';
 
 type Side = 'home' | 'away';
 
@@ -501,6 +502,9 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   add('종료 여부', record.meta.gameOver ? '예' : '아니오');
   add('종료 시각', record.meta.endedAt ? formatDateTimeLabel(record.meta.endedAt) : '-');
   add('최종 볼카운트', `B${record.counts.balls} / S${record.counts.strikes} / O${record.counts.outs}`);
+  add('기록원', record.meta.scorerName || record.meta.scorerEmail || record.meta.scorerUid || '-');
+  add('기록원 이메일', record.meta.scorerEmail || '-');
+  add('기록원 권한', record.meta.scorerRole || '-');
   add('기록 기준', 'KBO 기록지 기입법 기준');
   add('주자 상황', record.bases.map((runner, idx) => `${idx + 1}루:${runner ?? '-'}`).join(' | '));
 
@@ -1197,11 +1201,13 @@ export default function ScorekeeperPage() {
   const [battedBallType, setBattedBallType] = useState(baseBattedBallType);
   const [battedBallZone, setBattedBallZone] = useState(defaultZoneOptions[0]);
   const recordPayload = useMemo(() => buildGameRecord(state), [state]);
+  const { user } = useAuth();
   const [pendingExportId, setPendingExportId] = useState<string | null>(null);
   const isGameStarted = state.gameStarted;
   const isGameOver = state.gameOver;
   const hasActiveMatch = Boolean(state.activeMatchId);
-  const controlsDisabled = isGameOver || !isGameStarted || !hasActiveMatch;
+  const lockedByOther = Boolean(hasActiveMatch && state.scorerUid && state.scorerUid !== (user?.uid ?? null));
+  const controlsDisabled = isGameOver || !isGameStarted || !hasActiveMatch || lockedByOther;
   const isExporting = Boolean(pendingExportId);
   const canUndo = state.history.length > 0;
   const playerStats = useMemo(() => buildPlayerStats(recordPayload), [recordPayload]);
@@ -1212,11 +1218,18 @@ export default function ScorekeeperPage() {
         background: 'rgba(251,191,36,0.12)',
         border: 'rgba(251,191,36,0.4)',
       }
+    : lockedByOther
+      ? {
+          text: '다른 기록원이 기록 중',
+          color: '#fca5a5',
+          background: 'rgba(248,113,113,0.12)',
+          border: 'rgba(248,113,113,0.45)',
+        }
     : isGameOver
-    ? {
-        text: '경기 종료됨 · 기록 잠금',
-        color: '#fca5a5',
-        background: 'rgba(248,113,113,0.12)',
+      ? {
+          text: '경기 종료됨 · 기록 잠금',
+          color: '#fca5a5',
+          background: 'rgba(248,113,113,0.12)',
         border: 'rgba(248,113,113,0.4)',
       }
     : !isGameStarted
@@ -1579,6 +1592,7 @@ const handleConfirmHitWizard = () => {
   };
 
   const handleLiveUrlSave = () => {
+    if (lockedByOther) return;
     const normalized = normalizeLiveUrl(liveVideoUrlInput);
     setLiveVideoUrlInput(normalized);
     if (normalized !== state.liveVideoUrl) {
@@ -1587,7 +1601,7 @@ const handleConfirmHitWizard = () => {
   };
 
   const handleStartGame = () => {
-    if (!hasActiveMatch || isGameStarted || isGameOver) return;
+    if (!hasActiveMatch || isGameStarted || isGameOver || lockedByOther) return;
     setHitWizard(null);
     setActionModal(null);
     actions.startGame();
@@ -1603,6 +1617,7 @@ const handleConfirmHitWizard = () => {
   };
 
   const handleEndGame = () => {
+    if (lockedByOther) return;
     if (!isGameStarted && !state.gameOver) return;
     if (state.gameOver) {
       const filename = buildDownloadName('scorecard', state.endedAt);
@@ -1788,10 +1803,15 @@ const handleConfirmHitWizard = () => {
                 >
                   {statusBadge.text}
                 </span>
+                {lockedByOther ? (
+                  <span style={{ color: '#f87171', fontWeight: 800, fontSize: '12px' }}>
+                    다른 기록원이 기록 중입니다 ({state.scorerName || state.scorerEmail || state.scorerUid || '알 수 없음'})
+                  </span>
+                ) : null}
                 <button
                   type="button"
                   onClick={handleStartGame}
-                  disabled={isGameOver || isGameStarted}
+                  disabled={isGameOver || isGameStarted || lockedByOther}
                   style={{
                     padding: '10px 12px',
                     borderRadius: '10px',
@@ -1973,7 +1993,7 @@ const handleConfirmHitWizard = () => {
                 <button
                   type="button"
                   onClick={handleLiveUrlSave}
-                  disabled={!hasLiveUrlChange}
+                  disabled={!hasLiveUrlChange || lockedByOther}
                   style={{
                     padding: '10px 14px',
                     borderRadius: '10px',
@@ -2013,7 +2033,7 @@ const handleConfirmHitWizard = () => {
                 <button
                   type="button"
                   onClick={handleEndGame}
-                  disabled={isExporting}
+                  disabled={isExporting || lockedByOther}
                   style={{
                     padding: '12px 14px',
                     borderRadius: '12px',
