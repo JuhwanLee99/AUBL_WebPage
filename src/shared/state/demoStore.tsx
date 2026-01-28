@@ -568,7 +568,7 @@ function normalizeTotals(totals: unknown): PostGameTotals | undefined {
   if (!totals || typeof totals !== 'object') return undefined;
   const t = totals as PostGameTotals;
   const pick = (side: 'home' | 'away') => {
-    const src = (t as any)[side] ?? {};
+    const src = (t as Record<'home' | 'away', Partial<PostGameTotals['home']>>)[side] ?? {};
     const runs = asNumber(src.runs);
     const hits = asNumber(src.hits);
     const errors = asNumber(src.errors);
@@ -609,8 +609,8 @@ function normalizePitcherLine(entry: unknown): PostGamePitcherLine | null {
   const out: Partial<PostGamePitcherLine> = { name: p.name.trim() };
   fields.forEach((key) => {
     if (key === 'name' || key === 'result') return;
-    const val = asNumber((p as any)[key]);
-    if (val !== undefined) (out as any)[key] = val;
+    const val = asNumber((p as Record<string, unknown>)[key]);
+    if (val !== undefined) (out as Record<string, unknown>)[key] = val;
   });
   if (typeof p.result === 'string' && p.result.trim()) out.result = p.result.trim();
   return out as PostGamePitcherLine;
@@ -644,8 +644,8 @@ function normalizeBatterLine(entry: unknown): PostGameBatterLine | null {
   }
   ['ab', 'h', 'rbi', 'r', 'sb', 'avg', 'seasonAvg'].forEach((k) => {
     const key = k as keyof PostGameBatterLine;
-    const val = asNumber((b as any)[key]);
-    if (val !== undefined) (out as any)[key] = val;
+    const val = asNumber((b as Record<string, unknown>)[key]);
+    if (val !== undefined) (out as Record<string, unknown>)[key] = val;
   });
   return out as PostGameBatterLine;
 }
@@ -889,7 +889,7 @@ export function buildGameRecord(state: DemoState): GameRecord {
 }
 
 function snapshotState(state: DemoState): DemoSnapshot {
-  const { history, ...snapshot } = state;
+  const { history: _history, ...snapshot } = state;
   return snapshot;
 }
 
@@ -2613,7 +2613,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [auth.currentUser?.uid]);
+  }, []);
 
   // 새 경기로 전환될 때 이전 feed/events 잔상을 비운다.
   useEffect(() => {
@@ -2859,7 +2859,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     void run().catch(() => {
       // ignore lock acquisition errors
     });
-  }, [state.activeMatchId, auth.currentUser?.uid]);
+  }, [state.activeMatchId]);
 
   // Push game state to Firestore when admin updates locally.
   useEffect(() => {

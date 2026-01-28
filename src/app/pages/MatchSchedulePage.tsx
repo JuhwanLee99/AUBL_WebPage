@@ -1202,10 +1202,10 @@ export default function MatchSchedulePage() {
 }
 
 function CompletedResultCard({ match }: { match: MatchSchedule }) {
+  const [open, setOpen] = useState(false);
   const detail = match.postGame as PostGameRecord | undefined;
   if (!detail) return null;
   const teams = { home: match.homeTeamName, away: match.awayTeamName };
-  const [open, setOpen] = useState(false);
   return (
     <div
       style={{

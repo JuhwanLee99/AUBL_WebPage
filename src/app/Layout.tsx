@@ -26,35 +26,38 @@ export default function Layout() {
     window.scrollTo({ top: 0, left: 0 });
   }, [location.pathname]);
 
-  const navItems = [
-    { path: '/intro', label: '리그 소개' },
-    {
-      path: '/schedule',
-      label: '경기 일정',
-      children: [
-        { path: '/schedule/results', label: '경기 결과' },
-        { path: '/schedule/groups', label: '조별 일정' },
-        { path: '/schedule/manage', label: '일정 관리', requiresAdmin: true },
-      ],
-    },
-    {
-      path: '/records',
-      label: '기록',
-      children: [
-        { path: '/records/pitchers', label: '투수 기록' },
-        { path: '/records/batters', label: '타자 기록' },
-      ],
-    },
-    { path: '/community', label: '커뮤니티' },
-    {
-      path: '/standings',
-      label: '순위',
-      children: [{ path: '/standings/power-ranking', label: '파워랭킹' }],
-    },
-    { path: '/prediction', label: '승부예측' },
-    // 기록원: 항상 보이지만 비관리자는 클릭 시 안내 버블만 노출
-    { path: '/scorekeeper', label: '기록원', requiresAdmin: true, showWhenBlocked: true },
-  ];
+  const navItems = useMemo(
+    () => [
+      { path: '/intro', label: '리그 소개' },
+      {
+        path: '/schedule',
+        label: '경기 일정',
+        children: [
+          { path: '/schedule/results', label: '경기 결과' },
+          { path: '/schedule/groups', label: '조별 일정' },
+          { path: '/schedule/manage', label: '일정 관리', requiresAdmin: true },
+        ],
+      },
+      {
+        path: '/records',
+        label: '기록',
+        children: [
+          { path: '/records/pitchers', label: '투수 기록' },
+          { path: '/records/batters', label: '타자 기록' },
+        ],
+      },
+      { path: '/community', label: '커뮤니티' },
+      {
+        path: '/standings',
+        label: '순위',
+        children: [{ path: '/standings/power-ranking', label: '파워랭킹' }],
+      },
+      { path: '/prediction', label: '승부예측' },
+      // 기록원: 항상 보이지만 비관리자는 클릭 시 안내 버블만 노출
+      { path: '/scorekeeper', label: '기록원', requiresAdmin: true, showWhenBlocked: true },
+    ],
+    [],
+  );
   const [hoveredMenu, setHoveredMenu] = useState<string | null>(null);
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
 
