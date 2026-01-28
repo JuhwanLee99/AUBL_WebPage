@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
-import { collection, doc, onSnapshot, orderBy, query, setDoc, writeBatch, deleteDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot, orderBy, query, setDoc, writeBatch, deleteDoc, getDoc } from 'firebase/firestore';
 import { auth, firestore } from '../firebase/client';
 import { TEAMS } from '../lib/mockData';
 import type { LeagueDivision } from '../types';
@@ -813,6 +813,27 @@ function shouldTrackHistory(actionType: Action['type']) {
   ].includes(actionType);
 }
 
+function syncActiveMatchScore(nextState: DemoState): DemoState {
+  const matchId = nextState.activeMatchId;
+  if (!matchId) return nextState;
+
+  const activeMatch = nextState.matches.find((m) => m.id === matchId);
+  if (!activeMatch || activeMatch.status !== 'inProgress') return nextState;
+
+  const needsSync =
+    activeMatch.homeScore !== nextState.score.home || activeMatch.awayScore !== nextState.score.away;
+
+  if (!needsSync) return nextState;
+
+  return {
+    ...nextState,
+    matches: updateMatchSchedule(nextState.matches, matchId, {
+      homeScore: nextState.score.home,
+      awayScore: nextState.score.away,
+    }),
+  };
+}
+
 function reducer(state: DemoState, action: Action): DemoState {
   if (action.type === 'hydrate') {
     return normalizeState(initialState, action.state);
@@ -1172,6 +1193,8 @@ function reducer(state: DemoState, action: Action): DemoState {
     default:
       nextState = state;
   }
+
+  nextState = syncActiveMatchScore(nextState);
 
   if (nextState === state) return state;
   if (!shouldTrackHistory(action.type)) return nextState;
@@ -2480,6 +2503,27 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     const matchId = state.activeMatchId;
     if (!matchId) return;
     const stateDoc = doc(firestore, 'matchStates', matchId);
+
+    // 1) Fetch the latest state once immediately so spectators see current data without waiting for the next update.
+    void getDoc(stateDoc)
+      .then((snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data() as SharedGameState;
+        skipFirestoreWriteRef.current = true;
+        dispatch({
+          type: 'hydrate',
+          state: normalizeState(initialState, {
+            ...stateRef.current,
+            ...data,
+            matches: stateRef.current.matches,
+          }),
+        });
+      })
+      .catch(() => {
+        // ignore initial fetch errors; real-time listener below will retry on updates
+      });
+
+    // 2) Subscribe for real-time updates.
     const unsub = onSnapshot(
       stateDoc,
       (snap) => {
