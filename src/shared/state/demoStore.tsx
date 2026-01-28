@@ -220,8 +220,6 @@ type Action =
       benches: { home: PlayerSlot[]; away: PlayerSlot[] };
     };
 
-const STORAGE_KEY = 'aubl-demo-store';
-
 const initialMatch = MATCHES[0];
 const demoLineups: { home: PlayerSlot[]; away: PlayerSlot[] } = {
   home: [
@@ -298,7 +296,9 @@ const deriveMatchDivision = (
   homeTeamId?: string,
   awayTeamId?: string,
 ): LeagueDivision | undefined => {
-  if (division === 'EUTTEUM' || division === 'BEOGEUM') return division;
+  const normalized =
+    typeof division === 'string' ? division.trim().toUpperCase() : undefined;
+  if (normalized === 'EUTTEUM' || normalized === 'BEOGEUM') return normalized;
   const homeDiv = teamDivisionById(homeTeamId);
   const awayDiv = teamDivisionById(awayTeamId);
   if (homeDiv && awayDiv && homeDiv === awayDiv) return homeDiv;
@@ -314,6 +314,7 @@ const initialScheduledMatches: MatchSchedule[] = [
     awayTeamId: 'team-2',
     homeTeamName: teamNameById('team-1'),
     awayTeamName: teamNameById('team-2'),
+    division: deriveMatchDivision(undefined, 'team-1', 'team-2'),
     startTime: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
     venue: 'AUBL 메인구장',
     status: 'scheduled',
@@ -326,6 +327,7 @@ const initialScheduledMatches: MatchSchedule[] = [
     awayTeamId: 'team-4',
     homeTeamName: teamNameById('team-3'),
     awayTeamName: teamNameById('team-4'),
+    division: deriveMatchDivision(undefined, 'team-3', 'team-4'),
     startTime: new Date(Date.now() + 1000 * 60 * 60 * 48).toISOString(),
     venue: 'AUBL 보조구장',
     status: 'scheduled',
@@ -336,6 +338,7 @@ const initialScheduledMatches: MatchSchedule[] = [
     awayTeamId: 'team-1',
     homeTeamName: teamNameById('team-5'),
     awayTeamName: teamNameById('team-1'),
+    division: deriveMatchDivision(undefined, 'team-5', 'team-1'),
     startTime: new Date(Date.now() + 1000 * 60 * 60 * 72).toISOString(),
     venue: 'Epsilon Field',
     status: 'scheduled',
@@ -347,6 +350,7 @@ const initialScheduledMatches: MatchSchedule[] = [
     awayTeamId: 'team-3',
     homeTeamName: teamNameById('team-4'),
     awayTeamName: teamNameById('team-3'),
+    division: deriveMatchDivision(undefined, 'team-4', 'team-3'),
     startTime: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
     venue: 'Delta Dome',
     status: 'inProgress',
@@ -357,6 +361,7 @@ const initialScheduledMatches: MatchSchedule[] = [
     awayTeamId: 'team-5',
     homeTeamName: teamNameById('team-2'),
     awayTeamName: teamNameById('team-5'),
+    division: deriveMatchDivision(undefined, 'team-2', 'team-5'),
     startTime: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
     venue: 'Beta Stadium',
     status: 'completed',
@@ -369,6 +374,7 @@ const initialScheduledMatches: MatchSchedule[] = [
     awayTeamId: match.awayTeamId,
     homeTeamName: teamNameById(match.homeTeamId),
     awayTeamName: teamNameById(match.awayTeamId),
+    division: deriveMatchDivision(undefined, match.homeTeamId, match.awayTeamId),
     startTime: new Date(Date.now() - 1000 * 60 * 60 * 24 * (index + 1)).toISOString(),
     venue: 'AUBL 기록실',
     status: 'completed' as const,
@@ -682,6 +688,7 @@ function normalizeMatches(matches: unknown): MatchSchedule[] {
         startTime: new Date().toISOString(),
         venue: '미정',
         status: 'scheduled',
+        division: undefined,
       } satisfies MatchSchedule;
     }
     const match = entry as Partial<MatchSchedule>;
@@ -694,6 +701,7 @@ function normalizeMatches(matches: unknown): MatchSchedule[] {
       startTime: typeof match.startTime === 'string' ? match.startTime : new Date().toISOString(),
       venue: typeof match.venue === 'string' ? match.venue : '미정',
       status: match.status === 'completed' || match.status === 'inProgress' ? match.status : 'scheduled',
+      division: deriveMatchDivision(match.division, match.homeTeamId, match.awayTeamId),
       homeScore: typeof match.homeScore === 'number' ? match.homeScore : null,
       awayScore: typeof match.awayScore === 'number' ? match.awayScore : null,
       lineups: normalizeLineups(match.lineups),
@@ -2398,18 +2406,7 @@ interface DemoStoreValue {
 const DemoStoreContext = createContext<DemoStoreValue | null>(null);
 
 export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState, (init) => {
-    if (typeof window === 'undefined') return init;
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (!stored) return init;
-      const parsed = JSON.parse(stored) as DemoState;
-      return normalizeState(init, parsed);
-    } catch {
-      return init;
-    }
-  });
-  const skipSyncRef = useRef(false);
+  const [state, dispatch] = useReducer(reducer, initialState);
   const stateRef = useRef(state);
   const skipFirestoreWriteRef = useRef(false);
   const skipMatchesWriteRef = useRef(false);
@@ -2419,35 +2416,6 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (skipSyncRef.current) {
-      skipSyncRef.current = false;
-      return;
-    }
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-      // Ignore storage write failures.
-    }
-  }, [state]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const onStorage = (event: StorageEvent) => {
-      if (event.key !== STORAGE_KEY || !event.newValue) return;
-      try {
-        const nextState = JSON.parse(event.newValue) as DemoState;
-        skipSyncRef.current = true;
-        dispatch({ type: 'hydrate', state: nextState });
-      } catch {
-        // Ignore invalid payloads.
-      }
-    };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
 
   // Subscribe to schedule collection for spectators (read-only) and admins.
   useEffect(() => {
@@ -2540,12 +2508,13 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
 
   // Sync schedule changes to Firestore (admin routes only; spectators skip via flag/auth).
   useEffect(() => {
-    if (!auth.currentUser) return;
     if (skipMatchesWriteRef.current) {
       skipMatchesWriteRef.current = false;
       return;
     }
-    const key = JSON.stringify(state.matches.map((m) => [m.id, m.status, m.startTime, m.homeScore, m.awayScore, m.notes]));
+    const key = JSON.stringify(
+      state.matches.map((m) => [m.id, m.status, m.startTime, m.homeScore, m.awayScore, m.notes, m.division]),
+    );
     if (key === lastMatchesKeyRef.current) return;
     lastMatchesKeyRef.current = key;
     const syncMatches = async () => {
@@ -2559,7 +2528,6 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   }, [state.matches]);
 
   const updateCurrentMatchPointer = (matchId: string | null) => {
-    if (!auth.currentUser) return;
     void setDoc(
       doc(firestore, 'app', 'current'),
       { activeMatchId: matchId, updatedAt: Date.now() },

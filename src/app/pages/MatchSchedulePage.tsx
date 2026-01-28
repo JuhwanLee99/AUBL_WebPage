@@ -3,6 +3,8 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
 import type { MatchSchedule, MatchStatus, PostGameRecord } from '../../shared/state/demoStore';
+import type { LeagueDivision } from '../../shared/types';
+import { TEAMS } from '../../shared/lib/mockData';
 import { useAdmin } from '../../shared/auth/useAdmin';
 
 const emptyForm = {
@@ -11,6 +13,7 @@ const emptyForm = {
   startTime: '',
   venue: '',
   status: 'scheduled' as MatchStatus,
+  division: 'auto' as 'auto' | LeagueDivision,
   homeScore: '',
   awayScore: '',
   homeLineup: '',
@@ -121,6 +124,21 @@ const normalizePlayerSlot = (player: PlayerSlot): PlayerSlot => ({
   throws: player.throws || 'R',
   bats: player.bats || 'R',
 });
+
+const divisionStyles: Record<LeagueDivision, { label: string; color: string }> = {
+  EUTTEUM: { label: '으뜸', color: '#4f46e5' },
+  BEOGEUM: { label: '버금', color: '#10b981' },
+};
+
+const deriveDivision = (match: MatchSchedule): LeagueDivision | undefined => {
+  if (match.division === 'EUTTEUM' || match.division === 'BEOGEUM') return match.division;
+  const homeDiv = TEAMS.find((t) => t.id === match.homeTeamId)?.division;
+  const awayDiv = TEAMS.find((t) => t.id === match.awayTeamId)?.division;
+  if (homeDiv && awayDiv && homeDiv === awayDiv) return homeDiv;
+  if (homeDiv && !awayDiv) return homeDiv;
+  if (awayDiv && !homeDiv) return awayDiv;
+  return undefined;
+};
 
 function extractDateParts(value: string) {
   if (!value) return { date: '', hour: '', minute: '' };
@@ -302,6 +320,7 @@ export default function MatchSchedulePage() {
     if (!canEdit) return;
     const homeLineup = form.homeLineup.trim();
     const awayLineup = form.awayLineup.trim();
+    const selectedDivision = form.division === 'auto' ? undefined : (form.division as LeagueDivision);
     const lineupsFromText =
       homeLineup || awayLineup ? { home: parseLineup(homeLineup), away: parseLineup(awayLineup) } : undefined;
     const trimmedLineups = form.status === 'scheduled'
@@ -325,6 +344,7 @@ export default function MatchSchedulePage() {
       startTime: toIsoString(form.startTime),
       venue: form.venue || '미정',
       status: form.status,
+      division: selectedDivision,
       homeScore: form.status === 'completed' ? Number(form.homeScore || 0) : null,
       awayScore: form.status === 'completed' ? Number(form.awayScore || 0) : null,
       lineups: hasStructuredLineups ? trimmedLineups : lineupsFromText,
@@ -392,6 +412,7 @@ export default function MatchSchedulePage() {
       setTooltip(null);
       goTo('/scorekeeper');
     };
+    const division = deriveDivision(match);
     const quickActionStyle: CSSProperties = {
       display: 'inline-flex',
       alignItems: 'center',
@@ -445,8 +466,29 @@ export default function MatchSchedulePage() {
               </span>
               {isActive && <span style={{ fontSize: '12px', color: '#f97316' }}>선택됨</span>}
             </div>
-            <div style={{ color: '#94a3b8', marginTop: '4px', fontSize: '13px' }}>
-              {formatDateTimeLabel(match.startTime)} · {match.venue}
+            <div style={{ color: '#94a3b8', marginTop: '4px', fontSize: '13px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <span>
+                {formatDateTimeLabel(match.startTime)} · {match.venue}
+              </span>
+              {division && (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '4px 10px',
+                    borderRadius: '999px',
+                    border: `1px solid ${divisionStyles[division].color}55`,
+                    background: `${divisionStyles[division].color}14`,
+                    color: divisionStyles[division].color,
+                    fontWeight: 800,
+                    fontSize: '12px',
+                  }}
+                >
+                  <span style={{ width: '10px', height: '10px', borderRadius: '999px', background: divisionStyles[division].color }} />
+                  {divisionStyles[division].label}
+                </span>
+              )}
             </div>
           </div>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -720,7 +762,7 @@ export default function MatchSchedulePage() {
       >
         {[
           { path: '/schedule/results', label: '경기 결과', desc: '종료 경기 모아보기' },
-          { path: '/schedule/groups', label: '조별 일정', desc: '조(으뜸/버금)별 캘린더' },
+          { path: '/schedule/groups', label: '조별 일정', desc: '구분(으뜸/버금)별 캘린더' },
           { path: '/schedule/manage', label: '일정 관리', desc: '데모용 더미 등록 & 상태 변경' },
         ].map((item) => (
           <button
@@ -827,6 +869,18 @@ export default function MatchSchedulePage() {
                 placeholder="경기장 이름"
                 style={inputStyle}
               />
+            </label>
+            <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
+              구분
+              <select
+                value={form.division}
+                onChange={(event) => setForm((prev) => ({ ...prev, division: event.target.value as 'auto' | LeagueDivision }))}
+                style={inputStyle}
+              >
+                <option value="auto">자동(팀 소속 또는 미정)</option>
+                <option value="EUTTEUM">으뜸 경기</option>
+                <option value="BEOGEUM">버금 경기</option>
+              </select>
             </label>
           </div>
 
