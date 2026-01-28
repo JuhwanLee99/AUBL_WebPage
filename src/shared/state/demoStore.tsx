@@ -2489,6 +2489,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         if (!data) return;
         const nextId = typeof data.activeMatchId === 'string' ? data.activeMatchId : null;
         if (nextId === stateRef.current.activeMatchId) return;
+        skipFirestoreWriteRef.current = true;
         dispatch({ type: 'syncActiveMatch', matchId: nextId });
       },
       () => {
@@ -2550,7 +2551,6 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const matchId = state.activeMatchId;
     if (!matchId) return;
-    if (!auth.currentUser) return;
     if (skipFirestoreWriteRef.current) {
       skipFirestoreWriteRef.current = false;
       return;
@@ -2731,6 +2731,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'saveMatchLineups', matchId, lineups, benches });
       },
       selectMatch: (matchId: string | null) => {
+        skipFirestoreWriteRef.current = true;
         dispatch({ type: 'selectMatch', matchId });
         updateCurrentMatchPointer(matchId);
       },
