@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useReducer, useRef } fro
 import { collection, doc, onSnapshot, orderBy, query, setDoc, writeBatch, deleteDoc } from 'firebase/firestore';
 import { auth, firestore } from '../firebase/client';
 import { MATCHES, TEAMS } from '../lib/mockData';
+import type { LeagueDivision } from '../types';
 
 type Half = 'top' | 'bottom';
 
@@ -80,6 +81,7 @@ export interface MatchSchedule {
   startTime: string;
   venue: string;
   status: MatchStatus;
+  division?: LeagueDivision; // 으뜸/버금 구분 (관리자 지정)
   homeScore?: number | null;
   awayScore?: number | null;
   lineups?: { home: PlayerSlot[]; away: PlayerSlot[] };
@@ -290,6 +292,20 @@ const ensureCompleteLineups = (lineups: { home: PlayerSlot[]; away: PlayerSlot[]
 });
 
 const teamNameById = (teamId?: string) => TEAMS.find((team) => team.id === teamId)?.name ?? '미정';
+const teamDivisionById = (teamId?: string): LeagueDivision | undefined => TEAMS.find((team) => team.id === teamId)?.division;
+const deriveMatchDivision = (
+  division: unknown,
+  homeTeamId?: string,
+  awayTeamId?: string,
+): LeagueDivision | undefined => {
+  if (division === 'EUTTEUM' || division === 'BEOGEUM') return division;
+  const homeDiv = teamDivisionById(homeTeamId);
+  const awayDiv = teamDivisionById(awayTeamId);
+  if (homeDiv && awayDiv && homeDiv === awayDiv) return homeDiv;
+  if (homeDiv && !awayDiv) return homeDiv;
+  if (awayDiv && !homeDiv) return awayDiv;
+  return undefined;
+};
 
 const initialScheduledMatches: MatchSchedule[] = [
   {
