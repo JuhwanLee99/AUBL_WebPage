@@ -27,6 +27,8 @@ const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
 const FEED_LIMIT = 50; // 관중 뷰 기본 구독 크기
 const SCORER_FEED_LIMIT = 200; // 기록원 재접속 시 충분한 버퍼
 const WRITE_DEBOUNCE_MS = 300; // 기록원 상태 동기화 디바운스 (투구 간 평균 간격을 고려해 write 수 최소화)
+const SCORER_LOCK_TTL_MS = 180_000; // 3분 후 락 만료 (이닝 교대 대비 여유)
+const SCORER_LOCK_HEARTBEAT_MS = 60_000; // 60초마다 하트비트 갱신
 
 // Firestore는 undefined를 허용하지 않으므로 중첩 객체/배열에서 undefined를 제거한다.
 function pruneUndefined<T>(value: T): T {
@@ -299,7 +301,8 @@ type Action =
       benches: { home: PlayerSlot[]; away: PlayerSlot[] };
     }
   | { type: 'setFeed'; feed: PlayLog[] }
-  | { type: 'setEvents'; events: PlayEvent[] };
+  | { type: 'setEvents'; events: PlayEvent[] }
+  | { type: 'releaseLock' };
 
 const demoLineups: { home: PlayerSlot[]; away: PlayerSlot[] } = {
   home: [
@@ -943,7 +946,8 @@ function syncActiveMatchScore(nextState: DemoState): DemoState {
 function isLockedByOther(state: DemoState): boolean {
   const owner = state.scorerUid;
   const current = auth.currentUser?.uid ?? null;
-  if (!owner) return false;
+  const expired = !state.scorerLockedAt || Date.now() - state.scorerLockedAt > SCORER_LOCK_TTL_MS;
+  if (!owner || expired) return false;
   if (!current) return true;
   return owner !== current;
 }
@@ -995,6 +999,15 @@ function reducer(state: DemoState, action: Action): DemoState {
       return {
         ...state,
         events: normalizeEvents(action.events, { inning: state.inning, half: state.half }),
+      };
+    case 'releaseLock':
+      return {
+        ...state,
+        scorerUid: null,
+        scorerName: null,
+        scorerEmail: null,
+        scorerLockedAt: null,
+        scorerRole: null,
       };
     case 'ball':
       if (state.balls >= 3) {
@@ -2567,6 +2580,7 @@ interface DemoStoreValue {
     ) => void;
     selectMatch: (matchId: string | null) => void;
     loadFullSchedule: () => Promise<void>;
+    releaseLock: () => void;
   };
 }
 
@@ -2585,6 +2599,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   const notifiedMatchStartRef = useRef<Set<string>>(new Set());
   const matchesReadyRef = useRef(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     stateRef.current = state;
@@ -2826,7 +2841,9 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
           ? (snap.data() as SharedGameState & { scorerUid?: string | null; scorerName?: string | null; scorerEmail?: string | null; scorerLockedAt?: number | null; scorerRole?: string | null })
           : null;
         const owner = data?.scorerUid;
-        if (owner && owner !== user.uid) {
+        const lockedAt = data?.scorerLockedAt ?? 0;
+        const expired = !lockedAt || now - lockedAt > SCORER_LOCK_TTL_MS;
+        if (owner && owner !== user.uid && !expired) {
           return;
         }
         tx.set(
@@ -2835,7 +2852,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
             scorerUid: user.uid,
             scorerName: user.displayName ?? null,
             scorerEmail: user.email ?? null,
-            scorerLockedAt: data?.scorerLockedAt ?? now,
+            scorerLockedAt: now,
             scorerRole: data?.scorerRole ?? roleLabel,
           },
           { merge: true },
@@ -2860,6 +2877,38 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       // ignore lock acquisition errors
     });
   }, [state.activeMatchId]);
+
+  // Heartbeat to keep scorer lock fresh; expires automatically when stopped.
+  useEffect(() => {
+    const matchId = state.activeMatchId;
+    const user = auth.currentUser;
+    const isOwner = matchId && user && state.scorerUid === user.uid;
+    const expired = !state.scorerLockedAt || Date.now() - state.scorerLockedAt > SCORER_LOCK_TTL_MS;
+    if (!isOwner || !matchId) return;
+
+    // If somehow expired but still owner, refresh immediately.
+    if (expired) {
+      void setDoc(
+        doc(firestore, 'matchStates', matchId),
+        { scorerUid: user!.uid, scorerLockedAt: Date.now() },
+        { merge: true },
+      ).catch(() => {});
+    }
+
+    heartbeatTimerRef.current = setInterval(() => {
+      const now = Date.now();
+      void setDoc(
+        doc(firestore, 'matchStates', matchId),
+        { scorerUid: user!.uid, scorerLockedAt: now },
+        { merge: true },
+      ).catch(() => {});
+    }, SCORER_LOCK_HEARTBEAT_MS);
+
+    return () => {
+      if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
+      heartbeatTimerRef.current = null;
+    };
+  }, [state.activeMatchId, state.scorerUid, state.scorerLockedAt]);
 
   // Push game state to Firestore when admin updates locally.
   useEffect(() => {
@@ -3134,6 +3183,17 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         } catch {
           // ignore fetch errors for spectators; manual retry via action
         }
+      },
+      releaseLock: () => {
+        dispatch({ type: 'releaseLock' });
+        const matchId = stateRef.current.activeMatchId;
+        const user = auth.currentUser;
+        if (!matchId || !user) return;
+        void setDoc(
+          doc(firestore, 'matchStates', matchId),
+          { scorerUid: null, scorerName: null, scorerEmail: null, scorerLockedAt: null, scorerRole: null },
+          { merge: true },
+        ).catch(() => {});
       },
     }),
     [isAdmin],

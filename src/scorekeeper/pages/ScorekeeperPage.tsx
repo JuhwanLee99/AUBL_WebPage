@@ -1183,7 +1183,7 @@ export default function ScorekeeperPage() {
   });
   const [hitWizard, setHitWizard] = useState<HitWizardState | null>(null);
   const [manualBroadcast, setManualBroadcast] = useState('');
-  const [liveVideoUrlInput, setLiveVideoUrlInput] = useState(state.liveVideoUrl);
+  const [liveVideoUrlInput, setLiveVideoUrlInput] = useState('');
   const [hitAdvanceModal, setHitAdvanceModal] = useState<null | {
     bases: 1 | 2 | 3;
     selections: RunnerAdvanceSelections;
@@ -1206,7 +1206,12 @@ export default function ScorekeeperPage() {
   const isGameStarted = state.gameStarted;
   const isGameOver = state.gameOver;
   const hasActiveMatch = Boolean(state.activeMatchId);
-  const lockedByOther = Boolean(hasActiveMatch && state.scorerUid && state.scorerUid !== (user?.uid ?? null));
+  const lockedByOther = useMemo(() => {
+    if (!hasActiveMatch || !state.scorerUid) return false;
+    const expired = !state.scorerLockedAt || Date.now() - state.scorerLockedAt > 180_000;
+    if (expired) return false;
+    return state.scorerUid !== (user?.uid ?? null);
+  }, [hasActiveMatch, state.scorerUid, state.scorerLockedAt, user?.uid]);
   const controlsDisabled = isGameOver || !isGameStarted || !hasActiveMatch || lockedByOther;
   const isExporting = Boolean(pendingExportId);
   const canUndo = state.history.length > 0;
@@ -1261,7 +1266,9 @@ export default function ScorekeeperPage() {
   }, [state.activeMatchId]);
 
   useEffect(() => {
-    setLiveVideoUrlInput(state.liveVideoUrl);
+    const incoming = state.liveVideoUrl.trim();
+    const sanitized = incoming.includes('YOUR_CHANNEL_ID') ? '' : incoming;
+    setLiveVideoUrlInput(sanitized);
   }, [state.liveVideoUrl]);
 
   useEffect(() => {
@@ -1803,6 +1810,24 @@ const handleConfirmHitWizard = () => {
                 >
                   {statusBadge.text}
                 </span>
+                {!lockedByOther && state.scorerUid === (user?.uid ?? null) ? (
+                  <button
+                    type="button"
+                    onClick={() => actions.releaseLock()}
+                    style={{
+                      padding: '8px 10px',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(248,113,113,0.5)',
+                      background: 'rgba(248,113,113,0.12)',
+                      color: '#fecdd3',
+                      fontWeight: 800,
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    잠금 해제
+                  </button>
+                ) : null}
                 {lockedByOther ? (
                   <span style={{ color: '#f87171', fontWeight: 800, fontSize: '12px' }}>
                     다른 기록원이 기록 중입니다 ({state.scorerName || state.scorerEmail || state.scorerUid || '알 수 없음'})
