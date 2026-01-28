@@ -82,6 +82,57 @@ const safeMatchTime = (value: string) => {
 
 const scoreOrDash = (score?: number | null) => (typeof score === 'number' && Number.isFinite(score) ? score : '-');
 
+const countDots = (filled: number, total: number, color: string) =>
+  Array.from({ length: total }, (_, idx) => ({
+    active: idx < filled,
+    color,
+  }));
+
+const currentBatterName = (state: ReturnType<typeof useDemoStore>['state']) => {
+  const side = state.half === 'top' ? 'away' : 'home';
+  const lineup = state.lineups[side];
+  const battingLineup = lineup.filter((slot) => slot.pos.toUpperCase() !== 'P');
+  const activeLineup = battingLineup.length ? battingLineup : lineup;
+  const safeLength = activeLineup.length || 1;
+  const idx = state.batterIndex[side] % safeLength;
+  const batter = activeLineup[idx];
+  return batter?.name || '타자 대기 중';
+};
+
+function Badge({ label, dots }: { label: string; dots: { active: boolean; color: string }[] }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        background: 'rgba(255,255,255,0.04)',
+        borderRadius: '10px',
+        padding: '6px 8px',
+        border: '1px solid rgba(148,163,184,0.18)',
+      }}
+    >
+      <span style={{ fontWeight: 900, color: '#e2e8f0', fontSize: '12px', letterSpacing: '0.06em' }}>{label}</span>
+      <span style={{ display: 'flex', gap: '6px' }}>
+        {dots.map((dot, idx) => (
+          <span
+            // eslint-disable-next-line react/no-array-index-key
+            key={idx}
+            style={{
+              width: '10px',
+              height: '10px',
+              borderRadius: '999px',
+              backgroundColor: dot.active ? dot.color : 'rgba(148,163,184,0.3)',
+              boxShadow: dot.active ? `0 0 0 6px ${dot.color}33` : 'none',
+              transition: 'all 0.2s ease',
+            }}
+          />
+        ))}
+      </span>
+    </div>
+  );
+}
+
 export default function LandingPage() {
   const { state, actions } = useDemoStore();
   const navigate = useNavigate();
@@ -461,6 +512,42 @@ export default function LandingPage() {
                     />
                   </div>
                 </div>
+
+                {(() => {
+                  const isActive = match.id === state.activeMatchId;
+                  const balls = isActive ? state.balls : null;
+                  const strikes = isActive ? state.strikes : null;
+                  const outs = isActive ? state.outs : null;
+                  const inningLabel = isActive ? `${state.inning}회${state.half === 'top' ? '초' : '말'}` : '이닝 정보 없음';
+                  const batter = isActive ? currentBatterName(state) : '실시간 선택 시 표시';
+                  const bDots = countDots(balls ?? 0, 3, '#22c55e');
+                  const sDots = countDots(strikes ?? 0, 2, '#facc15');
+                  const oDots = countDots(outs ?? 0, 3, '#ef4444');
+                  return (
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr auto',
+                        gap: '10px',
+                        alignItems: 'center',
+                        padding: '10px 12px',
+                        borderRadius: '12px',
+                        background: 'rgba(15,23,42,0.6)',
+                        border: '1px solid rgba(148,163,184,0.28)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <Badge label="B" dots={bDots} />
+                        <Badge label="S" dots={sDots} />
+                        <Badge label="O" dots={oDots} />
+                      </div>
+                      <div style={{ display: 'grid', gap: '4px', justifyItems: 'end', textAlign: 'right' }}>
+                        <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '12px' }}>{inningLabel}</span>
+                        <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>현재 타석: {batter}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                   <button
