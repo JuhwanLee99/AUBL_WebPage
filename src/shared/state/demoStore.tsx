@@ -1,16 +1,18 @@
-import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
+import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { getIdTokenResult } from 'firebase/auth';
 import {
   collection,
   doc,
   onSnapshot,
   orderBy,
+  where,
   limit,
   query,
   setDoc,
   writeBatch,
   deleteDoc,
   getDoc,
+  getDocs,
   runTransaction,
 } from 'firebase/firestore';
 import { auth, firestore } from '../firebase/client';
@@ -720,6 +722,36 @@ function normalizeMatches(matches: unknown): MatchSchedule[] {
       deletedBy: typeof match.deletedBy === 'string' ? match.deletedBy : undefined,
     };
   });
+}
+
+function projectSpectatorMatch(match: MatchSchedule): MatchSchedule {
+  return {
+    id: match.id,
+    homeTeamId: match.homeTeamId,
+    awayTeamId: match.awayTeamId,
+    homeTeamName: match.homeTeamName,
+    awayTeamName: match.awayTeamName,
+    startTime: match.startTime,
+    venue: match.venue,
+    status: match.status,
+    division: match.division,
+    homeScore: match.homeScore,
+    awayScore: match.awayScore,
+    deleted: match.deleted,
+    deletedAt: match.deletedAt,
+    purgeAt: match.purgeAt,
+    deletedBy: match.deletedBy,
+  };
+}
+
+function mergeMatches(base: MatchSchedule[], incoming: MatchSchedule[]) {
+  const map = new Map<string, MatchSchedule>();
+  base.forEach((m) => map.set(m.id, m));
+  incoming.forEach((m) => {
+    const existing = map.get(m.id);
+    map.set(m.id, existing ? { ...existing, ...m } : m);
+  });
+  return Array.from(map.values());
 }
 
 function normalizeState(base: DemoState, incoming: DemoState): DemoState {
@@ -2534,6 +2566,7 @@ interface DemoStoreValue {
       benches: { home: PlayerSlot[]; away: PlayerSlot[] },
     ) => void;
     selectMatch: (matchId: string | null) => void;
+    loadFullSchedule: () => Promise<void>;
   };
 }
 
@@ -2551,10 +2584,36 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   const writeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const notifiedMatchStartRef = useRef<Set<string>>(new Set());
   const matchesReadyRef = useRef(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  // Determine admin (for schedule write privileges & full subscription)
+  useEffect(() => {
+    let cancelled = false;
+    const user = auth.currentUser;
+    if (!user) {
+      setIsAdmin(false);
+      return;
+    }
+    const run = async () => {
+      try {
+        const token = await getIdTokenResult(user, true);
+        if (cancelled) return;
+        const admin = Boolean((token.claims as Record<string, unknown>).admin) || ADMIN_EMAILS.includes(user.email?.toLowerCase() ?? '');
+        setIsAdmin(admin);
+      } catch {
+        if (cancelled) return;
+        setIsAdmin(ADMIN_EMAILS.includes(user.email?.toLowerCase() ?? ''));
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [auth.currentUser?.uid]);
 
   // 새 경기로 전환될 때 이전 feed/events 잔상을 비운다.
   useEffect(() => {
@@ -2564,24 +2623,36 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     lastEventsLengthRef.current = 0;
   }, [state.activeMatchId]);
 
-  // Subscribe to schedule collection for spectators (read-only) and admins.
+  // Subscribe to schedule: admins get 전체, 관중은 inProgress만 구독.
   useEffect(() => {
-    const q = query(collection(firestore, 'matches'), orderBy('startTime', 'asc'));
+    const matchesCol = collection(firestore, 'matches');
+    const liveQuery = isAdmin
+      ? query(matchesCol, orderBy('startTime', 'asc'))
+      : query(matchesCol, where('status', '==', 'inProgress'));
+
     const unsub = onSnapshot(
-      q,
+      liveQuery,
       (snap) => {
         const incoming = snap.docs.map((docSnap) => ({
           id: docSnap.id,
           ...(docSnap.data() as Partial<MatchSchedule>),
         }));
         const normalized = normalizeMatches(incoming);
+        const projected = isAdmin ? normalized : normalized.map(projectSpectatorMatch);
+        const merged = isAdmin
+          ? projected
+          : mergeMatches(
+              stateRef.current.matches.filter((m) => m.status !== 'inProgress'),
+              projected,
+            );
+
         skipMatchesWriteRef.current = true;
         matchesReadyRef.current = true;
-        dispatch({ type: 'setMatches', matches: normalized });
+        dispatch({ type: 'setMatches', matches: merged });
 
         // Notify locally when a 경기 status becomes inProgress (start).
         if (typeof window !== 'undefined' && typeof Notification !== 'undefined') {
-          const started = normalized.filter((m) => m.status === 'inProgress');
+          const started = projected.filter((m) => m.status === 'inProgress');
           started.forEach((match) => {
             if (notifiedMatchStartRef.current.has(match.id)) return;
             const permission = Notification.permission;
@@ -2611,7 +2682,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       },
     );
     return () => unsub();
-  }, []);
+  }, [isAdmin]);
 
   // Listen to current active match pointer so spectators know which match to watch.
   useEffect(() => {
@@ -2873,6 +2944,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
 
   // Sync schedule changes to Firestore (admin routes only; spectators skip via flag/auth).
   useEffect(() => {
+    if (!isAdmin) return;
     if (!matchesReadyRef.current) return;
     if (skipMatchesWriteRef.current) {
       skipMatchesWriteRef.current = false;
@@ -2891,7 +2963,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       await batch.commit();
     };
     void syncMatches().catch(() => {});
-  }, [state.matches]);
+  }, [state.matches, isAdmin]);
 
   // Auto purge expired trashed matches (deleted flag) from matches collection.
   useEffect(() => {
@@ -3039,8 +3111,32 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'selectMatch', matchId });
         updateCurrentMatchPointer(matchId);
       },
+      loadFullSchedule: async () => {
+        try {
+          const snap = await getDocs(
+            query(
+              collection(firestore, 'matches'),
+              where('status', 'in', ['scheduled', 'completed', 'canceled']),
+            ),
+          );
+          const incoming = snap.docs.map((docSnap) => ({
+            id: docSnap.id,
+            ...(docSnap.data() as Partial<MatchSchedule>),
+          }));
+          const normalized = normalizeMatches(incoming);
+          const projected = isAdmin ? normalized : normalized.map(projectSpectatorMatch);
+          skipMatchesWriteRef.current = true;
+          matchesReadyRef.current = true;
+          dispatch({
+            type: 'setMatches',
+            matches: mergeMatches(stateRef.current.matches, projected),
+          });
+        } catch {
+          // ignore fetch errors for spectators; manual retry via action
+        }
+      },
     }),
-    [],
+    [isAdmin],
   );
 
   const value = useMemo(() => ({ state, actions }), [state, actions]);
