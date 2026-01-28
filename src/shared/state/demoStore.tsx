@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
 import { collection, doc, onSnapshot, orderBy, query, setDoc, writeBatch, deleteDoc } from 'firebase/firestore';
 import { auth, firestore } from '../firebase/client';
-import { MATCHES, TEAMS } from '../lib/mockData';
+import { TEAMS } from '../lib/mockData';
 import type { LeagueDivision } from '../types';
 
 type Half = 'top' | 'bottom';
@@ -220,7 +220,6 @@ type Action =
       benches: { home: PlayerSlot[]; away: PlayerSlot[] };
     };
 
-const initialMatch = MATCHES[0];
 const demoLineups: { home: PlayerSlot[]; away: PlayerSlot[] } = {
   home: [
     { name: '김지찬', pos: '2B', number: '1', throws: 'R', bats: 'L' },
@@ -307,82 +306,6 @@ const deriveMatchDivision = (
   return undefined;
 };
 
-const initialScheduledMatches: MatchSchedule[] = [
-  {
-    id: 'schedule-1',
-    homeTeamId: 'team-1',
-    awayTeamId: 'team-2',
-    homeTeamName: teamNameById('team-1'),
-    awayTeamName: teamNameById('team-2'),
-    division: deriveMatchDivision(undefined, 'team-1', 'team-2'),
-    startTime: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
-    venue: 'AUBL 메인구장',
-    status: 'scheduled',
-    lineups: cloneLineups(demoLineups),
-    notes: '라인업 사전 등록 완료',
-  },
-  {
-    id: 'schedule-2',
-    homeTeamId: 'team-3',
-    awayTeamId: 'team-4',
-    homeTeamName: teamNameById('team-3'),
-    awayTeamName: teamNameById('team-4'),
-    division: deriveMatchDivision(undefined, 'team-3', 'team-4'),
-    startTime: new Date(Date.now() + 1000 * 60 * 60 * 48).toISOString(),
-    venue: 'AUBL 보조구장',
-    status: 'scheduled',
-  },
-  {
-    id: 'schedule-3',
-    homeTeamId: 'team-5',
-    awayTeamId: 'team-1',
-    homeTeamName: teamNameById('team-5'),
-    awayTeamName: teamNameById('team-1'),
-    division: deriveMatchDivision(undefined, 'team-5', 'team-1'),
-    startTime: new Date(Date.now() + 1000 * 60 * 60 * 72).toISOString(),
-    venue: 'Epsilon Field',
-    status: 'scheduled',
-    notes: '버금/EUTTEUM 간 인기 매치업',
-  },
-  {
-    id: 'schedule-4',
-    homeTeamId: 'team-4',
-    awayTeamId: 'team-3',
-    homeTeamName: teamNameById('team-4'),
-    awayTeamName: teamNameById('team-3'),
-    division: deriveMatchDivision(undefined, 'team-4', 'team-3'),
-    startTime: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
-    venue: 'Delta Dome',
-    status: 'inProgress',
-  },
-  {
-    id: 'schedule-5',
-    homeTeamId: 'team-2',
-    awayTeamId: 'team-5',
-    homeTeamName: teamNameById('team-2'),
-    awayTeamName: teamNameById('team-5'),
-    division: deriveMatchDivision(undefined, 'team-2', 'team-5'),
-    startTime: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
-    venue: 'Beta Stadium',
-    status: 'completed',
-    homeScore: 4,
-    awayScore: 6,
-  },
-  ...MATCHES.slice(0, 1).map((match, index) => ({
-    id: `result-${index + 1}`,
-    homeTeamId: match.homeTeamId,
-    awayTeamId: match.awayTeamId,
-    homeTeamName: teamNameById(match.homeTeamId),
-    awayTeamName: teamNameById(match.awayTeamId),
-    division: deriveMatchDivision(undefined, match.homeTeamId, match.awayTeamId),
-    startTime: new Date(Date.now() - 1000 * 60 * 60 * 24 * (index + 1)).toISOString(),
-    venue: 'AUBL 기록실',
-    status: 'completed' as const,
-    homeScore: match.homeScore,
-    awayScore: match.awayScore,
-  })),
-];
-
 const initialState: DemoState = {
   inning: 1,
   half: 'top',
@@ -395,8 +318,8 @@ const initialState: DemoState = {
   lastPlay: '경기 대기 중',
   feed: [],
   events: [],
-  homeTeamId: initialMatch?.homeTeamId ?? 'home',
-  awayTeamId: initialMatch?.awayTeamId ?? 'away',
+  homeTeamId: 'home',
+  awayTeamId: 'away',
   batterIndex: { home: 0, away: 0 },
   lineups: demoLineups,
   benches: {
@@ -416,7 +339,7 @@ const initialState: DemoState = {
   endedAt: null,
   liveVideoUrl: 'https://www.youtube.com/embed/live_stream?channel=YOUR_CHANNEL_ID',
   history: [],
-  matches: initialScheduledMatches,
+  matches: [],
   activeMatchId: null,
 };
 
@@ -2413,6 +2336,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   const lastStateKeyRef = useRef('');
   const lastMatchesKeyRef = useRef('');
   const notifiedMatchStartRef = useRef<Set<string>>(new Set());
+  const matchesReadyRef = useRef(false);
 
   useEffect(() => {
     stateRef.current = state;
@@ -2430,6 +2354,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         }));
         const normalized = normalizeMatches(incoming);
         skipMatchesWriteRef.current = true;
+        matchesReadyRef.current = true;
         dispatch({ type: 'setMatches', matches: normalized });
 
         // Notify locally when a 경기 status becomes inProgress (start).
@@ -2535,6 +2460,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
 
   // Sync schedule changes to Firestore (admin routes only; spectators skip via flag/auth).
   useEffect(() => {
+    if (!matchesReadyRef.current) return;
     if (skipMatchesWriteRef.current) {
       skipMatchesWriteRef.current = false;
       return;
@@ -2615,9 +2541,16 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       endGame: (endedAt: string) => dispatch({ type: 'endGame', endedAt }),
       resetGame: () => dispatch({ type: 'resetGame' }),
       undo: () => dispatch({ type: 'undo' }),
-      addMatch: (match: MatchSchedule) => dispatch({ type: 'addMatch', match }),
-      updateMatch: (matchId: string, updates: Partial<MatchSchedule>) => dispatch({ type: 'updateMatch', matchId, updates }),
+      addMatch: (match: MatchSchedule) => {
+        matchesReadyRef.current = true;
+        dispatch({ type: 'addMatch', match });
+      },
+      updateMatch: (matchId: string, updates: Partial<MatchSchedule>) => {
+        matchesReadyRef.current = true;
+        dispatch({ type: 'updateMatch', matchId, updates });
+      },
       deleteMatch: (matchId: string) => {
+        matchesReadyRef.current = true;
         dispatch({ type: 'deleteMatch', matchId });
         if (stateRef.current.activeMatchId === matchId) {
           updateCurrentMatchPointer(null);
@@ -2630,7 +2563,10 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         matchId: string,
         lineups: { home: PlayerSlot[]; away: PlayerSlot[] },
         benches: { home: PlayerSlot[]; away: PlayerSlot[] },
-      ) => dispatch({ type: 'saveMatchLineups', matchId, lineups, benches }),
+      ) => {
+        matchesReadyRef.current = true;
+        dispatch({ type: 'saveMatchLineups', matchId, lineups, benches });
+      },
       selectMatch: (matchId: string | null) => {
         dispatch({ type: 'selectMatch', matchId });
         updateCurrentMatchPointer(matchId);
