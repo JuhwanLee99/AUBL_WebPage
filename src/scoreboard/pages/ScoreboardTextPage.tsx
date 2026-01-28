@@ -398,6 +398,10 @@ function LiveFeed({
 }) {
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>(collapsedMap);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const heightMapRef = useRef<Map<string, number>>(new Map());
+  const overscanPx = 200;
 
   useEffect(() => {
     setCollapsed((prev) => ({ ...collapsedMap, ...prev }));
@@ -411,25 +415,17 @@ function LiveFeed({
     });
   }, [sections, collapsed]);
 
-  return (
-    <div
-      style={{
-        overflowY: 'auto',
-        maxHeight: '855px',
-        height: 'min(75vh, 855px)',
-        paddingRight: '6px',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'flex-start',
-        gap: '10px',
-        minHeight: 0,
-      }}
-      ref={containerRef}
-    >
-      {sections.map((section) => {
-        const isCollapsed = collapsed[section.inning];
-        return (
-          <div key={section.inning} style={{ width: '100%', display: 'grid', gap: '6px' }}>
+  const flatItems = useMemo(() => {
+    const items: { key: string; estimatedHeight: number; render: () => JSX.Element }[] = [];
+
+    sections.forEach((section) => {
+      const isCollapsed = collapsed[section.inning];
+      const headerKey = `header-${section.inning}`;
+      items.push({
+        key: headerKey,
+        estimatedHeight: 34,
+        render: () => (
+          <div key={headerKey} style={{ width: '100%', display: 'grid', gap: '6px' }}>
             <button
               type="button"
               onClick={() => setCollapsed((prev) => ({ ...prev, [section.inning]: !isCollapsed }))}
@@ -448,79 +444,182 @@ function LiveFeed({
               <span style={{ color: isCollapsed ? '#94a3b8' : '#22c55e' }}>{isCollapsed ? '▶' : '▼'}</span>
               <span>{section.inning}회 전체</span>
             </button>
-            {!isCollapsed ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {section.items.map((item, idx) => {
-                  if (item.type === 'marker') {
-                    return (
-                      <div key={item.key} style={{ color: item.color, fontWeight: 900, fontSize: '14px', padding: '2px 0' }}>
-                        {item.text}
-                      </div>
-                    );
-                  }
-                  if (item.type === 'batter') {
-                    return (
-                      <div key={item.key} style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '13px', padding: '2px 0' }}>
-                        {item.order ? `${item.order}번 ` : ''}
-                        {item.text} 타석
-                      </div>
-                    );
-                  }
-                  if (
-                    item.type === 'log' &&
-                    (item.text.includes('투수 교체') ||
-                      item.text.includes('타자 교체') ||
-                      item.text.trim().endsWith('투수'))
-                  ) {
-                    return (
-                      <div key={item.key} style={{ color: '#e2e8f0', fontWeight: 900, fontSize: '13px', padding: '2px 0' }}>
-                        {colorizeText(item.text).map((part) => (
-                          <span key={part.key} style={{ color: part.color ?? '#e2e8f0', fontWeight: part.color ? 900 : 800 }}>
-                            {part.text}
-                          </span>
-                        ))}
-                      </div>
-                    );
-                  }
-                  return (
-                    <div
-                      key={item.key}
-                      style={{
-                        padding: '10px 12px',
-                        borderRadius: '12px',
-                        border: '1px solid rgba(148, 163, 184, 0.2)',
-                        background: idx % 2 === 0 ? 'rgba(15, 23, 42, 0.65)' : 'rgba(15, 23, 42, 0.35)',
-                        fontSize: '14px',
-                        lineHeight: 1.5,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        width: 'max-content',
-                        maxWidth: '100%',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'keep-all',
-                        overflowWrap: 'anywhere',
-                        color: '#e2e8f0',
-                      }}
-                    >
-                      {colorizeText(item.text).map((part) => (
-                        <span key={part.key} style={{ color: part.color ?? '#e2e8f0', fontWeight: part.color ? 900 : 800 }}>
-                          {part.text}
-                        </span>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
           </div>
-        );
-      })}
-      {gameOverInfo ? (
-        <div style={{ display: 'grid', gap: '4px', padding: '4px 0' }}>
-          <div style={{ color: '#f87171', fontWeight: 900, fontSize: '15px' }}>{gameOverInfo.endText}</div>
-          <div style={{ color: '#f87171', fontWeight: 900, fontSize: '14px' }}>{gameOverInfo.resultText}</div>
+        ),
+      });
+
+      if (isCollapsed) return;
+
+      section.items.forEach((item, idx) => {
+        const estimatedHeight =
+          item.type === 'marker' ? 22 : item.type === 'batter' ? 22 : item.type === 'log' ? 52 : 48;
+        items.push({
+          key: item.key,
+          estimatedHeight,
+          render: () => {
+            if (item.type === 'marker') {
+              return (
+                <div key={item.key} style={{ color: item.color, fontWeight: 900, fontSize: '14px', padding: '2px 0' }}>
+                  {item.text}
+                </div>
+              );
+            }
+            if (item.type === 'batter') {
+              return (
+                <div key={item.key} style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '13px', padding: '2px 0' }}>
+                  {item.order ? `${item.order}번 ` : ''}
+                  {item.text} 타석
+                </div>
+              );
+            }
+            if (
+              item.type === 'log' &&
+              (item.text.includes('투수 교체') ||
+                item.text.includes('타자 교체') ||
+                item.text.trim().endsWith('투수'))
+            ) {
+              return (
+                <div key={item.key} style={{ color: '#e2e8f0', fontWeight: 900, fontSize: '13px', padding: '2px 0' }}>
+                  {colorizeText(item.text).map((part) => (
+                    <span key={part.key} style={{ color: part.color ?? '#e2e8f0', fontWeight: part.color ? 900 : 800 }}>
+                      {part.text}
+                    </span>
+                  ))}
+                </div>
+              );
+            }
+            return (
+              <div
+                key={item.key}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(148, 163, 184, 0.2)',
+                  background: idx % 2 === 0 ? 'rgba(15, 23, 42, 0.65)' : 'rgba(15, 23, 42, 0.35)',
+                  fontSize: '14px',
+                  lineHeight: 1.5,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  width: 'max-content',
+                  maxWidth: '100%',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'keep-all',
+                  overflowWrap: 'anywhere',
+                  color: '#e2e8f0',
+                }}
+              >
+                {colorizeText(item.text).map((part) => (
+                  <span key={part.key} style={{ color: part.color ?? '#e2e8f0', fontWeight: part.color ? 900 : 800 }}>
+                    {part.text}
+                  </span>
+                ))}
+              </div>
+            );
+          },
+        });
+      });
+    });
+
+    if (gameOverInfo) {
+      items.push({
+        key: 'game-over',
+        estimatedHeight: 42,
+        render: () => (
+          <div key="game-over" style={{ display: 'grid', gap: '4px', padding: '4px 0' }}>
+            <div style={{ color: '#f87171', fontWeight: 900, fontSize: '15px' }}>{gameOverInfo.endText}</div>
+            <div style={{ color: '#f87171', fontWeight: 900, fontSize: '14px' }}>{gameOverInfo.resultText}</div>
+          </div>
+        ),
+      });
+    }
+
+    return items;
+  }, [sections, collapsed, gameOverInfo]);
+
+  const totalHeight = useMemo(() => {
+    let h = 0;
+    flatItems.forEach((item) => {
+      h += heightMapRef.current.get(item.key) ?? item.estimatedHeight;
+    });
+    return h;
+  }, [flatItems]);
+
+  const { startIndex, endIndex, offsetTop } = useMemo(() => {
+    let y = 0;
+    let start = 0;
+    const viewportEnd = scrollTop + viewportHeight + overscanPx;
+    const viewportStart = Math.max(0, scrollTop - overscanPx);
+
+    for (let i = 0; i < flatItems.length; i += 1) {
+      const h = heightMapRef.current.get(flatItems[i].key) ?? flatItems[i].estimatedHeight;
+      const nextY = y + h;
+      if (nextY >= viewportStart) {
+        start = i;
+        break;
+      }
+      y = nextY;
+    }
+    let end = start;
+    let currentY = y;
+    for (let i = start; i < flatItems.length; i += 1) {
+      const h = heightMapRef.current.get(flatItems[i].key) ?? flatItems[i].estimatedHeight;
+      currentY += h;
+      end = i;
+      if (currentY >= viewportEnd) break;
+    }
+    return { startIndex: start, endIndex: Math.min(end, flatItems.length - 1), offsetTop: y };
+  }, [flatItems, scrollTop, viewportHeight, overscanPx]);
+
+  const visibleItems = flatItems.slice(startIndex, endIndex + 1);
+
+  const measureRef = (key: string) => (el: HTMLDivElement | null) => {
+    if (!el) return;
+    const prev = heightMapRef.current.get(key);
+    const next = el.getBoundingClientRect().height;
+    if (prev !== next) {
+      heightMapRef.current.set(key, next);
+      setViewportHeight((v) => v); // trigger recalculation
+    }
+  };
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const handle = () => {
+      setScrollTop(el.scrollTop);
+      setViewportHeight(el.clientHeight);
+    };
+    handle();
+    el.addEventListener('scroll', handle, { passive: true });
+    const resizeObserver = new ResizeObserver(() => handle());
+    resizeObserver.observe(el);
+    return () => {
+      el.removeEventListener('scroll', handle);
+      resizeObserver.disconnect();
+    };
+  }, []);
+
+  return (
+    <div
+      style={{
+        overflowY: 'auto',
+        maxHeight: '855px',
+        height: 'min(75vh, 855px)',
+        paddingRight: '6px',
+        minHeight: 0,
+        position: 'relative',
+      }}
+      ref={containerRef}
+    >
+      <div style={{ position: 'relative', height: totalHeight, width: '100%' }}>
+        <div style={{ position: 'absolute', top: offsetTop, left: 0, right: 0, display: 'grid', gap: '10px' }}>
+          {visibleItems.map((item) => (
+            <div key={item.key} ref={measureRef(item.key)}>
+              {item.render()}
+            </div>
+          ))}
         </div>
-      ) : null}
+      </div>
     </div>
   );
 }
