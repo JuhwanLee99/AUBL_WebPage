@@ -2,7 +2,7 @@
 import { useState } from 'react';
 
 export default function PredictionCard() {
-  const = useState(50);
+  const [homeWinProb, setHomeWinProb] = useState(50);
   
   // 간단한 시뮬레이션 핸들러
   const simulate = () => {

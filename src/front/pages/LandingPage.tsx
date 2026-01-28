@@ -116,8 +116,7 @@ function Badge({ label, dots }: { label: string; dots: { active: boolean; color:
       <span style={{ display: 'flex', gap: '6px' }}>
         {dots.map((dot, idx) => (
           <span
-            // eslint-disable-next-line react/no-array-index-key
-            key={idx}
+            key={`${label}-${idx}`}
             style={{
               width: '10px',
               height: '10px',
