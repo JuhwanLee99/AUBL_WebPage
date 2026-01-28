@@ -9,11 +9,38 @@ export default function ScoreboardLiveOverlayPage() {
   const navigate = useNavigate();
   const matches = useMemo(() => state.matches.filter((m) => !m.deleted), [state.matches]);
 
-  const youtubeLiveSrc = (state.liveVideoUrl || '').trim() || defaultLiveSrc;
+  const buildAutoPlaySrc = (url: string) => {
+    const base = url || defaultLiveSrc;
+    const hasQuery = base.includes('?');
+    const hasAutoplay = /[?&]autoplay=/i.test(base);
+    const hasMute = /[?&]mute=/i.test(base);
+    const hasPlaysinline = /[?&]playsinline=/i.test(base);
+    const hasFs = /[?&]fs=/i.test(base);
+
+    const params: string[] = [];
+    if (!hasAutoplay) params.push('autoplay=1');
+    if (!hasMute) params.push('mute=1');
+    if (!hasPlaysinline) params.push('playsinline=1');
+    if (!hasFs) params.push('fs=0'); // remove YouTube fullscreen button
+
+    if (!params.length) return base;
+    return `${base}${hasQuery ? '&' : '?'}${params.join('&')}`;
+  };
+
+  const youtubeLiveSrc = buildAutoPlaySrc((state.liveVideoUrl || '').trim() || defaultLiveSrc);
   const battingSide = state.half === 'top' ? 'away' : 'home';
   const inningHalfIcon = state.half === 'top' ? '▲' : '▼';
   const inningLabel = `${inningHalfIcon} ${state.inning}회${state.half === 'top' ? '초' : '말'}`;
   const lastPlay = state.lastPlay || '경기 대기 중';
+
+  const toggleFullscreen = () => {
+    const root = document.documentElement;
+    if (!document.fullscreenElement) {
+      void root.requestFullscreen?.();
+    } else {
+      void document.exitFullscreen?.();
+    }
+  };
 
   return (
     <div
@@ -36,7 +63,6 @@ export default function ScoreboardLiveOverlayPage() {
           border: 'none',
         }}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowFullScreen
       />
       <div
         style={{
@@ -119,6 +145,24 @@ export default function ScoreboardLiveOverlayPage() {
             }}
           >
             전광판
+          </button>
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            style={{
+              border: 'none',
+              background: 'rgba(15,23,42,0.9)',
+              color: '#f97316',
+              fontWeight: 800,
+              fontSize: '13px',
+              borderRadius: '999px',
+              padding: '8px 14px',
+              borderInline: '1px solid rgba(148,163,184,0.35)',
+              cursor: 'pointer',
+              boxShadow: '0 8px 20px rgba(0,0,0,0.35)',
+            }}
+          >
+            브라우저 전체화면
           </button>
         </div>
 

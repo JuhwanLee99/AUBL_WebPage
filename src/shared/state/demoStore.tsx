@@ -124,6 +124,7 @@ export interface MatchSchedule {
   startTime: string;
   venue: string;
   status: MatchStatus;
+  liveVideoUrl?: string;
   division?: LeagueDivision; // 으뜸/버금 구분 (관리자 지정)
   homeScore?: number | null;
   awayScore?: number | null;
@@ -720,6 +721,7 @@ function normalizeMatches(matches: unknown): MatchSchedule[] {
       startTime: typeof match.startTime === 'string' ? match.startTime : new Date().toISOString(),
       venue: typeof match.venue === 'string' ? match.venue : '미정',
       status: match.status === 'completed' || match.status === 'inProgress' ? match.status : 'scheduled',
+      liveVideoUrl: typeof match.liveVideoUrl === 'string' ? match.liveVideoUrl : undefined,
       division: deriveMatchDivision(match.division, match.homeTeamId, match.awayTeamId),
       homeScore: typeof match.homeScore === 'number' ? match.homeScore : null,
       awayScore: typeof match.awayScore === 'number' ? match.awayScore : null,
@@ -745,6 +747,7 @@ function projectSpectatorMatch(match: MatchSchedule): MatchSchedule {
     startTime: match.startTime,
     venue: match.venue,
     status: match.status,
+    liveVideoUrl: match.liveVideoUrl,
     division: match.division,
     homeScore: match.homeScore,
     awayScore: match.awayScore,
@@ -1259,7 +1262,10 @@ function reducer(state: DemoState, action: Action): DemoState {
       break;
     case 'setLiveVideoUrl': {
       const trimmed = action.url.trim();
-      nextState = { ...state, liveVideoUrl: trimmed };
+      const updatedMatches = state.activeMatchId
+        ? updateMatchSchedule(state.matches, state.activeMatchId, { liveVideoUrl: trimmed })
+        : state.matches;
+      nextState = { ...state, liveVideoUrl: trimmed, matches: updatedMatches };
       break;
     }
     case 'endGame':
@@ -1350,6 +1356,7 @@ function reducer(state: DemoState, action: Action): DemoState {
           ...state,
           activeMatchId: selected.id,
           followCurrent: typeof action.followCurrent === 'boolean' ? action.followCurrent : state.followCurrent,
+          liveVideoUrl: selected.liveVideoUrl ?? '',
           teamNames: { home: selected.homeTeamName, away: selected.awayTeamName },
           homeTeamId: selected.homeTeamId ?? state.homeTeamId,
           awayTeamId: selected.awayTeamId ?? state.awayTeamId,
@@ -1365,6 +1372,7 @@ function reducer(state: DemoState, action: Action): DemoState {
         nextState = {
           ...resetGameForMatch(state, selected),
           followCurrent: typeof action.followCurrent === 'boolean' ? action.followCurrent : state.followCurrent,
+          liveVideoUrl: selected.liveVideoUrl ?? '',
         };
       }
       break;
@@ -2413,10 +2421,10 @@ function createNewGame(state: DemoState): DemoState {
   scorerName: state.scorerName,
   scorerEmail: state.scorerEmail,
   scorerLockedAt: state.scorerLockedAt,
-  scorerRole: state.scorerRole,
-  scorerPaused: false,
-  followCurrent: state.followCurrent,
-};
+    scorerRole: state.scorerRole,
+    scorerPaused: false,
+    followCurrent: state.followCurrent,
+  };
 }
 
 function changeHalf(state: DemoState, message: string, pitchNumber = 0, logState?: DemoState): DemoState {
@@ -3189,7 +3197,18 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       runnerPickoff: (base: 0 | 1 | 2) => dispatch({ type: 'runnerPickoff', base }),
       runnerOut: (base: 0 | 1 | 2) => dispatch({ type: 'runnerOut', base }),
       addManualLog: (message: string) => dispatch({ type: 'manualLog', message }),
-      setLiveVideoUrl: (url: string) => dispatch({ type: 'setLiveVideoUrl', url }),
+      setLiveVideoUrl: (url: string) => {
+        dispatch({ type: 'setLiveVideoUrl', url });
+        const matchId = stateRef.current.activeMatchId;
+        if (!matchId) return;
+        const trimmed = url.trim();
+        // persist to matches collection so 일정/오버레이 버튼이 올바르게 판단
+        void setDoc(
+          doc(firestore, 'matches', matchId),
+          { liveVideoUrl: trimmed },
+          { merge: true },
+        ).catch(() => {});
+      },
       addOutWithMessage: (note: string, battedBall?: BattedBallDetails | null) =>
         dispatch({ type: 'outWithMessage', note, battedBall }),
       doublePlay: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'doublePlay', battedBall }),

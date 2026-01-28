@@ -4,11 +4,13 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../shared/auth/AuthProvider';
 import { useAdmin } from '../shared/auth/useAdmin';
+import { useDemoStore } from '../shared/state/demoStore';
 
 export default function Layout() {
   const location = useLocation();
   const { user, logout, initializing } = useAuth();
   const { isAdmin, roleLabel, roleDetail } = useAdmin();
+  const { state } = useDemoStore();
   const isLiveOverlay = location.pathname === '/live-overlay';
   const isScoreboardText = location.pathname === '/scoreboard-text';
   const isLanding = location.pathname === '/';
@@ -34,6 +36,9 @@ export default function Layout() {
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0 });
   }, [location.pathname]);
+
+  const activeMatch = useMemo(() => state.matches.find((m) => m.id === state.activeMatchId), [state.matches, state.activeMatchId]);
+  const hasLiveOverlay = Boolean((activeMatch?.liveVideoUrl || '').trim());
 
   const navItems = useMemo(
     () => [
@@ -287,22 +292,42 @@ export default function Layout() {
                   >
                     문자중계
                   </Link>
-                  <Link
-                    to="/live-overlay"
-                    style={{
-                      border: 'none',
-                      background: 'rgba(148,163,184,0.25)',
-                      color: '#e2e8f0',
-                      fontWeight: 800,
-                      fontSize: '13px',
-                      borderRadius: '999px',
-                      padding: '6px 12px',
-                      textDecoration: 'none',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    라이브 오버레이
-                  </Link>
+                  {hasLiveOverlay ? (
+                    <Link
+                      to="/live-overlay"
+                      style={{
+                        border: 'none',
+                        background: 'rgba(148,163,184,0.25)',
+                        color: '#e2e8f0',
+                        fontWeight: 800,
+                        fontSize: '13px',
+                        borderRadius: '999px',
+                        padding: '6px 12px',
+                        textDecoration: 'none',
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer',
+                      }}
+                      title="라이브 오버레이"
+                    >
+                      라이브 오버레이
+                    </Link>
+                  ) : (
+                    <span
+                      style={{
+                        border: '1px dashed rgba(248,113,113,0.6)',
+                        background: 'rgba(248,113,113,0.08)',
+                        color: '#fca5a5',
+                        fontWeight: 800,
+                        fontSize: '13px',
+                        borderRadius: '999px',
+                        padding: '6px 12px',
+                        whiteSpace: 'nowrap',
+                      }}
+                      title="이 경기에는 라이브 링크가 없습니다"
+                    >
+                      라이브 없음
+                    </span>
+                  )}
                 </div>
               )}
 

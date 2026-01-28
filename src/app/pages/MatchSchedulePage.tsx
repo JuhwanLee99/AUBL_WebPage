@@ -405,7 +405,7 @@ export default function MatchSchedulePage() {
     const displayStatus = deriveDisplayStatus(match);
     const badge = statusLabel(displayStatus);
     const isActive = state.activeMatchId === match.id;
-    const hasLiveOverlay = Boolean((state.liveVideoUrl || '').trim());
+    const hasLiveOverlay = Boolean((match.liveVideoUrl || '').trim());
     const textButtonLabel = match.status === 'completed' ? '경기 결과' : match.status === 'canceled' ? '취소됨' : '문자중계';
     const goTo = (path: string) => {
       actions.selectMatch(match.id);
