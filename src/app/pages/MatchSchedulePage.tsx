@@ -1,5 +1,5 @@
 import type { CSSProperties, FormEvent } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
 import type { MatchSchedule, MatchStatus, PostGameRecord } from '../../shared/state/demoStore';
@@ -188,6 +188,11 @@ export default function MatchSchedulePage() {
   const navigate = useNavigate();
   const { isAdmin } = useAdmin();
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    void actions.loadFullSchedule();
+  }, [actions]);
+
   const canEdit = isAdmin;
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
