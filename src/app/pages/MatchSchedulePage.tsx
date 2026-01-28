@@ -401,7 +401,7 @@ export default function MatchSchedulePage() {
     const badge = statusLabel(displayStatus);
     const isActive = state.activeMatchId === match.id;
     const hasLiveOverlay = Boolean((state.liveVideoUrl || '').trim());
-    const textButtonLabel = match.status === 'completed' ? '세부 결과' : match.status === 'canceled' ? '취소됨' : '문자중계';
+    const textButtonLabel = match.status === 'completed' ? '경기 결과' : match.status === 'canceled' ? '취소됨' : '문자중계';
     const goTo = (path: string) => {
       actions.selectMatch(match.id);
       navigate(path);
@@ -1218,10 +1218,10 @@ function CompletedResultCard({ match }: { match: MatchSchedule }) {
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-        <div style={{ display: 'grid', gap: '4px' }}>
-          <span style={{ fontWeight: 900, color: '#e2e8f0' }}>세부 결과</span>
-          <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>박스스코어와 투수·타자 기록을 바로 확인하세요.</span>
-        </div>
+      <div style={{ display: 'grid', gap: '4px' }}>
+        <span style={{ fontWeight: 900, color: '#e2e8f0' }}>경기 결과</span>
+        <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>박스스코어와 투수·타자 기록을 바로 확인하세요.</span>
+      </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           {detail.note && <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>{detail.note}</span>}
           <button
