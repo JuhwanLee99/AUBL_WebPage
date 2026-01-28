@@ -2,7 +2,10 @@ import type { CSSProperties, FormEvent } from 'react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
-import type { MatchSchedule, MatchStatus } from '../../shared/state/demoStore';
+import type { MatchSchedule, MatchStatus, PostGameRecord } from '../../shared/state/demoStore';
+import type { LeagueDivision } from '../../shared/types';
+import { TEAMS } from '../../shared/lib/mockData';
+import { useAdmin } from '../../shared/auth/useAdmin';
 
 const emptyForm = {
   homeTeamName: '',
@@ -10,6 +13,7 @@ const emptyForm = {
   startTime: '',
   venue: '',
   status: 'scheduled' as MatchStatus,
+  division: 'auto' as 'auto' | LeagueDivision,
   homeScore: '',
   awayScore: '',
   homeLineup: '',
@@ -19,6 +23,8 @@ const emptyForm = {
 
 type Side = 'home' | 'away';
 type PlayerSlot = NonNullable<MatchSchedule['lineups']>['home'][number];
+type PostGamePitcher = PostGameRecord['pitchers'] extends { home?: (infer P)[] } ? P : never;
+type PostGameBatter = PostGameRecord['batters'] extends { home?: (infer B)[] } ? B : never;
 
 const defaultPlayerSlot: PlayerSlot = {
   name: '',
@@ -119,6 +125,21 @@ const normalizePlayerSlot = (player: PlayerSlot): PlayerSlot => ({
   bats: player.bats || 'R',
 });
 
+const divisionStyles: Record<LeagueDivision, { label: string; color: string }> = {
+  EUTTEUM: { label: '으뜸', color: '#4f46e5' },
+  BEOGEUM: { label: '버금', color: '#10b981' },
+};
+
+const deriveDivision = (match: MatchSchedule): LeagueDivision | undefined => {
+  if (match.division === 'EUTTEUM' || match.division === 'BEOGEUM') return match.division;
+  const homeDiv = TEAMS.find((t) => t.id === match.homeTeamId)?.division;
+  const awayDiv = TEAMS.find((t) => t.id === match.awayTeamId)?.division;
+  if (homeDiv && awayDiv && homeDiv === awayDiv) return homeDiv;
+  if (homeDiv && !awayDiv) return homeDiv;
+  if (awayDiv && !homeDiv) return awayDiv;
+  return undefined;
+};
+
 function extractDateParts(value: string) {
   if (!value) return { date: '', hour: '', minute: '' };
   const date = new Date(value);
@@ -143,13 +164,15 @@ function statusLabel(status: MatchStatus) {
       return { text: '경기 종료', color: '#f97316', background: 'rgba(249,115,22,0.15)' };
     case 'inProgress':
       return { text: '진행 중', color: '#38bdf8', background: 'rgba(56,189,248,0.15)' };
+    case 'canceled':
+      return { text: '취소', color: '#94a3b8', background: 'rgba(148,163,184,0.18)' };
     default:
       return { text: '예정', color: '#22c55e', background: 'rgba(34,197,94,0.15)' };
   }
 }
 
 const deriveDisplayStatus = (match: MatchSchedule): MatchStatus => {
-  if (match.status === 'completed' || match.status === 'inProgress') return match.status;
+  if (match.status === 'completed' || match.status === 'inProgress' || match.status === 'canceled') return match.status;
   const startTime = getSafeTime(match.startTime);
   if (startTime > 0 && startTime < Date.now()) return 'completed';
   return 'scheduled';
@@ -163,6 +186,9 @@ const getSafeTime = (value: string) => {
 export default function MatchSchedulePage() {
   const { state, actions } = useDemoStore();
   const navigate = useNavigate();
+  const { isAdmin } = useAdmin();
+  const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
+  const canEdit = isAdmin;
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [formLineups, setFormLineups] = useState<{ home: PlayerSlot[]; away: PlayerSlot[] }>(() => ({
@@ -214,9 +240,11 @@ export default function MatchSchedulePage() {
     });
   };
 
+  const aliveMatches = useMemo(() => state.matches.filter((m) => !m.deleted), [state.matches]);
+
   const sortedMatches = useMemo(() => {
-    return [...state.matches].sort((a, b) => getSafeTime(a.startTime) - getSafeTime(b.startTime));
-  }, [state.matches]);
+    return [...aliveMatches].sort((a, b) => getSafeTime(a.startTime) - getSafeTime(b.startTime));
+  }, [aliveMatches]);
 
   const categorizedMatches = useMemo(() => {
     const now = Date.now();
@@ -226,10 +254,22 @@ export default function MatchSchedulePage() {
     );
     const past = sortedMatches.filter(
       (match) =>
-        match.status === 'completed' || (match.status === 'scheduled' && match.status !== 'inProgress' && getSafeTime(match.startTime) < now),
+        match.status === 'completed' ||
+        match.status === 'canceled' ||
+        (match.status === 'scheduled' && match.status !== 'inProgress' && getSafeTime(match.startTime) < now),
     );
     return { live, upcoming, past };
   }, [sortedMatches]);
+
+  const showBlockedTooltip = (el: HTMLElement | null) => {
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setTooltip({
+      text: '관리자 로그인이 필요합니다',
+      x: rect.left + rect.width / 2,
+      y: rect.bottom,
+    });
+  };
 
   const calendarWeeks = useMemo(() => {
     const firstDay = new Date(calendarMonth.year, calendarMonth.month, 1);
@@ -279,8 +319,10 @@ export default function MatchSchedulePage() {
 
   const handleFormSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!canEdit) return;
     const homeLineup = form.homeLineup.trim();
     const awayLineup = form.awayLineup.trim();
+    const selectedDivision = form.division === 'auto' ? undefined : (form.division as LeagueDivision);
     const lineupsFromText =
       homeLineup || awayLineup ? { home: parseLineup(homeLineup), away: parseLineup(awayLineup) } : undefined;
     const trimmedLineups = form.status === 'scheduled'
@@ -304,6 +346,7 @@ export default function MatchSchedulePage() {
       startTime: toIsoString(form.startTime),
       venue: form.venue || '미정',
       status: form.status,
+      division: selectedDivision,
       homeScore: form.status === 'completed' ? Number(form.homeScore || 0) : null,
       awayScore: form.status === 'completed' ? Number(form.awayScore || 0) : null,
       lineups: hasStructuredLineups ? trimmedLineups : lineupsFromText,
@@ -319,6 +362,7 @@ export default function MatchSchedulePage() {
   };
 
   const handleEditLineups = (match: MatchSchedule) => {
+    if (!canEdit) return;
     setEditingLineups({
       home: normalizeLineupForEditing(match.lineups?.home),
       away: normalizeLineupForEditing(match.lineups?.away),
@@ -339,6 +383,7 @@ export default function MatchSchedulePage() {
   };
 
   const handleSaveLineups = (matchId: string) => {
+    if (!canEdit) return;
     const trimmedLineups = {
       home: editingLineups.home.filter(hasMeaningfulPlayerData).map(normalizePlayerSlot),
       away: editingLineups.away.filter(hasMeaningfulPlayerData).map(normalizePlayerSlot),
@@ -356,10 +401,20 @@ export default function MatchSchedulePage() {
     const badge = statusLabel(displayStatus);
     const isActive = state.activeMatchId === match.id;
     const hasLiveOverlay = Boolean((state.liveVideoUrl || '').trim());
+    const textButtonLabel = match.status === 'completed' ? '경기 결과' : match.status === 'canceled' ? '취소됨' : '문자중계';
     const goTo = (path: string) => {
       actions.selectMatch(match.id);
       navigate(path);
     };
+    const goToScorekeeper = (buttonEl: HTMLButtonElement | null) => {
+      if (!isAdmin) {
+        showBlockedTooltip(buttonEl);
+        return;
+      }
+      setTooltip(null);
+      goTo('/scorekeeper');
+    };
+    const division = deriveDivision(match);
     const quickActionStyle: CSSProperties = {
       display: 'inline-flex',
       alignItems: 'center',
@@ -413,8 +468,29 @@ export default function MatchSchedulePage() {
               </span>
               {isActive && <span style={{ fontSize: '12px', color: '#f97316' }}>선택됨</span>}
             </div>
-            <div style={{ color: '#94a3b8', marginTop: '4px', fontSize: '13px' }}>
-              {formatDateTimeLabel(match.startTime)} · {match.venue}
+            <div style={{ color: '#94a3b8', marginTop: '4px', fontSize: '13px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <span>
+                {formatDateTimeLabel(match.startTime)} · {match.venue}
+              </span>
+              {division && (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '4px 10px',
+                    borderRadius: '999px',
+                    border: `1px solid ${divisionStyles[division].color}55`,
+                    background: `${divisionStyles[division].color}14`,
+                    color: divisionStyles[division].color,
+                    fontWeight: 800,
+                    fontSize: '12px',
+                  }}
+                >
+                  <span style={{ width: '10px', height: '10px', borderRadius: '999px', background: divisionStyles[division].color }} />
+                  {divisionStyles[division].label}
+                </span>
+              )}
             </div>
           </div>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -428,9 +504,9 @@ export default function MatchSchedulePage() {
                 <span aria-hidden>📺</span>
                 전광판
               </button>
-              <button type="button" onClick={() => goTo('/scoreboard-text')} style={quickActionStyle} title="문자중계">
+              <button type="button" onClick={() => goTo('/scoreboard-text')} style={quickActionStyle} title={textButtonLabel}>
                 <span aria-hidden>💬</span>
-                문자중계
+                {textButtonLabel}
               </button>
               <button
                 type="button"
@@ -442,18 +518,61 @@ export default function MatchSchedulePage() {
                 <span aria-hidden>{hasLiveOverlay ? '🛰️' : '🚫'}</span>
                 {hasLiveOverlay ? '라이브 오버레이' : '라이브 없음'}
               </button>
-              <button type="button" onClick={() => goTo('/scorekeeper')} style={quickActionStyle} title="기록원">
+              <button
+                type="button"
+                onClick={(e) => goToScorekeeper(e.currentTarget)}
+                onMouseEnter={(e) => {
+                  if (!isAdmin) showBlockedTooltip(e.currentTarget);
+                }}
+                onMouseLeave={() => setTooltip(null)}
+                onFocus={(e) => {
+                  if (!isAdmin) showBlockedTooltip(e.currentTarget);
+                }}
+                onBlur={() => setTooltip(null)}
+                style={{
+                  ...quickActionStyle,
+                  cursor: isAdmin ? 'pointer' : 'not-allowed',
+                  color: isAdmin ? quickActionStyle.color : 'rgba(203,213,225,0.6)',
+                }}
+                title="기록원"
+              >
                 <span aria-hidden>📝</span>
                 기록원
               </button>
             </div>
-            <button type="button" onClick={() => handleEditLineups(match)} style={secondaryButtonStyle}>
+            <button
+              type="button"
+              onClick={(e) => {
+                if (!canEdit) {
+                  showBlockedTooltip(e.currentTarget);
+                  return;
+                }
+                handleEditLineups(match);
+              }}
+              onMouseEnter={(e) => {
+                if (!canEdit) showBlockedTooltip(e.currentTarget);
+              }}
+              onMouseLeave={() => setTooltip(null)}
+              onFocus={(e) => {
+                if (!canEdit) showBlockedTooltip(e.currentTarget);
+              }}
+              onBlur={() => setTooltip(null)}
+              style={{
+                ...secondaryButtonStyle,
+                cursor: canEdit ? 'pointer' : 'not-allowed',
+                color: canEdit ? secondaryButtonStyle.color : 'rgba(203,213,225,0.65)',
+                border: canEdit ? secondaryButtonStyle.border : '1px solid rgba(148,163,184,0.35)',
+                background: canEdit ? secondaryButtonStyle.background : 'rgba(255,255,255,0.04)',
+              }}
+            >
               라인업 편집
             </button>
           </div>
         </div>
 
         {match.notes && <div style={{ color: '#cbd5e1', fontSize: '13px' }}>메모: {match.notes}</div>}
+
+        {match.status === 'completed' && match.postGame && <CompletedResultCard match={match} />}
 
         {editingMatchId === match.id && (
           <div
@@ -570,6 +689,28 @@ export default function MatchSchedulePage() {
 
   return (
     <div style={{ display: 'grid', gap: '24px' }}>
+      {tooltip && (
+        <div
+          style={{
+            position: 'fixed',
+            left: tooltip.x,
+            top: tooltip.y + 10,
+            transform: 'translate(-50%, 0)',
+            background: 'rgba(15,23,42,0.95)',
+            color: '#f97316',
+            padding: '8px 12px',
+            borderRadius: '10px',
+            border: '1px solid rgba(148,163,184,0.35)',
+            fontSize: '12px',
+            fontWeight: 700,
+            whiteSpace: 'nowrap',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+            zIndex: 2000,
+          }}
+        >
+          {tooltip.text}
+        </div>
+      )}
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h1 style={{ fontSize: '28px', fontWeight: 900, marginBottom: '8px' }}>경기 일정 및 결과</h1>
@@ -577,15 +718,33 @@ export default function MatchSchedulePage() {
         </div>
         <button
           type="button"
-          onClick={() => setShowForm((prev) => !prev)}
+          onClick={(e) => {
+            if (!canEdit) {
+              showBlockedTooltip(e.currentTarget);
+              return;
+            }
+            setShowForm((prev) => !prev);
+          }}
+          onMouseEnter={(e) => {
+            if (!canEdit) showBlockedTooltip(e.currentTarget);
+          }}
+          onMouseLeave={() => setTooltip(null)}
+          onFocus={(e) => {
+            if (!canEdit) showBlockedTooltip(e.currentTarget);
+          }}
+          onBlur={() => setTooltip(null)}
           style={{
             borderRadius: '999px',
             padding: '10px 18px',
             border: '1px solid rgba(148,163,184,0.4)',
-            background: showForm ? 'rgba(148,163,184,0.2)' : 'linear-gradient(90deg, #f97316, #f59e0b)',
-            color: showForm ? '#e2e8f0' : '#0b0f1a',
+            background: canEdit
+              ? showForm
+                ? 'rgba(148,163,184,0.2)'
+                : 'linear-gradient(90deg, #f97316, #f59e0b)'
+              : 'rgba(148,163,184,0.15)',
+            color: canEdit ? (showForm ? '#e2e8f0' : '#0b0f1a') : 'rgba(203,213,225,0.7)',
             fontWeight: 800,
-            cursor: 'pointer',
+            cursor: canEdit ? 'pointer' : 'not-allowed',
           }}
         >
           {showForm ? '추가 폼 닫기' : '경기 추가'}
@@ -605,7 +764,7 @@ export default function MatchSchedulePage() {
       >
         {[
           { path: '/schedule/results', label: '경기 결과', desc: '종료 경기 모아보기' },
-          { path: '/schedule/groups', label: '조별 일정', desc: '조(으뜸/버금)별 캘린더' },
+          { path: '/schedule/groups', label: '조별 일정', desc: '구분(으뜸/버금)별 캘린더' },
           { path: '/schedule/manage', label: '일정 관리', desc: '데모용 더미 등록 & 상태 변경' },
         ].map((item) => (
           <button
@@ -631,7 +790,7 @@ export default function MatchSchedulePage() {
         ))}
       </div>
 
-      {showForm && (
+      {canEdit && showForm && (
         <form
           onSubmit={handleFormSubmit}
           style={{
@@ -713,6 +872,18 @@ export default function MatchSchedulePage() {
                 style={inputStyle}
               />
             </label>
+            <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
+              구분
+              <select
+                value={form.division}
+                onChange={(event) => setForm((prev) => ({ ...prev, division: event.target.value as 'auto' | LeagueDivision }))}
+                style={inputStyle}
+              >
+                <option value="auto">자동(팀 소속 또는 미정)</option>
+                <option value="EUTTEUM">으뜸 경기</option>
+                <option value="BEOGEUM">버금 경기</option>
+              </select>
+            </label>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
@@ -725,6 +896,8 @@ export default function MatchSchedulePage() {
               >
                 <option value="scheduled">경기 예정</option>
                 <option value="completed">경기 종료</option>
+                <option value="canceled">경기 취소</option>
+                <option value="inProgress">경기 진행 중</option>
               </select>
             </label>
             {form.status === 'completed' && (
@@ -1024,6 +1197,300 @@ export default function MatchSchedulePage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function CompletedResultCard({ match }: { match: MatchSchedule }) {
+  const detail = match.postGame as PostGameRecord | undefined;
+  if (!detail) return null;
+  const teams = { home: match.homeTeamName, away: match.awayTeamName };
+  const [open, setOpen] = useState(false);
+  return (
+    <div
+      style={{
+        border: '1px solid rgba(148,163,184,0.3)',
+        borderRadius: '12px',
+        padding: '12px',
+        background: 'rgba(255,255,255,0.02)',
+        display: 'grid',
+        gap: '10px',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+      <div style={{ display: 'grid', gap: '4px' }}>
+        <span style={{ fontWeight: 900, color: '#e2e8f0' }}>경기 결과</span>
+        <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>박스스코어와 투수·타자 기록을 바로 확인하세요.</span>
+      </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {detail.note && <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>{detail.note}</span>}
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            style={{
+              padding: '6px 10px',
+              borderRadius: '10px',
+              border: '1px solid rgba(148,163,184,0.35)',
+              background: 'rgba(255,255,255,0.04)',
+              color: '#e2e8f0',
+              fontWeight: 800,
+              fontSize: '12px',
+              cursor: 'pointer',
+            }}
+          >
+            {open ? '접기' : '펼치기'}
+          </button>
+        </div>
+      </div>
+
+      {open && (
+        <>
+          <LineScoreCompact teams={teams} detail={detail} />
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
+            <TeamTotalsPill title={`${teams.home} 타격 요약`} totals={detail.teamBatterSummary?.home} color="#f97316" />
+            <TeamTotalsPill title={`${teams.away} 타격 요약`} totals={detail.teamBatterSummary?.away} color="#60a5fa" />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '8px' }}>
+            <PitchingMiniTable title={`${teams.home} 투수`} color="#f97316" pitchers={detail.pitchers?.home ?? []} />
+            <PitchingMiniTable title={`${teams.away} 투수`} color="#60a5fa" pitchers={detail.pitchers?.away ?? []} />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '8px' }}>
+            <BattingMiniTable title={`${teams.home} 타자`} color="#f97316" batters={detail.batters?.home ?? []} />
+            <BattingMiniTable title={`${teams.away} 타자`} color="#60a5fa" batters={detail.batters?.away ?? []} />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function LineScoreCompact({ teams, detail }: { teams: { home: string; away: string }; detail: PostGameRecord }) {
+  if (!detail.lineScore) return null;
+  const innings = detail.lineScore.innings || [];
+  const header = ['팀', ...innings, 'R', 'H', 'E', 'LOB'];
+  const row = (label: string, scores: number[] = [], totals?: { runs?: number; hits?: number; errors?: number; lob?: number }, color?: string) => [
+    { text: label, bold: true, color },
+    ...innings.map((_, idx) => ({ text: scores[idx] != null ? String(scores[idx]) : '-' })),
+    { text: totals?.runs != null ? String(totals.runs) : '-', bold: true },
+    { text: totals?.hits != null ? String(totals.hits) : '-' },
+    { text: totals?.errors != null ? String(totals.errors) : '-' },
+    { text: totals?.lob != null ? String(totals.lob) : '-' },
+  ];
+  const rows = [
+    row(teams.home, detail.lineScore.home, detail.totals?.home, '#f97316'),
+    row(teams.away, detail.lineScore.away, detail.totals?.away, '#60a5fa'),
+  ];
+  return (
+    <div
+      style={{
+        border: '1px solid rgba(148,163,184,0.25)',
+        borderRadius: '10px',
+        overflow: 'hidden',
+      }}
+    >
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${header.length}, minmax(0, 1fr))`, background: 'rgba(255,255,255,0.03)' }}>
+        {header.map((h) => (
+          <div key={h} style={{ padding: '6px', textAlign: 'center', fontWeight: 900, color: '#e2e8f0', fontSize: '12px' }}>
+            {h}
+          </div>
+        ))}
+      </div>
+      {rows.map((cells, ridx) => (
+        <div key={ridx} style={{ display: 'grid', gridTemplateColumns: `repeat(${header.length}, minmax(0, 1fr))`, borderTop: '1px solid rgba(148,163,184,0.2)' }}>
+          {cells.map((cell, cidx) => (
+            <div
+              key={cidx}
+              style={{
+                padding: '6px',
+                textAlign: 'center',
+                color: cell.color ?? '#cbd5e1',
+                fontWeight: cell.bold ? 800 : 700,
+                fontSize: '12px',
+              }}
+            >
+              {cell.text}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TeamTotalsPill({
+  title,
+  totals,
+  color,
+}: {
+  title: string;
+  totals?: { ab?: number; h?: number; rbi?: number; r?: number; sb?: number };
+  color: string;
+}) {
+  const items = [
+    { label: '타수', value: totals?.ab },
+    { label: '안타', value: totals?.h },
+    { label: '득점', value: totals?.r },
+    { label: '타점', value: totals?.rbi },
+    { label: '도루', value: totals?.sb },
+  ].filter((item) => item.value != null);
+  return (
+    <div
+      style={{
+        border: '1px solid rgba(148,163,184,0.25)',
+        borderRadius: '10px',
+        padding: '10px',
+        background: 'rgba(255,255,255,0.02)',
+        display: 'grid',
+        gap: '6px',
+      }}
+    >
+      <span style={{ fontWeight: 800, color: '#e2e8f0' }}>{title}</span>
+      {items.length ? (
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          {items.map((item) => (
+            <span
+              key={item.label}
+              style={{
+                padding: '6px 10px',
+                borderRadius: '10px',
+                border: `1px solid ${color}55`,
+                background: 'rgba(255,255,255,0.03)',
+                color,
+                fontWeight: 800,
+                fontSize: '12px',
+              }}
+            >
+              {item.label}: {item.value}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <span style={{ color: '#94a3b8', fontSize: '12px' }}>요약 없음</span>
+      )}
+    </div>
+  );
+}
+
+function PitchingMiniTable({
+  title,
+  pitchers,
+  color,
+}: {
+  title: string;
+  pitchers: PostGamePitcher[];
+  color: string;
+}) {
+  const header = ['투수', 'IP', 'BF', 'H', 'HR', 'BB', 'HBP', 'SO', 'R', 'ER', 'NP'];
+  const value = (v: unknown) => (v == null ? '-' : v);
+  return (
+    <div
+      style={{
+        border: '1px solid rgba(148,163,184,0.25)',
+        borderRadius: '10px',
+        padding: '10px',
+        background: 'rgba(255,255,255,0.02)',
+        display: 'grid',
+        gap: '6px',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontWeight: 800, color: '#e2e8f0' }}>{title}</span>
+        <span style={{ color: '#94a3b8', fontSize: '12px' }}>{pitchers.length}명</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${header.length}, minmax(40px, 1fr))`, gap: '4px' }}>
+        {header.map((h) => (
+          <div key={h} style={{ textAlign: 'center', fontWeight: 800, color: '#cbd5e1', fontSize: '11px' }}>
+            {h}
+          </div>
+        ))}
+        {pitchers.map((p) =>
+          [p.name, p.ip, p.bf, p.h, p.hr, p.bb, p.hbp, p.so, p.r, p.er, p.pitches].map((v, idx) => (
+            <div
+              key={`${p.name}-${idx}`}
+              style={{
+                textAlign: 'center',
+                color: idx === 0 ? color : '#e2e8f0',
+                fontWeight: idx === 0 ? 800 : 700,
+                fontSize: '12px',
+              }}
+            >
+              {value(v)}
+            </div>
+          )),
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BattingMiniTable({
+  title,
+  batters,
+  color,
+}: {
+  title: string;
+  batters: PostGameBatter[];
+  color: string;
+}) {
+  if (!batters.length) return null;
+  const header = ['순번', '선수', '포지션', 'AB', 'H', 'R', 'RBI', 'SB', 'AVG', '시즌'];
+  const value = (v: unknown) => (v == null ? '-' : v);
+  const formatAvg = (n?: number) => {
+    if (n == null) return '-';
+    const fixed = Number(n).toFixed(3);
+    return fixed.startsWith('0') ? fixed.slice(1) : fixed;
+  };
+  return (
+    <div
+      style={{
+        border: '1px solid rgba(148,163,184,0.25)',
+        borderRadius: '10px',
+        padding: '10px',
+        background: 'rgba(255,255,255,0.02)',
+        display: 'grid',
+        gap: '6px',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontWeight: 800, color: '#e2e8f0' }}>{title}</span>
+        <span style={{ color: '#94a3b8', fontSize: '12px' }}>{batters.length}명</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${header.length}, minmax(48px, 1fr))`, gap: '4px' }}>
+        {header.map((h) => (
+          <div key={h} style={{ textAlign: 'center', fontWeight: 800, color: '#cbd5e1', fontSize: '11px' }}>
+            {h}
+          </div>
+        ))}
+        {batters.map((b) =>
+          [
+            b.order ?? '-',
+            b.name,
+            b.pos ?? b.slot ?? '-',
+            b.ab,
+            b.h,
+            b.r,
+            b.rbi,
+            b.sb,
+            formatAvg(typeof b.avg === 'number' ? b.avg : (b.avg as unknown as number)),
+            formatAvg(typeof b.seasonAvg === 'number' ? b.seasonAvg : (b.seasonAvg as unknown as number)),
+          ].map((v, idx) => (
+            <div
+              key={`${b.name}-${idx}`}
+              style={{
+                textAlign: 'center',
+                color: idx === 1 ? color : '#e2e8f0',
+                fontWeight: idx <= 2 ? 800 : 700,
+                fontSize: '12px',
+              }}
+            >
+              {value(v)}
+            </div>
+          )),
+        )}
+      </div>
     </div>
   );
 }

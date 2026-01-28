@@ -1,11 +1,13 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
 import { TEAMS } from '../../shared/lib/mockData';
+import { useAdmin } from '../../shared/auth/useAdmin';
+import type { LeagueDivision } from '../../shared/types';
 
 const divisions = [
-  { key: 'EUTTEUM', label: '으뜸조', color: '#4f46e5' },
-  { key: 'BEOGEUM', label: '버금조', color: '#10b981' },
+  { key: 'EUTTEUM', label: '으뜸', color: '#4f46e5' },
+  { key: 'BEOGEUM', label: '버금', color: '#10b981' },
 ] as const;
 
 const cardBase = {
@@ -18,18 +20,38 @@ const cardBase = {
 export default function ScheduleGroupsPage() {
   const { state, actions } = useDemoStore();
   const navigate = useNavigate();
+  const { isAdmin } = useAdmin();
+  const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
+
+  const showBlockedTooltip = (el: HTMLElement | null) => {
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setTooltip({
+      text: '관리자 로그인이 필요합니다',
+      x: rect.left + rect.width / 2,
+      y: rect.bottom,
+    });
+  };
+
+  const deriveDivision = (match: (typeof state.matches)[number]): LeagueDivision | null => {
+    if (match.division === 'EUTTEUM' || match.division === 'BEOGEUM') return match.division;
+    const homeDiv = TEAMS.find((t) => t.id === match.homeTeamId)?.division;
+    const awayDiv = TEAMS.find((t) => t.id === match.awayTeamId)?.division;
+    if (homeDiv && awayDiv && homeDiv === awayDiv) return homeDiv;
+    if (homeDiv && !awayDiv) return homeDiv;
+    if (awayDiv && !homeDiv) return awayDiv;
+    return null;
+  };
 
   const divisionMatches = useMemo(() => {
-    const byDiv: Record<string, typeof state.matches> = { EUTTEUM: [], BEOGEUM: [] };
-    state.matches.forEach((match) => {
-      const homeDiv = TEAMS.find((t) => t.id === match.homeTeamId)?.division;
-      const awayDiv = TEAMS.find((t) => t.id === match.awayTeamId)?.division;
-      if (!homeDiv || !awayDiv) return;
-      if (homeDiv === awayDiv) {
-        byDiv[homeDiv] = [...(byDiv[homeDiv] ?? []), match];
-      }
+    const alive = state.matches.filter((m) => !m.deleted);
+    const byDiv: Record<LeagueDivision, typeof state.matches> = { EUTTEUM: [], BEOGEUM: [] };
+    alive.forEach((match) => {
+      const division = deriveDivision(match);
+      if (!division) return;
+      byDiv[division] = [...byDiv[division], match];
     });
-    Object.keys(byDiv).forEach((key) => {
+    (Object.keys(byDiv) as LeagueDivision[]).forEach((key) => {
       byDiv[key] = byDiv[key]
         .slice()
         .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
@@ -39,10 +61,32 @@ export default function ScheduleGroupsPage() {
 
   return (
     <div style={{ display: 'grid', gap: '18px' }}>
+      {tooltip && (
+        <div
+          style={{
+            position: 'fixed',
+            left: tooltip.x,
+            top: tooltip.y + 10,
+            transform: 'translate(-50%, 0)',
+            background: 'rgba(15,23,42,0.95)',
+            color: '#f97316',
+            padding: '8px 12px',
+            borderRadius: '10px',
+            border: '1px solid rgba(148,163,184,0.35)',
+            fontSize: '12px',
+            fontWeight: 700,
+            whiteSpace: 'nowrap',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+            zIndex: 2000,
+          }}
+        >
+          {tooltip.text}
+        </div>
+      )}
       <header style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 900 }}>조별 일정</h1>
-          <p style={{ margin: '6px 0 0', color: '#94a3b8' }}>조(으뜸/버금) 단위로 예정 경기와 결과를 묶어서 확인하세요.</p>
+          <p style={{ margin: '6px 0 0', color: '#94a3b8' }}>구분(으뜸/버금) 단위로 예정 경기와 결과를 묶어서 확인하세요.</p>
         </div>
         <button
           type="button"
@@ -63,7 +107,7 @@ export default function ScheduleGroupsPage() {
 
       <section style={{ display: 'grid', gap: '12px' }}>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', color: '#94a3b8', fontWeight: 700 }}>
-          <span>조 범례:</span>
+          <span>구분 범례:</span>
           {divisions.map((div) => (
             <span
               key={div.key}
@@ -165,18 +209,30 @@ export default function ScheduleGroupsPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={(e) => {
+                              if (!isAdmin) {
+                                showBlockedTooltip(e.currentTarget);
+                                return;
+                              }
                               actions.selectMatch(match.id);
                               navigate('/scorekeeper');
                             }}
+                            onMouseEnter={(e) => {
+                              if (!isAdmin) showBlockedTooltip(e.currentTarget);
+                            }}
+                            onMouseLeave={() => setTooltip(null)}
+                            onFocus={(e) => {
+                              if (!isAdmin) showBlockedTooltip(e.currentTarget);
+                            }}
+                            onBlur={() => setTooltip(null)}
                             style={{
                               padding: '8px 10px',
                               borderRadius: '10px',
                               border: '1px solid rgba(148,163,184,0.35)',
                               background: 'rgba(255,255,255,0.04)',
-                              color: '#cbd5e1',
+                              color: isAdmin ? '#cbd5e1' : 'rgba(203,213,225,0.6)',
                               fontWeight: 800,
-                              cursor: 'pointer',
+                              cursor: isAdmin ? 'pointer' : 'not-allowed',
                             }}
                           >
                             기록 관리
