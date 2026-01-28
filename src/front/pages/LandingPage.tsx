@@ -146,6 +146,11 @@ export default function LandingPage() {
     [state.matches],
   );
 
+  // Ensure live widget always has full schedule data, independent of any selector elsewhere.
+  useEffect(() => {
+    void actions.loadFullSchedule();
+  }, [actions]);
+
   const handleOpenMatch = (matchId: string, path: '/scoreboard' | '/scoreboard-text') => {
     actions.selectMatch(matchId);
     navigate(path);
