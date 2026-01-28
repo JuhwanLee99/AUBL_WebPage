@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
 import { TEAMS } from '../../shared/lib/mockData';
@@ -24,6 +24,10 @@ const teamColor = (teamId?: string) => TEAMS.find((t) => t.id === teamId)?.logoC
 export default function ScheduleResultsPage() {
   const { state, actions } = useDemoStore();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    void actions.loadFullSchedule();
+  }, [actions]);
 
   const results = useMemo(
     () =>

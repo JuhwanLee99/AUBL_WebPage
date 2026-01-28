@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
 import { TEAMS } from '../../shared/lib/mockData';
@@ -22,6 +22,10 @@ export default function ScheduleGroupsPage() {
   const navigate = useNavigate();
   const { isAdmin } = useAdmin();
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    void actions.loadFullSchedule();
+  }, [actions]);
 
   const showBlockedTooltip = (el: HTMLElement | null) => {
     if (!el) return;
