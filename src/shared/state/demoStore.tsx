@@ -3298,6 +3298,62 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         skipFirestoreWriteRef.current = true;
         dispatch({ type: 'selectMatch', matchId, followCurrent });
         if (isAdmin) updateCurrentMatchPointer(matchId);
+        if (!matchId) return;
+        const matchIdLocal = matchId;
+        void (async () => {
+          try {
+            // Prime matchStates document
+            const stateDoc = doc(firestore, 'matchStates', matchIdLocal);
+            const snap = await getDoc(stateDoc);
+            if (snap.exists()) {
+              const data = snap.data() as SharedGameState & { feed?: PlayLog[]; events?: PlayEvent[] };
+              skipFirestoreWriteRef.current = true;
+              dispatch({
+                type: 'hydrate',
+                state: normalizeState(initialState, {
+                  ...stateRef.current,
+                  ...data,
+                  matches: stateRef.current.matches,
+                }),
+              });
+            }
+            // Prime feed/events subcollections
+            const isScorer = stateRef.current.scorerUid && stateRef.current.scorerUid === (auth.currentUser?.uid ?? null);
+            const maxEntries = isScorer ? SCORER_FEED_LIMIT : FEED_LIMIT;
+            const fallback = { inning: stateRef.current.inning, half: stateRef.current.half as Half };
+            const [feedSnap, eventsSnap] = await Promise.all([
+              getDocs(
+                query(
+                  collection(firestore, 'matchStates', matchIdLocal, 'feed'),
+                  orderBy('createdAt', 'desc'),
+                  limit(maxEntries),
+                ),
+              ),
+              getDocs(
+                query(
+                  collection(firestore, 'matchStates', matchIdLocal, 'events'),
+                  orderBy('createdAt', 'desc'),
+                  limit(maxEntries),
+                ),
+              ),
+            ]);
+            const feedEntries = normalizeFeed(
+              feedSnap.docs.map((d) => d.data()),
+              fallback,
+            );
+            const eventEntries = normalizeEvents(
+              eventsSnap.docs.map((d) => d.data()),
+              fallback,
+            );
+            skipFirestoreWriteRef.current = true;
+            lastFeedLengthRef.current = feedEntries.length;
+            lastEventsLengthRef.current = eventEntries.length;
+            dispatch({ type: 'setFeed', feed: feedEntries });
+            dispatch({ type: 'setEvents', events: eventEntries });
+          } catch {
+            // ignore; realtime listener will still try
+          }
+        })();
       },
       loadFullSchedule: async () => {
         try {

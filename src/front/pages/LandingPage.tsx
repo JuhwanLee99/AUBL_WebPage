@@ -1,8 +1,11 @@
 // **`src/front/pages/LandingPage.tsx`**
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import { useDemoStore } from '../../shared/state/demoStore';
+import type { MatchSchedule } from '../../shared/state/demoStore';
+import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { firestore } from '../../shared/firebase/client';
 
 const tickerItems = [
   '📢 [공지] 1월 25일 으뜸 토너먼트 4강전: 세종대 vs 경희대국제 / 연세대 vs 서울시립대 경기 예정',
@@ -138,18 +141,44 @@ export default function LandingPage() {
   const heroRef = useRef<HTMLDivElement>(null);
   const highlightRefs = useRef<HTMLDivElement[]>([]);
   const snapshotRef = useRef<HTMLDivElement>(null);
-  const liveMatches = useMemo(
-    () =>
-      state.matches
-        .filter((match) => match.status === 'inProgress')
-        .sort((a, b) => safeMatchTime(a.startTime) - safeMatchTime(b.startTime)),
-    [state.matches],
-  );
+  const [liveMatchesRealtime, setLiveMatchesRealtime] = useState<MatchSchedule[]>([]);
+  const liveMatches = useMemo(() => {
+    const source = liveMatchesRealtime.length ? liveMatchesRealtime : state.matches;
+    return source
+      .filter((match) => match.status === 'inProgress')
+      .sort((a, b) => safeMatchTime(a.startTime) - safeMatchTime(b.startTime));
+  }, [liveMatchesRealtime, state.matches]);
 
   // Ensure live widget always has full schedule data, independent of any selector elsewhere.
   useEffect(() => {
     void actions.loadFullSchedule();
   }, [actions]);
+
+  // Dedicated in-progress subscription so LIVE 섹션은 셀렉터와 무관하게 항상 최신 상태를 반영.
+  useEffect(() => {
+    const liveQuery = query(collection(firestore, 'matches'), where('status', '==', 'inProgress'));
+    const unsub = onSnapshot(
+      liveQuery,
+      (snap) => {
+        const incoming = snap.docs.map((doc) => ({
+          id: doc.id,
+          ...(doc.data() as Partial<MatchSchedule>),
+        }));
+        setLiveMatchesRealtime(
+          incoming
+            .filter((m) => !m.deleted)
+            .sort((a, b) => safeMatchTime(a.startTime || '') - safeMatchTime(b.startTime || '')) as MatchSchedule[],
+        );
+      },
+      (error) => {
+        // fallback to store state on permission/index errors
+        // eslint-disable-next-line no-console
+        console.error('[landing live] snapshot error', error);
+        setLiveMatchesRealtime([]);
+      },
+    );
+    return () => unsub();
+  }, []);
 
   const handleOpenMatch = (matchId: string, path: '/scoreboard' | '/scoreboard-text') => {
     actions.selectMatch(matchId);
