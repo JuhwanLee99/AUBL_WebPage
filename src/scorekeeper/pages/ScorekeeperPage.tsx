@@ -1818,7 +1818,12 @@ const handleConfirmHitWizard = () => {
             {state.half === 'top' ? 'Top' : 'Bot'} {state.inning} | B:{state.balls} S:{state.strikes} O:{state.outs}
           </span>
         </div>
-        <span style={{ fontSize: '14px', color: '#94a3b8' }}>기록원 컨트롤러 · 데모</span>
+        {/* 기록원 정보 표시 영역 */}
+        <span style={{ fontSize: '14px', color: state.scorerUid ? '#38bdf8' : '#b33131' }}>
+          {state.scorerUid 
+            ? `현재 기록원: ${state.scorerName || state.scorerEmail || '알 수 없음'}` 
+            : '기록원 부재'}
+        </span>
       </header>
 
       <section
