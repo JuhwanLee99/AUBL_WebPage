@@ -1,10 +1,10 @@
 // **`src/front/pages/LandingPage.tsx`**
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import { useDemoStore } from '../../shared/state/demoStore';
 import type { MatchSchedule } from '../../shared/state/demoStore';
-import { collection, onSnapshot, orderBy, query, where, doc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, doc, getDoc } from 'firebase/firestore';
 import { firestore } from '../../shared/firebase/client';
 
 const tickerItems = [
@@ -91,6 +91,32 @@ const countDots = (filled: number, total: number, color: string) =>
     color,
   }));
 
+type LiveSnapshot = {
+  home: number;
+  away: number;
+  inning?: number;
+  half?: 'top' | 'bottom';
+  balls?: number;
+  strikes?: number;
+  outs?: number;
+  bases?: (string | null)[];
+};
+
+const clampCount = (value: unknown, max?: number) => {
+  if (typeof value !== 'number' || Number.isNaN(value)) return undefined;
+  const nonNegative = Math.max(0, value);
+  return typeof max === 'number' ? Math.min(nonNegative, max) : nonNegative;
+};
+
+const normalizeBases = (value: unknown): (string | null)[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const trimmed = value
+    .slice(0, 3)
+    .map((runner) => (typeof runner === 'string' && runner.trim() ? runner : null));
+  while (trimmed.length < 3) trimmed.push(null);
+  return trimmed as (string | null)[];
+};
+
 const currentBatterName = (state: ReturnType<typeof useDemoStore>['state']) => {
   const side = state.half === 'top' ? 'away' : 'home';
   const lineup = state.lineups[side];
@@ -135,6 +161,45 @@ function Badge({ label, dots }: { label: string; dots: { active: boolean; color:
   );
 }
 
+function MiniBases({ bases }: { bases?: (string | null | undefined)[] }) {
+  const hasRunner = (index: 0 | 1 | 2) => Boolean(bases && bases[index]);
+  const baseShape = (active: boolean, position: CSSProperties = {}): CSSProperties => ({
+    position: 'absolute',
+    width: 10,
+    height: 10,
+    borderRadius: '2px',
+    transform: position.transform ?? 'rotate(45deg)',
+    background: active ? 'linear-gradient(135deg, #fcd34d, #f59e0b)' : 'rgba(148,163,184,0.12)',
+    border: '1px solid rgba(226, 232, 240, 0.55)',
+    boxShadow: active ? '0 0 0 4px rgba(252, 211, 77, 0.18)' : 'none',
+    transition: 'all 0.18s ease',
+    ...position,
+  });
+
+  return (
+    <div
+      aria-label="베이스 상황"
+      style={{
+        display: 'grid',
+        placeItems: 'center',
+        padding: '4px 6px',
+        borderRadius: '10px',
+        border: '1px solid rgba(148,163,184,0.28)',
+        background: 'rgba(255,255,255,0.02)',
+        width: '56px',
+        height: '34px',
+        flexShrink: 0,
+      }}
+    >
+      <div style={{ position: 'relative', width: '38px', height: '24px' }}>
+        <span style={baseShape(hasRunner(1), { left: '50%', top: 0, transform: 'translate(-50%, 0) rotate(45deg)' })} />
+        <span style={baseShape(hasRunner(2), { left: 4, bottom: 1 })} />
+        <span style={baseShape(hasRunner(0), { right: 4, bottom: 1 })} />
+      </div>
+    </div>
+  );
+}
+
 export default function LandingPage() {
   const { state, actions } = useDemoStore();
   const navigate = useNavigate();
@@ -142,7 +207,7 @@ export default function LandingPage() {
   const highlightRefs = useRef<HTMLDivElement[]>([]);
   const snapshotRef = useRef<HTMLDivElement>(null);
   const [liveMatchesRealtime, setLiveMatchesRealtime] = useState<MatchSchedule[]>([]);
-  const [liveScores, setLiveScores] = useState<Record<string, { home: number; away: number; inning?: number; half?: 'top' | 'bottom' }>>({});
+  const [liveScores, setLiveScores] = useState<Record<string, LiveSnapshot>>({});
   const liveMatches = useMemo(() => {
     const source = liveMatchesRealtime.length ? liveMatchesRealtime : state.matches;
     return source
@@ -166,13 +231,25 @@ export default function LandingPage() {
           try {
             const snap = await getDoc(doc(firestore, 'matchStates', match.id));
             if (!snap.exists()) return null;
-            const data = snap.data() as { score?: { home?: number; away?: number }; inning?: number; half?: 'top' | 'bottom' };
+            const data = snap.data() as {
+              score?: { home?: number; away?: number };
+              inning?: number;
+              half?: 'top' | 'bottom';
+              balls?: number;
+              strikes?: number;
+              outs?: number;
+              bases?: unknown;
+            };
             return {
               id: match.id,
               home: data.score?.home ?? null,
               away: data.score?.away ?? null,
               inning: typeof data.inning === 'number' ? data.inning : undefined,
               half: data.half === 'top' || data.half === 'bottom' ? data.half : undefined,
+              balls: clampCount(data.balls, 3),
+              strikes: clampCount(data.strikes, 2),
+              outs: clampCount(data.outs, 3),
+              bases: normalizeBases(data.bases),
             };
           } catch {
             return null;
@@ -180,7 +257,7 @@ export default function LandingPage() {
         }),
       );
       if (cancelled) return;
-      const map: Record<string, { home: number; away: number; inning?: number; half?: 'top' | 'bottom' }> = {};
+      const map: Record<string, LiveSnapshot> = {};
       entries.forEach((entry) => {
         if (!entry) return;
         map[entry.id] = {
@@ -188,6 +265,10 @@ export default function LandingPage() {
           away: entry.away ?? 0,
           inning: entry.inning,
           half: entry.half,
+          balls: entry.balls,
+          strikes: entry.strikes,
+          outs: entry.outs,
+          bases: entry.bases,
         };
       });
       setLiveScores(map);
@@ -593,13 +674,15 @@ export default function LandingPage() {
 
                 {(() => {
                   const isActive = match.id === state.activeMatchId;
-                  const balls = isActive ? state.balls : null;
-                  const strikes = isActive ? state.strikes : null;
-                  const outs = isActive ? state.outs : null;
+                  const snapshot = liveScores[match.id];
+                  const balls = isActive ? state.balls : snapshot?.balls ?? 0;
+                  const strikes = isActive ? state.strikes : snapshot?.strikes ?? 0;
+                  const outs = isActive ? state.outs : snapshot?.outs ?? 0;
+                  const bases = isActive ? state.bases : snapshot?.bases;
                   const inningLabel = isActive
                     ? `${state.inning}회${state.half === 'top' ? '초' : '말'}`
-                    : liveScores[match.id]?.inning
-                      ? `${liveScores[match.id]?.inning}회${liveScores[match.id]?.half === 'top' ? '초' : '말'}`
+                    : snapshot?.inning
+                      ? `${snapshot.inning}회${snapshot.half === 'top' ? '초' : '말'}`
                       : '이닝 정보 없음';
                   const batter = isActive ? currentBatterName(state) : '실시간 선택 시 표시';
                   const bDots = countDots(balls ?? 0, 3, '#22c55e');
@@ -621,7 +704,10 @@ export default function LandingPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                         <Badge label="B" dots={bDots} />
                         <Badge label="S" dots={sDots} />
-                        <Badge label="O" dots={oDots} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Badge label="O" dots={oDots} />
+                          <MiniBases bases={bases} />
+                        </div>
                       </div>
                       <div style={{ display: 'grid', gap: '4px', justifyItems: 'end', textAlign: 'right' }}>
                         <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '12px' }}>{inningLabel}</span>
