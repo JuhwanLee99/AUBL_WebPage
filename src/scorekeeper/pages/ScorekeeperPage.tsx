@@ -1159,6 +1159,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
 
 export default function ScorekeeperPage() {
   const { state, actions } = useDemoStore();
+  const [showMobileWarning, setShowMobileWarning] = useState(false); // 모바일 경고 팝업 상태 관리
   const activeMatch = useMemo(
     () => state.matches.find((match) => match.id === state.activeMatchId) ?? null,
     [state.matches, state.activeMatchId],
@@ -1300,6 +1301,22 @@ export default function ScorekeeperPage() {
     return `${ownerLabel} ${formatMs(lockRemainingMs)}`;
   }, [hasActiveMatch, state.scorerUid, lockRemainingMs, user?.uid, formatMs]);
   const lockCountdownColor = lockRemainingMs > 30_000 ? '#67e8f9' : '#f87171';
+
+  // 모바일 환경 감지 Effect
+  useEffect(() => {
+    const checkMobileEnvironment = () => {
+      const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+      // 모바일 기기 정규식 체크 또는 화면 너비가 좁을 경우 (기록원 페이지는 넓은 화면 필요)
+      const isMobileDevice = /android|ipad|iphone|ipod/i.test(userAgent);
+      const isSmallScreen = window.innerWidth < 1024; // 태블릿/모바일 사이즈 기준
+
+      if (isMobileDevice || isSmallScreen) {
+        setShowMobileWarning(true);
+      }
+    };
+
+    checkMobileEnvironment();
+  }, []);
 
   // 락 만료까지 남은 시간 표시 (1초 단위)
   useEffect(() => {
@@ -2338,6 +2355,64 @@ const handleConfirmHitWizard = () => {
         <RemovedPlayersPanel title="교체 out (AWAY)" players={state.removed.away} density="regular" />
         <RemovedPlayersPanel title="교체 out (HOME)" players={state.removed.home} density="regular" />
       </div>
+
+      {/* 모바일 환경 경고 팝업 */}
+      {showMobileWarning && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(0, 0, 0, 0.85)',
+            display: 'grid',
+            placeItems: 'center',
+            padding: '20px',
+            backdropFilter: 'blur(4px)',
+          }}
+        >
+          <div
+            style={{
+              background: '#1e293b',
+              padding: '32px',
+              borderRadius: '24px',
+              border: '1px solid rgba(148, 163, 184, 0.2)',
+              maxWidth: '400px',
+              width: '100%',
+              textAlign: 'center',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🖥️</div>
+            <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#f8fafc', marginBottom: '12px' }}>
+              PC 환경 권장
+            </h3>
+            <p style={{ color: '#cbd5e1', lineHeight: '1.6', fontSize: '15px', marginBottom: '24px', wordBreak: 'keep-all' }}>
+              현재 <strong>기록원 페이지</strong>는 모바일 환경에 최적화되어 있지 않습니다.<br />
+              원활한 경기 기록을 위해<br />
+              <span style={{ color: '#60a5fa', fontWeight: 700 }}>PC 또는 넓은 화면의 태블릿</span>을 사용해 주세요.
+            </p>
+            <button
+              onClick={() => setShowMobileWarning(false)}
+              style={{
+                width: '100%',
+                padding: '14px',
+                borderRadius: '12px',
+                border: 'none',
+                background: '#334155',
+                color: '#f1f5f9',
+                fontWeight: 800,
+                fontSize: '15px',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.background = '#475569')}
+              onMouseOut={(e) => (e.currentTarget.style.background = '#334155')}
+            >
+              알겠습니다 (그대로 진행)
+            </button>
+          </div>
+        </div>
+      )}
 
       {hitWizard && (
         <HitWizardModal
