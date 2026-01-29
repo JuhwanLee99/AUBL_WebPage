@@ -4,7 +4,7 @@ service cloud.firestore {
   function isAdmin() {
     return request.auth != null
       && (request.auth.token.admin == true
-        || request.auth.token.email in ['aublcau@gmail.com', 'aublcauadmin@aubl.club', 'jhyoon01677002@gmail.com', 'synapse9983@gmail.com', 'example@ecam.com']);
+        || request.auth.token.email in ['example@ecam.com']); // 여기에 관리자 계정 이메일 추가
   }
 
   match /databases/{database}/documents {

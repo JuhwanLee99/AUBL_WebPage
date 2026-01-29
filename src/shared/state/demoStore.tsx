@@ -2751,14 +2751,13 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     stateRef.current = state;
   }, [state]);
 
-  // Snapshot to localStorage whenever meaningful changes occur.
+  // [수정 1] 상태 변경 시 로컬 스토리지에 저장하던 로직을 주석 처리 또는 삭제
+  /*
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!state.activeMatchId) return;
-    // Avoid excessive writes: only persist when gameStarted or feed/events have entries.
     if (!state.gameStarted && state.feed.length === 0 && state.events.length === 0) return;
     const snapshot = snapshotState(state);
-    // Limit persisted feed/events to reduce payload.
     const trimmed: DemoSnapshot = {
       ...snapshot,
       feed: snapshot.feed.slice(0, 150),
@@ -2770,6 +2769,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       // ignore storage quota errors
     }
   }, [state]);
+  */
 
   const pushMatchUpdate = useCallback((matchId: string, overrides: Partial<MatchSchedule> = {}) => {
     const current = stateRef.current.matches.find((m) => m.id === matchId);
@@ -2779,9 +2779,16 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     return setDoc(doc(firestore, 'matches', matchId), payload, { merge: true });
   }, []);
 
-  // Local persistence fallback to keep score state across navigation/refresh.
+  // [수정 2] 로컬 스토리지에서 불러오던 로직을 삭제하고, 오히려 "초기화(삭제)"하도록 변경
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    
+    // 기존에 저장된 데이터가 있다면 충돌 방지를 위해 확실히 삭제합니다.
+    // 이렇게 하면 새로고침 시 항상 깨끗한 상태(initialState)로 시작하여 
+    // 아래의 onSnapshot 구독들이 파이어베이스의 최신 데이터를 채워넣게 됩니다.
+    window.localStorage.removeItem(STORAGE_KEY);
+
+    /* 기존 불러오기 로직은 주석 처리 또는 삭제
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
@@ -2799,6 +2806,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // ignore corrupt cache
     }
+    */
   }, []);
 
   // Determine admin (for schedule write privileges & full subscription)
@@ -3396,7 +3404,27 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       undo: () => dispatch({ type: 'undo' }),
       addMatch: (match: MatchSchedule) => {
         matchesReadyRef.current = true;
-        dispatch({ type: 'addMatch', match });
+
+        // [수정] ID 생성 로직 추가 (날짜-홈팀-어웨이팀)
+        // 기존의 랜덤 ID(match-xxxx) 대신 읽기 편한 포맷으로 변경합니다.
+        const dateObj = new Date(match.startTime);
+        const yyyy = dateObj.getFullYear();
+        const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const dd = String(dateObj.getDate()).padStart(2, '0');
+        
+        // 팀 이름에서 공백 제거 (예: "LG 트윈스" -> "LG트윈스")
+        const cleanName = (name: string) => name.trim().replace(/\s+/g, '');
+        const home = cleanName(match.homeTeamName || 'Home');
+        const away = cleanName(match.awayTeamName || 'Away');
+
+        // 최종 ID: 20260130-Home-Away
+        const customId = `${yyyy}${mm}${dd}-${home}-${away}`;
+        const matchWithId = { ...match, id: customId };
+
+        dispatch({ type: 'addMatch', match: matchWithId });
+        
+        // Firestore 저장 (새로운 ID 사용)
+        void setDoc(doc(firestore, 'matches', matchWithId.id), pruneUndefined(matchWithId), { merge: true });
       },
       updateMatch: (matchId: string, updates: Partial<MatchSchedule>) => {
         matchesReadyRef.current = true;
