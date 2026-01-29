@@ -251,6 +251,12 @@ export default function Layout() {
       { path: '/prediction', label: '승부예측' },
       // 기록원: 항상 보이지만 비관리자는 클릭 시 안내 버블만 노출
       { path: '/scorekeeper', label: '기록원', requiresAdmin: true, showWhenBlocked: true },
+      // 사용설명서: 외부 링크
+      {
+        path: 'https://docs.google.com/document/d/e/2PACX-1vRYQNkS6wuqoYWokWN_rnPpmZuWLHcNyn_j5K5Vhw3g8voduO20VMJYFH_3FTjW9Whgk7nxywV8ps_9/pub',
+        label: '사용설명서',
+        isExternal: true,
+      },
     ],
     [],
   );
@@ -275,6 +281,9 @@ export default function Layout() {
     }
 
     const matched = filteredNavItems.find((item) => {
+      // External link check
+      if ((item as any).isExternal) return false;
+
       if (item.children?.some((child) => location.pathname === child.path || location.pathname.startsWith(child.path))) return true;
       if (item.children && location.pathname === item.path) return true; // 부모 경로 자체를 방문했을 때도 유지
       return false;
@@ -392,6 +401,8 @@ export default function Layout() {
                     const isActive = location.pathname === item.path || activeParentPath === item.path;
                     const isHovering = hoveredMenu === item.path;
                     const blocked = item.requiresAdmin && !isAdmin;
+                    const isExternal = (item as any).isExternal;
+
                     const handleBlockedHover = (el: HTMLAnchorElement | null) => {
                       if (!blocked || !el) return;
                       const rect = el.getBoundingClientRect();
@@ -401,20 +412,52 @@ export default function Layout() {
                         y: rect.bottom,
                       });
                     };
+
+                    const style = {
+                      fontSize: 'var(--nav-font-size)',
+                      fontWeight: 700,
+                      color: blocked ? 'rgba(203,213,225,0.55)' : isActive || isHovering ? '#f97316' : '#cbd5e1',
+                      transition: 'color 120ms ease',
+                      whiteSpace: 'nowrap',
+                      scrollSnapAlign: 'start',
+                      padding: '10px 0',
+                      cursor: blocked ? 'not-allowed' : 'pointer',
+                      textDecoration: 'none',
+                    };
+
+                    if (isExternal) {
+                      return (
+                        <a
+                          key={item.path}
+                          href={item.path}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={style}
+                          ref={(el) => {
+                            linkRefs.current[item.path] = el;
+                          }}
+                          onMouseEnter={() => {
+                            setHoveredMenu(item.path);
+                          }}
+                          onMouseLeave={() => {
+                            setHoveredMenu(null);
+                            setTooltip(null);
+                          }}
+                          onFocus={() => {
+                            setHoveredMenu(item.path);
+                          }}
+                          onBlur={() => setTooltip(null)}
+                        >
+                          {item.label}
+                        </a>
+                      );
+                    }
+
                     return (
                       <Link
                         key={item.path}
                         to={blocked ? location.pathname : item.path}
-                        style={{
-                          fontSize: 'var(--nav-font-size)',
-                          fontWeight: 700,
-                          color: blocked ? 'rgba(203,213,225,0.55)' : isActive || isHovering ? '#f97316' : '#cbd5e1',
-                          transition: 'color 120ms ease',
-                          whiteSpace: 'nowrap',
-                          scrollSnapAlign: 'start',
-                          padding: '10px 0',
-                          cursor: blocked ? 'not-allowed' : 'pointer',
-                        }}
+                        style={style}
                         ref={(el) => {
                           linkRefs.current[item.path] = el;
                         }}
