@@ -4,6 +4,12 @@ import { TEAMS } from '../../shared/lib/mockData';
 import { useDemoStore } from '../../shared/state/demoStore';
 import MatchSelectorBar from './MatchSelectorBar';
 
+// [수정됨] ScorekeeperPage와 동일한 로직의 헬퍼 함수 추가 (또는 shared/utils로 분리 권장)
+const getUniqueName = (name: string, number: string | number | undefined | null) => {
+  if (!name) return '';
+  return number ? `${name}(${number})` : name;
+};
+
 const countLights = (filled: number, total: number, color: string) =>
   Array.from({ length: total }, (_, idx) => ({
     active: idx < filled,
@@ -31,10 +37,17 @@ export default function ScoreboardPanel({
     [hittingSide, state.lineups],
   );
   const activeOffense = offenseLineup.length ? offenseLineup : state.lineups[hittingSide];
-  const currentBatter =
-    activeOffense[state.batterIndex[hittingSide] % Math.max(activeOffense.length, 1)]?.name ?? '타자';
-  const currentPitcher =
-    state.lineups[defenseSide].find((slot) => slot.pos.toUpperCase() === 'P')?.name ?? '투수';
+  // [수정됨] 현재 타자 이름 가져오기: 이름 + 등번호 조합 사용
+  const currentBatterSlot = activeOffense[state.batterIndex[hittingSide] % Math.max(activeOffense.length, 1)];
+  const currentBatter = currentBatterSlot
+    ? getUniqueName(currentBatterSlot.name, currentBatterSlot.number)
+    : '타자';
+
+  // [수정됨] 현재 투수 이름 가져오기: 이름 + 등번호 조합 사용
+  const currentPitcherSlot = state.lineups[defenseSide].find((slot) => slot.pos.toUpperCase() === 'P');
+  const currentPitcher = currentPitcherSlot
+    ? getUniqueName(currentPitcherSlot.name, currentPitcherSlot.number)
+    : '투수';
 
   const inningHalf = state.half === 'top' ? '▲' : '▼';
   const inning = state.inning;
