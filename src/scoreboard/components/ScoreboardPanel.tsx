@@ -24,6 +24,17 @@ export default function ScoreboardPanel({
     () => state.matches.find((match) => match.id === state.activeMatchId),
     [state.matches, state.activeMatchId],
   );
+  const hittingSide = state.half === 'top' ? 'away' : 'home';
+  const defenseSide = hittingSide === 'home' ? 'away' : 'home';
+  const offenseLineup = useMemo(
+    () => state.lineups[hittingSide].filter((slot) => slot.pos.toUpperCase() !== 'P'),
+    [hittingSide, state.lineups],
+  );
+  const activeOffense = offenseLineup.length ? offenseLineup : state.lineups[hittingSide];
+  const currentBatter =
+    activeOffense[state.batterIndex[hittingSide] % Math.max(activeOffense.length, 1)]?.name ?? '타자';
+  const currentPitcher =
+    state.lineups[defenseSide].find((slot) => slot.pos.toUpperCase() === 'P')?.name ?? '투수';
 
   const inningHalf = state.half === 'top' ? '▲' : '▼';
   const inning = state.inning;
@@ -31,6 +42,7 @@ export default function ScoreboardPanel({
   const strike = state.strikes;
   const out = state.outs;
   const bases = state.bases;
+  const pitchCount = state.pitchCount ?? 0;
   const boxScore = useMemo(() => {
     const totals = activeMatch?.postGame?.totals;
     const lineScore = activeMatch?.postGame?.lineScore;
@@ -103,18 +115,43 @@ export default function ScoreboardPanel({
           <ScoreCell label={state.teamNames.home || homeTeam?.name || 'HOME'} value={state.score.home} />
           <div
             style={{
-              background: '#0b1220',
-              border: '2px solid #111827',
-              borderRadius: '12px',
-              padding: 'clamp(14px, 2vw, 22px) clamp(10px, 1.6vw, 18px)',
-              fontWeight: 900,
-              fontSize: 'clamp(22px, 3.2vw, 38px)',
-              color: '#facc15',
-              textShadow: '0 0 14px rgba(250, 204, 21, 0.4)',
+              display: 'grid',
+              gap: '6px',
+              justifyItems: 'center',
+              width: '100%',
+              maxWidth: '320px',
+              margin: '0 auto',
             }}
           >
-            {inningHalf}
-            {inning}
+            <PlayerInfoChip
+              label="현재 투수"
+              value={currentPitcher}
+              subLabel={`총 투구수 ${pitchCount}`}
+              color="#60a5fa"
+            />
+            <div
+              style={{
+                background: '#0b1220',
+                border: '2px solid #111827',
+                borderRadius: '12px',
+                padding: 'clamp(12px, 1.8vw, 18px) clamp(10px, 1.6vw, 18px)',
+                fontWeight: 900,
+                fontSize: 'clamp(22px, 3.2vw, 38px)',
+                color: '#facc15',
+                textShadow: '0 0 14px rgba(250, 204, 21, 0.4)',
+                lineHeight: 1.05,
+                width: '100%',
+              }}
+            >
+              {inningHalf}
+              {inning}
+            </div>
+            <PlayerInfoChip
+              label="현재 타자"
+              value={currentBatter}
+              subLabel={`카운트 ${ball}-${strike} · 아웃 ${out}`}
+              color="#f97316"
+            />
           </div>
           <ScoreCell label={state.teamNames.away || awayTeam?.name || 'AWAY'} value={state.score.away} />
         </div>
@@ -309,7 +346,7 @@ function BoxScoreTable({
   data,
 }: {
   data: {
-    innings: number[];
+    innings: (number | string)[];
     rows: {
       name: string;
       runs: number;
@@ -362,7 +399,7 @@ function BoxScoreTable({
       <div style={{ display: 'grid', gridAutoRows: '1fr' }}>
         {rows.map((row, idx) => (
           <div
-            key={row.label}
+            key={row.name}
             style={{
               display: 'grid',
               gridTemplateColumns: `repeat(${headers.length}, minmax(0, 1fr))`,
@@ -397,6 +434,70 @@ function BoxScoreTable({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function PlayerInfoChip({
+  label,
+  value,
+  subLabel,
+  color,
+}: {
+  label: string;
+  value: string;
+  subLabel?: string;
+  color: string;
+}) {
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gap: '2px',
+        padding: '8px 12px',
+        background: 'rgba(15,23,42,0.9)',
+        border: `1px solid ${color}33`,
+        borderRadius: '12px',
+        width: '100%',
+        maxWidth: '320px',
+        minWidth: 0,
+        justifyItems: 'center',
+      }}
+    >
+      <span
+        style={{
+          display: 'inline-flex',
+          gap: '8px',
+          alignItems: 'center',
+          fontWeight: 900,
+          fontSize: '13px',
+          color: '#e2e8f0',
+        }}
+      >
+        <span
+          style={{
+            fontWeight: 800,
+            fontSize: '12px',
+            letterSpacing: '0.03em',
+            textTransform: 'uppercase',
+            color,
+          }}
+        >
+          {label}
+        </span>
+        <span>{value}</span>
+      </span>
+      {subLabel ? (
+        <span
+          style={{
+            fontWeight: 700,
+            fontSize: '12px',
+            color: '#94a3b8',
+          }}
+        >
+          {subLabel}
+        </span>
+      ) : null}
     </div>
   );
 }
