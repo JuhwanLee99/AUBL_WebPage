@@ -43,3 +43,12 @@ crawler/out/roster_players.jsonl
 serviceAccountKey.json
 .firebase/*
 firestore-debug.log
+
+# Python egg info
+*.egg-info
+
+# Firebase logs
+firebase-debug.log
+
+# (권장 수정) 기존 .log 대신
+*.log
