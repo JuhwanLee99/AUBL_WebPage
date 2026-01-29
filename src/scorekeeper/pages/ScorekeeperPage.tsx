@@ -1253,7 +1253,7 @@ export default function ScorekeeperPage() {
       innings: padInnings(lineScore?.[side]),
       color: side === 'home' ? '#f97316' : '#60a5fa',
     });
-    return { innings, rows: [mk('home'), mk('away')] };
+    return { innings, rows: [mk('away'), mk('home')] };
   }, [activeMatch?.postGame?.lineScore, activeMatch?.postGame?.totals, awayTeam?.name, homeTeam?.name, state.inning, state.score, state.teamNames]);
   const statusBadge = !hasActiveMatch
     ? {
@@ -1745,7 +1745,7 @@ const handleConfirmHitWizard = () => {
               <option value="">경기를 선택하세요</option>
               {state.matches.map((match) => (
                 <option key={match.id} value={match.id}>
-                  {match.homeTeamName} vs {match.awayTeamName} ({match.status === 'completed' ? '종료' : '예정'})
+                  {match.awayTeamName} vs {match.homeTeamName} ({match.status === 'completed' ? '종료' : '예정'})
                 </option>
               ))}
             </select>
@@ -1771,7 +1771,7 @@ const handleConfirmHitWizard = () => {
         {activeMatch ? (
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', color: '#cbd5e1', fontSize: '13px' }}>
             <span>
-              선택된 경기: {activeMatch.homeTeamName} vs {activeMatch.awayTeamName}
+              선택된 경기: {activeMatch.awayTeamName} vs {activeMatch.homeTeamName}
             </span>
             <span>일시: {formatDateTimeLabel(activeMatch.startTime)}</span>
             <span>라인업: {activeMatch.lineups ? '사전 저장됨' : '미저장'}</span>
@@ -1796,7 +1796,7 @@ const handleConfirmHitWizard = () => {
             Dashboard
           </span>
           <span style={{ color: '#cbd5e1' }}>
-            {state.teamNames.home} {state.score.home} - {state.teamNames.away} {state.score.away} |{' '}
+            {state.teamNames.away} {state.score.away} - {state.teamNames.home} {state.score.home} |{' '}
             {state.half === 'top' ? 'Top' : 'Bot'} {state.inning} | B:{state.balls} S:{state.strikes} O:{state.outs}
           </span>
         </div>
@@ -2263,32 +2263,6 @@ const handleConfirmHitWizard = () => {
             }}
           >
             <TeamEditor
-              label="HOME"
-              defaultName={homeTeam?.name ?? state.teamNames.home}
-              side="home"
-              teamName={state.teamNames.home}
-              lineup={state.lineups.home}
-              bench={state.benches.home}
-              benchInput={benchInput.home}
-              onChangeBenchInput={(val) => setBenchInput((p) => ({ ...p, home: val }))}
-              onSetTeamName={actions.setTeamName}
-              onSetLineup={actions.setLineup}
-              onAddBench={actions.addBench}
-              onRemoveBench={actions.removeBench}
-              onSubstitute={actions.substitute}
-              highlightBatterName={hittingSide === 'home' ? currentBatter : undefined}
-              highlightPitcherName={defenseSide === 'home' ? currentPitcher : undefined}
-            />
-            <div
-              aria-hidden
-              style={{
-                width: '1px',
-                background: 'rgba(148, 163, 184, 0.3)',
-                borderRadius: '999px',
-                alignSelf: 'stretch',
-              }}
-            />
-            <TeamEditor
               label="AWAY"
               defaultName={awayTeam?.name ?? state.teamNames.away}
               side="away"
@@ -2305,6 +2279,32 @@ const handleConfirmHitWizard = () => {
               highlightBatterName={hittingSide === 'away' ? currentBatter : undefined}
               highlightPitcherName={defenseSide === 'away' ? currentPitcher : undefined}
             />
+            <div
+              aria-hidden
+              style={{
+                width: '1px',
+                background: 'rgba(148, 163, 184, 0.3)',
+                borderRadius: '999px',
+                alignSelf: 'stretch',
+              }}
+            />
+            <TeamEditor
+              label="HOME"
+              defaultName={homeTeam?.name ?? state.teamNames.home}
+              side="home"
+              teamName={state.teamNames.home}
+              lineup={state.lineups.home}
+              bench={state.benches.home}
+              benchInput={benchInput.home}
+              onChangeBenchInput={(val) => setBenchInput((p) => ({ ...p, home: val }))}
+              onSetTeamName={actions.setTeamName}
+              onSetLineup={actions.setLineup}
+              onAddBench={actions.addBench}
+              onRemoveBench={actions.removeBench}
+              onSubstitute={actions.substitute}
+              highlightBatterName={hittingSide === 'home' ? currentBatter : undefined}
+              highlightPitcherName={defenseSide === 'home' ? currentPitcher : undefined}
+            />
           </div>
         </div>
       </div>
@@ -2318,12 +2318,12 @@ const handleConfirmHitWizard = () => {
         }}
       >
         <div style={{ display: 'grid', gap: '10px' }}>
-          <StatsTable title={`${state.teamNames.home} 타자 기록`} stats={playerStats.hitters.home} variant="batter" density="regular" />
-          <StatsTable title={`${state.teamNames.home} 투수 기록`} stats={playerStats.pitchers.home} variant="pitcher" density="regular" />
-        </div>
-        <div style={{ display: 'grid', gap: '10px' }}>
           <StatsTable title={`${state.teamNames.away} 타자 기록`} stats={playerStats.hitters.away} variant="batter" density="regular" />
           <StatsTable title={`${state.teamNames.away} 투수 기록`} stats={playerStats.pitchers.away} variant="pitcher" density="regular" />
+        </div>
+        <div style={{ display: 'grid', gap: '10px' }}>
+          <StatsTable title={`${state.teamNames.home} 타자 기록`} stats={playerStats.hitters.home} variant="batter" density="regular" />
+          <StatsTable title={`${state.teamNames.home} 투수 기록`} stats={playerStats.pitchers.home} variant="pitcher" density="regular" />
         </div>
       </div>
 
@@ -2335,8 +2335,8 @@ const handleConfirmHitWizard = () => {
           gap: '12px',
         }}
       >
-        <RemovedPlayersPanel title="교체 out (HOME)" players={state.removed.home} density="regular" />
         <RemovedPlayersPanel title="교체 out (AWAY)" players={state.removed.away} density="regular" />
+        <RemovedPlayersPanel title="교체 out (HOME)" players={state.removed.home} density="regular" />
       </div>
 
       {hitWizard && (
