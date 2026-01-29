@@ -20,6 +20,7 @@ import ScheduleManagePage from './pages/ScheduleManagePage';
 import PowerRankingPage from './pages/PowerRankingPage';
 import LoginPage from './pages/LoginPage';
 import AccessDeniedPage from './pages/AccessDeniedPage';
+import AdminPage from './pages/AdminPage';
 import { RequireAdmin } from '../shared/auth/RequireAdmin';
 
 export const router = createBrowserRouter([
@@ -100,6 +101,14 @@ export const router = createBrowserRouter([
         element: (
           <RequireAdmin>
             <ScorekeeperPage />
+          </RequireAdmin>
+        ),
+      },
+      {
+        path: 'admin',
+        element: (
+          <RequireAdmin>
+            <AdminPage />
           </RequireAdmin>
         ),
       },

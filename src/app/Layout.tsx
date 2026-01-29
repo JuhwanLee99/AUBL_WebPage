@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../shared/auth/AuthProvider';
 import { useAdmin } from '../shared/auth/useAdmin';
 import { useDemoStore } from '../shared/state/demoStore';
+import { ContentProvider } from '../shared/state/contentProvider';
 
 const NOTIFICATION_PROMPT_KEY = 'aubl:notificationPrompt:v1';
 const NOTIFICATION_PROMPT_SNOOZE_MS = 1000 * 60 * 60 * 24; // 24시간 동안 재등장 방지
@@ -303,7 +304,8 @@ export default function Layout() {
   }, [showSubnav, activeParentPath, location.pathname]);
 
   return (
-    <div className="app-shell">
+    <ContentProvider>
+      <div className="app-shell">
       {!isLiveOverlay && (
         <header className="app-header">
           <div
@@ -516,24 +518,44 @@ export default function Layout() {
                   <span style={{ color: '#cbd5e1', fontSize: '13px' }}>로그인 확인 중...</span>
                 ) : user ? (
                   <>
-                    <span
-                      style={{
-                        padding: '6px 10px',
-                        borderRadius: '10px',
-                        background: isAdmin
-                          ? 'linear-gradient(120deg, rgba(249,115,22,0.3), rgba(253,186,116,0.35))'
-                          : 'rgba(148,163,184,0.18)',
-                        color: isAdmin ? '#f97316' : '#e2e8f0',
-                        fontWeight: 800,
-                        fontSize: '12px',
-                        border: isAdmin ? '1px solid rgba(249,115,22,0.6)' : '1px solid rgba(148,163,184,0.35)',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.02em',
-                      }}
-                      title={`권한: ${roleLabel} (${roleDetail})`}
-                    >
-                      {roleLabel}
-                    </span>
+                    {isAdmin ? (
+                      <Link to="/admin" style={{ textDecoration: 'none' }}>
+                        <span
+                          style={{
+                            padding: '6px 10px',
+                            borderRadius: '10px',
+                            background: 'linear-gradient(120deg, rgba(249,115,22,0.3), rgba(253,186,116,0.35))',
+                            color: '#f97316',
+                            fontWeight: 800,
+                            fontSize: '12px',
+                            border: '1px solid rgba(249,115,22,0.6)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.02em',
+                            display: 'inline-block',
+                          }}
+                          title={`권한: ${roleLabel} (${roleDetail}) · 클릭하면 관리자 페이지로 이동`}
+                        >
+                          {roleLabel}
+                        </span>
+                      </Link>
+                    ) : (
+                      <span
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: '10px',
+                          background: 'rgba(148,163,184,0.18)',
+                          color: '#e2e8f0',
+                          fontWeight: 800,
+                          fontSize: '12px',
+                          border: '1px solid rgba(148,163,184,0.35)',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.02em',
+                        }}
+                        title={`권한: ${roleLabel} (${roleDetail})`}
+                      >
+                        {roleLabel}
+                      </span>
+                    )}
                     <span
                       style={{
                         padding: '8px 12px',
@@ -915,6 +937,7 @@ export default function Layout() {
           </div>
         </footer>
       )}
-    </div>
+      </div>
+    </ContentProvider>
   );
 }
