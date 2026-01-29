@@ -134,6 +134,18 @@ const currentPitcherName = (state: ReturnType<typeof useDemoStore>['state']) => 
   return pitcher?.name || '투수 대기 중';
 };
 
+const dateKey = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }); // YYYY-MM-DD
+};
+
+const formatTimeShort = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '시간 미정';
+  return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+};
+
 function Badge({ label, dots }: { label: string; dots: { active: boolean; color: string }[] }) {
   return (
     <div
@@ -214,6 +226,18 @@ export default function LandingPage() {
   const snapshotRef = useRef<HTMLDivElement>(null);
   const [liveMatchesRealtime, setLiveMatchesRealtime] = useState<MatchSchedule[]>([]);
   const [liveScores, setLiveScores] = useState<Record<string, LiveSnapshot>>({});
+  const todaysScheduled = useMemo(() => {
+    const todayKey = dateKey(new Date().toISOString());
+    const source = liveMatchesRealtime.length ? liveMatchesRealtime : state.matches;
+    return source
+      .filter(
+        (match) =>
+          match.status === 'scheduled' &&
+          todayKey &&
+          dateKey(match.startTime) === todayKey,
+      )
+      .sort((a, b) => safeMatchTime(a.startTime) - safeMatchTime(b.startTime));
+  }, [liveMatchesRealtime, state.matches]);
   const liveMatches = useMemo(() => {
     const source = liveMatchesRealtime.length ? liveMatchesRealtime : state.matches;
     return source
@@ -799,6 +823,67 @@ export default function LandingPage() {
               </Link>
             </div>
           </div>
+        )}
+      </section>
+
+      {/* Today's Schedule Strip */}
+      <section
+        style={{
+          borderRadius: 'var(--surface-radius-md)',
+          padding: '12px 14px',
+          border: '1px solid rgba(148, 163, 184, 0.24)',
+          background: 'rgba(15, 23, 42, 0.65)',
+          boxShadow: '0 10px 28px rgba(0,0,0,0.25)',
+          display: 'grid',
+          gap: '8px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#cbd5e1', fontWeight: 800, fontSize: '13px' }}>
+          <span
+            style={{
+              width: '10px',
+              height: '10px',
+              borderRadius: '999px',
+              backgroundColor: '#a855f7',
+              boxShadow: '0 0 0 6px rgba(168, 85, 247, 0.15)',
+            }}
+          />
+          오늘 예정 경기
+        </div>
+        {todaysScheduled.length ? (
+          <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '4px', alignItems: 'stretch' }}>
+            {todaysScheduled.map((match) => (
+              <div
+                key={`today-${match.id}`}
+                style={{
+                  flexShrink: 0,
+                  minWidth: '240px',
+                  padding: '10px 12px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(168, 85, 247, 0.28)',
+                  background: 'linear-gradient(135deg, rgba(168,85,247,0.12), rgba(99,102,241,0.08))',
+                  color: '#e2e8f0',
+                  display: 'grid',
+                  gap: '6px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 900, fontSize: '13px', color: '#ede9fe' }}>{formatTimeShort(match.startTime)}</span>
+                  <span style={{ fontSize: '12px', color: '#c4b5fd', whiteSpace: 'nowrap' }}>{match.venue || '장소 미정'}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800, fontSize: '14px' }}>
+                  <span style={{ color: '#e5e7eb' }}>{match.homeTeamName}</span>
+                  <span style={{ color: '#c4b5fd', fontSize: '12px' }}>vs</span>
+                  <span style={{ color: '#e5e7eb' }}>{match.awayTeamName}</span>
+                </div>
+                {match.notes && (
+                  <span style={{ color: '#c084fc', fontWeight: 700, fontSize: '12px' }}>{match.notes}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '13px' }}>오늘 예정된 경기가 없습니다.</span>
         )}
       </section>
 
