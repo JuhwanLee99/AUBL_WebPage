@@ -1,8 +1,11 @@
 // **`src/front/pages/LandingPage.tsx`**
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import { useDemoStore } from '../../shared/state/demoStore';
+import type { MatchSchedule } from '../../shared/state/demoStore';
+import { collection, onSnapshot, orderBy, query, where, doc, getDoc } from 'firebase/firestore';
+import { firestore } from '../../shared/firebase/client';
 
 const tickerItems = [
   '📢 [공지] 1월 25일 으뜸 토너먼트 4강전: 세종대 vs 경희대국제 / 연세대 vs 서울시립대 경기 예정',
@@ -116,8 +119,7 @@ function Badge({ label, dots }: { label: string; dots: { active: boolean; color:
       <span style={{ display: 'flex', gap: '6px' }}>
         {dots.map((dot, idx) => (
           <span
-            // eslint-disable-next-line react/no-array-index-key
-            key={idx}
+            key={`${label}-${idx}`}
             style={{
               width: '10px',
               height: '10px',
@@ -139,13 +141,89 @@ export default function LandingPage() {
   const heroRef = useRef<HTMLDivElement>(null);
   const highlightRefs = useRef<HTMLDivElement[]>([]);
   const snapshotRef = useRef<HTMLDivElement>(null);
-  const liveMatches = useMemo(
-    () =>
-      state.matches
-        .filter((match) => match.status === 'inProgress')
-        .sort((a, b) => safeMatchTime(a.startTime) - safeMatchTime(b.startTime)),
-    [state.matches],
-  );
+  const [liveMatchesRealtime, setLiveMatchesRealtime] = useState<MatchSchedule[]>([]);
+  const [liveScores, setLiveScores] = useState<Record<string, { home: number; away: number; inning?: number; half?: 'top' | 'bottom' }>>({});
+  const liveMatches = useMemo(() => {
+    const source = liveMatchesRealtime.length ? liveMatchesRealtime : state.matches;
+    return source
+      .filter((match) => match.status === 'inProgress')
+      .sort((a, b) => safeMatchTime(a.startTime) - safeMatchTime(b.startTime));
+  }, [liveMatchesRealtime, state.matches]);
+
+  // Ensure live widget always has full schedule data, independent of any selector elsewhere.
+  useEffect(() => {
+    setLiveMatchesRealtime([]);
+    setLiveScores({});
+    void actions.loadFullSchedule();
+  }, [actions]);
+
+  // Fetch latest score/inning for each live match so spectators see current data immediately.
+  useEffect(() => {
+    let cancelled = false;
+    const fetchScores = async () => {
+      const entries = await Promise.all(
+        liveMatches.map(async (match) => {
+          try {
+            const snap = await getDoc(doc(firestore, 'matchStates', match.id));
+            if (!snap.exists()) return null;
+            const data = snap.data() as { score?: { home?: number; away?: number }; inning?: number; half?: 'top' | 'bottom' };
+            return {
+              id: match.id,
+              home: data.score?.home ?? null,
+              away: data.score?.away ?? null,
+              inning: typeof data.inning === 'number' ? data.inning : undefined,
+              half: data.half === 'top' || data.half === 'bottom' ? data.half : undefined,
+            };
+          } catch {
+            return null;
+          }
+        }),
+      );
+      if (cancelled) return;
+      const map: Record<string, { home: number; away: number; inning?: number; half?: 'top' | 'bottom' }> = {};
+      entries.forEach((entry) => {
+        if (!entry) return;
+        map[entry.id] = {
+          home: entry.home ?? 0,
+          away: entry.away ?? 0,
+          inning: entry.inning,
+          half: entry.half,
+        };
+      });
+      setLiveScores(map);
+    };
+    if (liveMatches.length) void fetchScores();
+    else setLiveScores({});
+    return () => {
+      cancelled = true;
+    };
+  }, [liveMatches]);
+
+  // Dedicated in-progress subscription so LIVE 섹션은 셀렉터와 무관하게 항상 최신 상태를 반영.
+  useEffect(() => {
+    const liveQuery = query(collection(firestore, 'matches'), where('status', '==', 'inProgress'));
+    const unsub = onSnapshot(
+      liveQuery,
+      (snap) => {
+        const incoming = snap.docs.map((doc) => ({
+          id: doc.id,
+          ...(doc.data() as Partial<MatchSchedule>),
+        }));
+        setLiveMatchesRealtime(
+          incoming
+            .filter((m) => !m.deleted)
+            .sort((a, b) => safeMatchTime(a.startTime || '') - safeMatchTime(b.startTime || '')) as MatchSchedule[],
+        );
+      },
+      (error) => {
+        // fallback to store state on permission/index errors
+        // eslint-disable-next-line no-console
+        console.error('[landing live] snapshot error', error);
+        setLiveMatchesRealtime([]);
+      },
+    );
+    return () => unsub();
+  }, []);
 
   const handleOpenMatch = (matchId: string, path: '/scoreboard' | '/scoreboard-text') => {
     actions.selectMatch(matchId);
@@ -493,7 +571,7 @@ export default function LandingPage() {
                     </span>
                   </div>
                   <div style={{ fontWeight: 900, fontSize: '22px', color: '#f8fafc', letterSpacing: '0.04em' }}>
-                    {scoreOrDash(match.homeScore)} : {scoreOrDash(match.awayScore)}
+                    {scoreOrDash(liveScores[match.id]?.home ?? match.homeScore)} : {scoreOrDash(liveScores[match.id]?.away ?? match.awayScore)}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end', minWidth: 0 }}>
                     <span style={{ fontWeight: 800, color: '#e2e8f0', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'right' }}>
@@ -518,7 +596,11 @@ export default function LandingPage() {
                   const balls = isActive ? state.balls : null;
                   const strikes = isActive ? state.strikes : null;
                   const outs = isActive ? state.outs : null;
-                  const inningLabel = isActive ? `${state.inning}회${state.half === 'top' ? '초' : '말'}` : '이닝 정보 없음';
+                  const inningLabel = isActive
+                    ? `${state.inning}회${state.half === 'top' ? '초' : '말'}`
+                    : liveScores[match.id]?.inning
+                      ? `${liveScores[match.id]?.inning}회${liveScores[match.id]?.half === 'top' ? '초' : '말'}`
+                      : '이닝 정보 없음';
                   const batter = isActive ? currentBatterName(state) : '실시간 선택 시 표시';
                   const bDots = countDots(balls ?? 0, 3, '#22c55e');
                   const sDots = countDots(strikes ?? 0, 2, '#facc15');

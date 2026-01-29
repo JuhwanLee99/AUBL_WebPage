@@ -1,5 +1,5 @@
 import type { CSSProperties, FormEvent } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
 import type { MatchSchedule, MatchStatus, PostGameRecord } from '../../shared/state/demoStore';
@@ -188,6 +188,11 @@ export default function MatchSchedulePage() {
   const navigate = useNavigate();
   const { isAdmin } = useAdmin();
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    void actions.loadFullSchedule();
+  }, [actions]);
+
   const canEdit = isAdmin;
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -400,7 +405,7 @@ export default function MatchSchedulePage() {
     const displayStatus = deriveDisplayStatus(match);
     const badge = statusLabel(displayStatus);
     const isActive = state.activeMatchId === match.id;
-    const hasLiveOverlay = Boolean((state.liveVideoUrl || '').trim());
+    const hasLiveOverlay = Boolean((match.liveVideoUrl || '').trim());
     const textButtonLabel = match.status === 'completed' ? '경기 결과' : match.status === 'canceled' ? '취소됨' : '문자중계';
     const goTo = (path: string) => {
       actions.selectMatch(match.id);
@@ -1202,10 +1207,10 @@ export default function MatchSchedulePage() {
 }
 
 function CompletedResultCard({ match }: { match: MatchSchedule }) {
+  const [open, setOpen] = useState(false);
   const detail = match.postGame as PostGameRecord | undefined;
   if (!detail) return null;
   const teams = { home: match.homeTeamName, away: match.awayTeamName };
-  const [open, setOpen] = useState(false);
   return (
     <div
       style={{

@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
 import { TEAMS } from '../../shared/lib/mockData';
 import { useAdmin } from '../../shared/auth/useAdmin';
 import type { LeagueDivision } from '../../shared/types';
+import type { MatchSchedule } from '../../shared/state/demoStore';
 
 const divisions = [
   { key: 'EUTTEUM', label: '으뜸', color: '#4f46e5' },
@@ -22,6 +23,11 @@ export default function ScheduleGroupsPage() {
   const navigate = useNavigate();
   const { isAdmin } = useAdmin();
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
+  const matches = state.matches;
+
+  useEffect(() => {
+    void actions.loadFullSchedule();
+  }, [actions]);
 
   const showBlockedTooltip = (el: HTMLElement | null) => {
     if (!el) return;
@@ -33,7 +39,7 @@ export default function ScheduleGroupsPage() {
     });
   };
 
-  const deriveDivision = (match: (typeof state.matches)[number]): LeagueDivision | null => {
+  const deriveDivision = useCallback((match: MatchSchedule): LeagueDivision | null => {
     if (match.division === 'EUTTEUM' || match.division === 'BEOGEUM') return match.division;
     const homeDiv = TEAMS.find((t) => t.id === match.homeTeamId)?.division;
     const awayDiv = TEAMS.find((t) => t.id === match.awayTeamId)?.division;
@@ -41,11 +47,11 @@ export default function ScheduleGroupsPage() {
     if (homeDiv && !awayDiv) return homeDiv;
     if (awayDiv && !homeDiv) return awayDiv;
     return null;
-  };
+  }, []);
 
   const divisionMatches = useMemo(() => {
-    const alive = state.matches.filter((m) => !m.deleted);
-    const byDiv: Record<LeagueDivision, typeof state.matches> = { EUTTEUM: [], BEOGEUM: [] };
+    const alive = matches.filter((m) => !m.deleted);
+    const byDiv: Record<LeagueDivision, MatchSchedule[]> = { EUTTEUM: [], BEOGEUM: [] };
     alive.forEach((match) => {
       const division = deriveDivision(match);
       if (!division) return;
@@ -57,7 +63,7 @@ export default function ScheduleGroupsPage() {
         .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
     });
     return byDiv;
-  }, [state.matches]);
+  }, [matches, deriveDivision]);
 
   return (
     <div style={{ display: 'grid', gap: '18px' }}>

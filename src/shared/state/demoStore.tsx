@@ -1,15 +1,18 @@
-import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
-import { getIdTokenResult } from 'firebase/auth';
+import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState, useCallback } from 'react';
+import { getIdTokenResult, onIdTokenChanged } from 'firebase/auth';
 import {
   collection,
   doc,
   onSnapshot,
   orderBy,
+  where,
+  limit,
   query,
   setDoc,
   writeBatch,
   deleteDoc,
   getDoc,
+  getDocs,
   runTransaction,
 } from 'firebase/firestore';
 import { auth, firestore } from '../firebase/client';
@@ -21,6 +24,12 @@ const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
   .split(',')
   .map((email: string) => email.trim().toLowerCase())
   .filter(Boolean);
+const FEED_LIMIT = 50; // 관중 뷰 기본 구독 크기
+const SCORER_FEED_LIMIT = 200; // 기록원 재접속 시 충분한 버퍼
+const FEED_DOC_LIMIT = 120; // matchStates 문서에 함께 싣는 최대 feed/event 개수 (관중권한 fallback)
+const WRITE_DEBOUNCE_MS = 300; // 기록원 상태 동기화 디바운스 (투구 간 평균 간격을 고려해 write 수 최소화)
+const SCORER_LOCK_TTL_MS = 300_000; // 5분 후 락 만료 (이닝 교대 대비 여유)
+const SCORER_LOCK_HEARTBEAT_MS = 60_000; // 60초마다 하트비트 갱신
 
 // Firestore는 undefined를 허용하지 않으므로 중첩 객체/배열에서 undefined를 제거한다.
 function pruneUndefined<T>(value: T): T {
@@ -115,6 +124,7 @@ export interface MatchSchedule {
   startTime: string;
   venue: string;
   status: MatchStatus;
+  liveVideoUrl?: string;
   division?: LeagueDivision; // 으뜸/버금 구분 (관리자 지정)
   homeScore?: number | null;
   awayScore?: number | null;
@@ -200,13 +210,44 @@ interface DemoSnapshot {
   scorerEmail: string | null;
   scorerLockedAt: number | null;
   scorerRole: string | null;
+  scorerPaused: boolean;
+  followCurrent: boolean;
 }
 
 interface DemoState extends DemoSnapshot {
   history: DemoSnapshot[];
 }
 
-type SharedGameState = Omit<DemoSnapshot, 'matches'> & { updatedAt?: number };
+type SharedGameState = Pick<
+  DemoSnapshot,
+  | 'inning'
+  | 'half'
+  | 'balls'
+  | 'strikes'
+  | 'outs'
+  | 'pitchCount'
+  | 'bases'
+  | 'score'
+  | 'lastPlay'
+  | 'homeTeamId'
+  | 'awayTeamId'
+  | 'batterIndex'
+  | 'lineups'
+  | 'benches'
+  | 'teamNames'
+  | 'gameStarted'
+  | 'gameOver'
+  | 'endedAt'
+  | 'liveVideoUrl'
+  | 'activeMatchId'
+  | 'scorerUid'
+  | 'scorerName'
+  | 'scorerEmail'
+  | 'scorerLockedAt'
+  | 'scorerRole'
+  | 'scorerPaused'
+  | 'followCurrent'
+> & { updatedAt?: number };
 
 type Action =
   | { type: 'ball' }
@@ -256,7 +297,7 @@ type Action =
   | { type: 'moveMatchToTrash'; matchId: string; entry: MatchSchedule }
   | { type: 'restoreMatch'; matchId: string }
   | { type: 'purgeTrash'; matchId: string }
-  | { type: 'selectMatch'; matchId: string | null }
+  | { type: 'selectMatch'; matchId: string | null; followCurrent?: boolean }
   | { type: 'setMatches'; matches: MatchSchedule[] }
   | { type: 'syncActiveMatch'; matchId: string | null }
   | {
@@ -264,7 +305,11 @@ type Action =
       matchId: string;
       lineups: { home: PlayerSlot[]; away: PlayerSlot[] };
       benches: { home: PlayerSlot[]; away: PlayerSlot[] };
-    };
+    }
+  | { type: 'setFeed'; feed: PlayLog[] }
+  | { type: 'setEvents'; events: PlayEvent[] }
+  | { type: 'releaseLock' }
+  | { type: 'resumeLock'; payload: { scorerUid: string; scorerName: string | null; scorerEmail: string | null; scorerRole: string | null; lockedAt: number } };
 
 const demoLineups: { home: PlayerSlot[]; away: PlayerSlot[] } = {
   home: [
@@ -391,6 +436,8 @@ const initialState: DemoState = {
   scorerEmail: null,
   scorerLockedAt: null,
   scorerRole: null,
+  scorerPaused: false,
+  followCurrent: true,
 };
 
 function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }): PlayLog[] {
@@ -533,7 +580,7 @@ function normalizeTotals(totals: unknown): PostGameTotals | undefined {
   if (!totals || typeof totals !== 'object') return undefined;
   const t = totals as PostGameTotals;
   const pick = (side: 'home' | 'away') => {
-    const src = (t as any)[side] ?? {};
+    const src = (t as Record<'home' | 'away', Partial<PostGameTotals['home']>>)[side] ?? {};
     const runs = asNumber(src.runs);
     const hits = asNumber(src.hits);
     const errors = asNumber(src.errors);
@@ -574,8 +621,8 @@ function normalizePitcherLine(entry: unknown): PostGamePitcherLine | null {
   const out: Partial<PostGamePitcherLine> = { name: p.name.trim() };
   fields.forEach((key) => {
     if (key === 'name' || key === 'result') return;
-    const val = asNumber((p as any)[key]);
-    if (val !== undefined) (out as any)[key] = val;
+    const val = asNumber((p as Record<string, unknown>)[key]);
+    if (val !== undefined) (out as Record<string, unknown>)[key] = val;
   });
   if (typeof p.result === 'string' && p.result.trim()) out.result = p.result.trim();
   return out as PostGamePitcherLine;
@@ -609,8 +656,8 @@ function normalizeBatterLine(entry: unknown): PostGameBatterLine | null {
   }
   ['ab', 'h', 'rbi', 'r', 'sb', 'avg', 'seasonAvg'].forEach((k) => {
     const key = k as keyof PostGameBatterLine;
-    const val = asNumber((b as any)[key]);
-    if (val !== undefined) (out as any)[key] = val;
+    const val = asNumber((b as Record<string, unknown>)[key]);
+    if (val !== undefined) (out as Record<string, unknown>)[key] = val;
   });
   return out as PostGameBatterLine;
 }
@@ -674,6 +721,7 @@ function normalizeMatches(matches: unknown): MatchSchedule[] {
       startTime: typeof match.startTime === 'string' ? match.startTime : new Date().toISOString(),
       venue: typeof match.venue === 'string' ? match.venue : '미정',
       status: match.status === 'completed' || match.status === 'inProgress' ? match.status : 'scheduled',
+      liveVideoUrl: typeof match.liveVideoUrl === 'string' ? match.liveVideoUrl : undefined,
       division: deriveMatchDivision(match.division, match.homeTeamId, match.awayTeamId),
       homeScore: typeof match.homeScore === 'number' ? match.homeScore : null,
       awayScore: typeof match.awayScore === 'number' ? match.awayScore : null,
@@ -687,6 +735,37 @@ function normalizeMatches(matches: unknown): MatchSchedule[] {
       deletedBy: typeof match.deletedBy === 'string' ? match.deletedBy : undefined,
     };
   });
+}
+
+function projectSpectatorMatch(match: MatchSchedule): MatchSchedule {
+  return {
+    id: match.id,
+    homeTeamId: match.homeTeamId,
+    awayTeamId: match.awayTeamId,
+    homeTeamName: match.homeTeamName,
+    awayTeamName: match.awayTeamName,
+    startTime: match.startTime,
+    venue: match.venue,
+    status: match.status,
+    liveVideoUrl: match.liveVideoUrl,
+    division: match.division,
+    homeScore: match.homeScore,
+    awayScore: match.awayScore,
+    deleted: match.deleted,
+    deletedAt: match.deletedAt,
+    purgeAt: match.purgeAt,
+    deletedBy: match.deletedBy,
+  };
+}
+
+function mergeMatches(base: MatchSchedule[], incoming: MatchSchedule[]) {
+  const map = new Map<string, MatchSchedule>();
+  base.forEach((m) => map.set(m.id, m));
+  incoming.forEach((m) => {
+    const existing = map.get(m.id);
+    map.set(m.id, existing ? { ...existing, ...m } : m);
+  });
+  return Array.from(map.values());
 }
 
 function normalizeState(base: DemoState, incoming: DemoState): DemoState {
@@ -738,6 +817,8 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
     scorerEmail: typeof merged.scorerEmail === 'string' ? merged.scorerEmail : null,
     scorerLockedAt: typeof merged.scorerLockedAt === 'number' ? merged.scorerLockedAt : null,
     scorerRole: typeof merged.scorerRole === 'string' ? merged.scorerRole : null,
+    scorerPaused: typeof merged.scorerPaused === 'boolean' ? merged.scorerPaused : false,
+    followCurrent: typeof merged.followCurrent === 'boolean' ? merged.followCurrent : true,
   };
 }
 
@@ -824,7 +905,7 @@ export function buildGameRecord(state: DemoState): GameRecord {
 }
 
 function snapshotState(state: DemoState): DemoSnapshot {
-  const { history, ...snapshot } = state;
+  const { history: _history, ...snapshot } = state;
   return snapshot;
 }
 
@@ -849,6 +930,8 @@ function shouldTrackHistory(actionType: Action['type']) {
     'resetGame',
     'startGame',
     'setLiveVideoUrl',
+    'setFeed',
+    'setEvents',
   ].includes(actionType);
 }
 
@@ -876,7 +959,8 @@ function syncActiveMatchScore(nextState: DemoState): DemoState {
 function isLockedByOther(state: DemoState): boolean {
   const owner = state.scorerUid;
   const current = auth.currentUser?.uid ?? null;
-  if (!owner) return false;
+  const expired = !state.scorerLockedAt || Date.now() - state.scorerLockedAt > SCORER_LOCK_TTL_MS;
+  if (!owner || expired) return false;
   if (!current) return true;
   return owner !== current;
 }
@@ -906,6 +990,8 @@ function reducer(state: DemoState, action: Action): DemoState {
     'selectMatch',
     'setMatches',
     'syncActiveMatch',
+    'releaseLock',
+    'resumeLock',
   ];
   const lockBypass: Action['type'][] = ['selectMatch', 'setMatches', 'syncActiveMatch', 'hydrate'];
   if (isLockedByOther(state) && !lockBypass.includes(action.type)) {
@@ -919,6 +1005,40 @@ function reducer(state: DemoState, action: Action): DemoState {
   let nextState = state;
 
   switch (action.type) {
+    case 'setFeed':
+      return {
+        ...state,
+        feed: normalizeFeed(action.feed, { inning: state.inning, half: state.half }),
+      };
+    case 'setEvents':
+      return {
+        ...state,
+        events: normalizeEvents(action.events, { inning: state.inning, half: state.half }),
+      };
+    case 'releaseLock':
+      return {
+        ...state,
+        scorerUid: null,
+        scorerName: null,
+        scorerEmail: null,
+        scorerLockedAt: null,
+        scorerRole: null,
+        scorerPaused: true,
+        lastPlay: '*기록원* - 기록원이 자리를 비웠습니다',
+        feed: pushFeed(state.feed, createLogEntryForBaserunning(state, '*기록원* - 기록원이 자리를 비웠습니다', state.pitchCount)),
+      };
+    case 'resumeLock':
+      return {
+        ...state,
+        scorerUid: action.payload.scorerUid,
+        scorerName: action.payload.scorerName,
+        scorerEmail: action.payload.scorerEmail,
+        scorerLockedAt: action.payload.lockedAt,
+        scorerRole: action.payload.scorerRole,
+        scorerPaused: false,
+        lastPlay: '*기록원* - 기록원이 기록을 재개했습니다',
+        feed: pushFeed(state.feed, createLogEntryForBaserunning(state, '*기록원* - 기록을 재개합니다', state.pitchCount)),
+      };
     case 'ball':
       if (state.balls >= 3) {
         nextState = applyWalk(state, '볼넷', state.pitchCount + 1);
@@ -1142,7 +1262,10 @@ function reducer(state: DemoState, action: Action): DemoState {
       break;
     case 'setLiveVideoUrl': {
       const trimmed = action.url.trim();
-      nextState = { ...state, liveVideoUrl: trimmed };
+      const updatedMatches = state.activeMatchId
+        ? updateMatchSchedule(state.matches, state.activeMatchId, { liveVideoUrl: trimmed })
+        : state.matches;
+      nextState = { ...state, liveVideoUrl: trimmed, matches: updatedMatches };
       break;
     }
     case 'endGame':
@@ -1223,7 +1346,7 @@ function reducer(state: DemoState, action: Action): DemoState {
       break;
     case 'selectMatch': {
       if (!action.matchId) {
-        nextState = { ...state, activeMatchId: null };
+        nextState = { ...state, activeMatchId: null, followCurrent: typeof action.followCurrent === 'boolean' ? action.followCurrent : state.followCurrent };
         break;
       }
       const selected = state.matches.find((match) => match.id === action.matchId);
@@ -1232,6 +1355,8 @@ function reducer(state: DemoState, action: Action): DemoState {
         nextState = {
           ...state,
           activeMatchId: selected.id,
+          followCurrent: typeof action.followCurrent === 'boolean' ? action.followCurrent : state.followCurrent,
+          liveVideoUrl: selected.liveVideoUrl ?? '',
           teamNames: { home: selected.homeTeamName, away: selected.awayTeamName },
           homeTeamId: selected.homeTeamId ?? state.homeTeamId,
           awayTeamId: selected.awayTeamId ?? state.awayTeamId,
@@ -1244,7 +1369,11 @@ function reducer(state: DemoState, action: Action): DemoState {
           lastPlay: '경기 기록 불러오는 중...',
         };
       } else {
-        nextState = resetGameForMatch(state, selected);
+        nextState = {
+          ...resetGameForMatch(state, selected),
+          followCurrent: typeof action.followCurrent === 'boolean' ? action.followCurrent : state.followCurrent,
+          liveVideoUrl: selected.liveVideoUrl ?? '',
+        };
       }
       break;
     }
@@ -1255,6 +1384,7 @@ function reducer(state: DemoState, action: Action): DemoState {
       };
       break;
     case 'syncActiveMatch':
+      if (state.followCurrent === false) return state;
       if (action.matchId === state.activeMatchId) return state;
       nextState = { ...state, activeMatchId: action.matchId };
       break;
@@ -2235,22 +2365,24 @@ function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
     homeTeamId: match.homeTeamId ?? state.homeTeamId,
     awayTeamId: match.awayTeamId ?? state.awayTeamId,
     batterIndex: { home: 0, away: 0 },
-    lineups: cloneLineups(lineups),
-    benches: cloneBenches(benches),
-    teamNames: { home: match.homeTeamName, away: match.awayTeamName },
-    gameStarted: false,
-    gameOver: false,
+  lineups: cloneLineups(lineups),
+  benches: cloneBenches(benches),
+  teamNames: { home: match.homeTeamName, away: match.awayTeamName },
+  gameStarted: false,
+  gameOver: false,
     endedAt: null,
     liveVideoUrl: state.liveVideoUrl,
     history: [],
     removed: { home: [], away: [] },
     matches: state.matches,
     activeMatchId: match.id,
-    scorerUid: state.scorerUid,
-    scorerName: state.scorerName,
-    scorerEmail: state.scorerEmail,
-    scorerLockedAt: state.scorerLockedAt,
-    scorerRole: state.scorerRole,
+  scorerUid: state.scorerUid,
+  scorerName: state.scorerName,
+  scorerEmail: state.scorerEmail,
+  scorerLockedAt: state.scorerLockedAt,
+  scorerRole: state.scorerRole,
+  scorerPaused: false,
+  followCurrent: state.followCurrent,
   };
 }
 
@@ -2271,11 +2403,11 @@ function createNewGame(state: DemoState): DemoState {
     homeTeamId: state.homeTeamId,
     awayTeamId: state.awayTeamId,
     batterIndex: { home: 0, away: 0 },
-    lineups: cloneLineups(preparedLineups),
-    benches: {
-      home: state.benches.home.map((p) => ({ ...p })),
-      away: state.benches.away.map((p) => ({ ...p })),
-    },
+  lineups: cloneLineups(preparedLineups),
+  benches: {
+    home: state.benches.home.map((p) => ({ ...p })),
+    away: state.benches.away.map((p) => ({ ...p })),
+  },
     teamNames: { ...state.teamNames },
     gameStarted: false,
     gameOver: false,
@@ -2285,11 +2417,13 @@ function createNewGame(state: DemoState): DemoState {
     removed: { home: [], away: [] },
     matches: state.matches,
     activeMatchId: state.activeMatchId,
-    scorerUid: state.scorerUid,
-    scorerName: state.scorerName,
-    scorerEmail: state.scorerEmail,
-    scorerLockedAt: state.scorerLockedAt,
+  scorerUid: state.scorerUid,
+  scorerName: state.scorerName,
+  scorerEmail: state.scorerEmail,
+  scorerLockedAt: state.scorerLockedAt,
     scorerRole: state.scorerRole,
+    scorerPaused: false,
+    followCurrent: state.followCurrent,
   };
 }
 
@@ -2489,6 +2623,9 @@ interface DemoStoreValue {
       benches: { home: PlayerSlot[]; away: PlayerSlot[] },
     ) => void;
     selectMatch: (matchId: string | null) => void;
+    loadFullSchedule: () => Promise<void>;
+    releaseLock: () => void;
+    resumeLock: () => void;
   };
 }
 
@@ -2501,31 +2638,139 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   const skipMatchesWriteRef = useRef(false);
   const lastStateKeyRef = useRef('');
   const lastMatchesKeyRef = useRef('');
+  const lastFeedLengthRef = useRef(0);
+  const lastEventsLengthRef = useRef(0);
+  const writeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const notifiedMatchStartRef = useRef<Set<string>>(new Set());
   const matchesReadyRef = useRef(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const STORAGE_KEY = 'aubl-demo-state';
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
-  // Subscribe to schedule collection for spectators (read-only) and admins.
+  // Snapshot to localStorage whenever meaningful changes occur.
   useEffect(() => {
-    const q = query(collection(firestore, 'matches'), orderBy('startTime', 'asc'));
+    if (typeof window === 'undefined') return;
+    if (!state.activeMatchId) return;
+    // Avoid excessive writes: only persist when gameStarted or feed/events have entries.
+    if (!state.gameStarted && state.feed.length === 0 && state.events.length === 0) return;
+    const snapshot = snapshotState(state);
+    // Limit persisted feed/events to reduce payload.
+    const trimmed: DemoSnapshot = {
+      ...snapshot,
+      feed: snapshot.feed.slice(0, 150),
+      events: snapshot.events.slice(0, 150),
+    };
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+    } catch {
+      // ignore storage quota errors
+    }
+  }, [state]);
+
+  const pushMatchUpdate = useCallback((matchId: string, overrides: Partial<MatchSchedule> = {}) => {
+    const current = stateRef.current.matches.find((m) => m.id === matchId);
+    if (!current) return Promise.resolve();
+    matchesReadyRef.current = true;
+    const payload = pruneUndefined({ ...current, ...overrides });
+    return setDoc(doc(firestore, 'matches', matchId), payload, { merge: true });
+  }, []);
+
+  // Local persistence fallback to keep score state across navigation/refresh.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Partial<DemoSnapshot>;
+      if (!parsed.activeMatchId) return;
+      skipFirestoreWriteRef.current = true;
+      dispatch({
+        type: 'hydrate',
+        state: normalizeState(initialState, {
+          ...stateRef.current,
+          ...parsed,
+          matches: parsed.matches ?? stateRef.current.matches,
+        } as DemoState),
+      });
+    } catch {
+      // ignore corrupt cache
+    }
+  }, []);
+
+  // Determine admin (for schedule write privileges & full subscription)
+  useEffect(() => {
+    let cancelled = false;
+    const user = auth.currentUser;
+    if (!user) {
+      setIsAdmin(false);
+      return;
+    }
+    const run = async () => {
+      try {
+        const token = await getIdTokenResult(user, true);
+        if (cancelled) return;
+        const admin = Boolean((token.claims as Record<string, unknown>).admin) || ADMIN_EMAILS.includes(user.email?.toLowerCase() ?? '');
+        setIsAdmin(admin);
+      } catch {
+        if (cancelled) return;
+        setIsAdmin(ADMIN_EMAILS.includes(user.email?.toLowerCase() ?? ''));
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 새 경기로 전환될 때 이전 feed/events 잔상을 비운다.
+  useEffect(() => {
+    dispatch({ type: 'setFeed', feed: [] });
+    dispatch({ type: 'setEvents', events: [] });
+    lastFeedLengthRef.current = 0;
+    lastEventsLengthRef.current = 0;
+  }, [state.activeMatchId]);
+
+  // Subscribe to schedule for everyone; non-admin은 민감 필드만 제거한 projected 데이터를 사용.
+  useEffect(() => {
+    const matchesCol = collection(firestore, 'matches');
+    const liveQuery = query(matchesCol, orderBy('startTime', 'asc'));
+
     const unsub = onSnapshot(
-      q,
+      liveQuery,
       (snap) => {
         const incoming = snap.docs.map((docSnap) => ({
           id: docSnap.id,
           ...(docSnap.data() as Partial<MatchSchedule>),
         }));
-        const normalized = normalizeMatches(incoming);
+        const normalized = normalizeMatches(incoming).filter((m) => !m.deleted);
+        const projected = isAdmin ? normalized : normalized.map(projectSpectatorMatch);
+        const merged = isAdmin
+          ? projected
+          : mergeMatches(
+              stateRef.current.matches.filter((m) => m.status !== 'inProgress'),
+              projected,
+            );
+
         skipMatchesWriteRef.current = true;
         matchesReadyRef.current = true;
-        dispatch({ type: 'setMatches', matches: normalized });
+        dispatch({ type: 'setMatches', matches: merged });
+
+        // If spectators can't read app/current (권한 제한), auto-follow 첫 진행중 경기.
+        if (!stateRef.current.activeMatchId) {
+          const live = merged.find((m) => m.status === 'inProgress');
+          if (live) {
+            skipFirestoreWriteRef.current = true;
+            dispatch({ type: 'syncActiveMatch', matchId: live.id });
+          }
+        }
 
         // Notify locally when a 경기 status becomes inProgress (start).
         if (typeof window !== 'undefined' && typeof Notification !== 'undefined') {
-          const started = normalized.filter((m) => m.status === 'inProgress');
+          const started = projected.filter((m) => m.status === 'inProgress');
           started.forEach((match) => {
             if (notifiedMatchStartRef.current.has(match.id)) return;
             const permission = Notification.permission;
@@ -2555,7 +2800,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       },
     );
     return () => unsub();
-  }, []);
+  }, [isAdmin]);
 
   // Listen to current active match pointer so spectators know which match to watch.
   useEffect(() => {
@@ -2625,6 +2870,89 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     return () => unsub();
   }, [state.activeMatchId]);
 
+  // Subscribe to feed/events subcollections (최근 N개만).
+  useEffect(() => {
+    const matchId = state.activeMatchId;
+    if (!matchId) return;
+
+    const isScorer = stateRef.current.scorerUid && stateRef.current.scorerUid === (auth.currentUser?.uid ?? null);
+    const maxEntries = isScorer ? SCORER_FEED_LIMIT : FEED_LIMIT;
+
+    const feedQuery = query(
+      collection(firestore, 'matchStates', matchId, 'feed'),
+      orderBy('createdAt', 'desc'),
+      limit(maxEntries),
+    );
+    const eventsQuery = query(
+      collection(firestore, 'matchStates', matchId, 'events'),
+      orderBy('createdAt', 'desc'),
+      limit(maxEntries),
+    );
+
+    // One-time fetch to prefill feed/events for spectators so 기존 기록이 즉시 보임.
+    const prime = async () => {
+      try {
+        const [feedSnap, eventsSnap] = await Promise.all([getDocs(feedQuery), getDocs(eventsQuery)]);
+        const fallback = { inning: stateRef.current.inning, half: stateRef.current.half as Half };
+        const feedEntries = normalizeFeed(
+          feedSnap.docs.map((d) => d.data()),
+          fallback,
+        );
+        const eventEntries = normalizeEvents(
+          eventsSnap.docs.map((d) => d.data()),
+          fallback,
+        );
+        skipFirestoreWriteRef.current = true;
+        lastFeedLengthRef.current = feedEntries.length;
+        lastEventsLengthRef.current = eventEntries.length;
+        dispatch({ type: 'setFeed', feed: feedEntries });
+        dispatch({ type: 'setEvents', events: eventEntries });
+      } catch {
+        // ignore prefetch errors; realtime listener below will retry on updates
+      }
+    };
+    void prime();
+
+    const unsubFeed = onSnapshot(
+      feedQuery,
+      (snap) => {
+        const fallback = { inning: stateRef.current.inning, half: stateRef.current.half as Half };
+        const feedEntries = normalizeFeed(
+          snap.docs.map((d) => d.data()),
+          fallback,
+        );
+        skipFirestoreWriteRef.current = true;
+        lastFeedLengthRef.current = feedEntries.length;
+        dispatch({ type: 'setFeed', feed: feedEntries });
+      },
+      () => {
+        // ignore feed snapshot errors
+      },
+    );
+
+    const unsubEvents = onSnapshot(
+      eventsQuery,
+      (snap) => {
+        const fallback = { inning: stateRef.current.inning, half: stateRef.current.half as Half };
+        const eventsEntries = normalizeEvents(
+          snap.docs.map((d) => d.data()),
+          fallback,
+        );
+        skipFirestoreWriteRef.current = true;
+        lastEventsLengthRef.current = eventsEntries.length;
+        dispatch({ type: 'setEvents', events: eventsEntries });
+      },
+      () => {
+        // ignore events snapshot errors
+      },
+    );
+
+    return () => {
+      unsubFeed();
+      unsubEvents();
+    };
+  }, [state.activeMatchId, state.scorerUid]);
+
   // Attempt to acquire scorer lock for the active match.
   useEffect(() => {
     const matchId = state.activeMatchId;
@@ -2640,7 +2968,9 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
           ? (snap.data() as SharedGameState & { scorerUid?: string | null; scorerName?: string | null; scorerEmail?: string | null; scorerLockedAt?: number | null; scorerRole?: string | null })
           : null;
         const owner = data?.scorerUid;
-        if (owner && owner !== user.uid) {
+        const lockedAt = data?.scorerLockedAt ?? 0;
+        const expired = !lockedAt || now - lockedAt > SCORER_LOCK_TTL_MS;
+        if (owner && owner !== user.uid && !expired) {
           return;
         }
         tx.set(
@@ -2649,7 +2979,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
             scorerUid: user.uid,
             scorerName: user.displayName ?? null,
             scorerEmail: user.email ?? null,
-            scorerLockedAt: data?.scorerLockedAt ?? now,
+            scorerLockedAt: now,
             scorerRole: data?.scorerRole ?? roleLabel,
           },
           { merge: true },
@@ -2673,33 +3003,126 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     void run().catch(() => {
       // ignore lock acquisition errors
     });
-  }, [state.activeMatchId, auth.currentUser?.uid]);
+  }, [state.activeMatchId]);
+
+  // Heartbeat to keep scorer lock fresh; expires automatically when stopped.
+  useEffect(() => {
+    const matchId = state.activeMatchId;
+    const user = auth.currentUser;
+    const isOwner = matchId && user && state.scorerUid === user.uid;
+    const expired = !state.scorerLockedAt || Date.now() - state.scorerLockedAt > SCORER_LOCK_TTL_MS;
+    if (!isOwner || !matchId) return;
+
+    // If somehow expired but still owner, refresh immediately.
+    if (expired) {
+      void setDoc(
+        doc(firestore, 'matchStates', matchId),
+        { scorerUid: user!.uid, scorerLockedAt: Date.now() },
+        { merge: true },
+      ).catch(() => {});
+    }
+
+    heartbeatTimerRef.current = setInterval(() => {
+      const now = Date.now();
+      void setDoc(
+        doc(firestore, 'matchStates', matchId),
+        { scorerUid: user!.uid, scorerLockedAt: now },
+        { merge: true },
+      ).catch(() => {});
+    }, SCORER_LOCK_HEARTBEAT_MS);
+
+    return () => {
+      if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
+      heartbeatTimerRef.current = null;
+    };
+  }, [state.activeMatchId, state.scorerUid, state.scorerLockedAt]);
 
   // Push game state to Firestore when admin updates locally.
   useEffect(() => {
     const matchId = state.activeMatchId;
-    if (!matchId) return;
     const currentUid = auth.currentUser?.uid ?? null;
-    if (!currentUid) return;
+    if (!matchId || !currentUid) return;
     if (state.scorerUid && state.scorerUid !== currentUid) return;
     if (skipFirestoreWriteRef.current) {
       skipFirestoreWriteRef.current = false;
+      lastStateKeyRef.current = '';
+      lastFeedLengthRef.current = state.feed.length;
+      lastEventsLengthRef.current = state.events.length;
       return;
     }
-    const snapshot = snapshotState(state);
-    const { matches, ...rest } = snapshot;
-    const key = `${matchId}:${rest.inning}:${rest.half}:${rest.score.home}:${rest.score.away}:${rest.pitchCount}:${rest.feed.length}:${rest.events.length}:${rest.gameStarted}:${rest.gameOver}`;
-    if (key === lastStateKeyRef.current) return;
-    lastStateKeyRef.current = key;
-    void setDoc(
-      doc(firestore, 'matchStates', matchId),
-      { ...rest, updatedAt: Date.now() },
-      { merge: true },
-    ).catch(() => {});
+    // 디바운스: 잦은 pitch 입력 시 write 폭주 방지
+    if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
+
+    writeTimerRef.current = setTimeout(() => {
+      const snapshot = snapshotState(stateRef.current);
+      const trimmedFeed = snapshot.feed.slice(0, FEED_DOC_LIMIT);
+      const trimmedEvents = snapshot.events.slice(0, FEED_DOC_LIMIT);
+      const { matches: _matches, ...core } = snapshot;
+      const key = JSON.stringify({ matchId, core, trimmedFeed, trimmedEvents });
+
+      if (key !== lastStateKeyRef.current) {
+        lastStateKeyRef.current = key;
+        void setDoc(
+          doc(firestore, 'matchStates', matchId),
+          { ...core, feed: trimmedFeed, events: trimmedEvents, updatedAt: Date.now() },
+          { merge: true },
+        ).catch(() => {});
+      }
+
+      const newFeedCount = stateRef.current.feed.length - lastFeedLengthRef.current;
+      const newEventCount = stateRef.current.events.length - lastEventsLengthRef.current;
+
+      if (newFeedCount <= 0 && newEventCount <= 0) {
+        lastFeedLengthRef.current = stateRef.current.feed.length;
+        lastEventsLengthRef.current = stateRef.current.events.length;
+        return;
+      }
+
+      const batch = writeBatch(firestore);
+      const now = Date.now();
+
+      if (newFeedCount > 0) {
+        const newEntries = stateRef.current.feed.slice(0, newFeedCount);
+        newEntries.forEach((entry, idx) => {
+          batch.set(
+            doc(collection(firestore, 'matchStates', matchId, 'feed')),
+            pruneUndefined({ ...entry, createdAt: now + idx }),
+          );
+        });
+      }
+
+      if (newEventCount > 0) {
+        const newEntries = stateRef.current.events.slice(0, newEventCount);
+        newEntries.forEach((entry, idx) => {
+          batch.set(
+            doc(collection(firestore, 'matchStates', matchId, 'events')),
+            pruneUndefined({ ...entry, createdAt: now + idx }),
+          );
+        });
+      }
+
+      void batch
+        .commit()
+        .then(() => {
+          lastFeedLengthRef.current = stateRef.current.feed.length;
+          lastEventsLengthRef.current = stateRef.current.events.length;
+        })
+        .catch(() => {
+          // ignore sync errors; will retry on next state change
+        });
+    }, WRITE_DEBOUNCE_MS);
+
+    return () => {
+      if (writeTimerRef.current) {
+        clearTimeout(writeTimerRef.current);
+        writeTimerRef.current = null;
+      }
+    };
   }, [state]);
 
   // Sync schedule changes to Firestore (admin routes only; spectators skip via flag/auth).
   useEffect(() => {
+    if (!isAdmin) return;
     if (!matchesReadyRef.current) return;
     if (skipMatchesWriteRef.current) {
       skipMatchesWriteRef.current = false;
@@ -2718,7 +3141,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       await batch.commit();
     };
     void syncMatches().catch(() => {});
-  }, [state.matches]);
+  }, [state.matches, isAdmin]);
 
   // Auto purge expired trashed matches (deleted flag) from matches collection.
   useEffect(() => {
@@ -2774,7 +3197,18 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       runnerPickoff: (base: 0 | 1 | 2) => dispatch({ type: 'runnerPickoff', base }),
       runnerOut: (base: 0 | 1 | 2) => dispatch({ type: 'runnerOut', base }),
       addManualLog: (message: string) => dispatch({ type: 'manualLog', message }),
-      setLiveVideoUrl: (url: string) => dispatch({ type: 'setLiveVideoUrl', url }),
+      setLiveVideoUrl: (url: string) => {
+        dispatch({ type: 'setLiveVideoUrl', url });
+        const matchId = stateRef.current.activeMatchId;
+        if (!matchId) return;
+        const trimmed = url.trim();
+        // persist to matches collection so 일정/오버레이 버튼이 올바르게 판단
+        void setDoc(
+          doc(firestore, 'matches', matchId),
+          { liveVideoUrl: trimmed },
+          { merge: true },
+        ).catch(() => {});
+      },
       addOutWithMessage: (note: string, battedBall?: BattedBallDetails | null) =>
         dispatch({ type: 'outWithMessage', note, battedBall }),
       doublePlay: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'doublePlay', battedBall }),
@@ -2787,8 +3221,25 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       substitute: (side: Side, benchIndex: number, lineupIndex: number) =>
         dispatch({ type: 'substitute', side, benchIndex, lineupIndex }),
       setPlay: (message: string) => dispatch({ type: 'setPlay', message }),
-      startGame: () => dispatch({ type: 'startGame' }),
-      endGame: (endedAt: string) => dispatch({ type: 'endGame', endedAt }),
+      startGame: () => {
+        dispatch({ type: 'startGame' });
+        const matchId = stateRef.current.activeMatchId;
+        if (matchId) {
+          void pushMatchUpdate(matchId, { status: 'inProgress' }).catch(() => {});
+        }
+      },
+      endGame: (endedAt: string) => {
+        dispatch({ type: 'endGame', endedAt });
+        const matchId = stateRef.current.activeMatchId;
+        if (matchId) {
+          const snapshot = stateRef.current;
+          void pushMatchUpdate(matchId, {
+            status: 'completed',
+            homeScore: snapshot.score.home,
+            awayScore: snapshot.score.away,
+          }).catch(() => {});
+        }
+      },
       resetGame: () => dispatch({ type: 'resetGame' }),
       undo: () => dispatch({ type: 'undo' }),
       addMatch: (match: MatchSchedule) => {
@@ -2862,13 +3313,162 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'saveMatchLineups', matchId, lineups, benches });
       },
       selectMatch: (matchId: string | null) => {
+        const followCurrent = isAdmin;
         skipFirestoreWriteRef.current = true;
-        dispatch({ type: 'selectMatch', matchId });
-        updateCurrentMatchPointer(matchId);
+        dispatch({ type: 'selectMatch', matchId, followCurrent });
+        if (isAdmin) updateCurrentMatchPointer(matchId);
+        if (!matchId) return;
+        const matchIdLocal = matchId;
+        void (async () => {
+          try {
+            // Prime matchStates document
+            const stateDoc = doc(firestore, 'matchStates', matchIdLocal);
+            const snap = await getDoc(stateDoc);
+            if (snap.exists()) {
+              const data = snap.data() as SharedGameState & { feed?: PlayLog[]; events?: PlayEvent[] };
+              skipFirestoreWriteRef.current = true;
+              dispatch({
+                type: 'hydrate',
+                state: normalizeState(initialState, {
+                  ...stateRef.current,
+                  ...data,
+                  matches: stateRef.current.matches,
+                }),
+              });
+            }
+            // Prime feed/events subcollections
+            const isScorer = stateRef.current.scorerUid && stateRef.current.scorerUid === (auth.currentUser?.uid ?? null);
+            const maxEntries = isScorer ? SCORER_FEED_LIMIT : FEED_LIMIT;
+            const fallback = { inning: stateRef.current.inning, half: stateRef.current.half as Half };
+            const [feedSnap, eventsSnap] = await Promise.all([
+              getDocs(
+                query(
+                  collection(firestore, 'matchStates', matchIdLocal, 'feed'),
+                  orderBy('createdAt', 'desc'),
+                  limit(maxEntries),
+                ),
+              ),
+              getDocs(
+                query(
+                  collection(firestore, 'matchStates', matchIdLocal, 'events'),
+                  orderBy('createdAt', 'desc'),
+                  limit(maxEntries),
+                ),
+              ),
+            ]);
+            const feedEntries = normalizeFeed(
+              feedSnap.docs.map((d) => d.data()),
+              fallback,
+            );
+            const eventEntries = normalizeEvents(
+              eventsSnap.docs.map((d) => d.data()),
+              fallback,
+            );
+            skipFirestoreWriteRef.current = true;
+            lastFeedLengthRef.current = feedEntries.length;
+            lastEventsLengthRef.current = eventEntries.length;
+            dispatch({ type: 'setFeed', feed: feedEntries });
+            dispatch({ type: 'setEvents', events: eventEntries });
+          } catch {
+            // ignore; realtime listener will still try
+          }
+        })();
+      },
+      loadFullSchedule: async () => {
+        try {
+          const snap = await getDocs(
+            query(
+              collection(firestore, 'matches'),
+              where('status', 'in', ['scheduled', 'inProgress', 'completed', 'canceled']),
+            ),
+          );
+          const incoming = snap.docs.map((docSnap) => ({
+            id: docSnap.id,
+            ...(docSnap.data() as Partial<MatchSchedule>),
+          }));
+          const normalized = normalizeMatches(incoming).filter((m) => !m.deleted);
+          const projected = isAdmin ? normalized : normalized.map(projectSpectatorMatch);
+          skipMatchesWriteRef.current = true;
+          matchesReadyRef.current = true;
+          dispatch({
+            type: 'setMatches',
+            matches: mergeMatches(stateRef.current.matches, projected),
+          });
+        } catch {
+          // ignore fetch errors for spectators; manual retry via action
+        }
+      },
+      releaseLock: () => {
+        dispatch({ type: 'releaseLock' });
+        const matchId = stateRef.current.activeMatchId;
+        const user = auth.currentUser;
+        if (!matchId || !user) return;
+        void setDoc(
+          doc(firestore, 'matchStates', matchId),
+          {
+            scorerUid: null,
+            scorerName: null,
+            scorerEmail: null,
+            scorerLockedAt: null,
+            scorerRole: null,
+            scorerPaused: true,
+            updatedAt: Date.now(),
+          },
+          { merge: true },
+        ).catch(() => {});
+      },
+      resumeLock: () => {
+        const matchId = stateRef.current.activeMatchId;
+        const user = auth.currentUser;
+        if (!matchId || !user) return;
+        const lockedAt = Date.now();
+        const payload = {
+          scorerUid: user.uid,
+          scorerName: user.displayName ?? null,
+          scorerEmail: user.email ?? null,
+          scorerLockedAt: lockedAt,
+          scorerRole: stateRef.current.scorerRole ?? null,
+          scorerPaused: false,
+        };
+        void runTransaction(firestore, async (tx) => {
+          const ref = doc(firestore, 'matchStates', matchId);
+          const snap = await tx.get(ref);
+          const data = snap.exists() ? (snap.data() as SharedGameState) : null;
+          const owner = data?.scorerUid ?? null;
+          const locked = data?.scorerLockedAt ?? 0;
+          const expired = !locked || Date.now() - locked > SCORER_LOCK_TTL_MS;
+          if (owner && owner !== user.uid && !expired) {
+            return;
+          }
+          tx.set(ref, { ...payload, updatedAt: Date.now() }, { merge: true });
+        }).catch(() => {});
+        dispatch({
+          type: 'resumeLock',
+          payload: {
+            scorerUid: user.uid,
+            scorerName: user.displayName ?? null,
+            scorerEmail: user.email ?? null,
+            scorerRole: stateRef.current.scorerRole ?? null,
+            lockedAt,
+          },
+        });
       },
     }),
-    [],
+    [isAdmin],
   );
+
+  // Preload 전체 일정(예정/종료) once per actions ref to avoid 빈 목록 when 첫 진입.
+  useEffect(() => {
+    void actions.loadFullSchedule();
+  }, [actions]);
+
+  // Re-fetch schedule after auth state changes so 새로고침 직후에도 전체 일정이 복원된다.
+  useEffect(() => {
+    const unsub = onIdTokenChanged(auth, () => {
+      void actions.loadFullSchedule();
+    });
+    return () => unsub();
+  }, [actions]);
 
   const value = useMemo(() => ({ state, actions }), [state, actions]);
 
