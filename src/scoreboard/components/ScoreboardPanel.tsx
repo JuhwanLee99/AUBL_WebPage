@@ -31,6 +31,32 @@ export default function ScoreboardPanel({
   const strike = state.strikes;
   const out = state.outs;
   const bases = state.bases;
+  const boxScore = useMemo(() => {
+    const totals = activeMatch?.postGame?.totals;
+    const lineScore = activeMatch?.postGame?.lineScore;
+    const baseInnings = Array.from({ length: 9 }, (_v, idx) => idx + 1);
+    const hasExtras = (lineScore?.innings?.length ?? 0) > 9;
+    const innings = hasExtras ? [...baseInnings, '10+'] : baseInnings;
+    const padInnings = (arr: number[] | undefined) => {
+      const core = innings.map((_, idx) => {
+        if (hasExtras && idx === innings.length - 1) {
+          const extras = (arr ?? []).slice(9).reduce((acc, cur) => acc + (cur ?? 0), 0);
+          return (arr ?? []).length > 9 ? extras : '—';
+        }
+        return arr && arr[idx] != null ? arr[idx] : '—';
+      });
+      return core;
+    };
+    const mk = (side: 'home' | 'away') => ({
+      name: state.teamNames[side] || (side === 'home' ? homeTeam?.name : awayTeam?.name) || side.toUpperCase(),
+      runs: state.score[side],
+      hits: totals?.[side]?.hits ?? '—',
+      errors: totals?.[side]?.errors ?? '—',
+      innings: padInnings(lineScore?.[side]),
+      color: side === 'home' ? '#f97316' : '#60a5fa',
+    });
+    return { innings, rows: [mk('home'), mk('away')] };
+  }, [activeMatch?.postGame?.lineScore, activeMatch?.postGame?.totals, awayTeam?.name, homeTeam?.name, state.score, state.teamNames]);
   const summaryTime = useMemo(() => {
     if (!activeMatch?.startTime) return '일시 미정';
     const date = new Date(activeMatch.startTime);
@@ -99,18 +125,36 @@ export default function ScoreboardPanel({
           background: '#0b1220',
           borderRadius: '14px',
           border: '1px solid #1f2937',
-          padding: 'clamp(14px, 2.2vw, 20px)',
+          padding: 'clamp(8px, 1.4vw, 14px)',
           display: 'grid',
-          gap: 'clamp(12px, 2vw, 18px)',
+          gap: 'clamp(10px, 1.6vw, 14px)',
         }}
       >
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'clamp(12px, 2vw, 18px)', alignItems: 'center' }}>
-          <div style={{ display: 'grid', gap: 'clamp(8px, 1.4vw, 12px)' }}>
-            <CountBlock label="B" lights={countLights(ball, 3, '#22c55e')} />
-            <CountBlock label="S" lights={countLights(strike, 2, '#facc15')} />
-            <CountBlock label="O" lights={countLights(out, 3, '#ef4444')} />
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 0.9fr) minmax(360px, 1.35fr)',
+            gap: 'clamp(10px, 1.6vw, 14px)',
+            alignItems: 'stretch',
+          }}
+        >
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'auto auto',
+              gap: '8px',
+              alignItems: 'center',
+            }}
+          >
+            <div style={{ display: 'grid', gap: 'clamp(6px, 1.2vw, 10px)' }}>
+              <CountBlock label="B" lights={countLights(ball, 3, '#22c55e')} />
+              <CountBlock label="S" lights={countLights(strike, 2, '#facc15')} />
+              <CountBlock label="O" lights={countLights(out, 3, '#ef4444')} />
+            </div>
+            <BasePaths bases={bases} />
           </div>
-          <BasePaths bases={bases} />
+
+          <BoxScoreTable data={boxScore} />
         </div>
       </div>
 
@@ -206,19 +250,19 @@ function CountBlock({ label, lights }: { label: string; lights: { active: boolea
         display: 'grid',
         gridTemplateColumns: '40px 1fr',
         alignItems: 'center',
-        gap: '10px',
+        gap: '8px',
         color: '#f8fafc',
         fontWeight: 900,
       }}
     >
-      <span style={{ fontSize: 'clamp(18px, 2.6vw, 24px)' }}>{label}</span>
-      <div style={{ display: 'flex', gap: 'clamp(8px, 1.2vw, 14px)' }}>
+      <span style={{ fontSize: 'clamp(16px, 2.2vw, 22px)' }}>{label}</span>
+      <div style={{ display: 'flex', gap: 'clamp(6px, 1.2vw, 12px)' }}>
         {lights.map((light, idx) => (
           <span
             key={idx}
             style={{
-              width: 'clamp(16px, 2.2vw, 28px)',
-              height: 'clamp(16px, 2.2vw, 28px)',
+              width: 'clamp(14px, 2vw, 24px)',
+              height: 'clamp(14px, 2vw, 24px)',
               borderRadius: '50%',
               background: light.active ? light.color : '#1f2937',
               boxShadow: light.active ? `0 0 12px ${light.color}` : 'inset 0 0 0 1px #111827',
@@ -232,27 +276,130 @@ function CountBlock({ label, lights }: { label: string; lights: { active: boolea
 
 function BasePaths({ bases }: { bases: (string | null)[] }) {
   const [first, second, third] = bases.map(Boolean);
-  const baseSize = 'clamp(20px, 3vw, 34px)';
+  const baseSize = 'clamp(18px, 2.6vw, 30px)';
   return (
-    <div style={{ display: 'grid', gap: '8px', justifyItems: 'center' }}>
-      <span style={{ fontWeight: 900, color: '#cbd5e1' }}>BASES</span>
+    <div style={{ display: 'grid', gap: '0px', justifyItems: 'center', transform: 'translate(-18px, 10px)' }}>
+      <span
+        style={{
+          fontWeight: 900,
+          color: '#cbd5e1',
+          transform: 'translate(-12px, 10px)',
+        }}
+      >
+        BASES
+      </span>
       <div
         style={{
           position: 'relative',
-          width: 'clamp(120px, 18vw, 220px)',
-          height: 'clamp(120px, 18vw, 220px)',
+          width: 'clamp(90px, 13vw, 150px)',
+          height: 'clamp(90px, 13vw, 150px)',
           margin: '0 auto',
+          transform: 'translateY(14px)',
         }}
       >
-        <DiamondBase active={second} top="10%" left="50%" size={baseSize} />
-        <DiamondBase active={first} top="50%" left="90%" size={baseSize} />
-        <DiamondBase active={third} top="50%" left="10%" size={baseSize} />
-        <DiamondBase active={false} top="90%" left="50%" size={baseSize} />
+        <DiamondBase active={second} top="24%" left="44%" size={baseSize} />
+        <DiamondBase active={first} top="50%" left="68%" size={baseSize} />
+        <DiamondBase active={third} top="50%" left="18%" size={baseSize} />
       </div>
     </div>
   );
 }
 
+function BoxScoreTable({
+  data,
+}: {
+  data: {
+    innings: number[];
+    rows: {
+      name: string;
+      runs: number;
+      hits: number | string;
+      errors: number | string;
+      innings: (number | string)[];
+      color: string;
+    }[];
+  };
+}) {
+  const headers = ['팀', ...data.innings.map(String), 'R', 'H', 'E'];
+  const rows = data.rows;
+  return (
+    <div
+      style={{
+        border: '1px solid rgba(148,163,184,0.2)',
+        borderRadius: '12px',
+        overflow: 'hidden',
+        background: 'rgba(255,255,255,0.02)',
+        display: 'grid',
+        gridTemplateRows: 'auto 1fr',
+        height: '100%',
+        minHeight: '0',
+      }}
+    >
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${headers.length}, minmax(0, 1fr))`,
+          background: 'rgba(255,255,255,0.03)',
+          borderBottom: '1px solid rgba(148,163,184,0.2)',
+        }}
+      >
+        {headers.map((h) => (
+          <div
+            key={h}
+            style={{
+              padding: '8px 10px',
+              textAlign: 'center',
+              fontWeight: 800,
+              fontSize: '12px',
+              color: '#e2e8f0',
+              letterSpacing: '0.04em',
+            }}
+          >
+            {h}
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'grid', gridAutoRows: '1fr' }}>
+        {rows.map((row, idx) => (
+          <div
+            key={row.label}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${headers.length}, minmax(0, 1fr))`,
+              borderTop: idx === 0 ? 'none' : '1px solid rgba(148,163,184,0.2)',
+            }}
+          >
+            <div
+              style={{
+                padding: '10px',
+                fontWeight: 900,
+                color: row.color,
+                fontSize: '12px',
+                textAlign: 'center',
+              }}
+            >
+              {row.name}
+            </div>
+            {[...row.innings, row.runs, row.hits, row.errors].map((val, vIdx) => (
+              <div
+                key={`${row.name}-${vIdx}`}
+                style={{
+                  padding: '10px',
+                  textAlign: 'center',
+                  color: '#cbd5e1',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                }}
+              >
+                {val}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 function DiamondBase({
   active,
   top,
