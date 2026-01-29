@@ -6,12 +6,7 @@ import { useDemoStore } from '../../shared/state/demoStore';
 import type { MatchSchedule } from '../../shared/state/demoStore';
 import { collection, onSnapshot, query, where, doc, getDoc } from 'firebase/firestore';
 import { firestore } from '../../shared/firebase/client';
-
-const tickerItems = [
-  '📢 [공지] 1월 25일 으뜸 토너먼트 4강전: 세종대 vs 경희대국제 / 연세대 vs 서울시립대 경기 예정',
-  '🏆 [2024 결과] 으뜸 우승: 홍익대 / 버금 우승: 동국대 LAE',
-  '⚾ [현재 시즌] 2025 AUBL 토너먼트 진행 중 (주최: 아주대학교)',
-];
+import { useContent } from '../../shared/state/contentProvider';
 
 const valueProps = [
   {
@@ -220,6 +215,7 @@ function MiniBases({ bases }: { bases?: (string | null | undefined)[] }) {
 
 export default function LandingPage() {
   const { state, actions } = useDemoStore();
+  const { content } = useContent();
   const navigate = useNavigate();
   const heroRef = useRef<HTMLDivElement>(null);
   const highlightRefs = useRef<HTMLDivElement[]>([]);
@@ -244,6 +240,7 @@ export default function LandingPage() {
       .filter((match) => match.status === 'inProgress')
       .sort((a, b) => safeMatchTime(a.startTime) - safeMatchTime(b.startTime));
   }, [liveMatchesRealtime, state.matches]);
+  const tickerItems = content.tickerItems ?? [];
 
   // Ensure live widget always has full schedule data, independent of any selector elsewhere.
   useEffect(() => {
