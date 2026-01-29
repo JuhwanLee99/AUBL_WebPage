@@ -20,6 +20,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /notices/{noticeId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Live match state (scoreboard / 문자중계 데이터)
     match /matchStates/{matchId} {
       allow read: if true;

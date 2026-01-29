@@ -6,6 +6,9 @@ import StandingsPage from './pages/StandingPage';
 import PredictionPage from './pages/PredictionPage';
 import RecordPage from './pages/RecordPage';
 import CommunityPage from './pages/CommunityPage';
+import CommunityGalleryPage from './pages/CommunityGalleryPage'; // 새로 추가
+import CommunityNoticesPage from './pages/CommunityNoticesPage'; // 새로 추가
+import NoticeWritePage from './pages/NoticeWritePage'; // 새로 추가
 import ScoreboardPage from '../scoreboard/pages/ScoreboardPage';
 import ScoreboardTextPage from '../scoreboard/pages/ScoreboardTextPage';
 import ScoreboardLiveOverlayPage from '../scoreboard/pages/ScoreboardLiveOverlayPage';
@@ -51,7 +54,20 @@ export const router = createBrowserRouter([
       },
       {
         path: 'community',
-        element: <CommunityPage />,
+        children: [
+          { index: true, element: <CommunityPage /> }, // 메인 대시보드
+          { path: 'gallery', element: <CommunityGalleryPage /> }, // 갤러리 임베드
+          { path: 'notices', element: <CommunityNoticesPage /> }, // 공지 목록
+          { 
+            path: 'notices/new', 
+            element: (
+              <RequireAdmin>
+                <NoticeWritePage />
+              </RequireAdmin>
+            ) 
+          }, // 공지 작성 (관리자만)
+          // 개별 공지 상세 페이지가 필요하다면 'notices/:id' 추가 가능
+        ]
       },
       {
         path: 'schedule',
