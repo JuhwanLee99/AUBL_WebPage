@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
 
@@ -8,6 +8,31 @@ export default function ScoreboardLiveOverlayPage() {
   const { state, actions } = useDemoStore();
   const navigate = useNavigate();
   const matches = useMemo(() => state.matches.filter((m) => !m.deleted), [state.matches]);
+
+  // 기본값 false: 정방향(가로 모드 16:9)
+  // true일 경우: 90도 회전(세로 기기에서 꽉 차게 보기 위함)
+  const [isRotated, setIsRotated] = useState(false);
+
+  // 화면 크기에 따른 UI 스케일 계산 (모바일에서 더 작게 보이도록)
+  const [uiScale, setUiScale] = useState(1);
+
+  useEffect(() => {
+    const handleResize = () => {
+      // 화면 너비가 작을수록(모바일) 스케일을 줄임 (기본 1, 모바일 약 0.8~0.9)
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const minDim = Math.min(width, height);
+      
+      // 기준을 400px ~ 1000px 사이로 잡고 스케일링
+      if (minDim < 500) setUiScale(0.75);
+      else if (minDim < 800) setUiScale(0.85);
+      else setUiScale(1);
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const buildAutoPlaySrc = (url: string) => {
     const base = url || defaultLiveSrc;
@@ -21,7 +46,7 @@ export default function ScoreboardLiveOverlayPage() {
     if (!hasAutoplay) params.push('autoplay=1');
     if (!hasMute) params.push('mute=1');
     if (!hasPlaysinline) params.push('playsinline=1');
-    if (!hasFs) params.push('fs=0'); // remove YouTube fullscreen button
+    if (!hasFs) params.push('fs=0');
 
     if (!params.length) return base;
     return `${base}${hasQuery ? '&' : '?'}${params.join('&')}`;
@@ -42,223 +67,277 @@ export default function ScoreboardLiveOverlayPage() {
     }
   };
 
+  const containerStyle: React.CSSProperties = isRotated
+    ? {
+        width: 'min(100vh, calc(100vw * 1.7778))',
+        height: 'min(100vw, calc(100vh / 1.7778))',
+        transform: 'rotate(90deg)',
+        transformOrigin: 'center center',
+        position: 'absolute',
+        boxShadow: '0 0 50px rgba(0,0,0,0.5)',
+      }
+    : {
+        width: 'min(100vw, calc(100vh * 1.7778))',
+        height: 'min(100vh, calc(100vw / 1.7778))',
+        aspectRatio: '16 / 9',
+        transform: 'none',
+        position: 'relative',
+        boxShadow: '0 0 50px rgba(0,0,0,0.5)',
+      };
+
   return (
     <div
       style={{
-        position: 'relative',
-        width: '100%',
+        width: '100vw',
         height: '100vh',
-        overflow: 'hidden',
         backgroundColor: '#020617',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        position: 'relative',
       }}
     >
-      <iframe
-        title="AUBL Live Stream"
-        src={youtubeLiveSrc}
-        style={{
-          position: 'absolute',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-          border: 'none',
-        }}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-      />
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          zIndex: 2,
-          color: '#f8fafc',
-          fontFamily: '"Inter", "Pretendard", sans-serif',
-          pointerEvents: 'none',
-        }}
-      >
+      <div style={containerStyle}>
+        <iframe
+          title="AUBL Live Stream"
+          src={youtubeLiveSrc}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            border: 'none',
+          }}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        />
+        
+        {/* 오버레이 UI 레이어: uiScale 적용 */}
         <div
           style={{
             position: 'absolute',
-            top: 24,
-            right: 24,
-            display: 'flex',
-            gap: '8px',
-            pointerEvents: 'auto',
-            alignItems: 'center',
-            flexWrap: 'wrap',
+            inset: 0,
+            zIndex: 2,
+            color: '#f8fafc',
+            fontFamily: '"Inter", "Pretendard", sans-serif',
+            pointerEvents: 'none',
+            fontSize: `${16 * uiScale}px`, // 기본 폰트 사이즈 스케일링
           }}
         >
-          <select
-            value={state.activeMatchId ?? ''}
-            onChange={(e) => actions.selectMatch(e.target.value || null)}
+          {/* 상단 컨트롤 버튼 그룹 */}
+          <div
             style={{
-              padding: '8px 10px',
-              borderRadius: '10px',
-              border: '1px solid rgba(148,163,184,0.35)',
-              background: 'rgba(15,23,42,0.9)',
-              color: '#e2e8f0',
-              minWidth: '220px',
+              position: 'absolute',
+              top: 12 * uiScale, // 여백 축소
+              right: 12 * uiScale,
+              display: 'flex',
+              gap: 6 * uiScale,
               pointerEvents: 'auto',
-            }}
-          >
-            {!state.activeMatchId ? (
-              <option value="" disabled>
-                중계로 볼 경기 선택
-              </option>
-            ) : null}
-            {matches.map((match) => (
-              <option key={match.id} value={match.id}>
-                {match.awayTeamName} vs {match.homeTeamName} {match.status === 'inProgress' ? '· 진행중' : ''}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={() => navigate('/scoreboard-text')}
-            style={{
-              border: 'none',
-              background: 'rgba(15,23,42,0.9)',
-              color: '#e2e8f0',
-              fontWeight: 800,
-              fontSize: '13px',
-              borderRadius: '999px',
-              padding: '8px 14px',
-              borderInline: '1px solid rgba(148,163,184,0.35)',
-              cursor: 'pointer',
-              boxShadow: '0 8px 20px rgba(0,0,0,0.35)',
-            }}
-          >
-            문자중계
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/scoreboard')}
-            style={{
-              border: 'none',
-              background: 'rgba(15,23,42,0.9)',
-              color: '#e2e8f0',
-              fontWeight: 800,
-              fontSize: '13px',
-              borderRadius: '999px',
-              padding: '8px 14px',
-              borderInline: '1px solid rgba(148,163,184,0.35)',
-              cursor: 'pointer',
-              boxShadow: '0 8px 20px rgba(0,0,0,0.35)',
-            }}
-          >
-            전광판
-          </button>
-          <button
-            type="button"
-            onClick={toggleFullscreen}
-            style={{
-              border: 'none',
-              background: 'rgba(15,23,42,0.9)',
-              color: '#f97316',
-              fontWeight: 800,
-              fontSize: '13px',
-              borderRadius: '999px',
-              padding: '8px 14px',
-              borderInline: '1px solid rgba(148,163,184,0.35)',
-              cursor: 'pointer',
-              boxShadow: '0 8px 20px rgba(0,0,0,0.35)',
-            }}
-          >
-            브라우저 전체화면
-          </button>
-        </div>
-
-        <div
-          style={{
-            position: 'absolute',
-            top: 24,
-            left: 24,
-            background: 'rgba(15, 23, 42, 0.8)',
-            border: '1px solid rgba(148, 163, 184, 0.3)',
-            borderRadius: '16px',
-            padding: '14px 18px',
-            display: 'grid',
-            gap: '8px',
-            minWidth: '240px',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              fontSize: '20px',
-              fontWeight: 700,
-              color: battingSide === 'away' ? '#f97316' : '#f8fafc',
-            }}
-          >
-            <span>{state.teamNames.away || 'AWAY'}</span>
-            <span>{state.score.away}</span>
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              fontSize: '20px',
-              fontWeight: 700,
-              color: battingSide === 'home' ? '#f97316' : '#f8fafc',
-            }}
-          >
-            <span>{state.teamNames.home || 'HOME'}</span>
-            <span>{state.score.home}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#cbd5f5', marginTop: '-2px' }}>
-            <span>이닝</span>
-            <span>{inningLabel}</span>
-          </div>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr auto',
               alignItems: 'center',
-              gap: '12px',
-              paddingTop: '4px',
+              flexWrap: 'wrap',
+              justifyContent: 'flex-end',
+              transformOrigin: 'top right',
             }}
           >
-            <CountLights balls={state.balls} strikes={state.strikes} outs={state.outs} />
-            <BaseDiagram bases={state.bases} />
+            <select
+              value={state.activeMatchId ?? ''}
+              onChange={(e) => actions.selectMatch(e.target.value || null)}
+              style={{
+                padding: `${6 * uiScale}px ${8 * uiScale}px`,
+                borderRadius: '8px',
+                border: '1px solid rgba(148,163,184,0.35)',
+                background: 'rgba(15,23,42,0.9)',
+                color: '#e2e8f0',
+                fontSize: `${12 * uiScale}px`,
+                minWidth: `${180 * uiScale}px`,
+                maxWidth: `${250 * uiScale}px`,
+                pointerEvents: 'auto',
+              }}
+            >
+              {!state.activeMatchId ? (
+                <option value="" disabled>
+                  경기 선택
+                </option>
+              ) : null}
+              {matches.map((match) => (
+                <option key={match.id} value={match.id}>
+                  {match.awayTeamName} vs {match.homeTeamName}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => navigate('/scoreboard-text')}
+              style={{ ...controlButtonStyle, padding: `${6 * uiScale}px ${10 * uiScale}px`, fontSize: `${11 * uiScale}px` }}
+            >
+              문자중계
+            </button>
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              style={{ ...controlButtonStyle, padding: `${6 * uiScale}px ${10 * uiScale}px`, fontSize: `${11 * uiScale}px`, color: '#f97316' }}
+            >
+              전체화면
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsRotated((prev) => !prev)}
+              style={{ 
+                ...controlButtonStyle, 
+                color: '#38bdf8',
+                padding: `${6 * uiScale}px ${8 * uiScale}px`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              title="화면 회전"
+            >
+               <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                width={16 * uiScale} 
+                height={16 * uiScale} 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2.5" 
+                strokeLinecap="round" 
+                strokeLinejoin="round"
+              >
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+              </svg>
+            </button>
           </div>
-        </div>
 
-        <div
-          style={{
-            position: 'absolute',
-            left: 24,
-            right: 24,
-            bottom: 24,
-            background: 'rgba(15, 23, 42, 0.85)',
-            border: '1px solid rgba(148, 163, 184, 0.3)',
-            borderRadius: '14px',
-            padding: '14px 20px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '16px',
-            fontSize: '16px',
-          }}
-        >
-          <span
+          {/* 왼쪽 상단 점수판 (컴팩트 버전) */}
+          <div
             style={{
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              color: '#f97316',
-              textTransform: 'uppercase',
+              position: 'absolute',
+              top: 12 * uiScale,
+              left: 12 * uiScale,
+              background: 'rgba(15, 23, 42, 0.8)',
+              border: '1px solid rgba(148, 163, 184, 0.3)',
+              borderRadius: '12px',
+              padding: `${10 * uiScale}px ${14 * uiScale}px`, // 패딩 축소
+              display: 'grid',
+              gap: `${6 * uiScale}px`,
+              minWidth: `${200 * uiScale}px`,
             }}
           >
-            Last Play
-          </span>
-          <span style={{ color: '#e2e8f0' }}>{lastPlay}</span>
+            {/* Away Score */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: `${18 * uiScale}px`, // 폰트 축소
+                fontWeight: 700,
+                color: battingSide === 'away' ? '#f97316' : '#f8fafc',
+                lineHeight: 1.1,
+              }}
+            >
+              <span>{state.teamNames.away || 'AWAY'}</span>
+              <span>{state.score.away}</span>
+            </div>
+            {/* Home Score */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: `${18 * uiScale}px`, // 폰트 축소
+                fontWeight: 700,
+                color: battingSide === 'home' ? '#f97316' : '#f8fafc',
+                lineHeight: 1.1,
+              }}
+            >
+              <span>{state.teamNames.home || 'HOME'}</span>
+              <span>{state.score.home}</span>
+            </div>
+            {/* Inning */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: `${13 * uiScale}px`,
+                color: '#cbd5f5',
+                marginTop: 0,
+                paddingBottom: `${2 * uiScale}px`,
+                borderBottom: '1px solid rgba(255,255,255,0.1)',
+              }}
+            >
+              <span>이닝</span>
+              <span>{inningLabel}</span>
+            </div>
+            {/* BSO & Base */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr auto',
+                alignItems: 'center',
+                gap: `${10 * uiScale}px`,
+                paddingTop: `${2 * uiScale}px`,
+              }}
+            >
+              <CountLights balls={state.balls} strikes={state.strikes} outs={state.outs} scale={uiScale} />
+              <BaseDiagram bases={state.bases} scale={uiScale} />
+            </div>
+          </div>
+
+          {/* 하단 Last Play */}
+          <div
+            style={{
+              position: 'absolute',
+              left: 12 * uiScale,
+              right: 12 * uiScale,
+              bottom: 12 * uiScale,
+              background: 'rgba(15, 23, 42, 0.85)',
+              border: '1px solid rgba(148, 163, 184, 0.3)',
+              borderRadius: '10px',
+              padding: `${8 * uiScale}px ${12 * uiScale}px`, // 높이 축소
+              display: 'flex',
+              alignItems: 'center',
+              gap: `${12 * uiScale}px`,
+              fontSize: `${14 * uiScale}px`,
+            }}
+          >
+            <span
+              style={{
+                fontWeight: 700,
+                letterSpacing: '0.05em',
+                color: '#f97316',
+                textTransform: 'uppercase',
+                whiteSpace: 'nowrap',
+                fontSize: `${12 * uiScale}px`,
+              }}
+            >
+              Last Play
+            </span>
+            <span style={{ color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {lastPlay}
+            </span>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function CountLights({ balls, strikes, outs }: { balls: number; strikes: number; outs: number }) {
+const controlButtonStyle: React.CSSProperties = {
+  border: 'none',
+  background: 'rgba(15,23,42,0.9)',
+  color: '#e2e8f0',
+  fontWeight: 800,
+  borderRadius: '999px',
+  borderInline: '1px solid rgba(148,163,184,0.35)',
+  cursor: 'pointer',
+  boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
+  whiteSpace: 'nowrap',
+  transition: 'all 0.2s',
+};
+
+function CountLights({ balls, strikes, outs, scale = 1 }: { balls: number; strikes: number; outs: number; scale?: number }) {
   const renderLights = (count: number, max: number, color: string, label: string) => (
-    <div style={{ display: 'grid', gridTemplateColumns: '18px repeat(4, 12px)', gap: '4px', alignItems: 'center' }}>
-      <span style={{ fontWeight: 800, color: '#cbd5e1', fontSize: '12px', width: '18px', display: 'inline-block' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: `${16 * scale}px repeat(4, ${10 * scale}px)`, gap: `${3 * scale}px`, alignItems: 'center' }}>
+      <span style={{ fontWeight: 800, color: '#cbd5e1', fontSize: `${11 * scale}px`, width: `${16 * scale}px`, display: 'inline-block' }}>
         {label}
       </span>
       {Array.from({ length: max }).map((_, idx) => {
@@ -267,11 +346,11 @@ function CountLights({ balls, strikes, outs }: { balls: number; strikes: number;
           <div
             key={`${label}-${idx}`}
             style={{
-              width: '12px',
-              height: '12px',
+              width: `${10 * scale}px`,
+              height: `${10 * scale}px`,
               borderRadius: '50%',
               background: isOn ? color : 'rgba(148,163,184,0.2)',
-              boxShadow: isOn ? `0 0 8px ${color}` : 'none',
+              boxShadow: isOn ? `0 0 ${6 * scale}px ${color}` : 'none',
               border: '1px solid rgba(148,163,184,0.4)',
             }}
           />
@@ -281,7 +360,7 @@ function CountLights({ balls, strikes, outs }: { balls: number; strikes: number;
   );
 
   return (
-    <div style={{ display: 'grid', gap: '4px' }}>
+    <div style={{ display: 'grid', gap: `${3 * scale}px` }}>
       {renderLights(balls, 3, '#22c55e', 'B')}
       {renderLights(strikes, 2, '#facc15', 'S')}
       {renderLights(outs, 2, '#ef4444', 'O')}
@@ -289,24 +368,26 @@ function CountLights({ balls, strikes, outs }: { balls: number; strikes: number;
   );
 }
 
-function BaseDiagram({ bases }: { bases: (string | null)[] }) {
+function BaseDiagram({ bases, scale = 1 }: { bases: (string | null)[]; scale?: number }) {
   const hasRunner = (baseIndex: 0 | 1 | 2) => Boolean(bases[baseIndex]);
-  const baseSize = 20;
+  const baseSize = 16 * scale; // 베이스 크기 축소
+  const containerSize = 60 * scale; // 컨테이너 크기 축소
+
   const buildBaseStyle = (active: boolean) => ({
     width: baseSize,
     height: baseSize,
     transform: 'rotate(45deg)',
     background: active ? '#f97316' : 'transparent',
     border: '2px solid rgba(148,163,184,0.6)',
-    boxShadow: active ? '0 0 12px rgba(249,115,22,0.8)' : 'none',
+    boxShadow: active ? `0 0 ${8 * scale}px rgba(249,115,22,0.8)` : 'none',
   });
 
   return (
     <div
       style={{
         position: 'relative',
-        width: 76,
-        height: 76,
+        width: containerSize,
+        height: containerSize,
         display: 'grid',
         placeItems: 'center',
       }}
@@ -315,7 +396,7 @@ function BaseDiagram({ bases }: { bases: (string | null)[] }) {
         style={{
           ...buildBaseStyle(hasRunner(1)),
           position: 'absolute',
-          top: 16,
+          top: containerSize * 0.15,
           left: '50%',
           marginLeft: -baseSize / 2,
         }}
@@ -324,16 +405,16 @@ function BaseDiagram({ bases }: { bases: (string | null)[] }) {
         style={{
           ...buildBaseStyle(hasRunner(0)),
           position: 'absolute',
-          bottom: 16,
-          right: 12,
+          bottom: containerSize * 0.15,
+          right: containerSize * 0.1,
         }}
       />
       <div
         style={{
           ...buildBaseStyle(hasRunner(2)),
           position: 'absolute',
-          bottom: 16,
-          left: 12,
+          bottom: containerSize * 0.15,
+          left: containerSize * 0.1,
         }}
       />
     </div>
