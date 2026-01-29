@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 const sa = require('../serviceAccountKey.json');
 
 // ⬇ 여기에 실제 UID 입력
-const TARGET_UID = '73gidKdTH4XV2MaVmRWJwFFDYCA3';
+const TARGET_UID = '여기에 UID 입력';
 
 initializeApp({ credential: cert(sa) });
 

@@ -214,6 +214,19 @@ button:focus-visible {
   text-decoration-color: #f97316;
 }
 
+.badge-hoverable {
+  transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease, background-color 150ms ease;
+  will-change: transform;
+}
+
+.badge-hoverable:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(249, 115, 22, 0.38);
+  border-color: rgba(249, 115, 22, 0.7) !important;
+  background: rgba(249, 115, 22, 0.16) !important;
+  color: #fed7aa !important;
+}
+
 @media (max-width: 1024px) {
   :root {
     --page-padding: 32px 18px 64px;

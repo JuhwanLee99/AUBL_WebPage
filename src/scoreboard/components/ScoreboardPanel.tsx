@@ -24,6 +24,17 @@ export default function ScoreboardPanel({
     () => state.matches.find((match) => match.id === state.activeMatchId),
     [state.matches, state.activeMatchId],
   );
+  const hittingSide = state.half === 'top' ? 'away' : 'home';
+  const defenseSide = hittingSide === 'home' ? 'away' : 'home';
+  const offenseLineup = useMemo(
+    () => state.lineups[hittingSide].filter((slot) => slot.pos.toUpperCase() !== 'P'),
+    [hittingSide, state.lineups],
+  );
+  const activeOffense = offenseLineup.length ? offenseLineup : state.lineups[hittingSide];
+  const currentBatter =
+    activeOffense[state.batterIndex[hittingSide] % Math.max(activeOffense.length, 1)]?.name ?? '타자';
+  const currentPitcher =
+    state.lineups[defenseSide].find((slot) => slot.pos.toUpperCase() === 'P')?.name ?? '투수';
 
   const inningHalf = state.half === 'top' ? '▲' : '▼';
   const inning = state.inning;
@@ -31,6 +42,33 @@ export default function ScoreboardPanel({
   const strike = state.strikes;
   const out = state.outs;
   const bases = state.bases;
+  const pitchCount = state.pitchCount ?? 0;
+  const boxScore = useMemo(() => {
+    const totals = activeMatch?.postGame?.totals;
+    const lineScore = activeMatch?.postGame?.lineScore;
+    const baseInnings = Array.from({ length: 9 }, (_v, idx) => idx + 1);
+    const hasExtras = (lineScore?.innings?.length ?? 0) > 9;
+    const innings = hasExtras ? [...baseInnings, '10+'] : baseInnings;
+    const padInnings = (arr: number[] | undefined) => {
+      const core = innings.map((_, idx) => {
+        if (hasExtras && idx === innings.length - 1) {
+          const extras = (arr ?? []).slice(9).reduce((acc, cur) => acc + (cur ?? 0), 0);
+          return (arr ?? []).length > 9 ? extras : '—';
+        }
+        return arr && arr[idx] != null ? arr[idx] : '—';
+      });
+      return core;
+    };
+    const mk = (side: 'home' | 'away') => ({
+      name: state.teamNames[side] || (side === 'home' ? homeTeam?.name : awayTeam?.name) || side.toUpperCase(),
+      runs: state.score[side],
+      hits: totals?.[side]?.hits ?? '—',
+      errors: totals?.[side]?.errors ?? '—',
+      innings: padInnings(lineScore?.[side]),
+      color: side === 'home' ? '#f97316' : '#60a5fa',
+    });
+    return { innings, rows: [mk('away'), mk('home')] };
+  }, [activeMatch?.postGame?.lineScore, activeMatch?.postGame?.totals, awayTeam?.name, homeTeam?.name, state.score, state.teamNames]);
   const summaryTime = useMemo(() => {
     if (!activeMatch?.startTime) return '일시 미정';
     const date = new Date(activeMatch.startTime);
@@ -74,23 +112,48 @@ export default function ScoreboardPanel({
             textAlign: 'center',
           }}
         >
-          <ScoreCell label={state.teamNames.home || homeTeam?.name || 'HOME'} value={state.score.home} />
+          <ScoreCell label={state.teamNames.away || awayTeam?.name || 'AWAY'} value={state.score.away} />
           <div
             style={{
-              background: '#0b1220',
-              border: '2px solid #111827',
-              borderRadius: '12px',
-              padding: 'clamp(14px, 2vw, 22px) clamp(10px, 1.6vw, 18px)',
-              fontWeight: 900,
-              fontSize: 'clamp(22px, 3.2vw, 38px)',
-              color: '#facc15',
-              textShadow: '0 0 14px rgba(250, 204, 21, 0.4)',
+              display: 'grid',
+              gap: '6px',
+              justifyItems: 'center',
+              width: '100%',
+              maxWidth: '320px',
+              margin: '0 auto',
             }}
           >
-            {inningHalf}
-            {inning}
+            <PlayerInfoChip
+              label="현재 투수"
+              value={currentPitcher}
+              subLabel={`총 투구수 ${pitchCount}`}
+              color="#60a5fa"
+            />
+            <div
+              style={{
+                background: '#0b1220',
+                border: '2px solid #111827',
+                borderRadius: '12px',
+                padding: 'clamp(12px, 1.8vw, 18px) clamp(10px, 1.6vw, 18px)',
+                fontWeight: 900,
+                fontSize: 'clamp(22px, 3.2vw, 38px)',
+                color: '#facc15',
+                textShadow: '0 0 14px rgba(250, 204, 21, 0.4)',
+                lineHeight: 1.05,
+                width: '100%',
+              }}
+            >
+              {inningHalf}
+              {inning}
+            </div>
+            <PlayerInfoChip
+              label="현재 타자"
+              value={currentBatter}
+              subLabel={`카운트 ${ball}-${strike} · 아웃 ${out}`}
+              color="#f97316"
+            />
           </div>
-          <ScoreCell label={state.teamNames.away || awayTeam?.name || 'AWAY'} value={state.score.away} />
+          <ScoreCell label={state.teamNames.home || homeTeam?.name || 'HOME'} value={state.score.home} />
         </div>
       </div>
 
@@ -99,18 +162,36 @@ export default function ScoreboardPanel({
           background: '#0b1220',
           borderRadius: '14px',
           border: '1px solid #1f2937',
-          padding: 'clamp(14px, 2.2vw, 20px)',
+          padding: 'clamp(8px, 1.4vw, 14px)',
           display: 'grid',
-          gap: 'clamp(12px, 2vw, 18px)',
+          gap: 'clamp(10px, 1.6vw, 14px)',
         }}
       >
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'clamp(12px, 2vw, 18px)', alignItems: 'center' }}>
-          <div style={{ display: 'grid', gap: 'clamp(8px, 1.4vw, 12px)' }}>
-            <CountBlock label="B" lights={countLights(ball, 3, '#22c55e')} />
-            <CountBlock label="S" lights={countLights(strike, 2, '#facc15')} />
-            <CountBlock label="O" lights={countLights(out, 3, '#ef4444')} />
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 0.9fr) minmax(360px, 1.35fr)',
+            gap: 'clamp(10px, 1.6vw, 14px)',
+            alignItems: 'stretch',
+          }}
+        >
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'auto auto',
+              gap: '8px',
+              alignItems: 'center',
+            }}
+          >
+            <div style={{ display: 'grid', gap: 'clamp(6px, 1.2vw, 10px)' }}>
+              <CountBlock label="B" lights={countLights(ball, 3, '#22c55e')} />
+              <CountBlock label="S" lights={countLights(strike, 2, '#facc15')} />
+              <CountBlock label="O" lights={countLights(out, 3, '#ef4444')} />
+            </div>
+            <BasePaths bases={bases} />
           </div>
-          <BasePaths bases={bases} />
+
+          <BoxScoreTable data={boxScore} />
         </div>
       </div>
 
@@ -152,7 +233,7 @@ export default function ScoreboardPanel({
           }}
         >
           <span>
-            HOME: {state.teamNames.home || homeTeam?.name || 'HOME'} · AWAY: {state.teamNames.away || awayTeam?.name || 'AWAY'}
+            AWAY: {state.teamNames.away || awayTeam?.name || 'AWAY'} · HOME: {state.teamNames.home || homeTeam?.name || 'HOME'}
           </span>
           <span>Mock data demo · No live connection</span>
         </div>
@@ -206,19 +287,19 @@ function CountBlock({ label, lights }: { label: string; lights: { active: boolea
         display: 'grid',
         gridTemplateColumns: '40px 1fr',
         alignItems: 'center',
-        gap: '10px',
+        gap: '8px',
         color: '#f8fafc',
         fontWeight: 900,
       }}
     >
-      <span style={{ fontSize: 'clamp(18px, 2.6vw, 24px)' }}>{label}</span>
-      <div style={{ display: 'flex', gap: 'clamp(8px, 1.2vw, 14px)' }}>
+      <span style={{ fontSize: 'clamp(16px, 2.2vw, 22px)' }}>{label}</span>
+      <div style={{ display: 'flex', gap: 'clamp(6px, 1.2vw, 12px)' }}>
         {lights.map((light, idx) => (
           <span
             key={idx}
             style={{
-              width: 'clamp(16px, 2.2vw, 28px)',
-              height: 'clamp(16px, 2.2vw, 28px)',
+              width: 'clamp(14px, 2vw, 24px)',
+              height: 'clamp(14px, 2vw, 24px)',
               borderRadius: '50%',
               background: light.active ? light.color : '#1f2937',
               boxShadow: light.active ? `0 0 12px ${light.color}` : 'inset 0 0 0 1px #111827',
@@ -232,27 +313,194 @@ function CountBlock({ label, lights }: { label: string; lights: { active: boolea
 
 function BasePaths({ bases }: { bases: (string | null)[] }) {
   const [first, second, third] = bases.map(Boolean);
-  const baseSize = 'clamp(20px, 3vw, 34px)';
+  const baseSize = 'clamp(18px, 2.6vw, 30px)';
   return (
-    <div style={{ display: 'grid', gap: '8px', justifyItems: 'center' }}>
-      <span style={{ fontWeight: 900, color: '#cbd5e1' }}>BASES</span>
+    <div style={{ display: 'grid', gap: '0px', justifyItems: 'center', transform: 'translate(-18px, 10px)' }}>
+      <span
+        style={{
+          fontWeight: 900,
+          color: '#cbd5e1',
+          transform: 'translate(-12px, 10px)',
+        }}
+      >
+        BASES
+      </span>
       <div
         style={{
           position: 'relative',
-          width: 'clamp(120px, 18vw, 220px)',
-          height: 'clamp(120px, 18vw, 220px)',
+          width: 'clamp(90px, 13vw, 150px)',
+          height: 'clamp(90px, 13vw, 150px)',
           margin: '0 auto',
+          transform: 'translateY(14px)',
         }}
       >
-        <DiamondBase active={second} top="10%" left="50%" size={baseSize} />
-        <DiamondBase active={first} top="50%" left="90%" size={baseSize} />
-        <DiamondBase active={third} top="50%" left="10%" size={baseSize} />
-        <DiamondBase active={false} top="90%" left="50%" size={baseSize} />
+        <DiamondBase active={second} top="24%" left="44%" size={baseSize} />
+        <DiamondBase active={first} top="50%" left="68%" size={baseSize} />
+        <DiamondBase active={third} top="50%" left="18%" size={baseSize} />
       </div>
     </div>
   );
 }
 
+export function BoxScoreTable({
+  data,
+}: {
+  data: {
+    innings: (number | string)[];
+    rows: {
+      name: string;
+      runs: number;
+      hits: number | string;
+      errors: number | string;
+      innings: (number | string)[];
+      color: string;
+    }[];
+  };
+}) {
+  const headers = ['팀', ...data.innings.map(String), 'R', 'H', 'E'];
+  const rows = data.rows;
+  return (
+    <div
+      style={{
+        border: '1px solid rgba(148,163,184,0.2)',
+        borderRadius: '12px',
+        overflow: 'hidden',
+        background: 'rgba(255,255,255,0.02)',
+        display: 'grid',
+        gridTemplateRows: 'auto 1fr',
+        height: '100%',
+        minHeight: '0',
+      }}
+    >
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${headers.length}, minmax(0, 1fr))`,
+          background: 'rgba(255,255,255,0.03)',
+          borderBottom: '1px solid rgba(148,163,184,0.2)',
+        }}
+      >
+        {headers.map((h) => (
+          <div
+            key={h}
+            style={{
+              padding: '6px 8px',
+              textAlign: 'center',
+              fontWeight: 800,
+              fontSize: '12px',
+              color: '#e2e8f0',
+              letterSpacing: '0.04em',
+            }}
+          >
+            {h}
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'grid', gridAutoRows: '1fr' }}>
+        {rows.map((row, idx) => (
+          <div
+            key={row.name}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${headers.length}, minmax(0, 1fr))`,
+              borderTop: idx === 0 ? 'none' : '1px solid rgba(148,163,184,0.2)',
+            }}
+          >
+            <div
+              style={{
+                padding: '8px',
+                fontWeight: 900,
+                color: row.color,
+                fontSize: '12px',
+                textAlign: 'center',
+              }}
+            >
+              {row.name}
+            </div>
+            {[...row.innings, row.runs, row.hits, row.errors].map((val, vIdx) => (
+              <div
+                key={`${row.name}-${vIdx}`}
+                style={{
+                  padding: '8px',
+                  textAlign: 'center',
+                  color: '#cbd5e1',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                }}
+              >
+                {val}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PlayerInfoChip({
+  label,
+  value,
+  subLabel,
+  color,
+}: {
+  label: string;
+  value: string;
+  subLabel?: string;
+  color: string;
+}) {
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gap: '2px',
+        padding: '8px 12px',
+        background: 'rgba(15,23,42,0.9)',
+        border: `1px solid ${color}33`,
+        borderRadius: '12px',
+        width: '100%',
+        maxWidth: '320px',
+        minWidth: 0,
+        justifyItems: 'center',
+      }}
+    >
+      <span
+        style={{
+          display: 'inline-flex',
+          gap: '8px',
+          alignItems: 'center',
+          fontWeight: 900,
+          fontSize: '13px',
+          color: '#e2e8f0',
+        }}
+      >
+        <span
+          style={{
+            fontWeight: 800,
+            fontSize: '12px',
+            letterSpacing: '0.03em',
+            textTransform: 'uppercase',
+            color,
+          }}
+        >
+          {label}
+        </span>
+        <span>{value}</span>
+      </span>
+      {subLabel ? (
+        <span
+          style={{
+            fontWeight: 700,
+            fontSize: '12px',
+            color: '#94a3b8',
+          }}
+        >
+          {subLabel}
+        </span>
+      ) : null}
+    </div>
+  );
+}
 function DiamondBase({
   active,
   top,

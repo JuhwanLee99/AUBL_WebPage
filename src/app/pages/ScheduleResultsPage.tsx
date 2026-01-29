@@ -148,7 +148,7 @@ export default function ScheduleResultsPage() {
                   <div style={{ display: 'grid', gap: '4px' }}>
                     <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: 800, color: '#e2e8f0' }}>
-                        {match.homeTeamName} <span style={{ color: '#94a3b8' }}>vs</span> {match.awayTeamName}
+                        {match.awayTeamName} <span style={{ color: '#94a3b8' }}>vs</span> {match.homeTeamName}
                       </span>
                       <span
                         style={{
@@ -170,7 +170,7 @@ export default function ScheduleResultsPage() {
                   </div>
                   <div style={{ textAlign: 'right', display: 'grid', gap: '4px', justifyItems: 'end' }}>
                     <span style={{ fontWeight: 900, color: '#e2e8f0' }}>
-                      {match.homeScore ?? '-'} : {match.awayScore ?? '-'}
+                      {match.awayScore ?? '-'} : {match.homeScore ?? '-'}
                     </span>
                     <button
                       type="button"

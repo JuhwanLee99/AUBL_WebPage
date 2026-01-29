@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../shared/auth/AuthProvider';
 import { useAdmin } from '../shared/auth/useAdmin';
 import { useDemoStore } from '../shared/state/demoStore';
+import { ContentProvider } from '../shared/state/contentProvider';
 
 const NOTIFICATION_PROMPT_KEY = 'aubl:notificationPrompt:v1';
 const NOTIFICATION_PROMPT_SNOOZE_MS = 1000 * 60 * 60 * 24; // 24시간 동안 재등장 방지
@@ -33,6 +34,13 @@ export default function Layout() {
   useEffect(() => {
     document.documentElement.setAttribute('data-preview-mode', previewMode);
   }, [previewMode]);
+
+  // 초기 진입 시(SSR 포함) 모바일 폭이면 모바일 모드로 강제 전환 (테블릿 이상은 데스크톱 유지)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const isNarrowMobile = window.matchMedia('(max-width: 640px)').matches;
+    setPreviewMode(isNarrowMobile ? 'mobile' : 'desktop');
+  }, []);
 
   // 첫 방문 모바일 사용자에게 PC 최적화 안내
   useEffect(() => {
@@ -212,6 +220,7 @@ export default function Layout() {
 
   const activeMatch = useMemo(() => state.matches.find((m) => m.id === state.activeMatchId), [state.matches, state.activeMatchId]);
   const hasLiveOverlay = Boolean((activeMatch?.liveVideoUrl || '').trim());
+  const isMobileHeader = previewMode === 'mobile';
 
   const navItems = useMemo(
     () => [
@@ -242,6 +251,12 @@ export default function Layout() {
       { path: '/prediction', label: '승부예측' },
       // 기록원: 항상 보이지만 비관리자는 클릭 시 안내 버블만 노출
       { path: '/scorekeeper', label: '기록원', requiresAdmin: true, showWhenBlocked: true },
+      // 사용설명서: 외부 링크
+      {
+        path: 'https://docs.google.com/document/d/e/2PACX-1vRYQNkS6wuqoYWokWN_rnPpmZuWLHcNyn_j5K5Vhw3g8voduO20VMJYFH_3FTjW9Whgk7nxywV8ps_9/pub',
+        label: '사용설명서',
+        isExternal: true,
+      },
     ],
     [],
   );
@@ -266,6 +281,9 @@ export default function Layout() {
     }
 
     const matched = filteredNavItems.find((item) => {
+      // External link check
+      if ((item as any).isExternal) return false;
+
       if (item.children?.some((child) => location.pathname === child.path || location.pathname.startsWith(child.path))) return true;
       if (item.children && location.pathname === item.path) return true; // 부모 경로 자체를 방문했을 때도 유지
       return false;
@@ -303,7 +321,8 @@ export default function Layout() {
   }, [showSubnav, activeParentPath, location.pathname]);
 
   return (
-    <div className="app-shell">
+    <ContentProvider>
+      <div className="app-shell">
       {!isLiveOverlay && (
         <header className="app-header">
           <div
@@ -313,7 +332,13 @@ export default function Layout() {
             style={{
               position: 'relative',
               alignItems: 'center',
-              height: showSubnav ? 'calc(var(--header-height) + 32px)' : 'var(--header-height)',
+              height: isMobileHeader
+                ? showSubnav
+                  ? 'calc(var(--header-height) + 64px)'
+                  : 'calc(var(--header-height) + 32px)'
+                : showSubnav
+                  ? 'calc(var(--header-height) + 32px)'
+                  : 'var(--header-height)',
               transition: 'height 180ms ease',
               padding: 0,
             }}
@@ -321,11 +346,17 @@ export default function Layout() {
             <div
               style={{
                 position: 'absolute',
-                inset: 0,
+                top: 0,
+                left: 0,
+                right: 0,
                 height: 'var(--header-height)',
                 display: 'flex',
+                flexDirection: 'row',
                 alignItems: 'center',
+                flexWrap: isMobileHeader ? 'wrap' : 'nowrap',
+                rowGap: isMobileHeader ? '8px' : '0px',
                 padding: 'var(--header-padding)',
+                paddingTop: isMobileHeader ? '8px' : '10px',
                 boxSizing: 'border-box',
                 gap: '12px',
               }}
@@ -350,12 +381,28 @@ export default function Layout() {
                   .
                 </span>
               </Link>
-              <nav className="nav-scroll" style={{ marginLeft: 'auto', flex: 1, minWidth: 0, paddingLeft: '18px', position: 'relative' }}>
+              <nav
+                className="nav-scroll"
+                style={{
+                  marginLeft: isMobileHeader ? 0 : 'auto',
+                  flex: isMobileHeader ? '0 0 100%' : 1,
+                  width: isMobileHeader ? '100%' : undefined,
+                  minWidth: 0,
+                  paddingLeft: isMobileHeader ? '14px' : '18px',
+                  paddingRight: isMobileHeader ? '8px' : 0,
+                  marginRight: isMobileHeader ? '-6px' : 0,
+                  position: 'relative',
+                  order: isMobileHeader ? 3 : undefined,
+                  marginTop: isMobileHeader ? '4px' : 0,
+                }}
+              >
                 <div className="nav-scroll__rail">
                   {filteredNavItems.map((item) => {
                     const isActive = location.pathname === item.path || activeParentPath === item.path;
                     const isHovering = hoveredMenu === item.path;
                     const blocked = item.requiresAdmin && !isAdmin;
+                    const isExternal = (item as any).isExternal;
+
                     const handleBlockedHover = (el: HTMLAnchorElement | null) => {
                       if (!blocked || !el) return;
                       const rect = el.getBoundingClientRect();
@@ -365,20 +412,52 @@ export default function Layout() {
                         y: rect.bottom,
                       });
                     };
+
+                    const style = {
+                      fontSize: 'var(--nav-font-size)',
+                      fontWeight: 700,
+                      color: blocked ? 'rgba(203,213,225,0.55)' : isActive || isHovering ? '#f97316' : '#cbd5e1',
+                      transition: 'color 120ms ease',
+                      whiteSpace: 'nowrap',
+                      scrollSnapAlign: 'start',
+                      padding: '10px 0',
+                      cursor: blocked ? 'not-allowed' : 'pointer',
+                      textDecoration: 'none',
+                    };
+
+                    if (isExternal) {
+                      return (
+                        <a
+                          key={item.path}
+                          href={item.path}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={style}
+                          ref={(el) => {
+                            linkRefs.current[item.path] = el;
+                          }}
+                          onMouseEnter={() => {
+                            setHoveredMenu(item.path);
+                          }}
+                          onMouseLeave={() => {
+                            setHoveredMenu(null);
+                            setTooltip(null);
+                          }}
+                          onFocus={() => {
+                            setHoveredMenu(item.path);
+                          }}
+                          onBlur={() => setTooltip(null)}
+                        >
+                          {item.label}
+                        </a>
+                      );
+                    }
+
                     return (
                       <Link
                         key={item.path}
                         to={blocked ? location.pathname : item.path}
-                        style={{
-                          fontSize: 'var(--nav-font-size)',
-                          fontWeight: 700,
-                          color: blocked ? 'rgba(203,213,225,0.55)' : isActive || isHovering ? '#f97316' : '#cbd5e1',
-                          transition: 'color 120ms ease',
-                          whiteSpace: 'nowrap',
-                          scrollSnapAlign: 'start',
-                          padding: '10px 0',
-                          cursor: blocked ? 'not-allowed' : 'pointer',
-                        }}
+                        style={style}
                         ref={(el) => {
                           linkRefs.current[item.path] = el;
                         }}
@@ -440,11 +519,13 @@ export default function Layout() {
                     display: 'flex',
                     gap: '8px',
                     alignItems: 'center',
-                    marginLeft: '12px',
+                    marginLeft: isMobileHeader ? 0 : '12px',
                     background: 'rgba(148,163,184,0.12)',
                     borderRadius: '999px',
                     padding: '6px 8px',
                     flexShrink: 0,
+                    order: isMobileHeader ? 2 : undefined,
+                    flexWrap: 'wrap',
                   }}
                 >
                   <Link
@@ -509,32 +590,60 @@ export default function Layout() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '10px',
-                  marginLeft: isScoreboardText ? '8px' : '12px',
+                  marginLeft: isMobileHeader ? 'auto' : isScoreboardText ? '8px' : '12px',
+                  order: isMobileHeader ? 2 : undefined,
+                  flexWrap: 'wrap',
+                  justifyContent: isMobileHeader ? 'flex-end' : 'flex-start',
+                  width: 'auto',
                 }}
               >
                 {initializing ? (
                   <span style={{ color: '#cbd5e1', fontSize: '13px' }}>로그인 확인 중...</span>
                 ) : user ? (
                   <>
-                    <span
-                      style={{
-                        padding: '6px 10px',
-                        borderRadius: '10px',
-                        background: isAdmin
-                          ? 'linear-gradient(120deg, rgba(249,115,22,0.3), rgba(253,186,116,0.35))'
-                          : 'rgba(148,163,184,0.18)',
-                        color: isAdmin ? '#f97316' : '#e2e8f0',
-                        fontWeight: 800,
-                        fontSize: '12px',
-                        border: isAdmin ? '1px solid rgba(249,115,22,0.6)' : '1px solid rgba(148,163,184,0.35)',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.02em',
-                      }}
-                      title={`권한: ${roleLabel} (${roleDetail})`}
-                    >
-                      {roleLabel}
-                    </span>
-                    <span
+                    {isAdmin ? (
+                      <Link to="/admin" style={{ textDecoration: 'none' }}>
+                        <span
+                          className="badge-hoverable"
+                          style={{
+                            padding: '6px 10px',
+                            borderRadius: '10px',
+                            background: 'linear-gradient(120deg, rgba(249,115,22,0.3), rgba(253,186,116,0.35))',
+                            color: '#f97316',
+                            fontWeight: 800,
+                            fontSize: '12px',
+                            border: '1px solid rgba(249,115,22,0.6)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.02em',
+                            display: 'inline-block',
+                          }}
+                          title={`권한: ${roleLabel} (${roleDetail}) · 클릭하면 관리자 페이지로 이동`}
+                        >
+                          {roleLabel}
+                        </span>
+                      </Link>
+                    ) : (
+                      <span
+                        className="badge-hoverable"
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: '10px',
+                          background: 'rgba(148,163,184,0.18)',
+                          color: '#e2e8f0',
+                          fontWeight: 800,
+                          fontSize: '12px',
+                          border: '1px solid rgba(148,163,184,0.35)',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.02em',
+                        }}
+                        title={`권한: ${roleLabel} (${roleDetail})`}
+                      >
+                        {roleLabel}
+                      </span>
+                    )}
+                    <Link
+                      to="/account"
+                      className="badge-hoverable"
                       style={{
                         padding: '8px 12px',
                         borderRadius: '999px',
@@ -546,11 +655,14 @@ export default function Layout() {
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
+                        textDecoration: 'none',
+                        border: '1px solid rgba(148,163,184,0.3)',
+                        display: 'inline-block',
                       }}
-                      title={user.email ?? user.uid}
+                      title="계정 페이지로 이동"
                     >
                       {user.email ?? user.uid}
-                    </span>
+                    </Link>
                     <button
                       type="button"
                       onClick={logout}
@@ -590,7 +702,7 @@ export default function Layout() {
               onMouseLeave={() => setHoveredMenu(null)}
               style={{
                 position: 'absolute',
-                top: 'calc(var(--header-height) - 6px)',
+                top: isMobileHeader ? 'calc(var(--header-height) + 24px)' : 'calc(var(--header-height) - 6px)',
                 left: 0,
                 width: '100%',
                 height: showSubnav ? '32px' : '0px',
@@ -915,6 +1027,7 @@ export default function Layout() {
           </div>
         </footer>
       )}
-    </div>
+      </div>
+    </ContentProvider>
   );
 }

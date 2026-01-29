@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { TEAMS } from '../../shared/lib/mockData';
 import { buildGameRecord, useDemoStore } from '../../shared/state/demoStore';
 import type {
@@ -12,6 +13,7 @@ import StatsTable from '../../shared/components/StatsTable';
 import RemovedPlayersPanel from '../../shared/components/RemovedPlayersPanel';
 import type { BatterStatLine, PitcherStatLine } from '../../shared/types/scoreStats';
 import { useAuth } from '../../shared/auth/AuthProvider';
+import { BoxScoreTable } from '../../scoreboard/components/ScoreboardPanel';
 
 type Side = 'home' | 'away';
 
@@ -1158,6 +1160,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
 
 export default function ScorekeeperPage() {
   const { state, actions } = useDemoStore();
+  const [showMobileWarning, setShowMobileWarning] = useState(false); // 모바일 경고 팝업 상태 관리
   const activeMatch = useMemo(
     () => state.matches.find((match) => match.id === state.activeMatchId) ?? null,
     [state.matches, state.activeMatchId],
@@ -1226,6 +1229,34 @@ export default function ScorekeeperPage() {
   const isExporting = Boolean(pendingExportId);
   const canUndo = state.history.length > 0;
   const playerStats = useMemo(() => buildPlayerStats(recordPayload), [recordPayload]);
+  const boxScore = useMemo(() => {
+    const totals = activeMatch?.postGame?.totals;
+    const lineScore = activeMatch?.postGame?.lineScore;
+    const baseInnings = Array.from({ length: 9 }, (_v, idx) => idx + 1);
+    const hasExtrasFromRecord = (lineScore?.innings?.length ?? 0) > 9;
+    const hasExtrasLive = state.inning > 9;
+    const hasExtras = hasExtrasFromRecord || hasExtrasLive;
+    const innings = hasExtras ? [...baseInnings, '10+'] : baseInnings;
+    const padInnings = (arr: number[] | undefined) => {
+      const core = innings.map((_, idx) => {
+        if (hasExtras && idx === innings.length - 1) {
+          const extras = (arr ?? []).slice(9).reduce((acc, cur) => acc + (cur ?? 0), 0);
+          return (arr ?? []).length > 9 ? extras : '—';
+        }
+        return arr && arr[idx] != null ? arr[idx] : '—';
+      });
+      return core;
+    };
+    const mk = (side: 'home' | 'away') => ({
+      name: state.teamNames[side] || (side === 'home' ? homeTeam?.name : awayTeam?.name) || side.toUpperCase(),
+      runs: state.score[side],
+      hits: totals?.[side]?.hits ?? '—',
+      errors: totals?.[side]?.errors ?? '—',
+      innings: padInnings(lineScore?.[side]),
+      color: side === 'home' ? '#f97316' : '#60a5fa',
+    });
+    return { innings, rows: [mk('away'), mk('home')] };
+  }, [activeMatch?.postGame?.lineScore, activeMatch?.postGame?.totals, awayTeam?.name, homeTeam?.name, state.inning, state.score, state.teamNames]);
   const statusBadge = !hasActiveMatch
     ? {
         text: '경기 미선택 · 기록 대기',
@@ -1267,10 +1298,26 @@ export default function ScorekeeperPage() {
   const lockCountdownLabel = useMemo(() => {
     if (!hasActiveMatch || !state.scorerUid || lockRemainingMs <= 0) return '잠금 없음';
     const ownerLabel =
-      state.scorerUid === (user?.uid ?? null) ? '락 만료까지' : '해제 예상까지';
+      state.scorerUid === (user?.uid ?? null) ? '만료까지' : '해제 예상까지';
     return `${ownerLabel} ${formatMs(lockRemainingMs)}`;
   }, [hasActiveMatch, state.scorerUid, lockRemainingMs, user?.uid, formatMs]);
   const lockCountdownColor = lockRemainingMs > 30_000 ? '#67e8f9' : '#f87171';
+
+  // 모바일 환경 감지 Effect
+  useEffect(() => {
+    const checkMobileEnvironment = () => {
+      const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+      // 모바일 기기 정규식 체크 또는 화면 너비가 좁을 경우 (기록원 페이지는 넓은 화면 필요)
+      const isMobileDevice = /android|ipad|iphone|ipod/i.test(userAgent);
+      const isSmallScreen = window.innerWidth < 1024; // 태블릿/모바일 사이즈 기준
+
+      if (isMobileDevice || isSmallScreen) {
+        setShowMobileWarning(true);
+      }
+    };
+
+    checkMobileEnvironment();
+  }, []);
 
   // 락 만료까지 남은 시간 표시 (1초 단위)
   useEffect(() => {
@@ -1688,17 +1735,17 @@ const handleConfirmHitWizard = () => {
     >
       <section
         style={{
-          padding: '18px',
+          padding: '12px 18px 10px',
           borderBottom: '1px solid rgba(148, 163, 184, 0.2)',
           display: 'grid',
-          gap: '12px',
+          gap: '8px',
           background: 'rgba(15, 23, 42, 0.6)',
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
           <div>
-            <h2 style={{ fontSize: '18px', fontWeight: 900 }}>기록할 경기 선택</h2>
-            <p style={{ color: '#94a3b8', fontSize: '13px' }}>경기 일정에서 선택한 경기를 불러와 기록을 시작합니다.</p>
+            <h2 style={{ fontSize: '18px', fontWeight: 900, margin: 0 }}>기록할 경기 선택</h2>
+            <p style={{ color: '#94a3b8', fontSize: '13px', margin: '4px 0 0' }}>경기 일정에서 선택한 경기를 불러와 기록을 시작합니다.</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <select
@@ -1716,7 +1763,7 @@ const handleConfirmHitWizard = () => {
               <option value="">경기를 선택하세요</option>
               {state.matches.map((match) => (
                 <option key={match.id} value={match.id}>
-                  {match.homeTeamName} vs {match.awayTeamName} ({match.status === 'completed' ? '종료' : '예정'})
+                  {match.awayTeamName} vs {match.homeTeamName} ({match.status === 'completed' ? '종료' : '예정'})
                 </option>
               ))}
             </select>
@@ -1740,9 +1787,9 @@ const handleConfirmHitWizard = () => {
           </div>
         </div>
         {activeMatch ? (
-          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', color: '#cbd5e1', fontSize: '13px' }}>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', color: '#cbd5e1', fontSize: '13px' }}>
             <span>
-              선택된 경기: {activeMatch.homeTeamName} vs {activeMatch.awayTeamName}
+              선택된 경기: {activeMatch.awayTeamName} vs {activeMatch.homeTeamName}
             </span>
             <span>일시: {formatDateTimeLabel(activeMatch.startTime)}</span>
             <span>라인업: {activeMatch.lineups ? '사전 저장됨' : '미저장'}</span>
@@ -1767,23 +1814,48 @@ const handleConfirmHitWizard = () => {
             Dashboard
           </span>
           <span style={{ color: '#cbd5e1' }}>
-            {state.teamNames.home} {state.score.home} - {state.teamNames.away} {state.score.away} |{' '}
+            {state.teamNames.away} {state.score.away} - {state.teamNames.home} {state.score.home} |{' '}
             {state.half === 'top' ? 'Top' : 'Bot'} {state.inning} | B:{state.balls} S:{state.strikes} O:{state.outs}
           </span>
         </div>
-        <span style={{ fontSize: '14px', color: '#94a3b8' }}>기록원 컨트롤러 · 데모</span>
+        {/* 기록원 정보 표시 영역 */}
+        <span style={{ fontSize: '14px', color: state.scorerUid ? '#38bdf8' : '#b33131' }}>
+          {state.scorerUid 
+            ? `현재 기록원: ${state.scorerName || state.scorerEmail || '알 수 없음'}` 
+            : '기록원 부재'}
+        </span>
       </header>
+
+      <section
+        style={{
+          padding: '10px 18px 4px',
+        }}
+      >
+        <div
+          style={{
+            width: '100%',
+            borderRadius: '16px',
+            border: '1px solid rgba(148,163,184,0.3)',
+            background: 'rgba(15,23,42,0.7)',
+            padding: '8px',
+            boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
+          }}
+        >
+          <BoxScoreTable data={boxScore} />
+        </div>
+      </section>
 
       <div
         style={{
           display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-          gap: '16px',
-          padding: '18px',
+          gridTemplateColumns: '550px 960px',
+          gap: '10px',
+          padding: '16px',
           alignItems: 'start',
+          justifyContent: 'start',
         }}
       >
-        <div style={{ display: 'grid', gap: '12px', minHeight: '680px' }}>
+        <div style={{ display: 'grid', gap: '12px', minHeight: '680px', minWidth: 0, justifyItems: 'start' }}>
           <FieldView
             bases={state.bases}
             inning={state.inning}
@@ -1815,6 +1887,9 @@ const handleConfirmHitWizard = () => {
               display: 'grid',
               gap: '10px',
               minHeight: '220px',
+              width: '100%',
+              maxWidth: '550px',
+              minWidth: '480px',
             }}
           >
             <div
@@ -1879,7 +1954,7 @@ const handleConfirmHitWizard = () => {
                 {/* 하단: 락 설명 + 카운트다운 + 잠금 해제 한 줄 배치 */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>
-                    락은 입력 중 5분 동안 유지되고 60초마다 갱신됩니다. 락 소유자만 기록 가능합니다.{' '}
+                    락은 입력 중 5분 동안 유지되고 60초마다 갱신됩니다. 락 소유자만 기록 가능.{' '}
                     <span style={{ color: lockCountdownColor }}>{lockCountdownLabel}</span>
                   </span>
                   {!lockedByOther && state.scorerUid === (user?.uid ?? null) && !state.scorerPaused ? (
@@ -2196,6 +2271,10 @@ const handleConfirmHitWizard = () => {
             gap: '14px',
             minHeight: '360px',
             gridTemplateColumns: '1fr',
+            minWidth: 'min(520px, 100%)',
+            width: '100%',
+            maxWidth: '960px',
+            justifySelf: 'start',
           }}
         >
           <div
@@ -2206,32 +2285,6 @@ const handleConfirmHitWizard = () => {
               alignItems: 'start',
             }}
           >
-            <TeamEditor
-              label="HOME"
-              defaultName={homeTeam?.name ?? state.teamNames.home}
-              side="home"
-              teamName={state.teamNames.home}
-              lineup={state.lineups.home}
-              bench={state.benches.home}
-              benchInput={benchInput.home}
-              onChangeBenchInput={(val) => setBenchInput((p) => ({ ...p, home: val }))}
-              onSetTeamName={actions.setTeamName}
-              onSetLineup={actions.setLineup}
-              onAddBench={actions.addBench}
-              onRemoveBench={actions.removeBench}
-              onSubstitute={actions.substitute}
-              highlightBatterName={hittingSide === 'home' ? currentBatter : undefined}
-              highlightPitcherName={defenseSide === 'home' ? currentPitcher : undefined}
-            />
-            <div
-              aria-hidden
-              style={{
-                width: '1px',
-                background: 'rgba(148, 163, 184, 0.3)',
-                borderRadius: '999px',
-                alignSelf: 'stretch',
-              }}
-            />
             <TeamEditor
               label="AWAY"
               defaultName={awayTeam?.name ?? state.teamNames.away}
@@ -2249,6 +2302,32 @@ const handleConfirmHitWizard = () => {
               highlightBatterName={hittingSide === 'away' ? currentBatter : undefined}
               highlightPitcherName={defenseSide === 'away' ? currentPitcher : undefined}
             />
+            <div
+              aria-hidden
+              style={{
+                width: '1px',
+                background: 'rgba(148, 163, 184, 0.3)',
+                borderRadius: '999px',
+                alignSelf: 'stretch',
+              }}
+            />
+            <TeamEditor
+              label="HOME"
+              defaultName={homeTeam?.name ?? state.teamNames.home}
+              side="home"
+              teamName={state.teamNames.home}
+              lineup={state.lineups.home}
+              bench={state.benches.home}
+              benchInput={benchInput.home}
+              onChangeBenchInput={(val) => setBenchInput((p) => ({ ...p, home: val }))}
+              onSetTeamName={actions.setTeamName}
+              onSetLineup={actions.setLineup}
+              onAddBench={actions.addBench}
+              onRemoveBench={actions.removeBench}
+              onSubstitute={actions.substitute}
+              highlightBatterName={hittingSide === 'home' ? currentBatter : undefined}
+              highlightPitcherName={defenseSide === 'home' ? currentPitcher : undefined}
+            />
           </div>
         </div>
       </div>
@@ -2262,12 +2341,12 @@ const handleConfirmHitWizard = () => {
         }}
       >
         <div style={{ display: 'grid', gap: '10px' }}>
-          <StatsTable title={`${state.teamNames.home} 타자 기록`} stats={playerStats.hitters.home} variant="batter" density="regular" />
-          <StatsTable title={`${state.teamNames.home} 투수 기록`} stats={playerStats.pitchers.home} variant="pitcher" density="regular" />
-        </div>
-        <div style={{ display: 'grid', gap: '10px' }}>
           <StatsTable title={`${state.teamNames.away} 타자 기록`} stats={playerStats.hitters.away} variant="batter" density="regular" />
           <StatsTable title={`${state.teamNames.away} 투수 기록`} stats={playerStats.pitchers.away} variant="pitcher" density="regular" />
+        </div>
+        <div style={{ display: 'grid', gap: '10px' }}>
+          <StatsTable title={`${state.teamNames.home} 타자 기록`} stats={playerStats.hitters.home} variant="batter" density="regular" />
+          <StatsTable title={`${state.teamNames.home} 투수 기록`} stats={playerStats.pitchers.home} variant="pitcher" density="regular" />
         </div>
       </div>
 
@@ -2279,8 +2358,8 @@ const handleConfirmHitWizard = () => {
           gap: '12px',
         }}
       >
-        <RemovedPlayersPanel title="교체 out (HOME)" players={state.removed.home} density="regular" />
         <RemovedPlayersPanel title="교체 out (AWAY)" players={state.removed.away} density="regular" />
+        <RemovedPlayersPanel title="교체 out (HOME)" players={state.removed.home} density="regular" />
       </div>
 
       {hitWizard && (
@@ -2366,6 +2445,75 @@ const handleConfirmHitWizard = () => {
           onSelect={(isDropped) => handleDroppedThirdStrike(isDropped)}
         />
       )}
+
+      {/* 모바일 경고 팝업 (Portal 사용) */}
+      {showMobileWarning && createPortal(
+        <div
+          style={{
+            position: 'fixed', // 뷰포트 기준 고정
+            top: 0,
+            left: 0,
+            width: '100vw',  // 너비 강제 (스크롤바 영역 제외한 뷰포트 전체)
+            height: '100vh', // 높이 강제
+            zIndex: 99999,
+            background: 'rgba(0, 0, 0, 0.85)',
+            display: 'flex', // Flexbox 사용
+            alignItems: 'center', // 수직 중앙 정렬
+            justifyContent: 'center', // 수평 중앙 정렬
+            padding: '20px',
+            boxSizing: 'border-box', // 패딩이 너비에 포함되도록 설정
+            backdropFilter: 'blur(4px)',
+            overflow: 'hidden', // 내부 스크롤 방지
+          }}
+          // 배경 터치 시 이벤트 전파 방지 (선택 사항)
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div
+            style={{
+              background: '#1e293b',
+              padding: '32px',
+              borderRadius: '24px',
+              border: '1px solid rgba(148, 163, 184, 0.2)',
+              maxWidth: '400px',
+              width: '100%',
+              textAlign: 'center',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+              color: '#e2e8f0',
+              position: 'relative', // 내부 요소 기준점
+            }}
+          >
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🖥️</div>
+            <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#f8fafc', marginBottom: '12px', marginTop: 0 }}>
+              PC 환경 권장
+            </h3>
+            <p style={{ color: '#cbd5e1', lineHeight: '1.6', fontSize: '15px', marginBottom: '24px', wordBreak: 'keep-all' }}>
+              현재 <strong>기록원 페이지</strong>는 모바일 환경에 최적화되어 있지 않습니다.<br />
+              원활한 경기 기록을 위해<br />
+              <span style={{ color: '#60a5fa', fontWeight: 700 }}>PC 또는 넓은 화면의 태블릿</span>을 사용해 주세요.
+            </p>
+            <button
+              onClick={() => setShowMobileWarning(false)}
+              style={{
+                width: '100%',
+                padding: '14px',
+                borderRadius: '12px',
+                border: 'none',
+                background: '#334155',
+                color: '#f1f5f9',
+                fontWeight: 800,
+                fontSize: '15px',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.background = '#475569')}
+              onMouseOut={(e) => (e.currentTarget.style.background = '#334155')}
+            >
+              알겠습니다 (그대로 진행)
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
@@ -2411,6 +2559,9 @@ function FieldView({
         position: 'relative',
         borderRadius: '18px',
         background: '#0b0f1a',
+        width: '100%',
+        minWidth: '480px',
+        maxWidth: 'min(550px, 100%)',
         aspectRatio: '4 / 3',
         border: '1px solid rgba(148, 163, 184, 0.25)',
         overflow: 'hidden',
