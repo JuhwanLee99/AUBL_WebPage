@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { TEAMS } from '../../shared/lib/mockData';
 import { buildGameRecord, useDemoStore } from '../../shared/state/demoStore';
 import type {
@@ -1183,7 +1183,8 @@ export default function ScorekeeperPage() {
   });
   const [hitWizard, setHitWizard] = useState<HitWizardState | null>(null);
   const [manualBroadcast, setManualBroadcast] = useState('');
-  const [liveVideoUrlInput, setLiveVideoUrlInput] = useState(state.liveVideoUrl);
+  const [liveVideoUrlInput, setLiveVideoUrlInput] = useState('');
+  const [lockRemainingMs, setLockRemainingMs] = useState(0);
   const [hitAdvanceModal, setHitAdvanceModal] = useState<null | {
     bases: 1 | 2 | 3;
     selections: RunnerAdvanceSelections;
@@ -1206,8 +1207,22 @@ export default function ScorekeeperPage() {
   const isGameStarted = state.gameStarted;
   const isGameOver = state.gameOver;
   const hasActiveMatch = Boolean(state.activeMatchId);
-  const lockedByOther = Boolean(hasActiveMatch && state.scorerUid && state.scorerUid !== (user?.uid ?? null));
-  const controlsDisabled = isGameOver || !isGameStarted || !hasActiveMatch || lockedByOther;
+  const LOCK_TTL_MS = 300_000; // UI-side TTL (demoStore와 동일)
+  const formatMs = useCallback((ms: number) => {
+    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+    const m = Math.floor(totalSeconds / 60)
+      .toString()
+      .padStart(2, '0');
+    const s = (totalSeconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  }, []);
+  const lockedByOther = useMemo(() => {
+    if (!hasActiveMatch || !state.scorerUid) return false;
+    const expired = !state.scorerLockedAt || Date.now() - state.scorerLockedAt > LOCK_TTL_MS;
+    if (expired) return false;
+    return state.scorerUid !== (user?.uid ?? null);
+  }, [hasActiveMatch, state.scorerUid, state.scorerLockedAt, user?.uid]);
+  const controlsDisabled = isGameOver || !isGameStarted || !hasActiveMatch || lockedByOther || state.scorerPaused;
   const isExporting = Boolean(pendingExportId);
   const canUndo = state.history.length > 0;
   const playerStats = useMemo(() => buildPlayerStats(recordPayload), [recordPayload]);
@@ -1249,6 +1264,28 @@ export default function ScorekeeperPage() {
   const battedBallDetails = useMemo<BattedBallDetails | null>(() => {
     return buildBattedBallDetailsFromValues(battedBallType, battedBallZone);
   }, [battedBallType, battedBallZone]);
+  const lockCountdownLabel = useMemo(() => {
+    if (!hasActiveMatch || !state.scorerUid || lockRemainingMs <= 0) return '잠금 없음';
+    const ownerLabel =
+      state.scorerUid === (user?.uid ?? null) ? '락 만료까지' : '해제 예상까지';
+    return `${ownerLabel} ${formatMs(lockRemainingMs)}`;
+  }, [hasActiveMatch, state.scorerUid, lockRemainingMs, user?.uid, formatMs]);
+  const lockCountdownColor = lockRemainingMs > 30_000 ? '#67e8f9' : '#f87171';
+
+  // 락 만료까지 남은 시간 표시 (1초 단위)
+  useEffect(() => {
+    const update = () => {
+      if (!state.scorerLockedAt || !hasActiveMatch) {
+        setLockRemainingMs(0);
+        return;
+      }
+      const remaining = Math.max(LOCK_TTL_MS - (Date.now() - state.scorerLockedAt), 0);
+      setLockRemainingMs(remaining);
+    };
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  }, [state.scorerLockedAt, hasActiveMatch, LOCK_TTL_MS]);
 
   useEffect(() => {
     if (state.gameOver) {
@@ -1261,7 +1298,9 @@ export default function ScorekeeperPage() {
   }, [state.activeMatchId]);
 
   useEffect(() => {
-    setLiveVideoUrlInput(state.liveVideoUrl);
+    const incoming = state.liveVideoUrl.trim();
+    const sanitized = incoming.includes('YOUR_CHANNEL_ID') ? '' : incoming;
+    setLiveVideoUrlInput(sanitized);
   }, [state.liveVideoUrl]);
 
   useEffect(() => {
@@ -1789,46 +1828,102 @@ const handleConfirmHitWizard = () => {
               }}
             >
               <span style={{ fontWeight: 900 }}>Command Center</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                <span
-                  style={{
-                    fontSize: '12px',
-                    fontWeight: 800,
-                    color: statusBadge.color,
-                    background: statusBadge.background,
-                    border: `1px solid ${statusBadge.border}`,
-                    borderRadius: '999px',
-                    padding: '6px 10px',
-                  }}
-                >
-                  {statusBadge.text}
-                </span>
-                {lockedByOther ? (
-                  <span style={{ color: '#f87171', fontWeight: 800, fontSize: '12px' }}>
-                    다른 기록원이 기록 중입니다 ({state.scorerName || state.scorerEmail || state.scorerUid || '알 수 없음'})
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-end',
+                  gap: '6px',
+                  width: '100%',
+                  marginTop: '-35px',
+                }}
+              >
+                {/* 상단: 상태 뱃지 + 경기 시작 버튼 (Command Center 줄 오른쪽 끝) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <span
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: 800,
+                      color: statusBadge.color,
+                      background: statusBadge.background,
+                      border: `1px solid ${statusBadge.border}`,
+                      borderRadius: '999px',
+                      padding: '6px 10px',
+                    }}
+                  >
+                    {statusBadge.text}
                   </span>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={handleStartGame}
-                  disabled={isGameOver || isGameStarted || lockedByOther}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: '10px',
-                    border: '1px solid rgba(16,185,129,0.5)',
-                    background: isGameStarted
-                      ? 'rgba(148,163,184,0.16)'
-                      : 'linear-gradient(90deg, #10b981, #0ea5e9)',
-                    color: isGameStarted ? '#cbd5e1' : '#0b0f1a',
-                    fontWeight: 900,
-                    fontSize: '13px',
-                    cursor: isGameOver || isGameStarted ? 'not-allowed' : 'pointer',
-                    opacity: isGameOver ? 0.6 : 1,
-                    boxShadow: isGameStarted ? 'none' : '0 10px 20px rgba(16,185,129,0.22)',
-                  }}
-                >
-                  {isGameStarted ? '경기 진행 중' : '경기 시작'}
-                </button>
+                  <button
+                    type="button"
+                    onClick={handleStartGame}
+                    disabled={isGameOver || isGameStarted || lockedByOther}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(16,185,129,0.5)',
+                      background: isGameStarted
+                        ? 'rgba(148,163,184,0.16)'
+                        : 'linear-gradient(90deg, #10b981, #0ea5e9)',
+                      color: isGameStarted ? '#cbd5e1' : '#0b0f1a',
+                      fontWeight: 900,
+                      fontSize: '13px',
+                      cursor: isGameOver || isGameStarted ? 'not-allowed' : 'pointer',
+                      opacity: isGameOver ? 0.6 : 1,
+                      boxShadow: isGameStarted ? 'none' : '0 10px 20px rgba(16,185,129,0.22)',
+                    }}
+                  >
+                    {isGameStarted ? '경기 진행 중' : '경기 시작'}
+                  </button>
+                </div>
+
+                {/* 하단: 락 설명 + 카운트다운 + 잠금 해제 한 줄 배치 */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>
+                    락은 입력 중 5분 동안 유지되고 60초마다 갱신됩니다. 락 소유자만 기록 가능합니다.{' '}
+                    <span style={{ color: lockCountdownColor }}>{lockCountdownLabel}</span>
+                  </span>
+                  {!lockedByOther && state.scorerUid === (user?.uid ?? null) && !state.scorerPaused ? (
+                    <button
+                      type="button"
+                      onClick={() => actions.releaseLock()}
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(248,113,113,0.5)',
+                        background: 'rgba(248,113,113,0.12)',
+                        color: '#fecdd3',
+                        fontWeight: 800,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      잠금 해제
+                    </button>
+                  ) : null}
+                  {state.scorerPaused ? (
+                    <button
+                      type="button"
+                      onClick={() => actions.resumeLock()}
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(52,211,153,0.5)',
+                        background: 'rgba(34,197,94,0.12)',
+                        color: '#bbf7d0',
+                        fontWeight: 900,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      기록 재개
+                    </button>
+                  ) : null}
+                  {lockedByOther ? (
+                    <span style={{ color: '#f87171', fontWeight: 800, fontSize: '12px' }}>
+                      다른 기록원이 기록 중입니다 ({state.scorerName || state.scorerEmail || state.scorerUid || '알 수 없음'})
+                    </span>
+                  ) : null}
+                </div>
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '10px' }}>

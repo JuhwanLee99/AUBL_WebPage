@@ -1,7 +1,6 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
-import { TEAMS } from '../../shared/lib/mockData';
 import type { MatchSchedule } from '../../shared/state/demoStore';
 
 const gradientCard = (color: string) => ({
@@ -19,11 +18,13 @@ const statusLabel = (match: MatchSchedule) => {
   return { text: '예정', color: '#22c55e', bg: 'rgba(34,197,94,0.14)' };
 };
 
-const teamColor = (teamId?: string) => TEAMS.find((t) => t.id === teamId)?.logoColor ?? '#94a3b8';
-
 export default function ScheduleResultsPage() {
   const { state, actions } = useDemoStore();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    void actions.loadFullSchedule();
+  }, [actions]);
 
   const results = useMemo(
     () =>

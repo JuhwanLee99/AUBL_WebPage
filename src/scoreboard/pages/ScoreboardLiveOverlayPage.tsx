@@ -1,35 +1,46 @@
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
 
 const defaultLiveSrc = 'https://www.youtube.com/embed/live_stream?channel=YOUR_CHANNEL_ID';
 
 export default function ScoreboardLiveOverlayPage() {
-  const { state } = useDemoStore();
+  const { state, actions } = useDemoStore();
   const navigate = useNavigate();
-  if (!state.activeMatchId) {
-    return (
-      <div
-        style={{
-          display: 'grid',
-          placeItems: 'center',
-          height: '100vh',
-          background: '#020617',
-          color: '#e2e8f0',
-          fontSize: '18px',
-          fontWeight: 700,
-          textAlign: 'center',
-          padding: '24px',
-        }}
-      >
-        기록원에서 경기를 선택해야 라이브 오버레이가 반영됩니다.
-      </div>
-    );
-  }
-  const youtubeLiveSrc = (state.liveVideoUrl || '').trim() || defaultLiveSrc;
+  const matches = useMemo(() => state.matches.filter((m) => !m.deleted), [state.matches]);
+
+  const buildAutoPlaySrc = (url: string) => {
+    const base = url || defaultLiveSrc;
+    const hasQuery = base.includes('?');
+    const hasAutoplay = /[?&]autoplay=/i.test(base);
+    const hasMute = /[?&]mute=/i.test(base);
+    const hasPlaysinline = /[?&]playsinline=/i.test(base);
+    const hasFs = /[?&]fs=/i.test(base);
+
+    const params: string[] = [];
+    if (!hasAutoplay) params.push('autoplay=1');
+    if (!hasMute) params.push('mute=1');
+    if (!hasPlaysinline) params.push('playsinline=1');
+    if (!hasFs) params.push('fs=0'); // remove YouTube fullscreen button
+
+    if (!params.length) return base;
+    return `${base}${hasQuery ? '&' : '?'}${params.join('&')}`;
+  };
+
+  const youtubeLiveSrc = buildAutoPlaySrc((state.liveVideoUrl || '').trim() || defaultLiveSrc);
   const battingSide = state.half === 'top' ? 'away' : 'home';
   const inningHalfIcon = state.half === 'top' ? '▲' : '▼';
   const inningLabel = `${inningHalfIcon} ${state.inning}회${state.half === 'top' ? '초' : '말'}`;
   const lastPlay = state.lastPlay || '경기 대기 중';
+
+  const toggleFullscreen = () => {
+    const root = document.documentElement;
+    if (!document.fullscreenElement) {
+      void root.requestFullscreen?.();
+    } else {
+      void document.exitFullscreen?.();
+    }
+  };
 
   return (
     <div
@@ -52,7 +63,6 @@ export default function ScoreboardLiveOverlayPage() {
           border: 'none',
         }}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowFullScreen
       />
       <div
         style={{
@@ -72,8 +82,34 @@ export default function ScoreboardLiveOverlayPage() {
             display: 'flex',
             gap: '8px',
             pointerEvents: 'auto',
+            alignItems: 'center',
+            flexWrap: 'wrap',
           }}
         >
+          <select
+            value={state.activeMatchId ?? ''}
+            onChange={(e) => actions.selectMatch(e.target.value || null)}
+            style={{
+              padding: '8px 10px',
+              borderRadius: '10px',
+              border: '1px solid rgba(148,163,184,0.35)',
+              background: 'rgba(15,23,42,0.9)',
+              color: '#e2e8f0',
+              minWidth: '220px',
+              pointerEvents: 'auto',
+            }}
+          >
+            {!state.activeMatchId ? (
+              <option value="" disabled>
+                중계로 볼 경기 선택
+              </option>
+            ) : null}
+            {matches.map((match) => (
+              <option key={match.id} value={match.id}>
+                {match.homeTeamName} vs {match.awayTeamName} {match.status === 'inProgress' ? '· 진행중' : ''}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             onClick={() => navigate('/scoreboard-text')}
@@ -90,7 +126,7 @@ export default function ScoreboardLiveOverlayPage() {
               boxShadow: '0 8px 20px rgba(0,0,0,0.35)',
             }}
           >
-            문자중계로 이동
+            문자중계
           </button>
           <button
             type="button"
@@ -108,7 +144,25 @@ export default function ScoreboardLiveOverlayPage() {
               boxShadow: '0 8px 20px rgba(0,0,0,0.35)',
             }}
           >
-            전광판 보기
+            전광판
+          </button>
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            style={{
+              border: 'none',
+              background: 'rgba(15,23,42,0.9)',
+              color: '#f97316',
+              fontWeight: 800,
+              fontSize: '13px',
+              borderRadius: '999px',
+              padding: '8px 14px',
+              borderInline: '1px solid rgba(148,163,184,0.35)',
+              cursor: 'pointer',
+              boxShadow: '0 8px 20px rgba(0,0,0,0.35)',
+            }}
+          >
+            브라우저 전체화면
           </button>
         </div>
 
