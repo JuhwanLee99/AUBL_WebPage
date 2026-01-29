@@ -16,10 +16,18 @@ import { useAuth } from '../../shared/auth/AuthProvider';
 import { BoxScoreTable } from '../../scoreboard/components/ScoreboardPanel';
 
 // 동명이인 구분을 위한 고유 이름 생성 헬퍼 함수 추가
+// 이미 (등번호)가 붙어있으면 덧붙이지 않도록 안전장치 추가
 const getUniqueName = (name: string, number: string | number | undefined | null) => {
   if (!name) return '';
-  return number ? `${name}(${number})` : name;
+  if (!number) return name;
+  
+  const suffix = `(${number})`;
+  // 이미 이름 끝에 (등번호)가 포함되어 있다면 그대로 반환 (중복 방지)
+  if (name.endsWith(suffix)) return name;
+  
+  return `${name}${suffix}`;
 };
+
 type Side = 'home' | 'away';
 
 const mainButtons = [
@@ -1231,7 +1239,7 @@ export default function ScorekeeperPage() {
   const currentPitcher = currentPitcherSlot 
     ? getUniqueName(currentPitcherSlot.name, currentPitcherSlot.number) 
     : '';
-    
+
   const [actionModal, setActionModal] = useState<ActionModalData | null>(null);
   const [benchInput, setBenchInput] = useState<{ [K in Side]: { name: string; pos: string; number: string; throws: string; bats: string } }>({
     home: { name: '', pos: '', number: '', throws: 'R', bats: 'R' },
