@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "aubl-web-9a141"
-  }
+  },
+  "targets": {
+    "aubl-web-9a141": {
+      "hosting": {
+        "aubl": [
+          "aubl-web-9a141"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
