@@ -12,6 +12,7 @@ import StatsTable from '../../shared/components/StatsTable';
 import RemovedPlayersPanel from '../../shared/components/RemovedPlayersPanel';
 import type { BatterStatLine, PitcherStatLine } from '../../shared/types/scoreStats';
 import { useAuth } from '../../shared/auth/AuthProvider';
+import { BoxScoreTable } from '../../scoreboard/components/ScoreboardPanel';
 
 type Side = 'home' | 'away';
 
@@ -1226,6 +1227,34 @@ export default function ScorekeeperPage() {
   const isExporting = Boolean(pendingExportId);
   const canUndo = state.history.length > 0;
   const playerStats = useMemo(() => buildPlayerStats(recordPayload), [recordPayload]);
+  const boxScore = useMemo(() => {
+    const totals = activeMatch?.postGame?.totals;
+    const lineScore = activeMatch?.postGame?.lineScore;
+    const baseInnings = Array.from({ length: 9 }, (_v, idx) => idx + 1);
+    const hasExtrasFromRecord = (lineScore?.innings?.length ?? 0) > 9;
+    const hasExtrasLive = state.inning > 9;
+    const hasExtras = hasExtrasFromRecord || hasExtrasLive;
+    const innings = hasExtras ? [...baseInnings, '10+'] : baseInnings;
+    const padInnings = (arr: number[] | undefined) => {
+      const core = innings.map((_, idx) => {
+        if (hasExtras && idx === innings.length - 1) {
+          const extras = (arr ?? []).slice(9).reduce((acc, cur) => acc + (cur ?? 0), 0);
+          return (arr ?? []).length > 9 ? extras : '—';
+        }
+        return arr && arr[idx] != null ? arr[idx] : '—';
+      });
+      return core;
+    };
+    const mk = (side: 'home' | 'away') => ({
+      name: state.teamNames[side] || (side === 'home' ? homeTeam?.name : awayTeam?.name) || side.toUpperCase(),
+      runs: state.score[side],
+      hits: totals?.[side]?.hits ?? '—',
+      errors: totals?.[side]?.errors ?? '—',
+      innings: padInnings(lineScore?.[side]),
+      color: side === 'home' ? '#f97316' : '#60a5fa',
+    });
+    return { innings, rows: [mk('home'), mk('away')] };
+  }, [activeMatch?.postGame?.lineScore, activeMatch?.postGame?.totals, awayTeam?.name, homeTeam?.name, state.inning, state.score, state.teamNames]);
   const statusBadge = !hasActiveMatch
     ? {
         text: '경기 미선택 · 기록 대기',
@@ -1688,17 +1717,17 @@ const handleConfirmHitWizard = () => {
     >
       <section
         style={{
-          padding: '18px',
+          padding: '12px 18px 10px',
           borderBottom: '1px solid rgba(148, 163, 184, 0.2)',
           display: 'grid',
-          gap: '12px',
+          gap: '8px',
           background: 'rgba(15, 23, 42, 0.6)',
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
           <div>
-            <h2 style={{ fontSize: '18px', fontWeight: 900 }}>기록할 경기 선택</h2>
-            <p style={{ color: '#94a3b8', fontSize: '13px' }}>경기 일정에서 선택한 경기를 불러와 기록을 시작합니다.</p>
+            <h2 style={{ fontSize: '18px', fontWeight: 900, margin: 0 }}>기록할 경기 선택</h2>
+            <p style={{ color: '#94a3b8', fontSize: '13px', margin: '4px 0 0' }}>경기 일정에서 선택한 경기를 불러와 기록을 시작합니다.</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <select
@@ -1740,7 +1769,7 @@ const handleConfirmHitWizard = () => {
           </div>
         </div>
         {activeMatch ? (
-          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', color: '#cbd5e1', fontSize: '13px' }}>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', color: '#cbd5e1', fontSize: '13px' }}>
             <span>
               선택된 경기: {activeMatch.homeTeamName} vs {activeMatch.awayTeamName}
             </span>
@@ -1773,6 +1802,25 @@ const handleConfirmHitWizard = () => {
         </div>
         <span style={{ fontSize: '14px', color: '#94a3b8' }}>기록원 컨트롤러 · 데모</span>
       </header>
+
+      <section
+        style={{
+          padding: '10px 18px 4px',
+        }}
+      >
+        <div
+          style={{
+            width: '100%',
+            borderRadius: '16px',
+            border: '1px solid rgba(148,163,184,0.3)',
+            background: 'rgba(15,23,42,0.7)',
+            padding: '8px',
+            boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
+          }}
+        >
+          <BoxScoreTable data={boxScore} />
+        </div>
+      </section>
 
       <div
         style={{
