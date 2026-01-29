@@ -1,4 +1,5 @@
-import { FormEvent, useMemo, useState } from 'react';
+import type * as React from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../shared/auth/AuthProvider';
 
@@ -15,10 +16,13 @@ export default function LoginPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
-  const handleSubmit = async (evt: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (evt: React.FormEvent<HTMLFormElement>) => {
     evt.preventDefault();
     setSubmitting(true);
     setMessage(null);
@@ -26,6 +30,11 @@ export default function LoginPage() {
       if (mode === 'login') {
         await loginWithEmail(email, password);
       } else {
+        if (password !== confirmPassword) {
+          setSubmitting(false);
+          setMessage('비밀번호와 비밀번호 확인이 일치하지 않습니다.');
+          return;
+        }
         await registerWithEmail(email, password);
       }
       navigate(redirectTo, { replace: true });
@@ -52,26 +61,33 @@ export default function LoginPage() {
   return (
     <div className="auth-shell">
       <div className="auth-hero">
-        <p className="eyebrow">FIREBASE SECURED</p>
-        <h1>로그인하고 리그 운영에 참여하세요</h1>
+        <p className="eyebrow">AUBL 계정</p>
+        <h1>로그인하고 경기 소식을 가장 빠르게 만나보세요</h1>
         <p className="lede">
-          이메일/비밀번호 또는 Google 계정으로 로그인할 수 있습니다.
+          이메일·비밀번호(재확인) 또는 Google 계정으로 간편 로그인하세요.
           <br />
-          로그인 후 발급된 Firebase ID Token을 백엔드 요청 헤더에 첨부해 보안을 유지하세요.
+          로그인하면 실시간 전광판, 일정, 기록 열람과 알림 설정을 이용할 수 있습니다.
         </p>
         <div className="auth-tips">
           <div>
             <span>🎟️</span>
             <div>
-              <strong>권한별 접근</strong>
-              <p>필요 시 특정 페이지를 <code>RequireAuth</code>로 감싸서 접근을 제한하세요.</p>
+              <strong>회원 전용</strong>
+              <p>즐겨찾기 경기, 문자중계 구독 등 개인화 기능을 사용하려면 로그인하세요.</p>
             </div>
           </div>
           <div>
             <span>🔐</span>
             <div>
-              <strong>토큰 전달</strong>
-              <p>API 요청 시 <code>Authorization: Bearer {'<idToken>'}</code> 헤더로 전달합니다.</p>
+              <strong>안전한 인증</strong>
+              <p>비밀번호는 안전하게 암호화 저장되며, 모든 통신은 HTTPS로 보호됩니다.</p>
+            </div>
+          </div>
+          <div>
+            <span>✅</span>
+            <div>
+              <strong>알림 설정</strong>
+              <p>로그인하면 즐겨찾는 팀의 경기 시작/득점 알림을 바로 받아볼 수 있습니다.</p>
             </div>
           </div>
         </div>
@@ -125,6 +141,22 @@ export default function LoginPage() {
               minLength={6}
             />
           </label>
+          {mode === 'register' && (
+            <label className="auth-label">
+              비밀번호 확인
+              <input
+                className="auth-input"
+                type="password"
+                name="passwordConfirm"
+                autoComplete="new-password"
+                placeholder="다시 한 번 입력"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                minLength={6}
+              />
+            </label>
+          )}
 
           {(message || error) && (
             <div className="auth-alert">
@@ -132,7 +164,8 @@ export default function LoginPage() {
             </div>
           )}
 
-          <button type="submit" className="auth-submit" disabled={submitting}>
+          <div style={{ marginTop: '0px' }} />
+          <button type="submit" className="auth-submit" disabled={submitting} style={{ marginTop: '6px' }}>
             {submitting ? '처리 중...' : mode === 'login' ? '로그인' : '가입하기'}
           </button>
         </form>
@@ -152,6 +185,63 @@ export default function LoginPage() {
             권한 안내 보기
           </Link>
         </p>
+        <div
+          className="auth-footer"
+          style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', textAlign: 'center', fontSize: '12px' }}
+        >
+          <button
+            type="button"
+            className="auth-link"
+            style={{ border: 'none', background: 'transparent', padding: 0, fontWeight: 800, fontSize: '12px' }}
+            onClick={() => setShowTerms((v) => !v)}
+          >
+            회원약관 보기
+          </button>
+          <button
+            type="button"
+            className="auth-link"
+            style={{ border: 'none', background: 'transparent', padding: 0, fontWeight: 800, fontSize: '12px' }}
+            onClick={() => setShowPrivacy((v) => !v)}
+          >
+            개인정보 보호 안내
+          </button>
+        </div>
+        {showTerms && (
+          <div
+            className="auth-alert"
+            style={{
+              background: 'rgba(96,165,250,0.12)',
+              borderColor: 'rgba(96,165,250,0.4)',
+              textAlign: 'center',
+              fontSize: '12px',
+            }}
+          >
+            <strong>회원약관 요약</strong>
+            <ul style={{ margin: '6px 0 0', paddingLeft: 0, listStyle: 'none', color: '#e2e8f0', lineHeight: 1.5 }}>
+              <li>리그 운영 목적 내에서만 계정을 사용합니다.</li>
+              <li>타인의 정보를 무단으로 사용하지 않습니다.</li>
+              <li>위반 시 관리자 권한으로 계정이 제한될 수 있습니다.</li>
+            </ul>
+          </div>
+        )}
+        {showPrivacy && (
+          <div
+            className="auth-alert"
+            style={{
+              background: 'rgba(34,197,94,0.12)',
+              borderColor: 'rgba(34,197,94,0.4)',
+              textAlign: 'center',
+              fontSize: '12px',
+            }}
+          >
+            <strong>개인정보 보호 안내</strong>
+            <ul style={{ margin: '6px 0 0', paddingLeft: 0, listStyle: 'none', color: '#e2e8f0', lineHeight: 1.5 }}>
+              <li>이메일과 로그인 기록은 인증 및 보안 감사 목적에만 사용됩니다.</li>
+              <li>비밀번호는 Firebase Auth에서 안전하게 해시 저장됩니다.</li>
+              <li>요청 시 계정 삭제 및 로그 기록 정리에 대해 관리자에게 문의하세요.</li>
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );
