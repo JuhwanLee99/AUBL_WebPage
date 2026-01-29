@@ -1777,13 +1777,14 @@ const handleConfirmHitWizard = () => {
       <div
         style={{
           display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-          gap: '16px',
-          padding: '18px',
+          gridTemplateColumns: '550px 960px',
+          gap: '10px',
+          padding: '16px',
           alignItems: 'start',
+          justifyContent: 'start',
         }}
       >
-        <div style={{ display: 'grid', gap: '12px', minHeight: '680px' }}>
+        <div style={{ display: 'grid', gap: '12px', minHeight: '680px', minWidth: 0, justifyItems: 'start' }}>
           <FieldView
             bases={state.bases}
             inning={state.inning}
@@ -1815,6 +1816,9 @@ const handleConfirmHitWizard = () => {
               display: 'grid',
               gap: '10px',
               minHeight: '220px',
+              width: '100%',
+              maxWidth: '550px',
+              minWidth: '480px',
             }}
           >
             <div
@@ -2196,6 +2200,10 @@ const handleConfirmHitWizard = () => {
             gap: '14px',
             minHeight: '360px',
             gridTemplateColumns: '1fr',
+            minWidth: 'min(520px, 100%)',
+            width: '100%',
+            maxWidth: '960px',
+            justifySelf: 'start',
           }}
         >
           <div
@@ -2411,6 +2419,9 @@ function FieldView({
         position: 'relative',
         borderRadius: '18px',
         background: '#0b0f1a',
+        width: '100%',
+        minWidth: '480px',
+        maxWidth: 'min(550px, 100%)',
         aspectRatio: '4 / 3',
         border: '1px solid rgba(148, 163, 184, 0.25)',
         overflow: 'hidden',
