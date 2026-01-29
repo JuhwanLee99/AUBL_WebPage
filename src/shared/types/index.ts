@@ -59,3 +59,15 @@ export interface TeamSeasonRecord {
   captains: string[];
   players: PlayerSeasonStat[];
 }
+
+export type NoticeCategory = '일반' | '징계' | '경기공지' | '긴급';
+
+export interface Notice {
+  id: string;
+  title: string;
+  category: NoticeCategory;
+  content: string; // 간단한 텍스트 또는 HTML
+  author: string;
+  createdAt: number;
+  isImportant?: boolean; // 긴급/중요 상단 고정용
+}
