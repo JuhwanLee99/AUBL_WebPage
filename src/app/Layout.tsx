@@ -9,6 +9,8 @@ import { useDemoStore } from '../shared/state/demoStore';
 const NOTIFICATION_PROMPT_KEY = 'aubl:notificationPrompt:v1';
 const NOTIFICATION_PROMPT_SNOOZE_MS = 1000 * 60 * 60 * 24; // 24시간 동안 재등장 방지
 const NOTIFICATION_PROMPT_SNOOZE_WEEK_MS = NOTIFICATION_PROMPT_SNOOZE_MS * 7; // 1주일 동안 재등장 방지
+const MOBILE_NOTICE_KEY = 'aubl:mobileNotice:v1';
+const MOBILE_NOTICE_SNOOZE_MS = 1000 * 60 * 60 * 24; // 모바일 팝업 24시간 스누즈
 
 export default function Layout() {
   const location = useLocation();
@@ -26,10 +28,63 @@ export default function Layout() {
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
   const [notificationRequesting, setNotificationRequesting] = useState(false);
   const [notificationBlocked, setNotificationBlocked] = useState(false);
+  const [showMobileNotice, setShowMobileNotice] = useState(false);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-preview-mode', previewMode);
   }, [previewMode]);
+
+  // 첫 방문 모바일 사용자에게 PC 최적화 안내
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (isLiveOverlay) return;
+    const isMobileViewport = window.matchMedia('(max-width: 768px)').matches;
+    if (!isMobileViewport) return;
+    const stored = window.localStorage.getItem(MOBILE_NOTICE_KEY);
+    let snoozedUntil = 0;
+    let dismissedPermanently = false;
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as { snoozedUntil?: number; dismissedPermanently?: boolean; updatedAt?: number };
+        snoozedUntil = parsed.snoozedUntil ?? 0;
+        dismissedPermanently = Boolean(parsed.dismissedPermanently);
+      } catch {
+        // 기존 ISO 문자열 등은 무시하고 다시 표시
+      }
+    }
+    const now = Date.now();
+    if (dismissedPermanently) return;
+    if (now < snoozedUntil) return;
+    setShowMobileNotice(true);
+  }, [isLiveOverlay]);
+
+  const handleMobileNoticeConfirm = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(MOBILE_NOTICE_KEY, JSON.stringify({ updatedAt: Date.now(), lastAction: 'confirm' }));
+    }
+    setShowMobileNotice(false);
+  }, []);
+
+  const handleMobileNoticeSnoozeDay = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      const now = Date.now();
+      window.localStorage.setItem(
+        MOBILE_NOTICE_KEY,
+        JSON.stringify({ updatedAt: now, lastAction: 'snooze', snoozedUntil: now + MOBILE_NOTICE_SNOOZE_MS }),
+      );
+    }
+    setShowMobileNotice(false);
+  }, []);
+
+  const handleMobileNoticeNever = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(
+        MOBILE_NOTICE_KEY,
+        JSON.stringify({ updatedAt: Date.now(), lastAction: 'never', dismissedPermanently: true }),
+      );
+    }
+    setShowMobileNotice(false);
+  }, []);
 
   // 첫 방문 시에만 노출되는 경기 시작 알림 CTA (사용자 제스처로 권한 요청)
   useEffect(() => {
@@ -600,6 +655,84 @@ export default function Layout() {
       )}
 
       <main className="app-main" style={isLiveOverlay ? { maxWidth: '100%', margin: 0, padding: 0 } : undefined}>
+        {!isLiveOverlay && showMobileNotice && (
+          <div
+            role="alertdialog"
+            aria-live="polite"
+            style={{
+              position: 'relative',
+              display: 'flex',
+              gap: '14px',
+              alignItems: 'flex-start',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              padding: '18px 20px',
+              marginBottom: '18px',
+              borderRadius: '18px',
+              border: '1px solid rgba(248,184,12,0.4)',
+              background: 'linear-gradient(120deg, rgba(30,41,59,0.92), rgba(15,23,42,0.92))',
+              boxShadow: '0 18px 46px rgba(0,0,0,0.4)',
+            }}
+          >
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', minWidth: '220px' }}>
+              <span style={{ fontSize: '24px', lineHeight: 1 }}>💻</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ fontSize: '15px', fontWeight: 900, color: '#fde68a' }}>PC 화면에 최적화된 사이트입니다.</div>
+                <div style={{ fontSize: '13px', color: '#e2e8f0', lineHeight: 1.55 }}>
+                  모바일 버전은 아직 최적화 중이라 일부 레이아웃이 깨질 수 있어요. 원활한 이용을 위해 PC 브라우저 사용을 권장합니다.
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={handleMobileNoticeConfirm}
+                style={{
+                  background: 'linear-gradient(120deg, #f59e0b, #f97316)',
+                  color: '#0b0f1a',
+                  padding: '11px 14px',
+                  fontWeight: 900,
+                  fontSize: '13px',
+                  borderRadius: '12px',
+                  boxShadow: '0 10px 24px rgba(249,115,22,0.35)',
+                }}
+              >
+                확인
+              </button>
+              <button
+                type="button"
+                onClick={handleMobileNoticeSnoozeDay}
+                style={{
+                  background: 'rgba(15,23,42,0.7)',
+                  color: '#e2e8f0',
+                  border: '1px solid rgba(148,163,184,0.45)',
+                  padding: '10px 12px',
+                  fontWeight: 800,
+                  fontSize: '12px',
+                  borderRadius: '10px',
+                }}
+              >
+                하루 동안 보지 않기
+              </button>
+              <button
+                type="button"
+                onClick={handleMobileNoticeNever}
+                style={{
+                  background: 'rgba(239,68,68,0.12)',
+                  color: '#fecdd3',
+                  border: '1px solid rgba(248,113,113,0.45)',
+                  padding: '10px 12px',
+                  fontWeight: 800,
+                  fontSize: '12px',
+                  borderRadius: '10px',
+                }}
+              >
+                다시 보지 않기
+              </button>
+            </div>
+          </div>
+        )}
+
         {!isLiveOverlay && showNotificationPrompt && typeof Notification !== 'undefined' && (
           <div
             style={{
