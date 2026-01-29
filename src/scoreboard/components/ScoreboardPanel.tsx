@@ -67,7 +67,7 @@ export default function ScoreboardPanel({
       innings: padInnings(lineScore?.[side]),
       color: side === 'home' ? '#f97316' : '#60a5fa',
     });
-    return { innings, rows: [mk('home'), mk('away')] };
+    return { innings, rows: [mk('away'), mk('home')] };
   }, [activeMatch?.postGame?.lineScore, activeMatch?.postGame?.totals, awayTeam?.name, homeTeam?.name, state.score, state.teamNames]);
   const summaryTime = useMemo(() => {
     if (!activeMatch?.startTime) return '일시 미정';
@@ -112,7 +112,7 @@ export default function ScoreboardPanel({
             textAlign: 'center',
           }}
         >
-          <ScoreCell label={state.teamNames.home || homeTeam?.name || 'HOME'} value={state.score.home} />
+          <ScoreCell label={state.teamNames.away || awayTeam?.name || 'AWAY'} value={state.score.away} />
           <div
             style={{
               display: 'grid',
@@ -153,7 +153,7 @@ export default function ScoreboardPanel({
               color="#f97316"
             />
           </div>
-          <ScoreCell label={state.teamNames.away || awayTeam?.name || 'AWAY'} value={state.score.away} />
+          <ScoreCell label={state.teamNames.home || homeTeam?.name || 'HOME'} value={state.score.home} />
         </div>
       </div>
 
@@ -233,7 +233,7 @@ export default function ScoreboardPanel({
           }}
         >
           <span>
-            HOME: {state.teamNames.home || homeTeam?.name || 'HOME'} · AWAY: {state.teamNames.away || awayTeam?.name || 'AWAY'}
+            AWAY: {state.teamNames.away || awayTeam?.name || 'AWAY'} · HOME: {state.teamNames.home || homeTeam?.name || 'HOME'}
           </span>
           <span>Mock data demo · No live connection</span>
         </div>

@@ -106,7 +106,7 @@ export default function ScoreboardLiveOverlayPage() {
             ) : null}
             {matches.map((match) => (
               <option key={match.id} value={match.id}>
-                {match.homeTeamName} vs {match.awayTeamName} {match.status === 'inProgress' ? '· 진행중' : ''}
+                {match.awayTeamName} vs {match.homeTeamName} {match.status === 'inProgress' ? '· 진행중' : ''}
               </option>
             ))}
           </select>
@@ -186,11 +186,11 @@ export default function ScoreboardLiveOverlayPage() {
               justifyContent: 'space-between',
               fontSize: '20px',
               fontWeight: 700,
-              color: battingSide === 'home' ? '#f97316' : '#f8fafc',
+              color: battingSide === 'away' ? '#f97316' : '#f8fafc',
             }}
           >
-            <span>{state.teamNames.home || 'HOME'}</span>
-            <span>{state.score.home}</span>
+            <span>{state.teamNames.away || 'AWAY'}</span>
+            <span>{state.score.away}</span>
           </div>
           <div
             style={{
@@ -198,11 +198,11 @@ export default function ScoreboardLiveOverlayPage() {
               justifyContent: 'space-between',
               fontSize: '20px',
               fontWeight: 700,
-              color: battingSide === 'away' ? '#f97316' : '#f8fafc',
+              color: battingSide === 'home' ? '#f97316' : '#f8fafc',
             }}
           >
-            <span>{state.teamNames.away || 'AWAY'}</span>
-            <span>{state.score.away}</span>
+            <span>{state.teamNames.home || 'HOME'}</span>
+            <span>{state.score.home}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#cbd5f5', marginTop: '-2px' }}>
             <span>이닝</span>

@@ -93,7 +93,7 @@ export default function ScoreboardTextPage() {
     if (!state.gameOver) return null;
     const home = state.teamNames.home;
     const away = state.teamNames.away;
-    const scoreText = `${home} ${state.score.home} - ${away} ${state.score.away}`;
+    const scoreText = `${away} ${state.score.away} - ${home} ${state.score.home}`;
     let resultText = `무승부 (${scoreText})`;
     if (state.score.home > state.score.away) {
       resultText = `${home} 승리 (${scoreText})`;

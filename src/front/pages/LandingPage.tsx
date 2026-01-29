@@ -675,15 +675,15 @@ export default function LandingPage() {
                       }}
                     />
                     <span style={{ fontWeight: 800, color: '#e2e8f0', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {match.homeTeamName}
+                      {match.awayTeamName}
                     </span>
                   </div>
                   <div style={{ fontWeight: 900, fontSize: '22px', color: '#f8fafc', letterSpacing: '0.04em' }}>
-                    {scoreOrDash(liveScores[match.id]?.home ?? match.homeScore)} : {scoreOrDash(liveScores[match.id]?.away ?? match.awayScore)}
+                    {scoreOrDash(liveScores[match.id]?.away ?? match.awayScore)} : {scoreOrDash(liveScores[match.id]?.home ?? match.homeScore)}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end', minWidth: 0 }}>
                     <span style={{ fontWeight: 800, color: '#e2e8f0', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'right' }}>
-                      {match.awayTeamName}
+                      {match.homeTeamName}
                     </span>
                     <span
                       aria-hidden

@@ -175,7 +175,7 @@ export default function ScheduleGroupsPage() {
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                           <span style={{ fontWeight: 800, color: '#e2e8f0' }}>
-                            {match.homeTeamName} vs {match.awayTeamName}
+                            {match.awayTeamName} vs {match.homeTeamName}
                           </span>
                           <span
                             style={{

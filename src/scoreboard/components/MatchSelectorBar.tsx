@@ -48,7 +48,7 @@ export default function MatchSelectorBar({ summaryTime, summaryVenue }: Props) {
           ) : null}
           {matches.map((match) => (
             <option key={match.id} value={match.id}>
-              {match.homeTeamName} vs {match.awayTeamName} {match.status === 'inProgress' ? '· 진행중' : ''}
+              {match.awayTeamName} vs {match.homeTeamName} {match.status === 'inProgress' ? '· 진행중' : ''}
             </option>
           ))}
         </select>
