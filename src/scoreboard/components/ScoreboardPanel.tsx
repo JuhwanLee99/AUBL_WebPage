@@ -342,7 +342,7 @@ function BasePaths({ bases }: { bases: (string | null)[] }) {
   );
 }
 
-function BoxScoreTable({
+export function BoxScoreTable({
   data,
 }: {
   data: {
@@ -384,7 +384,7 @@ function BoxScoreTable({
           <div
             key={h}
             style={{
-              padding: '8px 10px',
+              padding: '6px 8px',
               textAlign: 'center',
               fontWeight: 800,
               fontSize: '12px',
@@ -408,7 +408,7 @@ function BoxScoreTable({
           >
             <div
               style={{
-                padding: '10px',
+                padding: '8px',
                 fontWeight: 900,
                 color: row.color,
                 fontSize: '12px',
@@ -421,7 +421,7 @@ function BoxScoreTable({
               <div
                 key={`${row.name}-${vIdx}`}
                 style={{
-                  padding: '10px',
+                  padding: '8px',
                   textAlign: 'center',
                   color: '#cbd5e1',
                   fontWeight: 800,
