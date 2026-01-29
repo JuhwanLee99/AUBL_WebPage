@@ -41,8 +41,5 @@ crawler/out/league_pitching_records.jsonl
 crawler/out/roster_players.jsonl
 .env
 serviceAccountKey.json
+.firebase/*
 firestore-debug.log
-.firebase/hosting.ZGlzdA.cache
-.firebase/hosting.ZGlzdA.cache
-.firebase/hosting.ZGlzdA.cache
-.firebase/hosting.ZGlzdA.cache
