@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { TEAMS } from '../../shared/lib/mockData';
 import { buildGameRecord, useDemoStore } from '../../shared/state/demoStore';
 import type {
@@ -1297,7 +1298,7 @@ export default function ScorekeeperPage() {
   const lockCountdownLabel = useMemo(() => {
     if (!hasActiveMatch || !state.scorerUid || lockRemainingMs <= 0) return '잠금 없음';
     const ownerLabel =
-      state.scorerUid === (user?.uid ?? null) ? '락 만료까지' : '해제 예상까지';
+      state.scorerUid === (user?.uid ?? null) ? '만료까지' : '해제 예상까지';
     return `${ownerLabel} ${formatMs(lockRemainingMs)}`;
   }, [hasActiveMatch, state.scorerUid, lockRemainingMs, user?.uid, formatMs]);
   const lockCountdownColor = lockRemainingMs > 30_000 ? '#67e8f9' : '#f87171';
@@ -1948,7 +1949,7 @@ const handleConfirmHitWizard = () => {
                 {/* 하단: 락 설명 + 카운트다운 + 잠금 해제 한 줄 배치 */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>
-                    락은 입력 중 5분 동안 유지되고 60초마다 갱신됩니다. 락 소유자만 기록 가능합니다.{' '}
+                    락은 입력 중 5분 동안 유지되고 60초마다 갱신됩니다. 락 소유자만 기록 가능.{' '}
                     <span style={{ color: lockCountdownColor }}>{lockCountdownLabel}</span>
                   </span>
                   {!lockedByOther && state.scorerUid === (user?.uid ?? null) && !state.scorerPaused ? (
@@ -2356,64 +2357,6 @@ const handleConfirmHitWizard = () => {
         <RemovedPlayersPanel title="교체 out (HOME)" players={state.removed.home} density="regular" />
       </div>
 
-      {/* 모바일 환경 경고 팝업 */}
-      {showMobileWarning && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 9999,
-            background: 'rgba(0, 0, 0, 0.85)',
-            display: 'grid',
-            placeItems: 'center',
-            padding: '20px',
-            backdropFilter: 'blur(4px)',
-          }}
-        >
-          <div
-            style={{
-              background: '#1e293b',
-              padding: '32px',
-              borderRadius: '24px',
-              border: '1px solid rgba(148, 163, 184, 0.2)',
-              maxWidth: '400px',
-              width: '100%',
-              textAlign: 'center',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-            }}
-          >
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🖥️</div>
-            <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#f8fafc', marginBottom: '12px' }}>
-              PC 환경 권장
-            </h3>
-            <p style={{ color: '#cbd5e1', lineHeight: '1.6', fontSize: '15px', marginBottom: '24px', wordBreak: 'keep-all' }}>
-              현재 <strong>기록원 페이지</strong>는 모바일 환경에 최적화되어 있지 않습니다.<br />
-              원활한 경기 기록을 위해<br />
-              <span style={{ color: '#60a5fa', fontWeight: 700 }}>PC 또는 넓은 화면의 태블릿</span>을 사용해 주세요.
-            </p>
-            <button
-              onClick={() => setShowMobileWarning(false)}
-              style={{
-                width: '100%',
-                padding: '14px',
-                borderRadius: '12px',
-                border: 'none',
-                background: '#334155',
-                color: '#f1f5f9',
-                fontWeight: 800,
-                fontSize: '15px',
-                cursor: 'pointer',
-                transition: 'background 0.2s',
-              }}
-              onMouseOver={(e) => (e.currentTarget.style.background = '#475569')}
-              onMouseOut={(e) => (e.currentTarget.style.background = '#334155')}
-            >
-              알겠습니다 (그대로 진행)
-            </button>
-          </div>
-        </div>
-      )}
-
       {hitWizard && (
         <HitWizardModal
           state={hitWizard}
@@ -2496,6 +2439,75 @@ const handleConfirmHitWizard = () => {
           onClose={() => setShowDroppedThirdStrike(false)}
           onSelect={(isDropped) => handleDroppedThirdStrike(isDropped)}
         />
+      )}
+
+      {/* 모바일 경고 팝업 (Portal 사용) */}
+      {showMobileWarning && createPortal(
+        <div
+          style={{
+            position: 'fixed', // 뷰포트 기준 고정
+            top: 0,
+            left: 0,
+            width: '100vw',  // 너비 강제 (스크롤바 영역 제외한 뷰포트 전체)
+            height: '100vh', // 높이 강제
+            zIndex: 99999,
+            background: 'rgba(0, 0, 0, 0.85)',
+            display: 'flex', // Flexbox 사용
+            alignItems: 'center', // 수직 중앙 정렬
+            justifyContent: 'center', // 수평 중앙 정렬
+            padding: '20px',
+            boxSizing: 'border-box', // 패딩이 너비에 포함되도록 설정
+            backdropFilter: 'blur(4px)',
+            overflow: 'hidden', // 내부 스크롤 방지
+          }}
+          // 배경 터치 시 이벤트 전파 방지 (선택 사항)
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div
+            style={{
+              background: '#1e293b',
+              padding: '32px',
+              borderRadius: '24px',
+              border: '1px solid rgba(148, 163, 184, 0.2)',
+              maxWidth: '400px',
+              width: '100%',
+              textAlign: 'center',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+              color: '#e2e8f0',
+              position: 'relative', // 내부 요소 기준점
+            }}
+          >
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🖥️</div>
+            <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#f8fafc', marginBottom: '12px', marginTop: 0 }}>
+              PC 환경 권장
+            </h3>
+            <p style={{ color: '#cbd5e1', lineHeight: '1.6', fontSize: '15px', marginBottom: '24px', wordBreak: 'keep-all' }}>
+              현재 <strong>기록원 페이지</strong>는 모바일 환경에 최적화되어 있지 않습니다.<br />
+              원활한 경기 기록을 위해<br />
+              <span style={{ color: '#60a5fa', fontWeight: 700 }}>PC 또는 넓은 화면의 태블릿</span>을 사용해 주세요.
+            </p>
+            <button
+              onClick={() => setShowMobileWarning(false)}
+              style={{
+                width: '100%',
+                padding: '14px',
+                borderRadius: '12px',
+                border: 'none',
+                background: '#334155',
+                color: '#f1f5f9',
+                fontWeight: 800,
+                fontSize: '15px',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.background = '#475569')}
+              onMouseOut={(e) => (e.currentTarget.style.background = '#334155')}
+            >
+              알겠습니다 (그대로 진행)
+            </button>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
