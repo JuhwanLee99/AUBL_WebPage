@@ -19,6 +19,12 @@ import { auth, firestore } from '../firebase/client';
 import { TEAMS } from '../lib/mockData';
 import type { LeagueDivision } from '../types';
 
+// 헬퍼 함수 추가
+const formatUniqueName = (name: string, number: string | number | undefined | null) => {
+  if (!name) return '';
+  return number ? `${name}(${number})` : name;
+};
+
 const TRASH_RETENTION_MS = 1000 * 60 * 60 * 24 * 30; // 30일 보관
 const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
   .split(',')
@@ -851,6 +857,12 @@ export interface GameRecord {
 }
 
 export function buildGameRecord(state: DemoState): GameRecord {
+  // [추가] 선수 객체의 이름을 '이름(등번호)'로 변환하는 내부 함수
+  const transformPlayer = (p: PlayerSlot) => ({
+    ...p,
+    name: formatUniqueName(p.name, p.number),
+  });
+
   return {
     meta: {
       homeTeamId: state.homeTeamId,
@@ -859,30 +871,38 @@ export function buildGameRecord(state: DemoState): GameRecord {
       awayTeamName: state.teamNames.away,
       inning: state.inning,
       half: state.half,
-    gameStarted: state.gameStarted,
-    gameOver: state.gameOver,
-    endedAt: state.endedAt,
-    scorerUid: state.scorerUid,
-    scorerName: state.scorerName,
-    scorerEmail: state.scorerEmail,
-    scorerRole: state.scorerRole,
-  },
+      gameStarted: state.gameStarted,
+      gameOver: state.gameOver,
+      endedAt: state.endedAt,
+      scorerUid: state.scorerUid,
+      scorerName: state.scorerName,
+      scorerEmail: state.scorerEmail,
+      scorerRole: state.scorerRole,
+    },
     score: { ...state.score },
-    counts: { balls: state.balls, strikes: state.strikes, outs: state.outs, pitchCount: state.pitchCount },
+    counts: {
+      balls: state.balls,
+      strikes: state.strikes,
+      outs: state.outs,
+      pitchCount: state.pitchCount,
+    },
     bases: [...state.bases],
     batterIndex: { ...state.batterIndex },
+    
+    // [수정] 아래 lineups, benches, removed 부분에 transformPlayer 적용
     lineups: {
-      home: state.lineups.home.map((player) => ({ ...player })),
-      away: state.lineups.away.map((player) => ({ ...player })),
+      home: state.lineups.home.map(transformPlayer),
+      away: state.lineups.away.map(transformPlayer),
     },
     benches: {
-      home: state.benches.home.map((player) => ({ ...player })),
-      away: state.benches.away.map((player) => ({ ...player })),
+      home: state.benches.home.map(transformPlayer),
+      away: state.benches.away.map(transformPlayer),
     },
     removed: {
-      home: state.removed.home.map((player) => ({ ...player })),
-      away: state.removed.away.map((player) => ({ ...player })),
+      home: state.removed.home.map(transformPlayer),
+      away: state.removed.away.map(transformPlayer),
     },
+    
     feed: state.feed.map((entry) => ({ ...entry })),
     events: state.events.map((entry) => ({
       ...entry,
