@@ -35,6 +35,13 @@ export default function Layout() {
     document.documentElement.setAttribute('data-preview-mode', previewMode);
   }, [previewMode]);
 
+  // 초기 진입 시(SSR 포함) 모바일 폭이면 모바일 모드로 강제 전환 (테블릿 이상은 데스크톱 유지)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const isNarrowMobile = window.matchMedia('(max-width: 640px)').matches;
+    setPreviewMode(isNarrowMobile ? 'mobile' : 'desktop');
+  }, []);
+
   // 첫 방문 모바일 사용자에게 PC 최적화 안내
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -213,6 +220,7 @@ export default function Layout() {
 
   const activeMatch = useMemo(() => state.matches.find((m) => m.id === state.activeMatchId), [state.matches, state.activeMatchId]);
   const hasLiveOverlay = Boolean((activeMatch?.liveVideoUrl || '').trim());
+  const isMobileHeader = previewMode === 'mobile';
 
   const navItems = useMemo(
     () => [
@@ -315,7 +323,13 @@ export default function Layout() {
             style={{
               position: 'relative',
               alignItems: 'center',
-              height: showSubnav ? 'calc(var(--header-height) + 32px)' : 'var(--header-height)',
+              height: isMobileHeader
+                ? showSubnav
+                  ? 'calc(var(--header-height) + 64px)'
+                  : 'calc(var(--header-height) + 32px)'
+                : showSubnav
+                  ? 'calc(var(--header-height) + 32px)'
+                  : 'var(--header-height)',
               transition: 'height 180ms ease',
               padding: 0,
             }}
@@ -323,11 +337,17 @@ export default function Layout() {
             <div
               style={{
                 position: 'absolute',
-                inset: 0,
+                top: 0,
+                left: 0,
+                right: 0,
                 height: 'var(--header-height)',
                 display: 'flex',
+                flexDirection: 'row',
                 alignItems: 'center',
+                flexWrap: isMobileHeader ? 'wrap' : 'nowrap',
+                rowGap: isMobileHeader ? '8px' : '0px',
                 padding: 'var(--header-padding)',
+                paddingTop: isMobileHeader ? '8px' : '10px',
                 boxSizing: 'border-box',
                 gap: '12px',
               }}
@@ -352,7 +372,21 @@ export default function Layout() {
                   .
                 </span>
               </Link>
-              <nav className="nav-scroll" style={{ marginLeft: 'auto', flex: 1, minWidth: 0, paddingLeft: '18px', position: 'relative' }}>
+              <nav
+                className="nav-scroll"
+                style={{
+                  marginLeft: isMobileHeader ? 0 : 'auto',
+                  flex: isMobileHeader ? '0 0 100%' : 1,
+                  width: isMobileHeader ? '100%' : undefined,
+                  minWidth: 0,
+                  paddingLeft: isMobileHeader ? '14px' : '18px',
+                  paddingRight: isMobileHeader ? '8px' : 0,
+                  marginRight: isMobileHeader ? '-6px' : 0,
+                  position: 'relative',
+                  order: isMobileHeader ? 3 : undefined,
+                  marginTop: isMobileHeader ? '4px' : 0,
+                }}
+              >
                 <div className="nav-scroll__rail">
                   {filteredNavItems.map((item) => {
                     const isActive = location.pathname === item.path || activeParentPath === item.path;
@@ -442,11 +476,13 @@ export default function Layout() {
                     display: 'flex',
                     gap: '8px',
                     alignItems: 'center',
-                    marginLeft: '12px',
+                    marginLeft: isMobileHeader ? 0 : '12px',
                     background: 'rgba(148,163,184,0.12)',
                     borderRadius: '999px',
                     padding: '6px 8px',
                     flexShrink: 0,
+                    order: isMobileHeader ? 2 : undefined,
+                    flexWrap: 'wrap',
                   }}
                 >
                   <Link
@@ -511,7 +547,11 @@ export default function Layout() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '10px',
-                  marginLeft: isScoreboardText ? '8px' : '12px',
+                  marginLeft: isMobileHeader ? 'auto' : isScoreboardText ? '8px' : '12px',
+                  order: isMobileHeader ? 2 : undefined,
+                  flexWrap: 'wrap',
+                  justifyContent: isMobileHeader ? 'flex-end' : 'flex-start',
+                  width: 'auto',
                 }}
               >
                 {initializing ? (
@@ -619,7 +659,7 @@ export default function Layout() {
               onMouseLeave={() => setHoveredMenu(null)}
               style={{
                 position: 'absolute',
-                top: 'calc(var(--header-height) - 6px)',
+                top: isMobileHeader ? 'calc(var(--header-height) + 24px)' : 'calc(var(--header-height) - 6px)',
                 left: 0,
                 width: '100%',
                 height: showSubnav ? '32px' : '0px',
