@@ -1004,10 +1004,33 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
       addPitch(inferred, cleaned);
     }
 
-    const name = entry.batter?.trim();
+    let name = entry.batter?.trim();
     if (!name) return;
     const side = offenseSide;
-    // 여기서 name은 uniqueName 형태여야 함
+    
+    const roster = side === 'home' ? rosterHome : rosterAway;
+
+    // 만약 roster에 해당 이름(예: "홍길동")이 없다면, "홍길동(18)" 같은 키를 찾아서 매핑
+    if (!roster.has(name)) {
+      // 1. 타순(Order) 정보가 있다면 우선적으로 확인
+      if (orderNum) {
+        const candidates = battingOrders[side].get(orderNum);
+        // 후보군 중 이름이 일치하는(시작하는) 선수 찾기
+        const match = candidates?.find(uName => uName.startsWith(`${name}(`) || uName === name);
+        if (match) name = match;
+      }
+
+      // 2. 타순으로 못 찾았다면, 로스터 전체에서 이름으로 검색 (동명이인이 없을 경우 유효)
+      if (!roster.has(name)) {
+         for (const key of roster.keys()) {
+           if (key.startsWith(`${name}(`)) {
+             name = key;
+             break;
+           }
+         }
+      }
+    }
+    
     ensureRosterEntry(side, name);
     if (orderNum) {
       const list = battingOrders[side].get(orderNum) ?? [];
