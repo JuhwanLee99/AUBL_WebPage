@@ -21,6 +21,7 @@ import PowerRankingPage from './pages/PowerRankingPage';
 import LoginPage from './pages/LoginPage';
 import AccessDeniedPage from './pages/AccessDeniedPage';
 import AdminPage from './pages/AdminPage';
+import AccountPage from './pages/AccountPage';
 import { RequireAdmin } from '../shared/auth/RequireAdmin';
 
 export const router = createBrowserRouter([
@@ -115,6 +116,10 @@ export const router = createBrowserRouter([
       {
         path: 'player/:name',
         element: <PlayerDetailPage />,
+      },
+      {
+        path: 'account',
+        element: <AccountPage />,
       },
       {
         path: 'login',

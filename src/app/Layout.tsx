@@ -521,6 +521,7 @@ export default function Layout() {
                     {isAdmin ? (
                       <Link to="/admin" style={{ textDecoration: 'none' }}>
                         <span
+                          className="badge-hoverable"
                           style={{
                             padding: '6px 10px',
                             borderRadius: '10px',
@@ -540,6 +541,7 @@ export default function Layout() {
                       </Link>
                     ) : (
                       <span
+                        className="badge-hoverable"
                         style={{
                           padding: '6px 10px',
                           borderRadius: '10px',
@@ -556,7 +558,9 @@ export default function Layout() {
                         {roleLabel}
                       </span>
                     )}
-                    <span
+                    <Link
+                      to="/account"
+                      className="badge-hoverable"
                       style={{
                         padding: '8px 12px',
                         borderRadius: '999px',
@@ -568,11 +572,14 @@ export default function Layout() {
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
+                        textDecoration: 'none',
+                        border: '1px solid rgba(148,163,184,0.3)',
+                        display: 'inline-block',
                       }}
-                      title={user.email ?? user.uid}
+                      title="계정 페이지로 이동"
                     >
                       {user.email ?? user.uid}
-                    </span>
+                    </Link>
                     <button
                       type="button"
                       onClick={logout}
