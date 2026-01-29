@@ -128,6 +128,12 @@ const currentBatterName = (state: ReturnType<typeof useDemoStore>['state']) => {
   return batter?.name || '타자 대기 중';
 };
 
+const currentPitcherName = (state: ReturnType<typeof useDemoStore>['state']) => {
+  const defenseSide = state.half === 'top' ? 'home' : 'away';
+  const pitcher = state.lineups[defenseSide].find((slot) => slot.pos.toUpperCase() === 'P');
+  return pitcher?.name || '투수 대기 중';
+};
+
 function Badge({ label, dots }: { label: string; dots: { active: boolean; color: string }[] }) {
   return (
     <div
@@ -685,6 +691,7 @@ export default function LandingPage() {
                       ? `${snapshot.inning}회${snapshot.half === 'top' ? '초' : '말'}`
                       : '이닝 정보 없음';
                   const batter = isActive ? currentBatterName(state) : '실시간 선택 시 표시';
+                  const pitcher = isActive ? currentPitcherName(state) : '투수 정보 없음';
                   const bDots = countDots(balls ?? 0, 3, '#22c55e');
                   const sDots = countDots(strikes ?? 0, 2, '#facc15');
                   const oDots = countDots(outs ?? 0, 3, '#ef4444');
@@ -709,9 +716,12 @@ export default function LandingPage() {
                           <MiniBases bases={bases} />
                         </div>
                       </div>
-                      <div style={{ display: 'grid', gap: '4px', justifyItems: 'end', textAlign: 'right' }}>
+                      <div style={{ display: 'grid', gap: '6px', justifyItems: 'end', textAlign: 'right' }}>
                         <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '12px' }}>{inningLabel}</span>
-                        <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>현재 타석: {batter}</span>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                          <span style={{ color: '#a5b4fc', fontWeight: 800, fontSize: '12px', whiteSpace: 'nowrap' }}>현재 투수: {pitcher}</span>
+                          <span style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px', whiteSpace: 'nowrap' }}>현재 타석: {batter}</span>
+                        </div>
                       </div>
                     </div>
                   );
