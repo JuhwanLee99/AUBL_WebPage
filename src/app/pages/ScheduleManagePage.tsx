@@ -171,7 +171,7 @@ export default function ScheduleManagePage() {
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                       <span style={{ width: '10px', height: '10px', borderRadius: '999px', background: color }} />
                       <span style={{ fontWeight: 800, color: '#e2e8f0' }}>
-                        {match.homeTeamName} vs {match.awayTeamName}
+                        {match.awayTeamName} vs {match.homeTeamName}
                       </span>
                       <span
                         style={{
@@ -344,7 +344,7 @@ export default function ScheduleManagePage() {
               }}
             >
               <span style={{ fontWeight: 800, color: '#e2e8f0' }}>
-                {match.homeTeamName} vs {match.awayTeamName}
+                {match.awayTeamName} vs {match.homeTeamName}
               </span>
               <input
                 defaultValue={match.notes ?? ''}
@@ -391,7 +391,7 @@ export default function ScheduleManagePage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
                     <div style={{ display: 'grid', gap: '4px' }}>
                       <span style={{ fontWeight: 800, color: '#e2e8f0' }}>
-                        {entry.homeTeamName} vs {entry.awayTeamName}
+                        {entry.awayTeamName} vs {entry.homeTeamName}
                       </span>
                       <span style={{ color: '#94a3b8', fontSize: '12px' }}>
                         {new Date(entry.startTime).toLocaleString('ko-KR')} · {entry.venue}

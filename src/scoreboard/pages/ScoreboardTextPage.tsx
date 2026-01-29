@@ -61,6 +61,10 @@ export default function ScoreboardTextPage() {
   const feed = useMemo(() => state.feed, [state.feed]);
   const hittingSide = state.half === 'top' ? 'away' : 'home';
   const defenseSide = hittingSide === 'home' ? 'away' : 'home';
+  const defenseAssignments = useMemo(
+    () => getDefenseAssignments(state.lineups[defenseSide] ?? []),
+    [defenseSide, state.lineups],
+  );
   const offenseLineup = state.lineups[hittingSide].filter((slot) => slot.pos.toUpperCase() !== 'P');
   const activeOffense = offenseLineup.length ? offenseLineup : state.lineups[hittingSide];
   const currentBatter = activeOffense[state.batterIndex[hittingSide] % (activeOffense.length || 1)]?.name ?? '타자';
@@ -89,7 +93,7 @@ export default function ScoreboardTextPage() {
     if (!state.gameOver) return null;
     const home = state.teamNames.home;
     const away = state.teamNames.away;
-    const scoreText = `${home} ${state.score.home} - ${away} ${state.score.away}`;
+    const scoreText = `${away} ${state.score.away} - ${home} ${state.score.home}`;
     let resultText = `무승부 (${scoreText})`;
     if (state.score.home > state.score.away) {
       resultText = `${home} 승리 (${scoreText})`;
@@ -158,16 +162,16 @@ export default function ScoreboardTextPage() {
         <div
           style={{
             display: 'grid',
-            gridTemplateRows: state.gameOver ? 'auto 1fr' : 'auto 1fr',
+            gridTemplateRows: state.gameOver ? 'auto 1fr' : 'auto 1fr auto',
             gap: '12px',
             padding: '16px',
             borderRadius: '16px',
             border: '1px solid rgba(148, 163, 184, 0.25)',
             background: '#0b0f1a',
             color: '#e2e8f0',
-            minHeight: 0,
-            height: 'min(90vh, 925px)',
-            overflow: 'hidden',
+            minHeight: 'min(90vh, 925px)',
+            height: 'auto',
+            overflow: 'visible',
           }}
         >
           {state.gameOver ? (
@@ -282,6 +286,31 @@ export default function ScoreboardTextPage() {
             </div>
           </div>
           <LiveFeed sections={sections} collapsedMap={collapsedMap} gameOverInfo={gameOverInfo} />
+          <div
+            style={{
+              borderRadius: '14px',
+              border: '1px solid rgba(148,163,184,0.25)',
+              background: 'rgba(15,23,42,0.5)',
+              padding: '12px',
+              display: 'grid',
+              gap: '10px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 900, fontSize: '15px', color: '#e2e8f0' }}>필드 상황</span>
+              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 800 }}>베이스 · 볼카운트 · 수비 위치</span>
+            </div>
+            <FieldView
+              bases={state.bases}
+              inning={state.inning}
+              half={state.half}
+              outs={state.outs}
+              balls={state.balls}
+              strikes={state.strikes}
+              batterName={currentBatter}
+              defenseAssignments={defenseAssignments}
+            />
+          </div>
         </>
           )}
         </div>
@@ -640,8 +669,8 @@ function LiveFeed({
     <div
       style={{
         overflowY: 'auto',
-        maxHeight: '855px',
-        height: 'min(75vh, 855px)',
+        maxHeight: '430px',
+        height: 'min(40vh, 430px)',
         paddingRight: '6px',
         minHeight: 0,
         position: 'relative',
@@ -659,6 +688,431 @@ function LiveFeed({
       </div>
     </div>
   );
+}
+
+function FieldView({
+  bases,
+  inning,
+  half,
+  outs,
+  balls,
+  strikes,
+  batterName,
+  defenseAssignments,
+  onSelectRunner,
+  onSelectBatter,
+  onSelectFielder,
+}: {
+  bases: (string | null)[];
+  inning: number;
+  half: 'top' | 'bottom';
+  outs: number;
+  balls: number;
+  strikes: number;
+  batterName: string;
+  defenseAssignments: { name: string; pos: string; x: number; y: number }[];
+  onSelectRunner?: (payload: { base: 0 | 1 | 2; name: string }) => void;
+  onSelectBatter?: () => void;
+  onSelectFielder?: (payload: { name: string; pos: string }) => void;
+}) {
+  const label = `${half === 'top' ? '▲' : '▼'} ${inning}`;
+  const baseSize = 'clamp(20px, 3.4vw, 30px)';
+  const groundShift = '-4%';
+  const positions = {
+    second: { x: 50, y: 35 },
+    first: { x: 72, y: 63 },
+    third: { x: 28, y: 63 },
+    home: { x: 50, y: 92 },
+    batter: { x: 58, y: 90 },
+  };
+  return (
+    <div
+      style={{
+        position: 'relative',
+        borderRadius: '18px',
+        background: '#0b0f1a',
+        width: '100%',
+        minWidth: 0,
+        maxWidth: '100%',
+        aspectRatio: '4 / 3',
+        border: '1px solid rgba(148, 163, 184, 0.25)',
+        overflow: 'hidden',
+        justifySelf: 'start',
+      }}
+    >
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          transform: `translateY(${groundShift})`,
+          pointerEvents: 'none',
+        }}
+      >
+        <FieldSvg />
+        <BaselineSvg />
+      </div>
+      <span
+        style={{
+          position: 'absolute',
+          top: '12px',
+          left: '12px',
+          padding: '8px 12px',
+          borderRadius: '12px',
+          background: 'rgba(15,23,42,0.8)',
+          border: '1px solid rgba(148,163,184,0.3)',
+          fontWeight: 900,
+          color: '#cbd5e1',
+          fontSize: '13px',
+        }}
+      >
+        {label}
+      </span>
+      <OutLights outs={outs} balls={balls} strikes={strikes} />
+      <Base
+        marker={Boolean(bases[1])}
+        label={bases[1] ?? '2'}
+        top={`${positions.second.y}%`}
+        left={`${positions.second.x}%`}
+        size={baseSize}
+        onSelect={() => bases[1] && onSelectRunner?.({ base: 1, name: bases[1] })}
+      />
+      <Base
+        marker={Boolean(bases[0])}
+        label={bases[0] ?? '1'}
+        top={`${positions.first.y}%`}
+        left={`${positions.first.x}%`}
+        size={baseSize}
+        onSelect={() => bases[0] && onSelectRunner?.({ base: 0, name: bases[0] })}
+      />
+      <Base
+        marker={Boolean(bases[2])}
+        label={bases[2] ?? '3'}
+        top={`${positions.third.y}%`}
+        left={`${positions.third.x}%`}
+        size={baseSize}
+        onSelect={() => bases[2] && onSelectRunner?.({ base: 2, name: bases[2] })}
+      />
+      <HomePlate occupied={false} size={baseSize} top={`${positions.home.y}%`} left={`${positions.home.x}%`} />
+      <BatterBadge name={batterName} top={`${positions.batter.y}%`} left={`${positions.batter.x}%`} onClick={onSelectBatter} />
+      <PitcherBadge
+        name={defenseAssignments.find((player) => player.pos.toUpperCase() === 'P')?.name ?? '투수'}
+        top="54%"
+        left="50%"
+        onClick={onSelectFielder}
+      />
+      <DefenseLayer
+        assignments={defenseAssignments.filter((player) => player.pos.toUpperCase() !== 'P')}
+        onSelectFielder={onSelectFielder}
+      />
+    </div>
+  );
+}
+
+function Base({
+  marker,
+  label,
+  top,
+  left,
+  size,
+  onSelect,
+}: {
+  marker?: boolean;
+  label?: string;
+  top?: string;
+  left?: string;
+  size?: string;
+  onSelect?: () => void;
+}) {
+  const clickable = marker && onSelect;
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top,
+        left,
+        transform: 'translate(-50%, -50%) rotate(45deg)',
+        width: size ?? '28px',
+        height: size ?? '28px',
+        background: '#f4f4f5',
+        borderRadius: '4px',
+        border: '2px solid #e5e7eb',
+        display: 'grid',
+        placeItems: 'center',
+        boxShadow: marker ? '0 0 0 8px rgba(248, 113, 113, 0.2)' : undefined,
+        cursor: clickable ? 'pointer' : 'default',
+        transition: 'transform 120ms ease, box-shadow 120ms ease',
+        ...(clickable
+          ? {
+              transformOrigin: 'center',
+            }
+          : {}),
+      }}
+      role={clickable ? 'button' : undefined}
+      onClick={() => clickable && onSelect?.()}
+      onMouseEnter={(e) => {
+        if (clickable) {
+          (e.currentTarget as HTMLDivElement).style.transform = 'translate(-50%, -50%) rotate(45deg) scale(1.05)';
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (clickable) {
+          (e.currentTarget as HTMLDivElement).style.transform = 'translate(-50%, -50%) rotate(45deg)';
+        }
+      }}
+    >
+      {marker && (
+        <span
+          style={{
+            transform: 'rotate(-45deg)',
+            fontWeight: 900,
+            color: '#ef4444',
+            fontSize: '10px',
+          }}
+        >
+          {label}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function HomePlate({ occupied, size, top, left }: { occupied: boolean; size?: string; top?: string; left?: string }) {
+  const plateWidth = size ? `calc(${size} * 1.5)` : '44px';
+  const plateHeight = size ? `calc(${size} * 1.2)` : '36px';
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: top ?? '72%',
+        left: left ?? '50%',
+        transform: 'translate(-50%, -50%)',
+        width: plateWidth,
+        height: plateHeight,
+        background: '#e5e7eb',
+        clipPath: 'polygon(0 0, 100% 0, 100% 60%, 50% 100%, 0 60%)',
+        border: occupied ? '2px solid #f97316' : '2px solid #d1d5db',
+        boxShadow: occupied ? '0 0 0 8px rgba(249, 115, 22, 0.2)' : undefined,
+      }}
+    />
+  );
+}
+
+function BaselineSvg() {
+  return (
+    <svg viewBox="0 0 100 100" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+      <polyline
+        points="50,72 72,50 50,28 28,50 50,72"
+        fill="none"
+        stroke="rgba(226,232,240,0.35)"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <line x1="50" y1="72" x2="2" y2="24" stroke="rgba(226,232,240,0.25)" strokeWidth="1.4" />
+      <line x1="50" y1="72" x2="98" y2="24" stroke="rgba(226,232,240,0.25)" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+function OutLights({ outs, balls, strikes }: { outs: number; balls: number; strikes: number }) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: '12px',
+        right: '12px',
+        display: 'flex',
+        gap: '8px',
+        alignItems: 'center',
+        padding: '6px 10px',
+        borderRadius: '12px',
+        background: 'rgba(15,23,42,0.8)',
+        border: '1px solid rgba(148,163,184,0.3)',
+      }}
+    >
+      <CounterDots label="B" count={balls} max={3} color="#22c55e" />
+      <CounterDots label="S" count={strikes} max={2} color="#facc15" />
+      <CounterDots label="O" count={outs} max={3} color="#ef4444" />
+    </div>
+  );
+}
+
+function CounterDots({ label, count, max, color }: { label: string; count: number; max: number; color: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+      <span style={{ color, fontWeight: 900, fontSize: '13px', width: '16px' }}>{label}</span>
+      {[...Array(max)].map((_, idx) => (
+        <span
+          key={idx}
+          style={{
+            width: '14px',
+            height: '14px',
+            borderRadius: '50%',
+            background: count > idx ? color : 'transparent',
+            border: `1px solid ${color}80`,
+            boxShadow: count > idx ? `0 0 10px ${color}99` : `inset 0 0 0 1px ${color}55`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function DefenseLayer({
+  assignments,
+  onSelectFielder,
+}: {
+  assignments: { name: string; pos: string; x: number; y: number }[];
+  onSelectFielder?: (payload: { name: string; pos: string }) => void;
+}) {
+  return (
+    <>
+      {assignments.map((player) => (
+        <div
+          key={player.name + player.pos}
+          role={onSelectFielder ? 'button' : undefined}
+          onClick={() => onSelectFielder?.({ name: player.name, pos: player.pos })}
+          style={{
+            position: 'absolute',
+            top: `${player.y}%`,
+            left: `${player.x}%`,
+            transform: 'translate(-50%, -50%)',
+            padding: '6px 8px',
+            borderRadius: '12px',
+            background: 'rgba(15,23,42,0.75)',
+            border: '1px solid rgba(148,163,184,0.3)',
+            color: '#e2e8f0',
+            fontWeight: 800,
+            fontSize: '11px',
+            cursor: onSelectFielder ? 'pointer' : 'default',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+            pointerEvents: onSelectFielder ? 'auto' : 'none',
+          }}
+        >
+          {player.pos} · {player.name}
+        </div>
+      ))}
+    </>
+  );
+}
+
+function BatterBadge({ name, top, left, onClick }: { name: string; top: string; left: string; onClick?: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        position: 'absolute',
+        top,
+        left,
+        transform: 'translate(-50%, -50%)',
+        padding: '10px 12px',
+        borderRadius: '12px',
+        border: '1px solid rgba(148,163,184,0.35)',
+        background: 'rgba(99,102,241,0.18)',
+        color: '#e2e8f0',
+        fontWeight: 900,
+        fontSize: '12px',
+        cursor: onClick ? 'pointer' : 'default',
+        boxShadow: '0 6px 16px rgba(0,0,0,0.3)',
+        pointerEvents: onClick ? 'auto' : 'none',
+      }}
+    >
+      타석 · {name}
+    </button>
+  );
+}
+
+function PitcherBadge({
+  name,
+  top,
+  left,
+  onClick,
+}: {
+  name: string;
+  top: string;
+  left: string;
+  onClick?: (payload: { name: string; pos: string }) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onClick?.({ name, pos: 'P' })}
+      style={{
+        position: 'absolute',
+        top,
+        left,
+        transform: 'translate(-50%, -50%)',
+        padding: '8px 10px',
+        borderRadius: '12px',
+        border: '1px solid rgba(148,163,184,0.3)',
+        background: 'rgba(15,23,42,0.75)',
+        color: '#e2e8f0',
+        fontWeight: 900,
+        fontSize: '12px',
+        cursor: onClick ? 'pointer' : 'default',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+        pointerEvents: onClick ? 'auto' : 'none',
+      }}
+    >
+      투수 · {name}
+    </button>
+  );
+}
+
+function FieldSvg() {
+  return (
+    <svg viewBox="0 0 100 100" style={{ position: 'absolute', inset: 0 }}>
+      <defs>
+        <linearGradient id="grass" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#166534" />
+          <stop offset="100%" stopColor="#0f3d1f" />
+        </linearGradient>
+        <linearGradient id="dirt" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#b7791f" />
+          <stop offset="100%" stopColor="#92400e" />
+        </linearGradient>
+      </defs>
+      <rect width="100" height="100" fill="url(#grass)" />
+      <path d="M 50 72 L 2 24 Q 50 -15 98 24 Z" fill="rgba(22,101,52,0.92)" />
+      <polygon points="50,28 72,50 50,72 28,50" fill="url(#dirt)" />
+      <circle cx="50" cy="50" r="3.5" fill="#a16207" stroke="rgba(0,0,0,0.25)" strokeWidth="0.4" />
+      <circle cx="50" cy="50" r="1.2" fill="#e2e8f0" opacity="0.4" />
+      <rect x="43.5" y="64" width="4" height="7" fill="transparent" stroke="rgba(148,163,184,0.5)" strokeWidth="0.6" />
+      <rect x="52.5" y="64" width="4" height="7" fill="transparent" stroke="rgba(148,163,184,0.5)" strokeWidth="0.6" />
+    </svg>
+  );
+}
+
+function getDefenseAssignments(lineup: { name: string; pos: string }[]) {
+  const posMap: Record<string, { x: number; y: number }> = {
+    P: { x: 50, y: 54 },
+    C: { x: 50, y: 84 },
+    '1B': { x: 76, y: 52 },
+    '2B': { x: 62, y: 40 },
+    SS: { x: 38, y: 40 },
+    '3B': { x: 24, y: 52 },
+    LF: { x: 18, y: 20 },
+    CF: { x: 50, y: 12 },
+    RF: { x: 82, y: 20 },
+  };
+  const fallback: { x: number; y: number }[] = [
+    { x: 50, y: 54 },
+    { x: 50, y: 84 },
+    { x: 76, y: 52 },
+    { x: 62, y: 40 },
+    { x: 38, y: 40 },
+    { x: 24, y: 52 },
+    { x: 18, y: 20 },
+    { x: 50, y: 12 },
+    { x: 82, y: 20 },
+  ];
+  return lineup
+    .filter((slot) => Boolean(posMap[slot.pos.toUpperCase()]))
+    .map((slot, idx) => {
+      const key = slot.pos.toUpperCase();
+      const coords = posMap[key] ?? fallback[idx] ?? { x: 50, y: 56 };
+      return { name: slot.name, pos: slot.pos, x: coords.x, y: coords.y };
+    });
 }
 
 function classifyResult(result: string) {

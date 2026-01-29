@@ -457,7 +457,7 @@ export default function MatchSchedulePage() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '18px', fontWeight: 800 }}>
-                {match.homeTeamName} vs {match.awayTeamName}
+                {match.awayTeamName} vs {match.homeTeamName}
               </span>
               <span
                 style={{
@@ -501,7 +501,7 @@ export default function MatchSchedulePage() {
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
             {match.status === 'completed' && (
               <span style={{ fontWeight: 700, color: '#e2e8f0' }}>
-                결과: {match.homeScore ?? 0} - {match.awayScore ?? 0}
+                결과: {match.awayScore ?? 0} - {match.homeScore ?? 0}
               </span>
             )}
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -592,11 +592,11 @@ export default function MatchSchedulePage() {
           >
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '12px' }}>
               <ScheduleLineupEditor
-                label="홈 라인업 & 후보"
-                side="home"
-                lineup={editingLineups.home}
-                bench={editingBenches.home}
-                benchInput={editingBenchInputs.home}
+                label="원정 라인업 & 후보"
+                side="away"
+                lineup={editingLineups.away}
+                bench={editingBenches.away}
+                benchInput={editingBenchInputs.away}
                 onSetLineup={(side, index, updates) =>
                   setEditingLineups((prev) => ({
                     ...prev,
@@ -612,11 +612,11 @@ export default function MatchSchedulePage() {
                 }
               />
               <ScheduleLineupEditor
-                label="원정 라인업 & 후보"
-                side="away"
-                lineup={editingLineups.away}
-                bench={editingBenches.away}
-                benchInput={editingBenchInputs.away}
+                label="홈 라인업 & 후보"
+                side="home"
+                lineup={editingLineups.home}
+                bench={editingBenches.home}
+                benchInput={editingBenchInputs.home}
                 onSetLineup={(side, index, updates) =>
                   setEditingLineups((prev) => ({
                     ...prev,
@@ -1165,7 +1165,7 @@ export default function MatchSchedulePage() {
                             >
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                 <span style={{ fontWeight: 800, fontSize: '13px' }}>
-                                  {match.homeTeamName} vs {match.awayTeamName}
+                                  {match.awayTeamName} vs {match.homeTeamName}
                                 </span>
                                 <span
                                   style={{
@@ -1186,7 +1186,7 @@ export default function MatchSchedulePage() {
                               </div>
                               {match.status === 'completed' && (
                                 <span style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '12px' }}>
-                                  {match.homeScore ?? 0} - {match.awayScore ?? 0}
+                                  {match.awayScore ?? 0} - {match.homeScore ?? 0}
                                 </span>
                               )}
                             </button>
@@ -1253,18 +1253,18 @@ function CompletedResultCard({ match }: { match: MatchSchedule }) {
           <LineScoreCompact teams={teams} detail={detail} />
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
-            <TeamTotalsPill title={`${teams.home} 타격 요약`} totals={detail.teamBatterSummary?.home} color="#f97316" />
             <TeamTotalsPill title={`${teams.away} 타격 요약`} totals={detail.teamBatterSummary?.away} color="#60a5fa" />
+            <TeamTotalsPill title={`${teams.home} 타격 요약`} totals={detail.teamBatterSummary?.home} color="#f97316" />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '8px' }}>
-            <PitchingMiniTable title={`${teams.home} 투수`} color="#f97316" pitchers={detail.pitchers?.home ?? []} />
             <PitchingMiniTable title={`${teams.away} 투수`} color="#60a5fa" pitchers={detail.pitchers?.away ?? []} />
+            <PitchingMiniTable title={`${teams.home} 투수`} color="#f97316" pitchers={detail.pitchers?.home ?? []} />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '8px' }}>
-            <BattingMiniTable title={`${teams.home} 타자`} color="#f97316" batters={detail.batters?.home ?? []} />
             <BattingMiniTable title={`${teams.away} 타자`} color="#60a5fa" batters={detail.batters?.away ?? []} />
+            <BattingMiniTable title={`${teams.home} 타자`} color="#f97316" batters={detail.batters?.home ?? []} />
           </div>
         </>
       )}
@@ -1285,8 +1285,8 @@ function LineScoreCompact({ teams, detail }: { teams: { home: string; away: stri
     { text: totals?.lob != null ? String(totals.lob) : '-' },
   ];
   const rows = [
-    row(teams.home, detail.lineScore.home, detail.totals?.home, '#f97316'),
     row(teams.away, detail.lineScore.away, detail.totals?.away, '#60a5fa'),
+    row(teams.home, detail.lineScore.home, detail.totals?.home, '#f97316'),
   ];
   return (
     <div

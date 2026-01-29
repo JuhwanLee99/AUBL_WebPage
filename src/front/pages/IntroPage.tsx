@@ -1,8 +1,15 @@
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import gsap from 'gsap';
+import { useContent } from '../../shared/state/contentProvider';
 
-const historyHighlights = [
+const DEFAULT_TAGLINE = 'AUBL · LEAGUE INTRO';
+const DEFAULT_HERO_SUBTITLE = '46th Amateur University Baseball League · Hosted by Chung-Ang University (Seoul)';
+const DEFAULT_HERO_TITLE = '순수 아마추어 대학 야구의 46년 — 2026년, 중앙대학교(서울)와 함께 새로운 도약을 준비합니다.';
+const DEFAULT_HERO_DESCRIPTION =
+  '1981년 출범한 전국대학아마추어야구연합회(AUBL)는 엘리트 선수 중심이 아닌 일반 대학생들의 땀방울로 성장했습니다. 2026 시즌은 중앙대학교(서울)가 주최를 맡아 조별 예선과 으뜸·버금 토너먼트를 통해 리그의 전통과 혁신을 모두 보여줄 예정입니다.';
+
+const DEFAULT_HISTORY_HIGHLIGHTS = [
   {
     title: 'Since 1981',
     desc: '1981년 대학생들의 작은 교류전으로 출발해 45년을 이어온 국내 유일 순수 대학 아마추어 야구 리그.',
@@ -20,7 +27,7 @@ const historyHighlights = [
   },
 ];
 
-const governance = [
+const DEFAULT_GOVERNANCE = [
   {
     label: '주최 (2026)',
     value: '중앙대학교(서울)',
@@ -38,7 +45,7 @@ const governance = [
   },
 ];
 
-const structureCards = [
+const DEFAULT_STRUCTURE_CARDS = [
   {
     title: '회원 자격',
     points: [
@@ -66,7 +73,7 @@ const structureCards = [
   },
 ];
 
-const postseasonMatches = [
+const DEFAULT_POSTSEASON_MATCHES = [
   {
     title: '으뜸 4강 (2026.01.25 예정)',
     matchups: ['세종대 Kings vs 경희대 국제 Lions', '연세대 Eagles vs 서울시립대 Falcons'],
@@ -120,13 +127,15 @@ const teamNames = [
   '홍익대학교 위너스',
 ];
 
-const heroMetrics = [
+const DEFAULT_HERO_METRICS = [
   { label: '2026 HOST', value: '중앙대학교(서울)', note: '제46회 AUBL 운영' },
   { label: '참가 규모', value: '약 40개 대학', note: 'A~H조 조별 예선 후 으뜸·버금' },
   { label: '핵심 가치', value: '실시간 기록 · 중계 · 디지털화', note: '모바일 친화 기록/중계로 모두가 같은 정보를 공유' },
 ];
 
 export default function IntroPage() {
+  const { content } = useContent();
+  const intro = content.intro;
   const pageRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -143,6 +152,16 @@ export default function IntroPage() {
 
     return () => ctx.revert();
   }, []);
+
+  const tagline = intro.tagline || DEFAULT_TAGLINE;
+  const heroSubtitle = intro.heroSubtitle || DEFAULT_HERO_SUBTITLE;
+  const heroTitle = intro.heroTitle || DEFAULT_HERO_TITLE;
+  const heroDescription = intro.heroDescription || DEFAULT_HERO_DESCRIPTION;
+  const historyHighlights = intro.historyHighlights?.length ? intro.historyHighlights : DEFAULT_HISTORY_HIGHLIGHTS;
+  const governance = intro.governance?.length ? intro.governance : DEFAULT_GOVERNANCE;
+  const structureCards = intro.structureCards?.length ? intro.structureCards : DEFAULT_STRUCTURE_CARDS;
+  const postseasonMatches = intro.postseasonMatches?.length ? intro.postseasonMatches : DEFAULT_POSTSEASON_MATCHES;
+  const heroMetrics = intro.heroMetrics?.length ? intro.heroMetrics : DEFAULT_HERO_METRICS;
 
   return (
     <div style={{ display: 'grid', gap: '32px' }} ref={pageRef}>
@@ -172,17 +191,16 @@ export default function IntroPage() {
               fontSize: 'clamp(11px, 2.8vw, 12px)',
             }}
           >
-            AUBL · LEAGUE INTRO
+            {tagline}
           </span>
-          <span style={{ color: '#cbd5e1', fontWeight: 700 }}>46th Amateur University Baseball League · Hosted by Chung-Ang University (Seoul)</span>
+          <span style={{ color: '#cbd5e1', fontWeight: 700 }}>{heroSubtitle}</span>
         </div>
         <div style={{ display: 'grid', gap: '12px' }}>
           <h2 style={{ margin: 0, fontSize: 'clamp(22px, 5.5vw, 34px)', lineHeight: 1.2, fontWeight: 900 }}>
-            순수 아마추어 대학 야구의 46년 — 2026년, 중앙대학교(서울)와 함께 새로운 도약을 준비합니다.
+            {heroTitle}
           </h2>
           <p style={{ margin: 0, color: '#cbd5e1', lineHeight: 1.7, maxWidth: '880px', fontSize: 'clamp(14px, 3.6vw, 16px)' }}>
-            1981년 출범한 전국대학아마추어야구연합회(AUBL)는 엘리트 선수 중심이 아닌 일반 대학생들의 땀방울로 성장했습니다.
-            2026 시즌은 중앙대학교(서울)가 주최를 맡아 조별 예선과 으뜸·버금 토너먼트를 통해 리그의 전통과 혁신을 모두 보여줄 예정입니다.
+            {heroDescription}
           </p>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
