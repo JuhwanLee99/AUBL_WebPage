@@ -74,11 +74,12 @@ export type PostGameTotals = {
   away: { runs: number; hits: number; errors: number; lob?: number };
 };
 
+// [수정] PostGameBatterLine 타입 정의에 세부 스탯 필드를 추가합니다.
 export type PostGameBatterLine = {
   name: string;
   pos?: string;
   order?: number | null;
-  slot?: string; // e.g., 대타/대주 표기
+  slot?: string;
   innings?: (string | null | undefined)[];
   ab?: number;
   h?: number;
@@ -87,6 +88,18 @@ export type PostGameBatterLine = {
   sb?: number;
   avg?: number;
   seasonAvg?: number;
+  // ▼▼▼ 추가된 필드 ▼▼▼
+  pa?: number;      // 타석
+  singles?: number; // 1루타
+  doubles?: number; // 2루타
+  triples?: number; // 3루타
+  hr?: number;      // 홈런
+  bb?: number;      // 볼넷
+  hbp?: number;     // 사구
+  so?: number;      // 삼진
+  sac?: number;     // 희생타
+  fc?: number;      // 야수선택
+  // ▲▲▲ 추가된 필드 ▲▲▲
 };
 
 export type PostGamePitcherLine = {
@@ -854,6 +867,73 @@ export interface GameRecord {
   feed: PlayLog[];
   events: PlayEvent[];
   lastPlay: string;
+}
+
+// [추가] 통계 집계 로직을 demoStore 내부에 추가합니다.
+function calculateGameStats(record: GameRecord) {
+  const stats = new Map<string, {
+    pa: number; ab: number; h: number; singles: number; doubles: number;
+    triples: number; hr: number; bb: number; hbp: number; so: number;
+    sac: number; fc: number; ci: number;
+  }>();
+
+  const ensureStat = (name: string) => {
+    if (!stats.has(name)) {
+      stats.set(name, {
+        pa: 0, ab: 0, h: 0, singles: 0, doubles: 0, triples: 0,
+        hr: 0, bb: 0, hbp: 0, so: 0, sac: 0, fc: 0, ci: 0
+      });
+    }
+    return stats.get(name)!;
+  };
+
+  // 기록된 이벤트를 역순(오래된 순)으로 순회하며 집계
+  // (record.feed는 최신순이므로 reverse() 사용)
+  const chronological = [...record.feed].reverse();
+  
+  chronological.forEach((entry) => {
+    const name = entry.batter?.trim();
+    if (!name) return;
+    
+    // 결과 텍스트 분석 (ScorekeeperPage의 classifyResult 로직과 동일)
+    const normalized = entry.result.replace(/\s+/g, '');
+    let kind = '';
+    
+    if (normalized.includes('홈런')) kind = 'hr';
+    else if (normalized.includes('3루타')) kind = 'triple';
+    else if (normalized.includes('2루타')) kind = 'double';
+    else if (normalized.includes('1루타')) kind = 'single';
+    else if (normalized.includes('고의') || normalized.toUpperCase().includes('IB')) kind = 'bb';
+    else if (normalized.includes('볼넷')) kind = 'bb';
+    else if (normalized.includes('몸에맞는공')) kind = 'hbp';
+    else if (normalized.includes('타격방해')) kind = 'ci';
+    else if (normalized.includes('야수선택') || normalized.toUpperCase().includes('F.C')) kind = 'fc';
+    else if (normalized.includes('희생플라이') || normalized.includes('희생번트')) kind = 'sac';
+    else if (normalized.includes('낫아웃')) kind = 'so_reach'; // 낫아웃 출루도 삼진으로 카운트
+    else if (normalized.includes('삼진')) kind = 'so';
+    else if (normalized.includes('아웃') && !normalized.includes('도루')) kind = 'out';
+    
+    if (!kind) return;
+    
+    const s = ensureStat(name);
+    
+    switch (kind) {
+      case 'single': s.pa++; s.ab++; s.h++; s.singles++; break;
+      case 'double': s.pa++; s.ab++; s.h++; s.doubles++; break;
+      case 'triple': s.pa++; s.ab++; s.h++; s.triples++; break;
+      case 'hr':     s.pa++; s.ab++; s.h++; s.hr++; break;
+      case 'bb':     s.pa++; s.bb++; break;
+      case 'ci':     s.pa++; s.ci++; break; // 타격방해는 타석엔 포함, 타수엔 미포함
+      case 'fc':     s.pa++; s.ab++; s.fc++; break; // 야수선택은 타수 포함
+      case 'hbp':    s.pa++; s.hbp++; break;
+      case 'so':     s.pa++; s.ab++; s.so++; break;
+      case 'so_reach': s.pa++; s.ab++; s.so++; break; // 낫아웃도 삼진
+      case 'out':    s.pa++; s.ab++; break;
+      case 'sac':    s.pa++; s.sac++; break;
+    }
+  });
+  
+  return stats;
 }
 
 export function buildGameRecord(state: DemoState): GameRecord {
@@ -3248,15 +3328,67 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
           void pushMatchUpdate(matchId, { status: 'inProgress' }).catch(() => {});
         }
       },
+     // [수정] endGame 액션에서 상세 스탯을 계산하여 저장하도록 수정
       endGame: (endedAt: string) => {
         dispatch({ type: 'endGame', endedAt });
         const matchId = stateRef.current.activeMatchId;
         if (matchId) {
           const snapshot = stateRef.current;
+          
+          // 상세 기록 산출
+          const gameRecord = buildGameRecord(snapshot);
+          const statsMap = calculateGameStats(gameRecord);
+          
+          // PostGameRecord 형식으로 변환 함수
+          const toBatterLines = (side: 'home' | 'away'): PostGameBatterLine[] => {
+            return snapshot.lineups[side]
+              .filter(p => p.pos.toUpperCase() !== 'P')
+              .map(p => {
+                // 이름(등번호) 형식 맞추기
+                const uniqueName = p.number ? `${p.name}(${p.number})` : p.name;
+                const stat = statsMap.get(uniqueName) ?? statsMap.get(p.name); // uniqueName으로 찾고 없으면 이름으로 시도
+                
+                return {
+                  name: uniqueName, // 저장될 때도 이름(등번호)
+                  pos: p.pos,
+                  order: typeof p.order === 'number' ? p.order : undefined,
+                  // 여기서부터 세부 스탯 매핑
+                  pa: stat?.pa ?? 0,
+                  ab: stat?.ab ?? 0,
+                  h: stat?.h ?? 0,
+                  singles: stat?.singles ?? 0,
+                  doubles: stat?.doubles ?? 0,
+                  triples: stat?.triples ?? 0,
+                  hr: stat?.hr ?? 0,
+                  bb: stat?.bb ?? 0,
+                  hbp: stat?.hbp ?? 0,
+                  so: stat?.so ?? 0,
+                  sac: stat?.sac ?? 0,
+                  fc: stat?.fc ?? 0,
+                  // 득점(R)과 타점(RBI)은 현재 자동 집계가 안되므로 일단 0이나 기존 로직 따름
+                  // 필요하다면 추후 calculateGameStats에서 r, rbi 로직도 추가 가능
+                };
+              });
+          };
+
+          const postGame: PostGameRecord = {
+            lineScore: { innings: [], home: [], away: [] }, // 라인스코어는 별도 로직이 있거나 비워둠
+            totals: { // 팀 합계 (간단 계산)
+              home: { runs: snapshot.score.home, hits: 0, errors: 0 },
+              away: { runs: snapshot.score.away, hits: 0, errors: 0 }
+            },
+            batters: {
+              home: toBatterLines('home'),
+              away: toBatterLines('away'),
+            },
+            // 투수 기록 등도 필요하면 여기서 추가 (현재는 타자 위주)
+          };
+
           void pushMatchUpdate(matchId, {
             status: 'completed',
             homeScore: snapshot.score.home,
             awayScore: snapshot.score.away,
+            postGame, // 상세 기록 저장
           }).catch(() => {});
         }
       },
