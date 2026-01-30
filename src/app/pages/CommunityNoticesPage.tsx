@@ -1,14 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { collection, query, orderBy, getDocs, where } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { firestore } from '../../shared/firebase/client';
 import { useAdmin } from '../../shared/auth/useAdmin';
 import type { Notice, NoticeCategory } from '../../shared/types';
 
-// 필터 타입 정의 (전체 + 공지 카테고리)
+// 필터 타입 정의
 type FilterValue = NoticeCategory | 'ALL';
 
-// 필터 옵션 정의에 타입 적용
+// 필터 옵션 정의
 const FILTERS: { label: string; value: FilterValue }[] = [
   { label: '전체', value: 'ALL' },
   { label: '긴급', value: '긴급' },
@@ -18,29 +18,16 @@ const FILTERS: { label: string; value: FilterValue }[] = [
 ];
 
 export default function CommunityNoticesPage() {
-  const [notices, setNotices] = useState<Notice[]>([]);
-  // state에도 타입 명시
+  const [notices, setNotices] = useState<Notice[]>([]); // 전체 공지사항 원본
   const [activeFilter, setActiveFilter] = useState<FilterValue>('ALL');
   const { isAdmin } = useAdmin();
   const navigate = useNavigate();
 
+  // 1. 컴포넌트 로드 시 '전체' 공지사항을 한 번만 불러옵니다.
   useEffect(() => {
     const fetchNotices = async () => {
       try {
-        let q;
-        const noticesRef = collection(firestore, 'notices');
-
-        // 필터링 쿼리 적용
-        if (activeFilter === 'ALL') {
-          q = query(noticesRef, orderBy('createdAt', 'desc'));
-        } else {
-          q = query(
-            noticesRef, 
-            where('category', '==', activeFilter),
-            orderBy('createdAt', 'desc')
-          );
-        }
-
+        const q = query(collection(firestore, 'notices'), orderBy('createdAt', 'desc'));
         const snap = await getDocs(q);
         setNotices(snap.docs.map(d => ({ id: d.id, ...d.data() } as Notice)));
       } catch (error) {
@@ -48,7 +35,15 @@ export default function CommunityNoticesPage() {
       }
     };
     void fetchNotices();
-  }, [activeFilter]);
+  }, []);
+
+  // 2. 현재 선택된 필터에 따라 보여줄 목록을 계산합니다. (Client-side Filtering)
+  const filteredNotices = useMemo(() => {
+    if (activeFilter === 'ALL') {
+      return notices;
+    }
+    return notices.filter(notice => notice.category === activeFilter);
+  }, [notices, activeFilter]);
 
   return (
     <div style={{ color: '#f8fafc', maxWidth: '800px', margin: '0 auto', paddingBottom: '40px' }}>
@@ -99,14 +94,14 @@ export default function CommunityNoticesPage() {
         ))}
       </div>
 
-      {/* 공지사항 목록 */}
+      {/* 공지사항 목록 (filteredNotices 사용) */}
       <div style={{ display: 'grid', gap: '16px' }}>
-        {notices.length === 0 ? (
+        {filteredNotices.length === 0 ? (
           <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
             해당 카테고리의 게시글이 없습니다.
           </div>
         ) : (
-          notices.map(notice => (
+          filteredNotices.map(notice => (
             <Link
               key={notice.id}
               to={notice.id}
