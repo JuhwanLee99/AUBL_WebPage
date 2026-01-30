@@ -131,7 +131,7 @@ export default function CommunityNoticesPage() {
                     {notice.category}
                   </span>
                   <span style={{ color: '#94a3b8', fontSize: '13px' }}>
-                    {new Date(notice.createdAt).toLocaleDateString()}
+                    {new Date(notice.createdAt).toLocaleString()}
                   </span>
                 </div>
                 

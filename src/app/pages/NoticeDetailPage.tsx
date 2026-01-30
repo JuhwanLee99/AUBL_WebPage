@@ -116,7 +116,7 @@ export default function NoticeDetailPage() {
                 {notice.category}
               </span>
               <span style={{ color: '#94a3b8', fontSize: '14px' }}>
-                {new Date(notice.createdAt).toLocaleDateString()} · {notice.author}
+                {new Date(notice.createdAt).toLocaleString()} · {notice.author}
               </span>
             </div>
             <h1 style={{ fontSize: '28px', fontWeight: 900, margin: '0 0 24px 0', lineHeight: 1.3 }}>{notice.title}</h1>
