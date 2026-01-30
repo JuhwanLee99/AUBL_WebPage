@@ -1,12 +1,12 @@
 {
   "projects": {
-    "default": "aubl-web-9a141"
+    "default": "aubl-backup"
   },
   "targets": {
-    "aubl-web-9a141": {
+    "aubl-backup": {
       "hosting": {
         "aubl": [
-          "aubl-web-9a141"
+          "aubl-backup"
         ]
       }
     }
