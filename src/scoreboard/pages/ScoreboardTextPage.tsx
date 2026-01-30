@@ -49,6 +49,50 @@ type DisplayItem =
     }
   | { type: 'log'; text: string; key: string; chip: string; inning: number; half: Half };
 
+type JerseyMap = { home: Map<string, { number: string; pos: string }>; away: Map<string, { number: string; pos: string }> };
+
+type PlayerNameParts = { raw: string; base: string; number?: string };
+
+// 이름 문자열에서 등번호를 분리해 base/name/number 정보를 반환한다.
+function parsePlayerName(raw: string | null | undefined): PlayerNameParts {
+  const trimmed = (raw ?? '').trim();
+  const match = trimmed.match(/^(.*?)(?:\(([^)]*)\))?\s*$/);
+  const base = (match?.[1] ?? '').trim();
+  const number = (match?.[2] ?? '').trim();
+  return { raw: trimmed, base, number: number || undefined };
+}
+
+// 이미 이름에 등번호가 붙어 있다면 그대로 사용하고, 없다면 등번호를 붙인다.
+function formatWithJersey(name: string, jersey?: string): string {
+  const parts = parsePlayerName(name);
+  const targetNumber = jersey ?? parts.number;
+  if (!targetNumber) return parts.raw;
+  const suffix = `(${targetNumber})`;
+  if (parts.raw.endsWith(suffix)) return parts.raw;
+  return `${parts.base}${suffix}`;
+}
+
+// 두 이름이 같은 선수인지 비교. 등번호가 모두 있으면 등번호까지 일치해야 동일, 한쪽만 있으면 같은 이름으로 간주.
+function isSamePlayerName(a: string | null | undefined, b: string | null | undefined): boolean {
+  const pa = parsePlayerName(a);
+  const pb = parsePlayerName(b);
+  if (!pa.base || !pb.base) return (pa.raw || '') === (pb.raw || '');
+  if (pa.base !== pb.base) return false;
+  if (pa.number && pb.number) return pa.number === pb.number;
+  return true; // 한쪽에만 번호가 있으면 동일 선수로 취급
+}
+
+// 주어진 이름으로 등번호를 찾아서 반환한다. (이름·base·unique 키 모두 시도)
+function resolveJersey(jerseyMap: JerseyMap, side: 'home' | 'away', name: string): string | undefined {
+  const { base, number } = parsePlayerName(name);
+  return (
+    jerseyMap[side].get(name)?.number ??
+    jerseyMap[side].get(base)?.number ??
+    jerseyMap[side].get(formatWithJersey(base, number))?.number ??
+    number
+  );
+}
+
 export default function ScoreboardTextPage() {
   const { state } = useDemoStore();
   const [showReplay, setShowReplay] = useState(false);
@@ -1159,7 +1203,7 @@ function computeBatterLine(feed: ReturnType<typeof useDemoStore>['state']['feed'
   feed.forEach((entry) => {
     const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
     if (offenseSide !== side) return;
-    if (entry.batter !== batter) return;
+    if (!isSamePlayerName(entry.batter, batter)) return;
     const kind = classifyResult(entry.result);
     if (!kind) return;
     if (['single', 'double', 'triple', 'hr', 'bb', 'hbp', 'so', 'so_reach', 'out', 'sac'].includes(kind)) {
@@ -1228,7 +1272,7 @@ function computePitcherLine(feed: ReturnType<typeof useDemoStore>['state']['feed
   if (!pitcher) return base;
   const chronological = [...feed].reverse();
   const current: Record<'home' | 'away', string | null> = { home: null, away: null };
-  const cleanName = (raw: string) => raw.replace(/\([^)]*\)/g, '').replace(/투수/g, '').replace(/·/g, '').trim();
+  const cleanName = (raw: string) => raw.replace(/투수/g, '').replace(/·/g, '').trim();
   chronological.forEach((entry) => {
     const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
     const defenseSide: 'home' | 'away' = offenseSide === 'home' ? 'away' : 'home';
@@ -1241,7 +1285,7 @@ function computePitcherLine(feed: ReturnType<typeof useDemoStore>['state']['feed
     }
 
     const activePitcher = current[defenseSide];
-    if (!activePitcher || activePitcher !== pitcher) return;
+    if (!activePitcher || !isSamePlayerName(activePitcher, pitcher)) return;
 
     const pitchInfo = classifyPitch(result);
     if (pitchInfo.pitch) {
@@ -1296,22 +1340,41 @@ function buildJerseyMap(
   lineups: ReturnType<typeof useDemoStore>['state']['lineups'],
   benches?: ReturnType<typeof useDemoStore>['state']['benches'],
   removed?: ReturnType<typeof useDemoStore>['state']['removed'],
-) {
+): JerseyMap {
   const merge = (
     lineup: { name: string; pos: string; number: string }[],
     bench?: { name: string; pos: string; number: string }[],
     gone?: { name: string; pos: string; number: string }[],
   ) => [...lineup, ...(bench ?? []), ...(gone ?? [])];
+
+  const buildSideMap = (players: { name: string; pos: string; number: string }[]) => {
+    const map = new Map<string, { number: string; pos: string }>();
+    const setIfEmpty = (key: string | undefined, value: { number: string; pos: string }) => {
+      const trimmed = (key ?? '').trim();
+      if (!trimmed || map.has(trimmed)) return;
+      map.set(trimmed, value);
+    };
+    players.forEach((p) => {
+      if (!p?.name) return;
+      const parts = parsePlayerName(p.name);
+      const entry = { number: p.number, pos: p.pos };
+      setIfEmpty(p.name, entry); // 원본 이름
+      setIfEmpty(formatWithJersey(parts.base || p.name, p.number), entry); // 이름+등번호
+      setIfEmpty(parts.base, entry); // 등번호 없는 베이스 이름(백업)
+    });
+    return map;
+  };
+
   return {
-    home: new Map(merge(lineups.home, benches?.home, removed?.home).map((p) => [p.name, { number: p.number, pos: p.pos }])),
-    away: new Map(merge(lineups.away, benches?.away, removed?.away).map((p) => [p.name, { number: p.number, pos: p.pos }])),
+    home: buildSideMap(merge(lineups.home, benches?.home, removed?.home)),
+    away: buildSideMap(merge(lineups.away, benches?.away, removed?.away)),
   };
 }
 
-function formatEntry(entry: ReturnType<typeof useDemoStore>['state']['feed'][number]) {
+function formatEntry(entry: ReturnType<typeof useDemoStore>['state']['feed'][number], batterDisplay?: string) {
   const halfLabel = entry.half === 'top' ? '초' : '말';
   const inningLabel = `${entry.inning}회${halfLabel}`;
-  const batterLabel = entry.batter ? `${entry.order}번 ${entry.batter} 타석` : '';
+  const batterLabel = entry.batter ? `${entry.order}번 ${batterDisplay ?? entry.batter} 타석` : '';
   const pitchLabel = entry.pitch > 0 ? `${entry.pitch}구째` : '';
   const parts = [inningLabel, batterLabel, pitchLabel].filter(Boolean).join(' ');
   return parts ? `${parts} ${entry.result}` : entry.result;
@@ -1319,7 +1382,7 @@ function formatEntry(entry: ReturnType<typeof useDemoStore>['state']['feed'][num
 
 function buildDisplayItems(
   feed: ReturnType<typeof useDemoStore>['state']['feed'],
-  jerseyMap: { home: Map<string, { number: string; pos: string }>; away: Map<string, { number: string; pos: string }> },
+  jerseyMap: JerseyMap,
 ): DisplayItem[] {
   const chronological = [...feed].reverse();
   const items: DisplayItem[] = [];
@@ -1379,11 +1442,11 @@ function buildDisplayItems(
     if (batterName && order) {
       const slot = battingSlots[offenseSide];
       const prevOccupant = slot.get(order);
-      if (prevOccupant && prevOccupant !== batterName) {
-        const outgoingJersey = jerseyMap[offenseSide].get(prevOccupant)?.number;
+      if (prevOccupant && !isSamePlayerName(prevOccupant, batterName)) {
+        const outgoingJersey = resolveJersey(jerseyMap, offenseSide, prevOccupant);
         items.push({
           type: 'batter',
-          text: `${prevOccupant}${outgoingJersey ? `(${outgoingJersey})` : ''}`,
+          text: formatWithJersey(prevOccupant, outgoingJersey),
           key: `batter-${entry.inning}-${entry.half}-${order}-${idx}-out`,
           inning: entry.inning,
           half: entry.half,
@@ -1398,9 +1461,9 @@ function buildDisplayItems(
     }
 
     if (batterName) {
-      const jersey = jerseyMap[offenseSide].get(batterName)?.number;
-      const batterText = `${batterName}${jersey ? `(${jersey})` : ''}`;
-      if (batterName !== prevBatter || isSubstitute) {
+      const jersey = resolveJersey(jerseyMap, offenseSide, batterName);
+      const batterText = formatWithJersey(batterName, jersey);
+      if (!prevBatter || !isSamePlayerName(prevBatter, batterName) || isSubstitute) {
         items.push({
           type: 'batter',
           text: batterText,
@@ -1417,7 +1480,7 @@ function buildDisplayItems(
 
     items.push({
       type: 'log',
-      text: formatEntry(entry),
+      text: formatEntry(entry, batterName ? formatWithJersey(batterName, resolveJersey(jerseyMap, offenseSide, batterName)) : undefined),
       key: `log-${entry.inning}-${entry.half}-${entry.order}-${entry.pitch}-${idx}`,
       chip: `${entry.inning}-${entry.half}-${entry.order}-${entry.pitch}`,
       inning: entry.inning,
@@ -1591,15 +1654,27 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   const pitcherAppearance: Record<'home' | 'away', Map<string, number>> = { home: new Map(), away: new Map() };
   const nextAppearance: Record<'home' | 'away', number> = { home: 0, away: 0 };
 
+  const findRosterKey = (map: Map<string, unknown>, name: string) => {
+    for (const key of map.keys()) {
+      if (isSamePlayerName(key, name)) return key;
+    }
+    return null;
+  };
+
   const ensureRosterEntry = (side: 'home' | 'away', name: string) => {
     const roster = side === 'home' ? rosterHome : rosterAway;
-    if (roster.has(name)) return roster.get(name)!;
     const benchMeta = side === 'home' ? benchMetaHome : benchMetaAway;
-    const meta = benchMeta.get(name);
+
+    const existingKey = findRosterKey(roster, name);
+    if (existingKey) return { key: existingKey, entry: roster.get(existingKey)! };
+
+    const benchKey = findRosterKey(benchMeta, name);
+    const meta = benchKey ? benchMeta.get(benchKey) : benchMeta.get(name);
+    const key = benchKey ?? name;
     const entry = { pos: meta?.pos, order: meta?.order ?? extraOrder[side] };
     extraOrder[side] += 1;
-    roster.set(name, entry);
-    return entry;
+    roster.set(key, entry);
+    return { key, entry };
   };
 
   const ensurePitcherAppearance = (side: 'home' | 'away', name: string) => {
@@ -1611,31 +1686,31 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   };
 
   const addStat = (side: 'home' | 'away', name: string) => {
-    ensureRosterEntry(side, name);
+    const { key } = ensureRosterEntry(side, name);
     const roster = side === 'home' ? rosterHome : rosterAway;
-    const pos = roster.get(name)?.pos;
+    const pos = roster.get(key)?.pos;
     const store = side === 'home' ? statsHome : statsAway;
-    if (!store.has(name)) {
-      store.set(name, ensurePlayerStat(name, pos));
+    if (!store.has(key)) {
+      store.set(key, ensurePlayerStat(key, pos));
     }
-    return store.get(name)!;
+    return store.get(key)!;
   };
 
   const addPitch = (side: 'home' | 'away', name: string) => {
-    ensureRosterEntry(side, name);
-    ensurePitcherAppearance(side, name);
+    const { key } = ensureRosterEntry(side, name);
+    ensurePitcherAppearance(side, key);
     const roster = side === 'home' ? rosterHome : rosterAway;
-    const pos = roster.get(name)?.pos;
+    const pos = roster.get(key)?.pos;
     const store = side === 'home' ? pitchHome : pitchAway;
-    if (!store.has(name)) {
-      store.set(name, ensurePitcherStat(name, pos));
+    if (!store.has(key)) {
+      store.set(key, ensurePitcherStat(key, pos));
     }
-    return store.get(name)!;
+    return store.get(key)!;
   };
 
   const chronological = [...record.feed].reverse();
   const currentPitcher: Record<'home' | 'away', string | null> = { home: null, away: null };
-  const cleanName = (raw: string) => raw.replace(/\([^)]*\)/g, '').replace(/투수/g, '').replace(/·/g, '').trim();
+  const cleanName = (raw: string) => raw.replace(/투수/g, '').replace(/·/g, '').trim();
 
   const inferPitcherSide = (name: string): 'home' | 'away' | null => {
     if (rosterHome.has(name) || benchMetaHome.has(name)) return 'home';
@@ -1651,9 +1726,9 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
 
     const setCurrentPitcher = (side: 'home' | 'away', name: string) => {
       const cleaned = cleanName(name);
-      currentPitcher[side] = cleaned;
-      ensureRosterEntry(side, cleaned);
-      ensurePitcherAppearance(side, cleaned);
+      const { key } = ensureRosterEntry(side, cleaned);
+      currentPitcher[side] = key;
+      ensurePitcherAppearance(side, key);
     };
 
     if (result.includes('투수 교체')) {
@@ -1669,14 +1744,14 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
       setCurrentPitcher(inferred, cleaned);
     }
 
-    const name = entry.batter?.trim();
-    if (!name) return;
+    const rawName = entry.batter?.trim();
+    if (!rawName) return;
     const side = offenseSide;
-    ensureRosterEntry(side, name);
+    const { key: batterName } = ensureRosterEntry(side, rawName);
     if (orderNum) {
       const list = battingOrders[side].get(orderNum) ?? [];
-      if (!list.includes(name)) {
-        list.push(name);
+      if (!list.includes(batterName)) {
+        list.push(batterName);
       }
       battingOrders[side].set(orderNum, list);
     }
@@ -1693,7 +1768,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     }
     const kind = classifyResult(result);
     if (!kind) return;
-    const stat = addStat(side, name);
+    const stat = addStat(side, batterName);
     switch (kind) {
       case 'single':
         stat.pa += 1;
