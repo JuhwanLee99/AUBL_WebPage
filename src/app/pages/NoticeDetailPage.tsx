@@ -1,10 +1,29 @@
-// src/app/pages/NoticeDetailPage.tsx 수정본
+// src/app/pages/NoticeDetailPage.tsx
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore'; // updateDoc, deleteDoc 추가
-import { firestore } from '../../shared/firebase/client';
-import { useAdmin } from '../../shared/auth/useAdmin'; // 관리자 확인 훅 추가
+import { 
+  doc, 
+  getDoc, 
+  updateDoc, 
+  deleteDoc, 
+  collection, 
+  addDoc, 
+  query, 
+  orderBy, 
+  onSnapshot 
+} from 'firebase/firestore'; 
+import { firestore, auth } from '../../shared/firebase/client';
+import { useAdmin } from '../../shared/auth/useAdmin';
 import type { Notice } from '../../shared/types';
+
+// 댓글 타입 정의
+interface Comment {
+  id: string;
+  content: string;
+  author: string;
+  uid: string;
+  createdAt: number;
+}
 
 export default function NoticeDetailPage() {
   const { noticeId } = useParams();
@@ -13,10 +32,24 @@ export default function NoticeDetailPage() {
   
   const [notice, setNotice] = useState<Notice | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState(false); // 수정 모드 상태
+  const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
 
+  // 댓글 관련 상태
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [commentText, setCommentText] = useState('');
+  const [currentUser, setCurrentUser] = useState(auth.currentUser);
+
+  // 사용자 상태 감지
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      setCurrentUser(user);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 공지사항 상세 내용 불러오기
   useEffect(() => {
     if (!noticeId) return;
     const fetchNotice = async () => {
@@ -38,7 +71,28 @@ export default function NoticeDetailPage() {
     void fetchNotice();
   }, [noticeId]);
 
-  // 삭제 함수
+  // 댓글 목록 실시간 구독
+  useEffect(() => {
+    if (!noticeId) return;
+    
+    // notices 컬렉션 하위의 comments 서브 컬렉션 사용
+    const q = query(
+      collection(firestore, 'notices', noticeId, 'comments'),
+      orderBy('createdAt', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const loadedComments = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Comment[];
+      setComments(loadedComments);
+    });
+
+    return () => unsubscribe();
+  }, [noticeId]);
+
+  // 공지 삭제 함수
   const handleDelete = async () => {
     if (!window.confirm('정말 삭제하시겠습니까?')) return;
     try {
@@ -50,20 +104,52 @@ export default function NoticeDetailPage() {
     }
   };
 
-  // 수정 저장 함수
+  // 공지 수정 저장 함수
   const handleUpdate = async () => {
     try {
       const ref = doc(firestore, 'notices', noticeId!);
       await updateDoc(ref, {
         title: editTitle,
         content: editContent,
-        updatedAt: Date.now() // 수정일시 기록
+        updatedAt: Date.now()
       });
       setNotice(prev => prev ? { ...prev, title: editTitle, content: editContent } : null);
       setIsEditing(false);
       alert('수정되었습니다.');
     } catch (err) {
       alert('수정 실패: ' + err);
+    }
+  };
+
+  // 댓글 작성 함수
+  const handleWriteComment = async () => {
+    if (!commentText.trim()) return;
+    if (!currentUser) {
+      alert('로그인이 필요합니다.');
+      return;
+    }
+
+    try {
+      await addDoc(collection(firestore, 'notices', noticeId!, 'comments'), {
+        content: commentText,
+        author: currentUser.displayName || currentUser.email?.split('@')[0] || '익명',
+        uid: currentUser.uid,
+        createdAt: Date.now(),
+      });
+      setCommentText(''); // 입력창 초기화
+    } catch (err) {
+      console.error(err);
+      alert('댓글 등록에 실패했습니다.');
+    }
+  };
+
+  // 댓글 삭제 함수
+  const handleDeleteComment = async (commentId: string) => {
+    if (!window.confirm('댓글을 삭제하시겠습니까?')) return;
+    try {
+      await deleteDoc(doc(firestore, 'notices', noticeId!, 'comments', commentId));
+    } catch (err) {
+      alert('댓글 삭제 실패: ' + err);
     }
   };
 
@@ -89,7 +175,7 @@ export default function NoticeDetailPage() {
         )}
       </div>
 
-      <article style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(148, 163, 184, 0.15)', borderRadius: '16px', padding: '32px', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
+      <article style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(148, 163, 184, 0.15)', borderRadius: '16px', padding: '32px', boxShadow: '0 4px 20px rgba(0,0,0,0.2)', marginBottom: '32px' }}>
         {isEditing ? (
           /* 수정 모드 UI */
           <div style={{ display: 'grid', gap: '16px' }}>
@@ -126,6 +212,83 @@ export default function NoticeDetailPage() {
           </>
         )}
       </article>
+
+      {/* 댓글 섹션 */}
+      <section style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '16px', padding: '24px', border: '1px solid rgba(148, 163, 184, 0.1)' }}>
+        <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          댓글 <span style={{ color: '#94a3b8', fontSize: '14px', fontWeight: 400 }}>{comments.length}</span>
+        </h3>
+
+        {/* 댓글 입력창 */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '32px' }}>
+          <textarea
+            placeholder={currentUser ? "댓글을 남겨주세요." : "로그인이 필요합니다."}
+            disabled={!currentUser}
+            value={commentText}
+            onChange={(e) => setCommentText(e.target.value)}
+            style={{
+              flex: 1,
+              padding: '12px',
+              borderRadius: '8px',
+              background: '#1e293b',
+              border: '1px solid #334155',
+              color: '#fff',
+              fontSize: '15px',
+              minHeight: '45px',
+              resize: 'vertical',
+            }}
+          />
+          <button
+            onClick={handleWriteComment}
+            disabled={!currentUser}
+            style={{
+              padding: '0 20px',
+              borderRadius: '8px',
+              background: currentUser ? '#3b82f6' : '#475569',
+              color: currentUser ? '#fff' : '#94a3b8',
+              border: 'none',
+              fontWeight: 700,
+              cursor: currentUser ? 'pointer' : 'not-allowed',
+            }}
+          >
+            등록
+          </button>
+        </div>
+
+        {/* 댓글 목록 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {comments.map((comment) => (
+            <div key={comment.id} style={{ padding: '16px', background: '#1e293b', borderRadius: '12px', border: '1px solid rgba(148, 163, 184, 0.1)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontWeight: 700, color: '#e2e8f0' }}>{comment.author}</span>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>
+                    {new Date(comment.createdAt).toLocaleString()}
+                  </span>
+                </div>
+                {/* 본인 댓글이거나 관리자일 경우 삭제 버튼 표시 */}
+                {(currentUser?.uid === comment.uid || isAdmin) && (
+                  <button 
+                    onClick={() => handleDeleteComment(comment.id)}
+                    style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    삭제
+                  </button>
+                )}
+              </div>
+              <div style={{ color: '#cbd5e1', fontSize: '15px', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                {comment.content}
+              </div>
+            </div>
+          ))}
+
+          {comments.length === 0 && (
+            <div style={{ textAlign: 'center', color: '#64748b', padding: '20px 0' }}>
+              아직 댓글이 없습니다.
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
