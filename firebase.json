@@ -3,6 +3,8 @@
     "rules": "database.rules.json"
   },
   "firestore": {
+    "database": "(default)",
+    "location": "asia-northeast3",
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
@@ -20,7 +22,6 @@
     }
   ],
   "hosting": {
-    "target": "aubl",  
     "public": "dist",
     "ignore": [
       "firebase.json",
