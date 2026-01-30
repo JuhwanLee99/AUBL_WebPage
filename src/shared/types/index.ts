@@ -70,4 +70,5 @@ export interface Notice {
   author: string;
   createdAt: number;
   isImportant?: boolean; // 긴급/중요 상단 고정용
+  allowComments?: boolean; // 댓글 허용 여부 (없으면 true로 취급)
 }

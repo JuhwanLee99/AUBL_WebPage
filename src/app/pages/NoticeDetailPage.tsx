@@ -1,4 +1,3 @@
-// src/app/pages/NoticeDetailPage.tsx
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -16,7 +15,6 @@ import { firestore, auth } from '../../shared/firebase/client';
 import { useAdmin } from '../../shared/auth/useAdmin';
 import type { Notice } from '../../shared/types';
 
-// 댓글 타입 정의
 interface Comment {
   id: string;
   content: string;
@@ -28,28 +26,28 @@ interface Comment {
 export default function NoticeDetailPage() {
   const { noticeId } = useParams();
   const navigate = useNavigate();
-  const { isAdmin } = useAdmin(); // 관리자 권한 확인
+  const { isAdmin } = useAdmin();
   
   const [notice, setNotice] = useState<Notice | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // 수정 모드 상태
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
+  const [editAllowComments, setEditAllowComments] = useState(true); // [추가] 수정 시 댓글 허용 여부 상태
 
   // 댓글 관련 상태
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentText, setCommentText] = useState('');
   const [currentUser, setCurrentUser] = useState(auth.currentUser);
 
-  // 사용자 상태 감지
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      setCurrentUser(user);
-    });
+    const unsubscribe = auth.onAuthStateChanged((user) => setCurrentUser(user));
     return () => unsubscribe();
   }, []);
 
-  // 공지사항 상세 내용 불러오기
+  // 공지 로드
   useEffect(() => {
     if (!noticeId) return;
     const fetchNotice = async () => {
@@ -58,9 +56,10 @@ export default function NoticeDetailPage() {
         const snap = await getDoc(ref);
         if (snap.exists()) {
           const data = snap.data() as Notice;
-          setNotice({ ...snap.data(), id: snap.id } as Notice);
+          setNotice({ ...data, id: snap.id });
           setEditTitle(data.title);
           setEditContent(data.content);
+          setEditAllowComments(data.allowComments ?? true); // [추가] 기존 값이 없으면 true
         }
       } catch (err) {
         console.error('공지사항 로딩 실패:', err);
@@ -71,28 +70,17 @@ export default function NoticeDetailPage() {
     void fetchNotice();
   }, [noticeId]);
 
-  // 댓글 목록 실시간 구독
+  // 댓글 구독
   useEffect(() => {
     if (!noticeId) return;
-    
-    // notices 컬렉션 하위의 comments 서브 컬렉션 사용
-    const q = query(
-      collection(firestore, 'notices', noticeId, 'comments'),
-      orderBy('createdAt', 'asc')
-    );
-
+    const q = query(collection(firestore, 'notices', noticeId, 'comments'), orderBy('createdAt', 'asc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const loadedComments = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Comment[];
-      setComments(loadedComments);
+      setComments(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as Comment[]);
     });
-
     return () => unsubscribe();
   }, [noticeId]);
 
-  // 공지 삭제 함수
+  // 삭제
   const handleDelete = async () => {
     if (!window.confirm('정말 삭제하시겠습니까?')) return;
     try {
@@ -104,16 +92,22 @@ export default function NoticeDetailPage() {
     }
   };
 
-  // 공지 수정 저장 함수
+  // 수정 저장
   const handleUpdate = async () => {
     try {
       const ref = doc(firestore, 'notices', noticeId!);
       await updateDoc(ref, {
         title: editTitle,
         content: editContent,
+        allowComments: editAllowComments, // [추가] 수정된 설정 저장
         updatedAt: Date.now()
       });
-      setNotice(prev => prev ? { ...prev, title: editTitle, content: editContent } : null);
+      setNotice(prev => prev ? { 
+        ...prev, 
+        title: editTitle, 
+        content: editContent, 
+        allowComments: editAllowComments 
+      } : null);
       setIsEditing(false);
       alert('수정되었습니다.');
     } catch (err) {
@@ -121,14 +115,13 @@ export default function NoticeDetailPage() {
     }
   };
 
-  // 댓글 작성 함수
+  // 댓글 작성
   const handleWriteComment = async () => {
     if (!commentText.trim()) return;
     if (!currentUser) {
       alert('로그인이 필요합니다.');
       return;
     }
-
     try {
       await addDoc(collection(firestore, 'notices', noticeId!, 'comments'), {
         content: commentText,
@@ -136,14 +129,13 @@ export default function NoticeDetailPage() {
         uid: currentUser.uid,
         createdAt: Date.now(),
       });
-      setCommentText(''); // 입력창 초기화
+      setCommentText('');
     } catch (err) {
-      console.error(err);
-      alert('댓글 등록에 실패했습니다.');
+      alert('댓글 등록 실패: ' + err);
     }
   };
 
-  // 댓글 삭제 함수
+  // 댓글 삭제
   const handleDeleteComment = async (commentId: string) => {
     if (!window.confirm('댓글을 삭제하시겠습니까?')) return;
     try {
@@ -154,28 +146,31 @@ export default function NoticeDetailPage() {
   };
 
   if (loading) return <div style={{ color: '#94a3b8', padding: '40px', textAlign: 'center' }}>로딩 중...</div>;
-  if (!notice) return <div style={{ color: '#f87171', padding: '40px', textAlign: 'center' }}>삭제되거나 존재하지 않는 공지사항입니다.</div>;
+  if (!notice) return <div style={{ color: '#f87171', padding: '40px', textAlign: 'center' }}>공지사항이 없습니다.</div>;
+
+  // [중요] 댓글 허용 여부 확인 (undefined면 true로 간주)
+  const isCommentsAllowed = notice.allowComments ?? true;
 
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto', color: '#f8fafc', paddingBottom: '40px' }}>
+      {/* 상단 네비게이션 & 관리자 버튼 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <button
           onClick={() => navigate('/community/notices')}
-          style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}
+          style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontWeight: 700 }}
         >
-          &larr; 목록으로 돌아가기
+          &larr; 목록으로
         </button>
 
-        {/* 관리자에게만 보이는 제어 버튼 */}
         {isAdmin && !isEditing && (
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={() => setIsEditing(true)} style={{ padding: '6px 12px', borderRadius: '6px', background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '14px' }}>수정</button>
-            <button onClick={handleDelete} style={{ padding: '6px 12px', borderRadius: '6px', background: '#ef4444', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '14px' }}>삭제</button>
+            <button onClick={() => setIsEditing(true)} style={{ padding: '6px 12px', borderRadius: '6px', background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer' }}>수정</button>
+            <button onClick={handleDelete} style={{ padding: '6px 12px', borderRadius: '6px', background: '#ef4444', color: '#fff', border: 'none', cursor: 'pointer' }}>삭제</button>
           </div>
         )}
       </div>
 
-      <article style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(148, 163, 184, 0.15)', borderRadius: '16px', padding: '32px', boxShadow: '0 4px 20px rgba(0,0,0,0.2)', marginBottom: '32px' }}>
+      <article style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(148, 163, 184, 0.15)', borderRadius: '16px', padding: '32px', marginBottom: '32px' }}>
         {isEditing ? (
           /* 수정 모드 UI */
           <div style={{ display: 'grid', gap: '16px' }}>
@@ -189,6 +184,18 @@ export default function NoticeDetailPage() {
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
             />
+            
+            {/* [추가] 수정 모드에서 댓글 허용 설정 */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={editAllowComments}
+                onChange={(e) => setEditAllowComments(e.target.checked)}
+                style={{ width: '18px', height: '18px', accentColor: '#3b82f6' }}
+              />
+              <span style={{ color: '#cbd5e1' }}>댓글 허용</span>
+            </label>
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button onClick={() => setIsEditing(false)} style={{ padding: '8px 16px', background: 'transparent', color: '#94a3b8', border: 'none', cursor: 'pointer' }}>취소</button>
               <button onClick={handleUpdate} style={{ padding: '8px 16px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}>저장하기</button>
@@ -213,82 +220,82 @@ export default function NoticeDetailPage() {
         )}
       </article>
 
-      {/* 댓글 섹션 */}
-      <section style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '16px', padding: '24px', border: '1px solid rgba(148, 163, 184, 0.1)' }}>
-        <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          댓글 <span style={{ color: '#94a3b8', fontSize: '14px', fontWeight: 400 }}>{comments.length}</span>
-        </h3>
+      {/* [수정] 댓글 섹션: allowComments가 false이면 숨김 */}
+      {isCommentsAllowed ? (
+        <section style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '16px', padding: '24px', border: '1px solid rgba(148, 163, 184, 0.1)' }}>
+          <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            댓글 <span style={{ color: '#94a3b8', fontSize: '14px', fontWeight: 400 }}>{comments.length}</span>
+          </h3>
 
-        {/* 댓글 입력창 */}
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '32px' }}>
-          <textarea
-            placeholder={currentUser ? "댓글을 남겨주세요." : "로그인이 필요합니다."}
-            disabled={!currentUser}
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value)}
-            style={{
-              flex: 1,
-              padding: '12px',
-              borderRadius: '8px',
-              background: '#1e293b',
-              border: '1px solid #334155',
-              color: '#fff',
-              fontSize: '15px',
-              minHeight: '45px',
-              resize: 'vertical',
-            }}
-          />
-          <button
-            onClick={handleWriteComment}
-            disabled={!currentUser}
-            style={{
-              padding: '0 20px',
-              borderRadius: '8px',
-              background: currentUser ? '#3b82f6' : '#475569',
-              color: currentUser ? '#fff' : '#94a3b8',
-              border: 'none',
-              fontWeight: 700,
-              cursor: currentUser ? 'pointer' : 'not-allowed',
-            }}
-          >
-            등록
-          </button>
-        </div>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '32px' }}>
+            <textarea
+              placeholder={currentUser ? "댓글을 남겨주세요." : "로그인이 필요합니다."}
+              disabled={!currentUser}
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              style={{
+                flex: 1,
+                padding: '12px',
+                borderRadius: '8px',
+                background: '#1e293b',
+                border: '1px solid #334155',
+                color: '#fff',
+                fontSize: '15px',
+                minHeight: '45px',
+                resize: 'vertical',
+              }}
+            />
+            <button
+              onClick={handleWriteComment}
+              disabled={!currentUser}
+              style={{
+                padding: '0 20px',
+                borderRadius: '8px',
+                background: currentUser ? '#3b82f6' : '#475569',
+                color: currentUser ? '#fff' : '#94a3b8',
+                border: 'none',
+                fontWeight: 700,
+                cursor: currentUser ? 'pointer' : 'not-allowed',
+              }}
+            >
+              등록
+            </button>
+          </div>
 
-        {/* 댓글 목록 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {comments.map((comment) => (
-            <div key={comment.id} style={{ padding: '16px', background: '#1e293b', borderRadius: '12px', border: '1px solid rgba(148, 163, 184, 0.1)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontWeight: 700, color: '#e2e8f0' }}>{comment.author}</span>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>
-                    {new Date(comment.createdAt).toLocaleString()}
-                  </span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {comments.map((comment) => (
+              <div key={comment.id} style={{ padding: '16px', background: '#1e293b', borderRadius: '12px', border: '1px solid rgba(148, 163, 184, 0.1)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontWeight: 700, color: '#e2e8f0' }}>{comment.author}</span>
+                    <span style={{ fontSize: '12px', color: '#64748b' }}>
+                      {new Date(comment.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                  {(currentUser?.uid === comment.uid || isAdmin) && (
+                    <button 
+                      onClick={() => handleDeleteComment(comment.id)}
+                      style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}
+                    >
+                      삭제
+                    </button>
+                  )}
                 </div>
-                {/* 본인 댓글이거나 관리자일 경우 삭제 버튼 표시 */}
-                {(currentUser?.uid === comment.uid || isAdmin) && (
-                  <button 
-                    onClick={() => handleDeleteComment(comment.id)}
-                    style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}
-                  >
-                    삭제
-                  </button>
-                )}
+                <div style={{ color: '#cbd5e1', fontSize: '15px', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                  {comment.content}
+                </div>
               </div>
-              <div style={{ color: '#cbd5e1', fontSize: '15px', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                {comment.content}
-              </div>
-            </div>
-          ))}
-
-          {comments.length === 0 && (
-            <div style={{ textAlign: 'center', color: '#64748b', padding: '20px 0' }}>
-              아직 댓글이 없습니다.
-            </div>
-          )}
+            ))}
+            {comments.length === 0 && (
+              <div style={{ textAlign: 'center', color: '#64748b', padding: '20px 0' }}>아직 댓글이 없습니다.</div>
+            )}
+          </div>
+        </section>
+      ) : (
+        <div style={{ textAlign: 'center', color: '#64748b', padding: '20px', background: 'rgba(15, 23, 42, 0.4)', borderRadius: '16px' }}>
+          댓글 작성이 허용되지 않은 게시글입니다.
         </div>
-      </section>
+      )}
     </div>
   );
 }

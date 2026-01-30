@@ -1,9 +1,9 @@
-// src/app/pages/NoticeWritePage.tsx
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, addDoc } from 'firebase/firestore';
 import { firestore, auth } from '../../shared/firebase/client';
 import type { NoticeCategory } from '../../shared/types';
+// sendFCMNotification 등 필요한 import 유지
 
 const CATEGORIES: NoticeCategory[] = ['일반', '경기공지', '징계', '긴급'];
 
@@ -12,6 +12,7 @@ export default function NoticeWritePage() {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<NoticeCategory>('일반');
   const [content, setContent] = useState('');
+  const [allowComments, setAllowComments] = useState(true); // [추가] 기본값 true
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -24,95 +25,107 @@ export default function NoticeWritePage() {
         title,
         category,
         content,
-        author: auth.currentUser?.email ?? 'Admin',
+        author: auth.currentUser?.email?.split('@')[0] ?? 'Admin', // 이메일 ID 사용
         createdAt: Date.now(),
+        allowComments, // [추가] 저장 시 포함
       });
+
+      // (알림 전송 로직이 있다면 여기에 유지)
+
       navigate('/community/notices');
     } catch (err) {
       alert('저장 실패: ' + err);
+    } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div style={{ maxWidth: '600px', margin: '0 auto', color: '#f8fafc' }}>
+    <div style={{ maxWidth: '600px', margin: '0 auto', color: '#f8fafc', padding: '20px' }}>
       <h2 style={{ fontSize: '24px', fontWeight: 900, marginBottom: '24px' }}>공지사항 작성</h2>
-      <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '20px' }}>
-        
+      
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {/* 카테고리 선택 */}
-        <div>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700 }}>분류</label>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {CATEGORIES.map(cat => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setCategory(cat)}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  border: '1px solid ' + (category === cat ? '#3b82f6' : 'rgba(148,163,184,0.3)'),
-                  background: category === cat ? 'rgba(59,130,246,0.2)' : 'transparent',
-                  color: category === cat ? '#60a5fa' : '#94a3b8',
-                  cursor: 'pointer',
-                  fontWeight: 700
-                }}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setCategory(cat)}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '20px',
+                border: 'none',
+                background: category === cat ? '#3b82f6' : '#334155',
+                color: '#fff',
+                fontWeight: category === cat ? 700 : 400,
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              {cat}
+            </button>
+          ))}
         </div>
 
-        {/* 제목 */}
-        <div>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700 }}>제목</label>
+        {/* 제목 입력 */}
+        <input
+          placeholder="제목을 입력하세요"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          style={{
+            padding: '14px',
+            borderRadius: '8px',
+            background: '#1e293b',
+            border: '1px solid #334155',
+            color: '#fff',
+            fontSize: '16px',
+            fontWeight: 700
+          }}
+        />
+
+        {/* 본문 입력 */}
+        <textarea
+          placeholder="내용을 입력하세요"
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          style={{
+            minHeight: '300px',
+            padding: '14px',
+            borderRadius: '8px',
+            background: '#1e293b',
+            border: '1px solid #334155',
+            color: '#fff',
+            fontSize: '15px',
+            lineHeight: 1.6,
+            resize: 'vertical'
+          }}
+        />
+
+        {/* [추가] 댓글 허용 옵션 */}
+        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
           <input
-            type="text"
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '12px',
-              borderRadius: '8px',
-              background: 'rgba(15,23,42,0.6)',
-              border: '1px solid rgba(148,163,184,0.3)',
-              color: '#fff'
-            }}
-            placeholder="제목을 입력하세요"
+            type="checkbox"
+            checked={allowComments}
+            onChange={(e) => setAllowComments(e.target.checked)}
+            style={{ width: '18px', height: '18px', accentColor: '#3b82f6' }}
           />
-        </div>
+          <span style={{ color: '#cbd5e1', fontSize: '15px' }}>댓글 허용</span>
+        </label>
 
-        {/* 내용 */}
-        <div>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 700 }}>내용</label>
-          <textarea
-            value={content}
-            onChange={e => setContent(e.target.value)}
-            style={{
-              width: '100%',
-              minHeight: '300px',
-              padding: '12px',
-              borderRadius: '8px',
-              background: 'rgba(15,23,42,0.6)',
-              border: '1px solid rgba(148,163,184,0.3)',
-              color: '#fff',
-              lineHeight: 1.6
-            }}
-            placeholder="내용을 입력하세요"
-          />
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+        {/* 버튼 그룹 */}
+        <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
           <button
             type="button"
             onClick={() => navigate(-1)}
             style={{
-              padding: '10px 20px',
+              flex: 1,
+              padding: '12px',
               borderRadius: '8px',
-              background: 'transparent',
+              background: '#334155',
               color: '#94a3b8',
               border: 'none',
+              fontWeight: 700,
               cursor: 'pointer'
             }}
           >
@@ -122,17 +135,17 @@ export default function NoticeWritePage() {
             type="submit"
             disabled={submitting}
             style={{
-              padding: '10px 24px',
+              flex: 2,
+              padding: '12px',
               borderRadius: '8px',
-              background: '#3b82f6',
+              background: submitting ? '#94a3b8' : '#3b82f6',
               color: '#fff',
               border: 'none',
               fontWeight: 700,
-              cursor: submitting ? 'not-allowed' : 'pointer',
-              opacity: submitting ? 0.7 : 1
+              cursor: submitting ? 'not-allowed' : 'pointer'
             }}
           >
-            {submitting ? '저장 중...' : '등록하기'}
+            {submitting ? '저장 중...' : '작성 완료'}
           </button>
         </div>
       </form>

@@ -1,6 +1,7 @@
 rules_version = '2';
 
 service cloud.firestore {
+  // 관리자 권한 확인 함수
   function isAdmin() {
     return request.auth != null
       && (request.auth.token.admin == true
@@ -8,29 +9,44 @@ service cloud.firestore {
   }
 
   match /databases/{database}/documents {
-    // App-wide metadata (currently just the active match pointer)
+    // 앱 전반 설정 (현재 활성 경기 포인터)
     match /app/current {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // Public schedule
+    // 경기 일정
     match /matches/{matchId} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
+    // [수정됨] 공지사항 및 댓글 규칙
     match /notices/{noticeId} {
+      // 공지사항 자체는 누구나 읽기 가능, 쓰기는 관리자만
       allow read: if true;
       allow write: if isAdmin();
+
+      // [추가] 공지사항 하위의 댓글 컬렉션 규칙
+      match /comments/{commentId} {
+        // 1. 읽기: 누구나 가능 (비로그인 사용자 포함)
+        allow read: if true;
+        
+        // 2. 쓰기(생성): 로그인한 사용자만 가능
+        allow create: if request.auth != null;
+        
+        // 3. 수정/삭제: 관리자이거나, 본인이 작성한 댓글(uid 일치)인 경우만 가능
+        allow update, delete: if request.auth != null && (
+          isAdmin() || request.auth.uid == resource.data.uid
+        );
+      }
     }
 
-    // Live match state (scoreboard / 문자중계 데이터)
+    // 실시간 경기 상태 (스코어보드/문자중계)
     match /matchStates/{matchId} {
       allow read: if true;
       allow write: if isAdmin();
 
-      // 최근 feed/events 서브컬렉션
       match /feed/{entryId} {
         allow read: if true;
         allow write: if isAdmin();
@@ -41,7 +57,7 @@ service cloud.firestore {
       }
     }
 
-    // Deny anything else by default.
+    // 그 외 모든 접근 거부
     match /{document=**} {
       allow read, write: if false;
     }
