@@ -15,6 +15,19 @@ import type { BatterStatLine, PitcherStatLine } from '../../shared/types/scoreSt
 import { useAuth } from '../../shared/auth/AuthProvider';
 import { BoxScoreTable } from '../../scoreboard/components/ScoreboardPanel';
 
+// 동명이인 구분을 위한 고유 이름 생성 헬퍼 함수 추가
+// 이미 (등번호)가 붙어있으면 덧붙이지 않도록 안전장치 추가
+const getUniqueName = (name: string, number: string | number | undefined | null) => {
+  if (!name) return '';
+  if (!number) return name;
+  
+  const suffix = `(${number})`;
+  // 이미 이름 끝에 (등번호)가 포함되어 있다면 그대로 반환 (중복 방지)
+  if (name.endsWith(suffix)) return name;
+  
+  return `${name}${suffix}`;
+};
+
 type Side = 'home' | 'away';
 
 const mainButtons = [
@@ -419,10 +432,13 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
     home: new Map(),
     away: new Map(),
   };
+  // [수정됨] CSV용 디렉토리 생성 시 고유 이름(이름+등번호)을 키로 사용
   const seedDirectory = (side: 'home' | 'away', slots: typeof record.lineups.home) => {
     slots.forEach((slot) => {
       if (!slot.name) return;
-      playerDirectory[side].set(slot.name, {
+      // 키 생성 시 getUniqueName 사용
+      const uniqueName = getUniqueName(slot.name, slot.number);
+      playerDirectory[side].set(uniqueName, {
         number: slot.number || '-',
         pos: slot.pos || '-',
         posNumber: defensePositionNumber(slot.pos || '-'),
@@ -437,8 +453,12 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   seedDirectory('away', record.benches.away);
   seedDirectory('home', record.removed.home);
   seedDirectory('away', record.removed.away);
-  const getPlayerMeta = (side: 'home' | 'away', name: string) =>
-    playerDirectory[side].get(name) ?? { number: '-', pos: '-', posNumber: '-', throws: '-', bats: '-' };
+
+  // [수정됨] 메타데이터 조회 시에도 고유 이름을 키로 사용하도록 수정해야 함
+  // 호출하는 쪽에서 이미 uniqueName을 넘긴다고 가정하거나, 이 함수 내부에서는 map의 key를 그대로 사용
+  const getPlayerMeta = (side: 'home' | 'away', uniqueName: string) =>
+    playerDirectory[side].get(uniqueName) ?? { number: '-', pos: '-', posNumber: '-', throws: '-', bats: '-' };
+
   const stripBatterFromNote = (note: string, batter?: string) => {
     const cleaned = (note || '').replace(/\s+/g, ' ').trim();
     if (!batter) return cleaned;
@@ -516,12 +536,15 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
     add('타순', '등번호', '선수', '수비번호', '포지션', '투', '타');
     const batting = record.lineups[side].filter((slot) => slot.pos.toUpperCase() !== 'P');
     batting.forEach((slot, idx) => {
-      const meta = getPlayerMeta(side, slot.name);
+      // [수정됨] 메타데이터 조회 키 변경
+      const uniqueName = getUniqueName(slot.name, slot.number);
+      const meta = getPlayerMeta(side, uniqueName);
       add(idx + 1, meta.number, slot.name, meta.posNumber, slot.pos, meta.throws, meta.bats);
     });
     const pitcher = record.lineups[side].find((slot) => slot.pos.toUpperCase() === 'P');
     if (pitcher) {
-      const meta = getPlayerMeta(side, pitcher.name);
+      const uniqueName = getUniqueName(pitcher.name, pitcher.number);
+      const meta = getPlayerMeta(side, uniqueName);
       add('P', meta.number, pitcher.name, meta.posNumber, pitcher.pos, meta.throws, meta.bats);
     }
   };
@@ -535,7 +558,8 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
       return;
     }
     record.benches[side].forEach((slot) => {
-      const meta = getPlayerMeta(side, slot.name);
+      const uniqueName = getUniqueName(slot.name, slot.number);
+      const meta = getPlayerMeta(side, uniqueName);
       add(meta.number, slot.name, slot.pos, meta.posNumber, meta.throws, meta.bats);
     });
   };
@@ -556,11 +580,19 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
       return;
     }
     stats.pitchers[side].forEach((p, idx) => {
+      // p.name은 이미 uniqueName임 (buildPlayerStats 수정됨)
       const meta = getPlayerMeta(side, p.name);
       const orderLabel = p.appearanceLabel || (idx === 0 ? '선발' : `계투(${idx})`);
+      // CSV에는 이름만 깔끔하게 출력하고 싶다면 meta.name 등을 쓰거나 p.name을 파싱해야 하지만,
+      // 식별을 위해 uniqueName을 그대로 출력하거나, 여기서 괄호를 뗄 수도 있음.
+      // 일단 uniqueName 그대로 출력 (동명이인 구분 위해)
       add(orderLabel, meta.number, p.name, p.pos ?? meta.pos, meta.throws, meta.bats);
     });
   };
+
+  // ... (writeHitterStats, writePitcherStats 등은 p.name을 그대로 사용하므로 로직 변경 없음. 
+  // 단, p.name이 이제 '홍길동(18)' 형태임) ...
+
   const writeHitterStats = (side: 'home' | 'away', label: string) => {
     addBlank();
     add(`실시간 타자 기록 - ${label}`);
@@ -717,15 +749,20 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
       hitters.push({ name: '-', pos: '-', number: '-', throws: 'R', bats: 'R' });
     }
     const notesByOrder = scorebookEventsBySide(side);
+    // statsByName 키도 uniqueName이어야 함
     const statsByName = new Map(stats.hitters[side].map((stat) => [stat.name, stat]));
+    
     hitters.slice(0, 9).forEach((slot, idx) => {
       const order = idx + 1;
       const inningNotes = innings.map((inning) => {
         const notes = notesByOrder.get(order)?.get(inning);
         return notes?.length ? notes.join(' | ') : '-';
       });
-      const stat = statsByName.get(slot.name);
-      const meta = getPlayerMeta(side, slot.name);
+      
+      const uniqueName = getUniqueName(slot.name, slot.number);
+      const stat = statsByName.get(uniqueName);
+      const meta = getPlayerMeta(side, uniqueName);
+
       add(
         order,
         meta.number,
@@ -847,31 +884,37 @@ function classifyPitch(result: string) {
 }
 
 function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
+  // Roster Map의 Key를 uniqueName으로 변경
   const rosterHome = new Map<string, { pos?: string; order: number }>();
   const rosterAway = new Map<string, { pos?: string; order: number }>();
-  record.lineups.home.forEach((p, idx) => rosterHome.set(p.name, { pos: p.pos, order: idx }));
-  record.lineups.away.forEach((p, idx) => rosterAway.set(p.name, { pos: p.pos, order: idx }));
+  
+  record.lineups.home.forEach((p, idx) => rosterHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx }));
+  record.lineups.away.forEach((p, idx) => rosterAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx }));
 
   const benchMetaHome = new Map<string, { pos?: string; order: number }>();
   const benchMetaAway = new Map<string, { pos?: string; order: number }>();
-  record.benches.home.forEach((p, idx) => benchMetaHome.set(p.name, { pos: p.pos, order: 100 + idx }));
-  record.benches.away.forEach((p, idx) => benchMetaAway.set(p.name, { pos: p.pos, order: 100 + idx }));
+  record.benches.home.forEach((p, idx) => benchMetaHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx }));
+  record.benches.away.forEach((p, idx) => benchMetaAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx }));
+
   const extraOrder: Record<'home' | 'away', number> = { home: 100, away: 100 };
   const battingOrders: Record<'home' | 'away', Map<number, string[]>> = { home: new Map(), away: new Map() };
 
   const seedBattingOrders = (side: 'home' | 'away') => {
     const batting = record.lineups[side].filter((slot) => slot.pos.toUpperCase() !== 'P');
-    batting.forEach((slot, idx) => battingOrders[side].set(idx + 1, [slot.name]));
+    // Batting order map에도 uniqueName 저장
+    batting.forEach((slot, idx) => battingOrders[side].set(idx + 1, [getUniqueName(slot.name, slot.number)]));
   };
   seedBattingOrders('home');
   seedBattingOrders('away');
+
   const addRemovedOrders = (side: 'home' | 'away') => {
     (record.removed?.[side] ?? []).forEach((p) => {
       const ord = typeof p.order === 'number' && p.order > 0 ? p.order : null;
       if (!ord) return;
       const list = battingOrders[side].get(ord) ?? [];
-      if (!list.includes(p.name)) {
-        list.unshift(p.name);
+      const uniqueName = getUniqueName(p.name, p.number);
+      if (!list.includes(uniqueName)) {
+        list.unshift(uniqueName);
       }
       battingOrders[side].set(ord, list);
     });
@@ -887,6 +930,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   const nextAppearance: Record<'home' | 'away', number> = { home: 0, away: 0 };
 
   const ensureRosterEntry = (side: 'home' | 'away', name: string) => {
+    // name은 이미 uniqueName이어야 함
     const roster = side === 'home' ? rosterHome : rosterAway;
     if (roster.has(name)) return roster.get(name)!;
     const benchMeta = side === 'home' ? benchMetaHome : benchMetaAway;
@@ -925,7 +969,12 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
 
   const chronological = [...record.feed].reverse();
   const currentPitcher: Record<'home' | 'away', string | null> = { home: null, away: null };
-  const cleanName = (raw: string) => raw.replace(/\([^)]*\)/g, '').replace(/투수/g, '').replace(/·/g, '').trim();
+  
+  // [수정됨] 이름 파싱 로직 변경: 괄호() 안의 내용(등번호 포함)을 유지해야 함
+  // 기존: raw.replace(/\([^)]*\)/g, '') -> 괄호 전체 삭제
+  // 변경: 등번호가 있는 uniqueName 형태 '홍길동(18)'를 유지하기 위해 괄호 삭제 정규식 제거
+  // 대신 '투수', '·' 같은 불필요한 텍스트만 제거
+  const cleanName = (raw: string) => raw.replace(/투수/g, '').replace(/·/g, '').trim();
 
   const inferPitcherSide = (name: string): 'home' | 'away' | null => {
     if (rosterHome.has(name) || benchMetaHome.has(name)) return 'home';
@@ -939,6 +988,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     const result = entry.result.trim();
     const orderNum = typeof entry.order === 'number' && entry.order > 0 ? entry.order : null;
 
+    // result 문자열에는 이제 "홍길동(18)" 형태가 들어올 것임
     if (result.includes('투수 교체')) {
       const incoming = result.split('→')[1];
       if (incoming) {
@@ -954,9 +1004,33 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
       addPitch(inferred, cleaned);
     }
 
-    const name = entry.batter?.trim();
+    let name = entry.batter?.trim();
     if (!name) return;
     const side = offenseSide;
+    
+    const roster = side === 'home' ? rosterHome : rosterAway;
+
+    // 만약 roster에 해당 이름(예: "홍길동")이 없다면, "홍길동(18)" 같은 키를 찾아서 매핑
+    if (!roster.has(name)) {
+      // 1. 타순(Order) 정보가 있다면 우선적으로 확인
+      if (orderNum) {
+        const candidates = battingOrders[side].get(orderNum);
+        // 후보군 중 이름이 일치하는(시작하는) 선수 찾기
+        const match = candidates?.find(uName => uName.startsWith(`${name}(`) || uName === name);
+        if (match) name = match;
+      }
+
+      // 2. 타순으로 못 찾았다면, 로스터 전체에서 이름으로 검색 (동명이인이 없을 경우 유효)
+      if (!roster.has(name)) {
+         for (const key of roster.keys()) {
+           if (key.startsWith(`${name}(`)) {
+             name = key;
+             break;
+           }
+         }
+      }
+    }
+    
     ensureRosterEntry(side, name);
     if (orderNum) {
       const list = battingOrders[side].get(orderNum) ?? [];
@@ -1176,9 +1250,19 @@ export default function ScorekeeperPage() {
   const defenseLineup = state.lineups[defenseSide];
   const activeLineupLength = activeOffenseEntries.length || 1;
   const currentBatterEntry = activeOffenseEntries[state.batterIndex[hittingSide] % activeLineupLength] ?? null;
-  const currentBatter = currentBatterEntry?.slot?.name ?? '타자';
+
+  // [수정됨] 현재 타자/투수 이름을 고유 식별자(이름+등번호)로 설정
+  const currentBatter = currentBatterEntry 
+    ? getUniqueName(currentBatterEntry.slot.name, currentBatterEntry.slot.number) 
+    : '타자';
+    
   const currentBatterLineupIndex = currentBatterEntry?.idx ?? 0;
-  const currentPitcher = defenseLineup.find((slot) => slot.pos.toUpperCase() === 'P')?.name ?? '';
+  
+  const currentPitcherSlot = defenseLineup.find((slot) => slot.pos.toUpperCase() === 'P');
+  const currentPitcher = currentPitcherSlot 
+    ? getUniqueName(currentPitcherSlot.name, currentPitcherSlot.number) 
+    : '';
+
   const [actionModal, setActionModal] = useState<ActionModalData | null>(null);
   const [benchInput, setBenchInput] = useState<{ [K in Side]: { name: string; pos: string; number: string; throws: string; bats: string } }>({
     home: { name: '', pos: '', number: '', throws: 'R', bats: 'R' },
