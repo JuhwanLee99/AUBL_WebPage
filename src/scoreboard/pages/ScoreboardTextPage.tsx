@@ -5,6 +5,7 @@ import StatsTable from '../../shared/components/StatsTable';
 import RemovedPlayersPanel from '../../shared/components/RemovedPlayersPanel';
 import type { BatterStatLine, PitcherStatLine } from '../../shared/types/scoreStats';
 import type { MatchSchedule } from '../../shared/state/demoStore';
+import './ScoreboardTextPage.css';
 
 type Half = 'top' | 'bottom';
 
@@ -96,6 +97,17 @@ function resolveJersey(jerseyMap: JerseyMap, side: 'home' | 'away', name: string
 export default function ScoreboardTextPage() {
   const { state } = useDemoStore();
   const [showReplay, setShowReplay] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 900);
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
   const activeMatch = useMemo(
     () => state.matches.find((m) => m.id === state.activeMatchId) ?? null,
     [state.matches, state.activeMatchId],
@@ -168,29 +180,24 @@ export default function ScoreboardTextPage() {
   }
 
   return (
-    <div
-      style={{
-        display: 'grid',
-        gap: 'clamp(12px, 1.6vw, 18px)',
-        minHeight: '100vh',
-      }}
-    >
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1.2fr)',
-          gap: 'clamp(16px, 2vw, 24px)',
-          alignItems: 'stretch',
-        }}
-      >
-        <div style={{ display: 'grid', alignItems: 'start', gap: '0px' }}>
+    <div className="scoreboard-text-page">
+      <div className="main-content-grid">
+        <div className={`scoreboard-section ${isMobile ? 'mobile-layout' : ''}`}>
           <ScoreboardFrame
             variant="text"
             showFootnote={false}
-            panelStyle={{
-              width: '100%',
-              aspectRatio: '4 / 3',
-            }}
+            panelStyle={
+              isMobile
+                ? {
+                    width: '100%',
+                    height: 'auto',
+                    minHeight: '500px',
+                  }
+                : {
+                    width: '100%',
+                    aspectRatio: '4 / 3',
+                  }
+            }
           />
           <div style={{ marginTop: '20px' }}>
             <NowPlayingCard
@@ -203,21 +210,7 @@ export default function ScoreboardTextPage() {
             />
           </div>
         </div>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateRows: state.gameOver ? 'auto 1fr' : 'auto 1fr auto',
-            gap: '12px',
-            padding: '16px',
-            borderRadius: '16px',
-            border: '1px solid rgba(148, 163, 184, 0.25)',
-            background: '#0b0f1a',
-            color: '#e2e8f0',
-            minHeight: 'min(90vh, 925px)',
-            height: 'auto',
-            overflow: 'visible',
-          }}
-        >
+        <div className={state.gameOver ? 'live-feed-section game-over' : 'live-feed-section'}>
           {state.gameOver ? (
             <>
               {postGameDetail ? (
@@ -360,14 +353,7 @@ export default function ScoreboardTextPage() {
         </div>
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: '12px',
-          padding: '0 2px',
-        }}
-      >
+      <div className="stats-grid">
         <div style={{ display: 'grid', gap: '8px' }}>
           <StatsTable title={`${state.teamNames.home} 타자 기록`} stats={playerStats.hitters.home} variant="batter" density="compact" />
           <StatsTable title={`${state.teamNames.home} 투수 기록`} stats={playerStats.pitchers.home} variant="pitcher" density="compact" />
@@ -379,14 +365,7 @@ export default function ScoreboardTextPage() {
         </div>
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: '12px',
-          padding: '0 2px 12px',
-        }}
-      >
+      <div className="removed-players-grid">
         <RemovedPlayersPanel title="교체 out (HOME)" players={state.removed.home} density="compact" />
         <RemovedPlayersPanel title="교체 out (AWAY)" players={state.removed.away} density="compact" />
       </div>
