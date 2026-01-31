@@ -1570,8 +1570,8 @@ function ScheduleLineupEditor({
   onRemoveBench: (side: Side, index: number) => void;
 }) {
   const lineupEntries = lineup.map((slot, idx) => ({ slot, idx }));
-  const battingEntries = lineupEntries.filter((entry) => entry.slot.pos.toUpperCase() !== 'P');
-  const pitcherEntry = lineupEntries.find((entry) => entry.slot.pos.toUpperCase() === 'P');
+  const battingEntries = lineupEntries.slice(0, 9);
+  const pitcherEntry = lineupEntries[9];
   return (
     <div style={{ display: 'grid', gap: '8px' }}>
       <span style={{ fontWeight: 800, color: '#cbd5e1' }}>{label}</span>

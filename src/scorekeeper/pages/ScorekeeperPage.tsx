@@ -1068,7 +1068,24 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     }
 
     const pitchSide = side === 'home' ? 'away' : 'home';
-    const pitcherName = currentPitcher[pitchSide];
+    
+    // [수정됨] 투수 기록 집계 안전장치 추가
+    // 1. 피드에서 투수 이름을 찾음
+    let pitcherName = currentPitcher[pitchSide];
+    
+    // 2. 피드에 투수 정보가 없다면(null), 현재 로스터에서 'P' 포지션인 선수를 찾음 (Fallback)
+    if (!pitcherName) {
+      const roster = pitchSide === 'home' ? rosterHome : rosterAway;
+      // 로스터 맵을 순회하며 포지션이 P인 선수 찾기
+      for (const [pName, info] of roster.entries()) {
+        if (info.pos && info.pos.toUpperCase() === 'P') {
+          pitcherName = pName;
+          // 피드 처리의 일관성을 위해 currentPitcher 캐시에도 저장
+          currentPitcher[pitchSide] = pName; 
+          break;
+        }
+      }
+    }
     const pitcherStat = pitcherName ? addPitch(pitchSide, pitcherName) : null;
     const pitchInfo = classifyPitch(result);
     if (pitcherStat && pitchInfo.pitch) {
@@ -1274,9 +1291,11 @@ export default function ScorekeeperPage() {
   const offenseLineupEntries = state.lineups[hittingSide].map((slot, idx) => ({ slot, idx }));
   // 타석에 들어갈 수 있는 선수만 필터링 (오타니룰 고려)
   const offenseBattingEntries = offenseLineupEntries.filter((entry) => {
-    // 투수가 아니면 타석에 들어감
+    // 1. 타순 1~9번(인덱스 0~8)은 무조건 포함
+    if (entry.idx < 9) return true;
+    
+    // 2. 그 외(10번 등)는 기존 로직 (투수가 아니거나 canPitcherBat 만족 시)
     if (entry.slot.pos.toUpperCase() !== 'P') return true;
-    // 투수인 경우, 타석에 들어갈 수 있는지 확인 (오타니룰 고려)
     return canPitcherBat(entry.slot, state.lineups[hittingSide]);
   });
   const activeOffenseEntries = offenseBattingEntries.length ? offenseBattingEntries : offenseLineupEntries;
