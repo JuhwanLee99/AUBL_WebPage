@@ -901,7 +901,10 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   const battingOrders: Record<'home' | 'away', Map<number, string[]>> = { home: new Map(), away: new Map() };
 
   const seedBattingOrders = (side: 'home' | 'away') => {
-    const batting = record.lineups[side].filter((slot) => slot.pos.toUpperCase() !== 'P');
+    // [수정됨] .filter((slot) => slot.pos.toUpperCase() !== 'P') 제거
+    // 이유: 투수가 타석에 들어서면 P 포지션이어도 타자 기록에 포함되어야 함.
+    // 대신 라인업의 상위 9명을 타자로 간주 (오타니 룰 등 고려, 기본 타순은 9명)
+    const batting = record.lineups[side].slice(0, 9);
     // Batting order map에도 uniqueName 저장
     batting.forEach((slot, idx) => battingOrders[side].set(idx + 1, [getUniqueName(slot.name, slot.number)]));
   };
@@ -977,9 +980,26 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   // 대신 '투수', '·' 같은 불필요한 텍스트만 제거
   const cleanName = (raw: string) => raw.replace(/투수/g, '').replace(/·/g, '').trim();
 
+  // [추가] 투수 이름이 로스터의 uniqueName과 일치하지 않을 때(예: "홍길동" vs "홍길동(18)") 찾아주는 헬퍼
+  const resolvePitcherName = (rawName: string, side: 'home' | 'away' | null) => {
+    const checkSides = side ? [side] : ['home', 'away'];
+    for (const s of checkSides as ('home' | 'away')[]) {
+        const roster = s === 'home' ? rosterHome : rosterAway;
+        if (roster.has(rawName)) return rawName;
+        // 이름 뒤에 (등번호)가 붙은 키가 있는지 확인
+        for (const key of roster.keys()) {
+            if (key.startsWith(rawName + '(')) return key;
+        }
+    }
+    return rawName;
+  };
+
   const inferPitcherSide = (name: string): 'home' | 'away' | null => {
     if (rosterHome.has(name) || benchMetaHome.has(name)) return 'home';
     if (rosterAway.has(name) || benchMetaAway.has(name)) return 'away';
+    // 로스터 키 매칭 시도
+    for (const key of rosterHome.keys()) if (key.startsWith(name + '(')) return 'home';
+    for (const key of rosterAway.keys()) if (key.startsWith(name + '(')) return 'away';
     return null;
   };
 
@@ -993,14 +1013,20 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     if (result.includes('투수 교체')) {
       const incoming = result.split('→')[1];
       if (incoming) {
-        const cleaned = cleanName(incoming);
+        let cleaned = cleanName(incoming);
         const inferred = inferPitcherSide(cleaned) ?? defenseSide;
+        // [수정] 고유 이름으로 변환하여 사용 (중복 방지)
+        cleaned = resolvePitcherName(cleaned, inferred);
+        
         currentPitcher[inferred] = cleaned;
         addPitch(inferred, cleaned);
       }
     } else if (result.endsWith('투수')) {
-      const cleaned = cleanName(result.replace('투수', ''));
+      let cleaned = cleanName(result.replace('투수', ''));
       const inferred = inferPitcherSide(cleaned) ?? defenseSide;
+      // [수정] 고유 이름으로 변환하여 사용
+      cleaned = resolvePitcherName(cleaned, inferred);
+
       currentPitcher[inferred] = cleaned;
       addPitch(inferred, cleaned);
     }
