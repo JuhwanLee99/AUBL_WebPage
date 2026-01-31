@@ -68,9 +68,16 @@ const snapshotCards = [
 const formatLiveTime = (value: string) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '시간 미정';
-  const dayLabel = date.toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', weekday: 'short' });
-  const timeLabel = date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
-  return `${dayLabel} · ${timeLabel}`;
+  // Intl 대신 명시적 KST 변환 사용을 권장하지만, 표시는 브라우저 편의를 위해 유지하되 타임존 명시
+  return new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    month: 'numeric',
+    day: 'numeric',
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(date);
 };
 
 const safeMatchTime = (value: string) => {
@@ -129,16 +136,35 @@ const currentPitcherName = (state: ReturnType<typeof useDemoStore>['state']) => 
   return pitcher?.name || '투수 대기 중';
 };
 
-const dateKey = (value: string) => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }); // YYYY-MM-DD
+// [수정됨] KST(UTC+9) 기준 날짜 키 생성 (YYYY-MM-DD) - 수학적 계산으로 오차 제거
+const getKstDateKey = (value: string | Date) => {
+  const date = typeof value === 'string' ? new Date(value) : value;
+  const time = date.getTime();
+  if (Number.isNaN(time)) return null;
+
+  // 1. UTC 타임스탬프에 9시간(KST 오프셋)을 더함
+  const kstOffset = 9 * 60 * 60 * 1000;
+  const kstDate = new Date(time + kstOffset);
+
+  // 2. 더해진 시간의 UTC 컴포넌트를 추출하면 정확한 KST 날짜가 됨
+  const yyyy = kstDate.getUTCFullYear();
+  const mm = String(kstDate.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(kstDate.getUTCDate()).padStart(2, '0');
+  
+  return `${yyyy}-${mm}-${dd}`;
 };
 
 const formatTimeShort = (value: string) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '시간 미정';
-  return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+  
+  // 시간 표시도 KST 기준으로 고정
+  return new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false 
+  }).format(date);
 };
 
 function Badge({ label, dots }: { label: string; dots: { active: boolean; color: string }[] }) {
@@ -222,40 +248,39 @@ export default function LandingPage() {
   const snapshotRef = useRef<HTMLDivElement>(null);
   const [liveMatchesRealtime, setLiveMatchesRealtime] = useState<MatchSchedule[]>([]);
   const [liveScores, setLiveScores] = useState<Record<string, LiveSnapshot>>({});
+
   // 1. 오늘 경기 계산
   const todaysScheduled = useMemo(() => {
-    const todayKey = dateKey(new Date().toISOString());
-    // 수정됨: liveMatchesRealtime 대신 항상 state.matches(전체 일정)를 사용
-    const source = state.matches; 
-    return source
+    // 현재 KST 기준 '오늘'의 YYYY-MM-DD 키 생성
+    const todayKey = getKstDateKey(new Date());
+    
+    return state.matches
       .filter(
         (match) =>
           match.status === 'scheduled' &&
-          todayKey &&
-          dateKey(match.startTime) === todayKey,
+          todayKey !== null && // todayKey가 유효할 때만
+          getKstDateKey(match.startTime) === todayKey,
       )
       .sort((a, b) => safeMatchTime(a.startTime) - safeMatchTime(b.startTime));
-  }, [state.matches]); // 의존성 배열에서 liveMatchesRealtime 제거
+  }, [state.matches]);
 
   // 2. 내일 경기 계산
   const tomorrowsScheduled = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    const tomorrowKey = dateKey(d.toISOString());
+    // 현재 시간에서 정확히 24시간을 더해 KST 기준 '내일'의 키 생성
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const tomorrowKey = getKstDateKey(tomorrow);
     
-    // 수정됨: liveMatchesRealtime 대신 항상 state.matches(전체 일정)를 사용
-    const source = state.matches;
-    return source
+    return state.matches
       .filter(
         (match) =>
           match.status === 'scheduled' &&
-          tomorrowKey &&
-          dateKey(match.startTime) === tomorrowKey,
+          tomorrowKey !== null && // tomorrowKey가 유효할 때만
+          getKstDateKey(match.startTime) === tomorrowKey,
       )
       .sort((a, b) => safeMatchTime(a.startTime) - safeMatchTime(b.startTime));
-  }, [state.matches]); // 의존성 배열에서 liveMatchesRealtime 제거
+  }, [state.matches]);
 
-  // 3. 라이브 경기 계산 (중복 선언 주의: 이 부분은 한 번만 있어야 합니다!)
+  // 3. 라이브 경기 계산
   const liveMatches = useMemo(() => {
     const source = liveMatchesRealtime.length ? liveMatchesRealtime : state.matches;
     return source
@@ -263,17 +288,17 @@ export default function LandingPage() {
       .sort((a, b) => safeMatchTime(a.startTime) - safeMatchTime(b.startTime));
   }, [liveMatchesRealtime, state.matches]);
 
-  // 4. 티커 아이템 (중복 선언 주의: 이 부분은 한 번만 있어야 합니다!)
+  // 4. 티커 아이템
   const tickerItems = content.tickerItems ?? [];
 
-  // Ensure live widget always has full schedule data, independent of any selector elsewhere.
+  // Ensure live widget always has full schedule data
   useEffect(() => {
     setLiveMatchesRealtime([]);
     setLiveScores({});
     void actions.loadFullSchedule();
   }, [actions]);
 
-  // Fetch latest score/inning for each live match so spectators see current data immediately.
+  // Fetch latest score/inning
   useEffect(() => {
     let cancelled = false;
     const fetchScores = async () => {
@@ -331,7 +356,7 @@ export default function LandingPage() {
     };
   }, [liveMatches]);
 
-  // Dedicated in-progress subscription so LIVE 섹션은 셀렉터와 무관하게 항상 최신 상태를 반영.
+  // Dedicated in-progress subscription
   useEffect(() => {
     const liveQuery = query(collection(firestore, 'matches'), where('status', '==', 'inProgress'));
     const unsub = onSnapshot(
@@ -348,8 +373,6 @@ export default function LandingPage() {
         );
       },
       (error) => {
-        // fallback to store state on permission/index errors
-        // eslint-disable-next-line no-console
         console.error('[landing live] snapshot error', error);
         setLiveMatchesRealtime([]);
       },
@@ -908,7 +931,7 @@ export default function LandingPage() {
         )}
       </section>
 
-      {/* [추가됨] Tomorrow's Schedule Strip */}
+      {/* Tomorrow's Schedule Strip */}
       <section
         style={{
           borderRadius: 'var(--surface-radius-md)',
@@ -926,7 +949,7 @@ export default function LandingPage() {
               width: '10px',
               height: '10px',
               borderRadius: '999px',
-              backgroundColor: '#0ea5e9', // 내일은 하늘색 계열로 구분
+              backgroundColor: '#0ea5e9',
               boxShadow: '0 0 0 6px rgba(14, 165, 233, 0.15)',
             }}
           />
