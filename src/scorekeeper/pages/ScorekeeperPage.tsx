@@ -5634,12 +5634,30 @@ function TeamEditor({
   highlightBatterName?: string;
   highlightPitcherName?: string;
 }) {
-  const lineupEntries = lineup.map((slot, idx) => ({ slot, idx }));
-  
+  // [수정] 빈 라인업을 받아도 UI 입력칸을 유지하기 위해 동적으로 빈 슬롯 생성
+  const filledLineup = React.useMemo(() => {
+    const result = [...lineup];
+    const emptySlot = { name: '', pos: '', number: '', throws: 'R' as const, bats: 'R' as const };
+
+    // 타자 9명 채우기 (투수가 아닌 슬롯)
+    while (result.filter(s => s.pos.toUpperCase() !== 'P').length < 9) {
+      result.push({ ...emptySlot });
+    }
+
+    // 투수 채우기
+    if (!result.some(s => s.pos.toUpperCase() === 'P')) {
+      result.push({ ...emptySlot, pos: 'P' });
+    }
+
+    return result;
+  }, [lineup]);
+
+  const lineupEntries = filledLineup.map((slot, idx) => ({ slot, idx }));
+
   // [핵심 수정] 투수(P) 여부와 상관없이 항상 라인업의 앞 9명을 타자로 표시합니다.
   // 이렇게 하면 투수가 타석에 들어서도 입력칸이 유지됩니다.
   const battingEntries = lineupEntries.slice(0, 9);
-  
+
   // 투수는 전체 라인업에서 포지션이 'P'인 선수를 찾아서 하단에 별도 표시합니다.
   const pitcherEntry = lineupEntries.find((entry) => entry.slot.pos.toUpperCase() === 'P');
   
