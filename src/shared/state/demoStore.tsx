@@ -18,6 +18,7 @@ import {
 import { auth, firestore } from '../firebase/client';
 import { TEAMS } from '../lib/mockData';
 import type { LeagueDivision } from '../types';
+import { sendGameDetail, transformMatchToGameDetail } from '../api';
 
 // 헬퍼 함수 추가
 const formatUniqueName = (name: string, number: string | number | undefined | null) => {
@@ -3838,6 +3839,36 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
             awayScore: snapshot.score.away,
             postGame, // 상세 기록 저장
           }).catch(() => {});
+
+          // 백엔드로 경기 데이터 전송
+          const currentMatch = snapshot.matches.find(m => m.id === matchId);
+          if (currentMatch) {
+            const matchWithPostGame: MatchSchedule = {
+              ...currentMatch,
+              status: 'completed',
+              homeScore: snapshot.score.home,
+              awayScore: snapshot.score.away,
+              postGame,
+            };
+
+            // TODO: seasonId를 동적으로 가져오기 (현재는 하드코딩)
+            const CURRENT_SEASON_ID = 1;
+
+            const gameDetail = transformMatchToGameDetail(matchWithPostGame, CURRENT_SEASON_ID);
+
+            if (gameDetail) {
+              void sendGameDetail(gameDetail)
+                .then((response) => {
+                  console.log('✅ 경기 데이터 백엔드 전송 성공:', response);
+                })
+                .catch((error) => {
+                  console.error('❌ 경기 데이터 백엔드 전송 실패:', error);
+                  // 실패해도 Firestore에는 저장되어 있으므로 나중에 재시도 가능
+                });
+            } else {
+              console.warn('⚠️ 경기 데이터 변환 실패: 백엔드 전송 생략');
+            }
+          }
         }
       },
       resetGame: () => dispatch({ type: 'resetGame' }),
