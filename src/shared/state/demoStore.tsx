@@ -1516,8 +1516,21 @@ function reducer(state: DemoState, action: Action): DemoState {
       nextState = createNewGame(state);
       break;
     case 'setGameLimit': {
-      if (state.gameStarted || state.gameOver) return state;
-      nextState = { ...state, gameLimitMinutes: action.minutes };
+      // 경기 종료 후에는 설정 불가
+      if (state.gameOver) return state;
+
+      // 경기 시작 후에 제한시간을 설정하면 타이머를 현재 시간부터 시작
+      if (state.gameStarted && action.minutes !== null) {
+        nextState = {
+          ...state,
+          gameLimitMinutes: action.minutes,
+          gameStartTimestamp: Date.now(),
+          gamePausedAt: null,
+          gamePausedDuration: 0,
+        };
+      } else {
+        nextState = { ...state, gameLimitMinutes: action.minutes };
+      }
       break;
     }
     case 'pauseGameTimer': {

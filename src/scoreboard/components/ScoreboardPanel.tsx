@@ -389,6 +389,9 @@ export default function ScoreboardPanel({
           gamePausedAt={state.gamePausedAt}
           gamePausedDuration={state.gamePausedDuration}
           gameStarted={state.gameStarted}
+          style={{
+            padding: '6px 14px',
+          }}
         />
 
         <div

@@ -5,6 +5,7 @@ import { useDemoStore, buildGameRecord } from '../../shared/state/demoStore';
 import type { PlayEvent, ErrorDetails, RunnerAdvanceOutcome, BattedBallDetails } from '../../shared/state/demoStore'; // [추가] 타입 임포트
 import StatsTable from '../../shared/components/StatsTable';
 import RemovedPlayersPanel from '../../shared/components/RemovedPlayersPanel';
+import { GameTimerDisplay } from '../../shared/components/GameTimerDisplay';
 import type { BatterStatLine, PitcherStatLine } from '../../shared/types/scoreStats';
 import type { MatchSchedule } from '../../shared/state/demoStore';
 import './ScoreboardTextPage.css';
@@ -339,7 +340,20 @@ export default function ScoreboardTextPage() {
               gap: '12px',
             }}
           >
-            <span style={{ fontWeight: 900, fontSize: '18px' }}>문자 중계</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontWeight: 900, fontSize: '18px' }}>문자 중계</span>
+              <GameTimerDisplay
+                gameLimitMinutes={state.gameLimitMinutes}
+                gameStartTimestamp={state.gameStartTimestamp}
+                gamePausedAt={state.gamePausedAt}
+                gamePausedDuration={state.gamePausedDuration}
+                gameStarted={state.gameStarted}
+                style={{
+                  padding: '5px 10px',
+                  fontSize: '12px',
+                }}
+              />
+            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>총 {feed.length}건</span>
               {hasLiveOverlay ? (
