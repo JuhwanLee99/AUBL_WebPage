@@ -241,6 +241,10 @@ interface DemoSnapshot {
   scorerRole: string | null;
   scorerPaused: boolean;
   followCurrent: boolean;
+  gameLimitMinutes: number | null;
+  gameStartTimestamp: number | null;
+  gamePausedAt: number | null;
+  gamePausedDuration: number;
 }
 
 interface DemoState extends DemoSnapshot {
@@ -276,6 +280,10 @@ type SharedGameState = Pick<
   | 'scorerRole'
   | 'scorerPaused'
   | 'followCurrent'
+  | 'gameLimitMinutes'
+  | 'gameStartTimestamp'
+  | 'gamePausedAt'
+  | 'gamePausedDuration'
 > & { updatedAt?: number };
 
 type Action =
@@ -338,7 +346,10 @@ type Action =
   | { type: 'setFeed'; feed: PlayLog[] }
   | { type: 'setEvents'; events: PlayEvent[] }
   | { type: 'releaseLock' }
-  | { type: 'resumeLock'; payload: { scorerUid: string; scorerName: string | null; scorerEmail: string | null; scorerRole: string | null; lockedAt: number } };
+  | { type: 'resumeLock'; payload: { scorerUid: string; scorerName: string | null; scorerEmail: string | null; scorerRole: string | null; lockedAt: number } }
+  | { type: 'setGameLimit'; minutes: number | null }
+  | { type: 'pauseGameTimer' }
+  | { type: 'resumeGameTimer' };
 
 const demoLineups: { home: PlayerSlot[]; away: PlayerSlot[] } = {
   home: [
@@ -467,6 +478,10 @@ const initialState: DemoState = {
   scorerRole: null,
   scorerPaused: false,
   followCurrent: true,
+  gameLimitMinutes: null,
+  gameStartTimestamp: null,
+  gamePausedAt: null,
+  gamePausedDuration: 0,
 };
 
 function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }): PlayLog[] {
@@ -1363,6 +1378,9 @@ function reducer(state: DemoState, action: Action): DemoState {
         history: [],
         removed: { ...state.removed },
         matches,
+        gameStartTimestamp: state.gameLimitMinutes !== null ? Date.now() : null,
+        gamePausedAt: null,
+        gamePausedDuration: 0,
       };
       break;
     }
@@ -1460,6 +1478,26 @@ function reducer(state: DemoState, action: Action): DemoState {
     case 'resetGame':
       nextState = createNewGame(state);
       break;
+    case 'setGameLimit': {
+      if (state.gameStarted || state.gameOver) return state;
+      nextState = { ...state, gameLimitMinutes: action.minutes };
+      break;
+    }
+    case 'pauseGameTimer': {
+      if (!state.gameStarted || state.gameOver || state.gamePausedAt !== null) return state;
+      nextState = { ...state, gamePausedAt: Date.now() };
+      break;
+    }
+    case 'resumeGameTimer': {
+      if (!state.gameStarted || state.gameOver || state.gamePausedAt === null) return state;
+      const pauseDuration = Date.now() - state.gamePausedAt;
+      nextState = {
+        ...state,
+        gamePausedAt: null,
+        gamePausedDuration: state.gamePausedDuration + pauseDuration,
+      };
+      break;
+    }
     case 'addMatch':
       nextState = {
         ...state,
@@ -2516,6 +2554,7 @@ function applyEndGame(state: DemoState, endedAt: string): DemoState {
     endedAt,
     lastPlay: message,
     feed: pushFeed(state.feed, feedEntry),
+    gamePausedAt: null,
   };
 }
 
@@ -2559,6 +2598,10 @@ function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
   scorerRole: state.scorerRole,
   scorerPaused: false,
   followCurrent: state.followCurrent,
+  gameLimitMinutes: null,
+  gameStartTimestamp: null,
+  gamePausedAt: null,
+  gamePausedDuration: 0,
   };
 }
 
@@ -2600,6 +2643,10 @@ function createNewGame(state: DemoState): DemoState {
     scorerRole: state.scorerRole,
     scorerPaused: false,
     followCurrent: state.followCurrent,
+    gameLimitMinutes: null,
+    gameStartTimestamp: null,
+    gamePausedAt: null,
+    gamePausedDuration: 0,
   };
 }
 
@@ -2802,6 +2849,9 @@ interface DemoStoreValue {
     loadFullSchedule: () => Promise<void>;
     releaseLock: () => void;
     resumeLock: () => void;
+    setGameLimit: (minutes: number | null) => void;
+    pauseGameTimer: () => void;
+    resumeGameTimer: () => void;
   };
 }
 
@@ -3709,6 +3759,9 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
           },
         });
       },
+      setGameLimit: (minutes: number | null) => dispatch({ type: 'setGameLimit', minutes }),
+      pauseGameTimer: () => dispatch({ type: 'pauseGameTimer' }),
+      resumeGameTimer: () => dispatch({ type: 'resumeGameTimer' }),
     }),
     [isAdmin],
   );

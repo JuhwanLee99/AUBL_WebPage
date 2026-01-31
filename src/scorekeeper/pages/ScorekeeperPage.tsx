@@ -14,6 +14,7 @@ import RemovedPlayersPanel from '../../shared/components/RemovedPlayersPanel';
 import type { BatterStatLine, PitcherStatLine } from '../../shared/types/scoreStats';
 import { useAuth } from '../../shared/auth/AuthProvider';
 import { BoxScoreTable } from '../../scoreboard/components/ScoreboardPanel';
+import { GameTimerDisplay } from '../../shared/components/GameTimerDisplay';
 
 // 동명이인 구분을 위한 고유 이름 생성 헬퍼 함수 추가
 // 이미 (등번호)가 붙어있으면 덧붙이지 않도록 안전장치 추가
@@ -1288,6 +1289,7 @@ export default function ScorekeeperPage() {
   const [showDroppedThirdStrike, setShowDroppedThirdStrike] = useState(false);
   const [battedBallType, setBattedBallType] = useState(baseBattedBallType);
   const [battedBallZone, setBattedBallZone] = useState(defaultZoneOptions[0]);
+  const [gameLimitInput, setGameLimitInput] = useState('');
   const recordPayload = useMemo(() => buildGameRecord(state), [state]);
   const { user } = useAuth();
   const [pendingExportId, setPendingExportId] = useState<string | null>(null);
@@ -1423,6 +1425,15 @@ export default function ScorekeeperPage() {
     const timer = setInterval(update, 1000);
     return () => clearInterval(timer);
   }, [state.scorerLockedAt, hasActiveMatch, LOCK_TTL_MS]);
+
+  // 경기 시간제한 입력값 동기화
+  useEffect(() => {
+    if (state.gameLimitMinutes !== null) {
+      setGameLimitInput(state.gameLimitMinutes.toString());
+    } else {
+      setGameLimitInput('');
+    }
+  }, [state.gameLimitMinutes]);
 
   useEffect(() => {
     if (state.gameOver) {
@@ -1998,12 +2009,96 @@ const handleConfirmHitWizard = () => {
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'flex-end',
-                  gap: '6px',
+                  gap: '8px',
                   width: '100%',
                   marginTop: '-35px',
                 }}
               >
-                {/* 상단: 상태 뱃지 + 경기 시작 버튼 (Command Center 줄 오른쪽 끝) */}
+                {/* 경기 시간제한 입력 (경기 시작 전에만 표시) - 별도 줄 */}
+                {!isGameStarted && !isGameOver && hasActiveMatch && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8' }}>
+                      경기 시간 제한:
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={gameLimitInput}
+                      onChange={(e) => setGameLimitInput(e.target.value)}
+                      placeholder="분 입력 (예: 90)"
+                      disabled={lockedByOther}
+                      style={{
+                        width: '100px',
+                        padding: '8px',
+                        borderRadius: '8px',
+                        border: '1px solid #374151',
+                        background: '#1f2937',
+                        color: '#f8fafc',
+                        fontSize: '13px',
+                      }}
+                    />
+                    <span style={{ fontSize: '12px', color: '#94a3b8' }}>분</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const minutes = parseInt(gameLimitInput) || null;
+                        actions.setGameLimit(minutes);
+                      }}
+                      disabled={lockedByOther}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #3b82f6',
+                        background: '#1e40af',
+                        color: '#fff',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: lockedByOther ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      설정
+                    </button>
+                    {state.gameLimitMinutes !== null && (
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#22c55e' }}>
+                        ✓ {state.gameLimitMinutes}분 설정됨
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* 타이머 + 일시정지/재개 버튼 줄 */}
+                {state.gameStarted && !state.gameOver && state.gameLimitMinutes !== null && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <GameTimerDisplay
+                      gameLimitMinutes={state.gameLimitMinutes}
+                      gameStartTimestamp={state.gameStartTimestamp}
+                      gamePausedAt={state.gamePausedAt}
+                      gamePausedDuration={state.gamePausedDuration}
+                      gameStarted={state.gameStarted}
+                    />
+                    {!lockedByOther && (
+                      <button
+                        type="button"
+                        onClick={() => state.gamePausedAt !== null ? actions.resumeGameTimer() : actions.pauseGameTimer()}
+                        style={{
+                          padding: '8px 14px',
+                          borderRadius: '8px',
+                          border: `1px solid ${state.gamePausedAt !== null ? '#10b981' : '#f97316'}`,
+                          background: state.gamePausedAt !== null ? '#059669' : '#ea580c',
+                          color: '#fff',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {state.gamePausedAt !== null ? '⏵ 타이머 재개' : '⏸ 타이머 일시정지'}
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* 상태 뱃지 + 경기 시작 버튼 줄 */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   <span
                     style={{
