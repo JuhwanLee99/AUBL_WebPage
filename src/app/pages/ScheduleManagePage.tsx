@@ -77,12 +77,21 @@ export default function ScheduleManagePage() {
   };
 
   return (
-    <div style={{ display: 'grid', gap: '18px' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 900 }}>일정 관리</h1>
-          <p style={{ margin: '6px 0 0', color: '#94a3b8' }}>데모용 더미 일정을 빠르게 추가·상태 변경해 보세요.</p>
-        </div>
+    <>
+      <style>
+        {`
+          input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            cursor: pointer;
+          }
+        `}
+      </style>
+      <div style={{ display: 'grid', gap: '18px' }}>
+        <header style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 900 }}>일정 관리</h1>
+            <p style={{ margin: '6px 0 0', color: '#94a3b8' }}>데모용 더미 일정을 빠르게 추가·상태 변경해 보세요.</p>
+          </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <button
             type="button"
@@ -251,7 +260,7 @@ export default function ScheduleManagePage() {
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                    gridTemplateColumns: '130px 130px 190px 120px 1fr 1fr 1fr',
                     gap: '8px',
                     padding: '8px',
                     borderRadius: '10px',
@@ -274,7 +283,10 @@ export default function ScheduleManagePage() {
                   <input
                     type="datetime-local"
                     defaultValue={toLocalInputValue(match.startTime)}
-                    style={inputStyle}
+                    style={{
+                      ...inputStyle,
+                      colorScheme: 'dark',
+                    }}
                     onBlur={(e) => {
                       const iso = toIsoString(e.target.value);
                       if (iso) actions.updateMatch(match.id, { startTime: iso });
@@ -454,6 +466,7 @@ export default function ScheduleManagePage() {
           )}
         </section>
       )}
-    </div>
+      </div>
+    </>
   );
 }

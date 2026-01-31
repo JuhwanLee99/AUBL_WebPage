@@ -701,23 +701,32 @@ export default function MatchSchedulePage() {
   );
 
   return (
-    <div style={{ display: 'grid', gap: '24px' }}>
-      {tooltip && (
-        <div
-          style={{
-            position: 'fixed',
-            left: tooltip.x,
-            top: tooltip.y + 10,
-            transform: 'translate(-50%, 0)',
-            background: 'rgba(15,23,42,0.95)',
-            color: '#f97316',
-            padding: '8px 12px',
-            borderRadius: '10px',
-            border: '1px solid rgba(148,163,184,0.35)',
-            fontSize: '12px',
-            fontWeight: 700,
-            whiteSpace: 'nowrap',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+    <>
+      <style>
+        {`
+          input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            cursor: pointer;
+          }
+        `}
+      </style>
+      <div style={{ display: 'grid', gap: '24px' }}>
+        {tooltip && (
+          <div
+            style={{
+              position: 'fixed',
+              left: tooltip.x,
+              top: tooltip.y + 10,
+              transform: 'translate(-50%, 0)',
+              background: 'rgba(15,23,42,0.95)',
+              color: '#f97316',
+              padding: '8px 12px',
+              borderRadius: '10px',
+              border: '1px solid rgba(148,163,184,0.35)',
+              fontSize: '12px',
+              fontWeight: 700,
+              whiteSpace: 'nowrap',
+            boxShadow: '0 10px 30px rgba(56, 46, 46, 0.25)',
             zIndex: 2000,
           }}
         >
@@ -815,7 +824,7 @@ export default function MatchSchedulePage() {
             gap: '16px',
           }}
         >
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 300px 1fr 150px', gap: '12px' }}>
             <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
               홈 팀
               <input
@@ -839,7 +848,7 @@ export default function MatchSchedulePage() {
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '1.2fr 0.8fr 0.8fr',
+                  gridTemplateColumns: '140px 75px 75px',
                   gap: '8px',
                   alignItems: 'center',
                 }}
@@ -848,7 +857,10 @@ export default function MatchSchedulePage() {
                   type="date"
                   value={startTimeParts.date}
                   onChange={(event) => updateStartTime({ date: event.target.value })}
-                  style={inputStyle}
+                  style={{
+                    ...inputStyle,
+                    colorScheme: 'white',
+                  }}
                 />
                 <select
                   value={startTimeParts.hour}
@@ -1211,6 +1223,7 @@ export default function MatchSchedulePage() {
         </div>
       )}
     </div>
+    </>
   );
 }
 
