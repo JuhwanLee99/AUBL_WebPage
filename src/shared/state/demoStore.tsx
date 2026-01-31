@@ -1736,6 +1736,7 @@ function ensureHalfPitcherLogged(state: DemoState, feed: PlayLog[]) {
     batter: '',
     pitch: 0,
     result: `${pitcher.name}${pitcher.number ? `(${pitcher.number})` : ''} 투수`,
+    createdAt: Date.now(),
   };
   return pushFeed(feed, pitcherEntry);
 }
@@ -1817,6 +1818,7 @@ function createLogEntry(state: DemoState, result: string, pitch: number): PlayLo
     batter: info.batter,
     pitch,
     result,
+    createdAt: Date.now(),
   };
 }
 
@@ -1828,6 +1830,7 @@ function createLogEntryWithBatter(state: DemoState, batter: string, order: numbe
     batter,
     pitch,
     result,
+    createdAt: Date.now(),
   };
 }
 
@@ -1839,6 +1842,7 @@ function createLogEntryForBaserunning(state: DemoState, result: string, pitch: n
     batter: '',
     pitch,
     result,
+    createdAt: Date.now(),
   };
 }
 
@@ -2973,7 +2977,13 @@ function substitutePlayer(
   }
 
   const changeText = `${changeLabel} · ${formatPlayer(outgoing)} → ${formatPlayer(benchPlayer)}`;
-  const feed = pushFeed(state.feed, createLogEntryForBaserunning(state, changeText, 0));
+  let feed = pushFeed(state.feed, createLogEntryForBaserunning(state, changeText, 0));
+
+  // 투수 교체 시 새로운 투수 로그 즉시 추가 (ensureHalfPitcherLogged가 나중에 중복 추가하는 것 방지)
+  if (isPitcherChange && incomingIsP) {
+    const newPitcherLog = `${formatPlayer(benchPlayer)} 투수`;
+    feed = pushFeed(feed, createLogEntryForBaserunning(state, newPitcherLog, 0));
+  }
 
   // 대주자 교체 시 베이스 업데이트
   let bases = state.bases;
@@ -3344,7 +3354,10 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     if (!matchId) return;
 
     const isScorer = stateRef.current.scorerUid && stateRef.current.scorerUid === (auth.currentUser?.uid ?? null);
-    const maxEntries = isScorer ? SCORER_FEED_LIMIT : FEED_LIMIT;
+    // 기록원이면 구독하지 않음 (로컬 상태가 Firestore 구독으로 덮어써지는 것을 방지)
+    if (isScorer) return;
+
+    const maxEntries = FEED_LIMIT;
 
     const feedQuery = query(
       collection(firestore, 'matchStates', matchId, 'feed'),
@@ -3570,7 +3583,8 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       const now = Date.now();
 
       if (newFeedCount > 0) {
-        const newEntries = stateRef.current.feed.slice(0, newFeedCount);
+        // 배열 끝에서부터 새로운 항목 가져오기
+        const newEntries = stateRef.current.feed.slice(-newFeedCount);
         newEntries.forEach((entry, idx) => {
           batch.set(
             doc(collection(firestore, 'matchStates', matchId, 'feed')),
@@ -3580,7 +3594,8 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (newEventCount > 0) {
-        const newEntries = stateRef.current.events.slice(0, newEventCount);
+        // 배열 끝에서부터 새로운 항목 가져오기
+        const newEntries = stateRef.current.events.slice(-newEventCount);
         newEntries.forEach((entry, idx) => {
           batch.set(
             doc(collection(firestore, 'matchStates', matchId, 'events')),

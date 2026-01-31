@@ -921,7 +921,8 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   seedBattingOrders('away');
 
   const addRemovedOrders = (side: 'home' | 'away') => {
-    (record.removed?.[side] ?? []).forEach((p) => {
+    // [수정] 교체된 순서대로 정렬하기 위해 removed 배열을 역순으로 순회
+    [...(record.removed?.[side] ?? [])].reverse().forEach((p) => {
       const ord = typeof p.order === 'number' && p.order > 0 ? p.order : null;
       if (!ord) return;
       const list = battingOrders[side].get(ord) ?? [];
@@ -1234,11 +1235,11 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
         const row = stat ? { ...base, ...stat, pos: stat.pos ?? base.pos } : base;
 
         if (meta?.substitutionType) {
-          console.log(`[통계 생성] ${playerName}:`, {
-            meta,
-            hasSubstitutionType: !!meta.substitutionType,
-            substitutionType: meta.substitutionType,
-          });
+          // console.log(`[통계 생성] ${playerName}:`, {
+          //   meta,
+          //   hasSubstitutionType: !!meta.substitutionType,
+          //   substitutionType: meta.substitutionType,
+          // });
         }
 
         // 교체된 선수는 'out', 교체로 들어온 선수는 substitutionType을 status로 설정
@@ -1247,7 +1248,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
           status = 'out';
         } else if (meta?.substitutionType) {
           status = meta.substitutionType;
-          console.log(`✓ ${playerName} - substitutionType: ${meta.substitutionType} -> status: ${status}`);
+          // console.log(`✓ ${playerName} - substitutionType: ${meta.substitutionType} -> status: ${status}`);
         }
 
         rows.push({ ...row, order, status });
