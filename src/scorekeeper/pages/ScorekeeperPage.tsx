@@ -1400,40 +1400,6 @@ export default function ScorekeeperPage() {
     });
     return { innings, rows: [mk('away'), mk('home')] };
   }, [recordPayload, state.inning, state.score, state.teamNames, activeMatch, homeTeam, awayTeam]);
-  const statusBadge = !hasActiveMatch
-    ? {
-        text: '경기 미선택 · 기록 대기',
-        color: '#fbbf24',
-        background: 'rgba(251,191,36,0.12)',
-        border: 'rgba(251,191,36,0.4)',
-      }
-    : lockedByOther
-      ? {
-          text: '다른 기록원이 기록 중',
-          color: '#fca5a5',
-          background: 'rgba(248,113,113,0.12)',
-          border: 'rgba(248,113,113,0.45)',
-        }
-    : isGameOver
-      ? {
-          text: '경기 종료됨 · 기록 잠금',
-          color: '#fca5a5',
-          background: 'rgba(248,113,113,0.12)',
-        border: 'rgba(248,113,113,0.4)',
-      }
-    : !isGameStarted
-      ? {
-          text: '대기 중 · 경기 시작 필요',
-          color: '#e2e8f0',
-          background: 'rgba(148,163,184,0.16)',
-          border: 'rgba(148,163,184,0.35)',
-        }
-      : {
-          text: '실시간 입력 가능',
-          color: '#67e8f9',
-          background: 'rgba(56,189,248,0.12)',
-          border: 'rgba(56,189,248,0.35)',
-        };
   const hasLiveUrlChange = liveVideoUrlInput.trim() !== state.liveVideoUrl.trim();
   const battedBallDetails = useMemo<BattedBallDetails | null>(() => {
     return buildBattedBallDetailsFromValues(battedBallType, battedBallZone);
@@ -2066,7 +2032,7 @@ const handleConfirmHitWizard = () => {
                 }}
               >
                 {/* 경기 시간제한 입력 (경기 시작 전에만 표시) - 별도 줄 */}
-                {!isGameStarted && !isGameOver && hasActiveMatch && (
+                {!isGameOver && hasActiveMatch && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     <label style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8' }}>
                       경기 시간 제한:
@@ -2093,8 +2059,20 @@ const handleConfirmHitWizard = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        const minutes = parseInt(gameLimitInput) || null;
-                        actions.setGameLimit(minutes);
+                        const trimmed = gameLimitInput.trim();
+                        if (!trimmed) {
+                          console.log('제한시간 설정: 빈 값으로 null 설정');
+                          actions.setGameLimit(null);
+                          return;
+                        }
+                        const parsed = parseInt(trimmed, 10);
+                        if (isNaN(parsed) || parsed < 0) {
+                          console.log('제한시간 설정: 유효하지 않은 값', trimmed);
+                          alert('유효한 숫자를 입력해주세요 (0 이상)');
+                          return;
+                        }
+                        console.log('제한시간 설정:', parsed, '분');
+                        actions.setGameLimit(parsed);
                       }}
                       disabled={lockedByOther}
                       style={{
@@ -2118,52 +2096,43 @@ const handleConfirmHitWizard = () => {
                   </div>
                 )}
 
-                {/* 타이머 + 일시정지/재개 버튼 줄 */}
-                {state.gameStarted && !state.gameOver && state.gameLimitMinutes !== null && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    <GameTimerDisplay
-                      gameLimitMinutes={state.gameLimitMinutes}
-                      gameStartTimestamp={state.gameStartTimestamp}
-                      gamePausedAt={state.gamePausedAt}
-                      gamePausedDuration={state.gamePausedDuration}
-                      gameStarted={state.gameStarted}
-                    />
-                    {!lockedByOther && (
-                      <button
-                        type="button"
-                        onClick={() => state.gamePausedAt !== null ? actions.resumeGameTimer() : actions.pauseGameTimer()}
-                        style={{
-                          padding: '8px 14px',
-                          borderRadius: '8px',
-                          border: `1px solid ${state.gamePausedAt !== null ? '#10b981' : '#f97316'}`,
-                          background: state.gamePausedAt !== null ? '#059669' : '#ea580c',
-                          color: '#fff',
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {state.gamePausedAt !== null ? '⏵ 타이머 재개' : '⏸ 타이머 일시정지'}
-                      </button>
+                {/* 상태 뱃지 + 타이머 + 일시정지 + 경기 시작 버튼 줄 */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    {state.gameStarted && !state.gameOver && state.gameLimitMinutes !== null && (
+                      <>
+                        <GameTimerDisplay
+                          gameLimitMinutes={state.gameLimitMinutes}
+                          gameStartTimestamp={state.gameStartTimestamp}
+                          gamePausedAt={state.gamePausedAt}
+                          gamePausedDuration={state.gamePausedDuration}
+                          gameStarted={state.gameStarted}
+                          style={{
+                            padding: '6px 10px',
+                            fontSize: '12px',
+                          }}
+                        />
+                        {!lockedByOther && (
+                          <button
+                            type="button"
+                            onClick={() => state.gamePausedAt !== null ? actions.resumeGameTimer() : actions.pauseGameTimer()}
+                            style={{
+                              padding: '6px 10px',
+                              borderRadius: '8px',
+                              border: `1px solid ${state.gamePausedAt !== null ? '#10b981' : '#f97316'}`,
+                              background: state.gamePausedAt !== null ? '#059669' : '#ea580c',
+                              color: '#fff',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {state.gamePausedAt !== null ? '⏵ 타이머 재개' : '⏸ 타이머 일시정지'}
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
-                )}
-
-                {/* 상태 뱃지 + 경기 시작 버튼 줄 */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  <span
-                    style={{
-                      fontSize: '12px',
-                      fontWeight: 800,
-                      color: statusBadge.color,
-                      background: statusBadge.background,
-                      border: `1px solid ${statusBadge.border}`,
-                      borderRadius: '999px',
-                      padding: '6px 10px',
-                    }}
-                  >
-                    {statusBadge.text}
-                  </span>
                   <button
                     type="button"
                     onClick={handleStartGame}
