@@ -1729,13 +1729,18 @@ function ensureHalfPitcherLogged(state: DemoState, feed: PlayLog[]) {
   const defenseSide: Side = state.half === 'top' ? 'home' : 'away';
   const pitcher = state.lineups[defenseSide].find((slot) => slot.pos.toUpperCase() === 'P');
   if (!pitcher) return feed;
+
+  // 투수 등판 순서 계산
+  const pitcherAppearanceCount = calculatePitcherAppearanceCount(feed, defenseSide);
+  const appearanceLabel = pitcherAppearanceCount === 0 ? '선발' : `${pitcherAppearanceCount}차 계투`;
+
   const pitcherEntry: PlayLog = {
     inning: state.inning,
     half: state.half,
     order: 0,
     batter: '',
     pitch: 0,
-    result: `${pitcher.name}${pitcher.number ? `(${pitcher.number})` : ''} 투수`,
+    result: `${pitcher.name}${pitcher.number ? `(${pitcher.number})` : ''} 투수 (${appearanceLabel})`,
     createdAt: Date.now(),
   };
   return pushFeed(feed, pitcherEntry);
@@ -2933,6 +2938,28 @@ function updateLineup(state: DemoState, side: Side, index: number, updates: Part
   return { ...state, lineups: { ...state.lineups, [side]: updated }, feed, lastPlay };
 }
 
+// 투수 등판 순서를 계산하는 헬퍼 함수
+function calculatePitcherAppearanceCount(feed: PlayLog[], side: Side): number {
+  let count = 0;
+  const chronological = [...feed].reverse();
+
+  for (const entry of chronological) {
+    const result = entry.result.trim();
+    const entrySide: Side = entry.half === 'top' ? 'away' : 'home';
+    const defenseSide: Side = entrySide === 'home' ? 'away' : 'home';
+
+    // 수비팀(투수팀)만 카운트
+    if (defenseSide !== side) continue;
+
+    // "투수 교체" 또는 "투수"로 끝나는 로그
+    if (result.includes('투수 교체') || result.endsWith('투수')) {
+      count++;
+    }
+  }
+
+  return count;
+}
+
 function substitutePlayer(
   state: DemoState,
   side: Side,
@@ -2981,7 +3008,10 @@ function substitutePlayer(
 
   // 투수 교체 시 새로운 투수 로그 즉시 추가 (ensureHalfPitcherLogged가 나중에 중복 추가하는 것 방지)
   if (isPitcherChange && incomingIsP) {
-    const newPitcherLog = `${formatPlayer(benchPlayer)} 투수`;
+    // 투수 등판 순서 계산
+    const pitcherAppearanceCount = calculatePitcherAppearanceCount(state.feed, side);
+    const appearanceLabel = pitcherAppearanceCount === 0 ? '선발' : `${pitcherAppearanceCount}차 계투`;
+    const newPitcherLog = `${formatPlayer(benchPlayer)} 투수 (${appearanceLabel})`;
     feed = pushFeed(feed, createLogEntryForBaserunning(state, newPitcherLog, 0));
   }
 
