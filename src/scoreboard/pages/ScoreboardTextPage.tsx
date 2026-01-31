@@ -1363,7 +1363,7 @@ function buildDisplayItems(
   feed: ReturnType<typeof useDemoStore>['state']['feed'],
   jerseyMap: JerseyMap,
 ): DisplayItem[] {
-  const chronological = [...feed].reverse();
+  const chronological = [...feed];
   const items: DisplayItem[] = [];
 
   const markerText = (inning: number, half: Half, type: 'start' | 'end') => {

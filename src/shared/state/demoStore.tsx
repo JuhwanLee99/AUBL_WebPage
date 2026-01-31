@@ -486,7 +486,7 @@ const initialState: DemoState = {
 
 function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }): PlayLog[] {
   if (!Array.isArray(feed)) return [];
-  return feed.map((entry) => {
+  const normalized = feed.map((entry) => {
     if (typeof entry === 'string') {
       return {
         inning: fallback.inning,
@@ -517,6 +517,14 @@ function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }):
       pitch: 0,
       result: String(entry),
     };
+  });
+
+  // 투구 순서대로 정렬: inning → half (초→말) → order (타순) → pitch (투구수)
+  return normalized.sort((a, b) => {
+    if (a.inning !== b.inning) return a.inning - b.inning;
+    if (a.half !== b.half) return a.half === 'top' ? -1 : 1;
+    if (a.order !== b.order) return a.order - b.order;
+    return a.pitch - b.pitch;
   });
 }
 
