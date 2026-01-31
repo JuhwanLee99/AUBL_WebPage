@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ScoreboardFrame from '../components/ScoreboardFrame';
 import { useDemoStore, buildGameRecord } from '../../shared/state/demoStore';
-import type { PlayEvent, ErrorDetails, RunnerAdvanceOutcome, BattedBallDetails } from '../../shared/state/demoStore'; // [추가] 타입 임포트
+import type { PlayEvent, ErrorDetails, RunnerAdvanceOutcome, BattedBallDetails } from '../../shared/state/demoStore';
 import StatsTable from '../../shared/components/StatsTable';
 import RemovedPlayersPanel from '../../shared/components/RemovedPlayersPanel';
 import { GameTimerDisplay } from '../../shared/components/GameTimerDisplay';
@@ -727,6 +727,10 @@ function LiveFeed({
                 </div>
               );
             }
+            // [수정] 교체 로그 판별 조건 완화 및 렌더링
+            // 기존에는 item.text.includes(...) 만 체크했으나, colorizeText에서 하이라이팅이 되면
+            // 일반 로그 형태(박스)보다는 텍스트 형태(한 줄)로 보여주는 것이 깔끔할 수 있습니다.
+            // 여기서는 교체 관련 키워드가 포함된 경우 텍스트 형태로 렌더링하도록 합니다.
             if (
               item.type === 'log' &&
               (item.text.includes('투수 교체') ||
@@ -746,6 +750,7 @@ function LiveFeed({
                 </div>
               );
             }
+            // 일반 로그 (박스 형태)
             return (
               <div
                 key={item.key}
@@ -779,7 +784,8 @@ function LiveFeed({
     });
 
     if (gameOverInfo) {
-      items.push({
+      // ... (game over info 렌더링 유지) ...
+       items.push({
         key: 'game-over',
         estimatedHeight: 42,
         render: () => (
@@ -1675,9 +1681,13 @@ function groupByInning(items: DisplayItem[]) {
   return [...map.values()].sort((a, b) => a.inning - b.inning);
 }
 
+// [수정] colorizeText 함수: 선수 교체 관련 키워드 추가하여 하이라이팅 적용
+// -------------------------------------------------------------------------
 function colorizeText(text: string) {
+  // 기존 패턴에 '투수 교체', '타자 교체', '대수비', '대타', '대주자' 등 추가
   const pattern =
-    /(\d+\s*안타|\d+\s*아웃|득점|점수|도루\s*성공|도루\s*실패|도루|안타|2루타|3루타|루타|홈런|볼넷|몸에\s*맞는\s*공|몸에맞는공|HBP|HP|사구|아웃|삼진|낫아웃|견제사|실책|E[1-6]|WP|PB|BK|야수선택|FC|F\.C)/g;
+    /(\d+\s*안타|\d+\s*아웃|득점|점수|도루\s*성공|도루\s*실패|도루|안타|2루타|3루타|루타|홈런|볼넷|몸에\s*맞는\s*공|몸에맞는공|HBP|HP|사구|아웃|삼진|낫아웃|견제사|실책|E[1-6]|WP|PB|BK|야수선택|FC|F\.C|투수\s*교체|타자\s*교체|대수비|대타|대주자)/g;
+  
   const colorMap: Record<string, string> = {
     득점: '#facc15',
     점수: '#facc15',
@@ -1725,15 +1735,30 @@ function colorizeText(text: string) {
     '3아웃': '#f87171',
     삼진: '#f87171',
     견제사: '#f87171',
+    // [추가] 교체 관련 키워드 색상 정의 (녹색 계열)
+    '투수 교체': '#4ade80',
+    '투수교체': '#4ade80',
+    '타자 교체': '#4ade80',
+    '타자교체': '#4ade80',
+    대수비: '#4ade80',
+    대타: '#4ade80',
+    대주자: '#4ade80',
   };
+
   const parts: Array<{ text: string; color?: string; key: string }> = [];
   let lastIndex = 0;
   text.replace(pattern, (match, _p1, offset) => {
-    const key = match.replace(/\s+/g, '');
+    // 공백 제거하여 키 매칭
+    const key = match.replace(/\s+/g, ' ').trim(); // 정규화 (공백 하나로)
+    const normalizedKey = match.replace(/\s+/g, ''); // 맵 매칭용 (공백 제거)
+    
+    // colorMap에서 키를 찾을 때 공백 있는 버전과 없는 버전 모두 시도
+    const color = colorMap[key] || colorMap[normalizedKey];
+
     if (lastIndex < offset) {
       parts.push({ text: text.slice(lastIndex, offset), key: `${lastIndex}-${offset}` });
     }
-    parts.push({ text: match, color: colorMap[key], key: `${offset}-${offset + match.length}` });
+    parts.push({ text: match, color: color, key: `${offset}-${offset + match.length}` });
     lastIndex = offset + match.length;
     return match;
   });

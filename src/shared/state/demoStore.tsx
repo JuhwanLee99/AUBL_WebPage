@@ -3502,20 +3502,40 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
 
     writeTimerRef.current = setTimeout(() => {
-      const snapshot = snapshotState(stateRef.current);
-      const trimmedFeed = snapshot.feed.slice(0, FEED_DOC_LIMIT);
-      const trimmedEvents = snapshot.events.slice(0, FEED_DOC_LIMIT);
-      const { matches: _matches, ...core } = snapshot;
-      const key = JSON.stringify({ matchId, core, trimmedFeed, trimmedEvents });
+            const snapshot = snapshotState(stateRef.current);
+            const trimmedFeed = snapshot.feed.slice(0, FEED_DOC_LIMIT);
+            const trimmedEvents = snapshot.events.slice(0, FEED_DOC_LIMIT);
+            const { matches: _matches, ...core } = snapshot;
+            const key = JSON.stringify({ matchId, core, trimmedFeed, trimmedEvents });
 
-      if (key !== lastStateKeyRef.current) {
-        lastStateKeyRef.current = key;
-        void setDoc(
-          doc(firestore, 'matchStates', matchId),
-          { ...core, feed: trimmedFeed, events: trimmedEvents, updatedAt: Date.now() },
-          { merge: true },
-        ).catch(() => {});
-      }
+            if (key !== lastStateKeyRef.current) {
+              lastStateKeyRef.current = key;
+
+              // [수정 전]
+              /*
+              void setDoc(
+                doc(firestore, 'matchStates', matchId),
+                { ...core, feed: trimmedFeed, events: trimmedEvents, updatedAt: Date.now() },
+                {  merge: true },
+                ).catch(() => {});
+              */
+
+              // [수정 후] pruneUndefined로 감싸서 undefined 값을 제거합니다.
+              const payload = pruneUndefined({
+                ...core,
+                feed: trimmedFeed,
+                events: trimmedEvents,
+                updatedAt: Date.now()
+              });
+
+              void setDoc(
+                doc(firestore, 'matchStates', matchId),
+                payload,
+                { merge: true },
+              ).catch((err) => {
+                console.error("Firestore Save Error:", err); // 에러 확인용 로그 추가
+              });
+            }
 
       const newFeedCount = stateRef.current.feed.length - lastFeedLengthRef.current;
       const newEventCount = stateRef.current.events.length - lastEventsLengthRef.current;
