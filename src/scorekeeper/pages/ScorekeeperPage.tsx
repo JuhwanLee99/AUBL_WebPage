@@ -42,6 +42,7 @@ const secondaryButtons = [
   { label: '고의4구', color: '#22c55e', action: 'intentional_walk' },
   { label: '사구', color: '#22c55e', action: 'hbp' },
   { label: '타격 방해', color: '#f97316', action: 'catcher_interference' },
+  { label: '더블아웃', color: '#ef4444', action: 'multipleOut' },
   { label: '카운트 리셋', color: '#94a3b8', action: 'resetCount' },
   { label: '주자 클리어', color: '#94a3b8', action: 'clearBases' },
   { label: '이닝 전환', color: '#94a3b8', action: 'nextHalf' },
@@ -1339,6 +1340,7 @@ export default function ScorekeeperPage() {
     outsCount: 2 | 3;
     battedBall?: BattedBallDetails | null;
   }>(null);
+  const [multipleRunnersOutModal, setMultipleRunnersOutModal] = useState(false);
   const [lastHitWizard, setLastHitWizard] = useState<HitWizardState | null>(null);
   const [errorOnPlayModal, setErrorOnPlayModal] = useState<null | { selections: RunnerAdvanceSelections; batterResult: 'out' | 'hold' | 1 | 2 | 3 | 4; errorType: string; context: string; fielder: string }>(null);
   const [showDroppedThirdStrike, setShowDroppedThirdStrike] = useState(false);
@@ -1784,6 +1786,13 @@ const handleConfirmHitWizard = () => {
       case 'nextHalf':
         actions.nextHalf();
         break;
+      case 'multipleOut': {
+        const runnersOnBase = state.bases.filter((r) => r !== null).length;
+        if (runnersOnBase >= 1) {
+          setMultipleRunnersOutModal(true);
+        }
+        break;
+      }
       case 'undo':
         actions.undo();
         break;
@@ -2686,6 +2695,17 @@ const handleConfirmHitWizard = () => {
           }}
         />
       )}
+      {multipleRunnersOutModal && (
+        <MultipleRunnersOutModal
+          basesState={state.bases}
+          minOuts={1}
+          onClose={() => setMultipleRunnersOutModal(false)}
+          onConfirm={(selectedRunners, label) => {
+            actions.multipleRunnersOut(selectedRunners, label);
+            setMultipleRunnersOutModal(false);
+          }}
+        />
+      )}
       {showDroppedThirdStrike && (
         <DroppedThirdStrikeModal
           batterName={currentBatter}
@@ -2799,7 +2819,7 @@ function FieldView({
     first: { x: 72, y: 63 },
     third: { x: 28, y: 63 },
     home: { x: 50, y: 92 },
-    batter: { x: 58, y: 90 },
+    batter: { x: 65, y: 90 },
   };
   return (
     <div
@@ -3330,6 +3350,199 @@ function DoublePlayModal({
             }}
           >
             {canConfirm ? '확인' : `주자 ${outsCount - 1}명을 선택하세요`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MultipleRunnersOutModal({
+  basesState,
+  minOuts = 1,
+  maxOuts,
+  onClose,
+  onConfirm,
+}: {
+  basesState: (string | null)[];
+  minOuts?: number;
+  maxOuts?: number;
+  onClose: () => void;
+  onConfirm: (selectedRunners: number[], label: string) => void;
+}) {
+  const runners = basesState
+    .map((runner, idx) => (runner ? { runner, baseIndex: idx as 0 | 1 | 2 } : null))
+    .filter(Boolean) as { runner: string; baseIndex: 0 | 1 | 2 }[];
+
+  const [selectedRunners, setSelectedRunners] = useState<number[]>([]);
+  const [customLabel, setCustomLabel] = useState('');
+
+  const effectiveMaxOuts = maxOuts ?? runners.length;
+
+  const toggleRunner = (baseIndex: number) => {
+    if (selectedRunners.includes(baseIndex)) {
+      setSelectedRunners(selectedRunners.filter((idx) => idx !== baseIndex));
+    } else {
+      if (selectedRunners.length < effectiveMaxOuts) {
+        setSelectedRunners([...selectedRunners, baseIndex]);
+      }
+    }
+  };
+
+  const handleConfirm = () => {
+    if (selectedRunners.length >= minOuts && selectedRunners.length <= effectiveMaxOuts) {
+      const defaultLabel = selectedRunners.length === 2 ? '더블아웃' : `${selectedRunners.length}명 아웃`;
+      onConfirm(selectedRunners, customLabel.trim() || defaultLabel);
+    }
+  };
+
+  const canConfirm = selectedRunners.length >= minOuts && selectedRunners.length <= effectiveMaxOuts;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'grid',
+        placeItems: 'center',
+        zIndex: 1000,
+        padding: '20px',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: '#1e293b',
+          borderRadius: '20px',
+          border: '1px solid rgba(148,163,184,0.25)',
+          maxWidth: '500px',
+          width: '100%',
+          maxHeight: '90vh',
+          overflow: 'auto',
+        }}
+      >
+        <div
+          style={{
+            padding: '20px 24px',
+            borderBottom: '1px solid rgba(148,163,184,0.2)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <h3 style={{ fontSize: '18px', fontWeight: 900, color: '#f8fafc', margin: 0 }}>
+            주루 아웃 선택
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: 'rgba(148,163,184,0.2)',
+              border: 'none',
+              color: '#e2e8f0',
+              borderRadius: '8px',
+              padding: '6px 10px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: 700,
+            }}
+          >
+            취소
+          </button>
+        </div>
+        <div style={{ padding: '24px' }}>
+          <p style={{ color: '#cbd5e1', fontSize: '14px', marginBottom: '16px', marginTop: 0 }}>
+            아웃될 주자를 선택하세요. ({minOuts}명 이상 선택 가능)
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+            {runners.map((entry) => {
+              const isSelected = selectedRunners.includes(entry.baseIndex);
+              return (
+                <button
+                  key={entry.baseIndex}
+                  type="button"
+                  onClick={() => toggleRunner(entry.baseIndex)}
+                  style={{
+                    padding: '16px',
+                    borderRadius: '12px',
+                    border: isSelected ? '2px solid #ef4444' : '1px solid rgba(148,163,184,0.3)',
+                    background: isSelected ? 'rgba(239,68,68,0.15)' : 'rgba(15,23,42,0.6)',
+                    color: isSelected ? '#fca5a5' : '#e2e8f0',
+                    fontWeight: 700,
+                    fontSize: '15px',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      border: isSelected ? '2px solid #ef4444' : '2px solid rgba(148,163,184,0.4)',
+                      background: isSelected ? '#ef4444' : 'transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '12px',
+                    }}
+                  >
+                    {isSelected && '✓'}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '4px' }}>
+                      {baseLabelForIndex(entry.baseIndex)} 주자
+                    </div>
+                    <div style={{ fontSize: '16px', fontWeight: 900 }}>{entry.runner}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '13px', color: '#cbd5e1', display: 'block', marginBottom: '8px' }}>
+              기록 라벨 (선택사항)
+            </label>
+            <input
+              type="text"
+              value={customLabel}
+              onChange={(e) => setCustomLabel(e.target.value)}
+              placeholder={selectedRunners.length === 2 ? '더블아웃' : `${selectedRunners.length}명 아웃`}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                border: '1px solid rgba(148,163,184,0.3)',
+                background: 'rgba(15,23,42,0.6)',
+                color: '#e2e8f0',
+                fontSize: '14px',
+              }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={!canConfirm}
+            style={{
+              width: '100%',
+              padding: '14px',
+              borderRadius: '12px',
+              border: 'none',
+              background: canConfirm ? 'linear-gradient(90deg, #ef4444, #dc2626)' : 'rgba(148,163,184,0.2)',
+              color: canConfirm ? '#fff' : '#64748b',
+              fontWeight: 900,
+              fontSize: '15px',
+              cursor: canConfirm ? 'pointer' : 'not-allowed',
+              opacity: canConfirm ? 1 : 0.6,
+            }}
+          >
+            {canConfirm ? '확인' : `주자 ${minOuts}명 이상 선택하세요`}
           </button>
         </div>
       </div>
