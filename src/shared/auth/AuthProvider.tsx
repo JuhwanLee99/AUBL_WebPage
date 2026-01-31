@@ -16,8 +16,8 @@ import { auth } from '../firebase/client';
 
 // -----------------------------------------------------------
 // [로컬 테스트용 설정]
-// true로 설정하면 Firebase 연결 없이 테스트 관리자 계정으로 로그인된 상태가 됩니다.
-const IS_TEST_MODE = false; // false
+// ✅ Vite 환경변수를 사용하여, 실제 배포 빌드(Production)에서는 무조건 false가 됨
+const IS_TEST_MODE = import.meta.env.DEV && false;
 
 const MOCK_USER = {
   uid: 'test-local-user',
