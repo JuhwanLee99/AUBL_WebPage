@@ -2703,8 +2703,9 @@ function updateMatchSchedule(matches: MatchSchedule[], matchId: string, updates:
 }
 
 function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
-  const lineups = ensureCompleteLineups(match.lineups ?? state.lineups);
-  const benches = match.benches ?? state.benches;
+  // [수정] 경기에 저장된 라인업이 없으면(null/undefined) state.lineups(이전 경기 또는 mock)를 쓰는 대신 빈 라인업으로 초기화
+  const lineups = ensureCompleteLineups(match.lineups ?? { home: [], away: [] });
+  const benches = match.benches ?? { home: [], away: [] };
   return {
     inning: 1,
     half: 'top',
