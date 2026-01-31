@@ -78,6 +78,8 @@ interface PlayerSlot {
   // 오타니룰: 투수가 DH 역할을 하는 경우 true
   // 이 플래그가 true인 투수는 마운드에서 내려와도 타석에 계속 들어갈 수 있음
   isOhtaniRule?: boolean;
+  // 교체 유형: 대수비, 대타, 대주자
+  substitutionType?: '대수비' | '대타' | '대주자';
 }
 
 export type PostGameLineScore = { innings: number[]; home: number[]; away: number[] };
@@ -157,6 +159,7 @@ export interface MatchSchedule {
   venue: string;
   status: MatchStatus;
   liveVideoUrl?: string;
+  liveDelaySeconds?: number;
   division?: LeagueDivision; // 으뜸/버금 구분 (관리자 지정)
   homeScore?: number | null;
   awayScore?: number | null;
@@ -197,6 +200,8 @@ export interface PlayLog {
   batter: string;
   pitch: number;
   result: string;
+  // [수정] 정렬을 위해 생성 시간 필드 추가
+  createdAt?: number;
 }
 
 export interface PlayEvent {
@@ -235,6 +240,7 @@ interface DemoSnapshot {
   gameOver: boolean;
   endedAt: string | null;
   liveVideoUrl: string;
+  liveDelaySeconds: number;
   matches: MatchSchedule[];
   activeMatchId: string | null;
   scorerUid: string | null;
@@ -275,6 +281,7 @@ type SharedGameState = Pick<
   | 'gameOver'
   | 'endedAt'
   | 'liveVideoUrl'
+  | 'liveDelaySeconds'
   | 'activeMatchId'
   | 'scorerUid'
   | 'scorerName'
@@ -325,8 +332,9 @@ type Action =
   | { type: 'setLineup'; side: Side; index: number; updates: Partial<PlayerSlot> }
   | { type: 'addBench'; side: Side; player: PlayerSlot }
   | { type: 'removeBench'; side: Side; benchIndex: number }
-  | { type: 'substitute'; side: Side; benchIndex: number; lineupIndex: number }
+  | { type: 'substitute'; side: Side; benchIndex: number; lineupIndex: number; substitutionType?: '대수비' | '대타' | '대주자' }
   | { type: 'setLiveVideoUrl'; url: string }
+  | { type: 'setLiveDelaySeconds'; seconds: number }
   | { type: 'startGame' }
   | { type: 'endGame'; endedAt: string }
   | { type: 'resetGame' }
@@ -403,7 +411,9 @@ const normalizePlayerSlotForGame = (player: PlayerSlot): PlayerSlot => ({
   bats: player.bats === 'L' ? 'L' : 'R',
   order: typeof player.order === 'number' ? player.order : null,
   // [수정] 오타니룰 플래그 보존
-  isOhtaniRule: !!player.isOhtaniRule, 
+  isOhtaniRule: !!player.isOhtaniRule,
+  // [수정] 교체 유형 보존 (추가됨: 이 부분이 없으면 게임 로직 진행 중 정보가 사라질 수 있음)
+  substitutionType: player.substitutionType,
 });
 
 // 라인업 채움 로직 (UI 9칸 유지 보장 수정)
@@ -495,6 +505,7 @@ const initialState: DemoState = {
   gameOver: false,
   endedAt: null,
   liveVideoUrl: '',
+  liveDelaySeconds: 0,
   history: [],
   matches: [],
   activeMatchId: null,
@@ -534,6 +545,8 @@ function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }):
         batter: typeof e.batter === 'string' ? e.batter : '',
         pitch: typeof e.pitch === 'number' ? e.pitch : 0,
         result: typeof e.result === 'string' ? e.result : '',
+        // [수정] createdAt 보존
+        createdAt: typeof e.createdAt === 'number' ? e.createdAt : undefined,
       };
     }
     return {
@@ -546,10 +559,20 @@ function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }):
     };
   });
 
-  // 투구 순서대로 정렬: inning → half (초→말) → order (타순) → pitch (투구수)
+  // [수정] 정렬 로직 개선: createdAt이 있으면 최우선으로 사용하여 교체 로그 위치 보정
   return normalized.sort((a, b) => {
     if (a.inning !== b.inning) return a.inning - b.inning;
     if (a.half !== b.half) return a.half === 'top' ? -1 : 1;
+    
+    // createdAt이 둘 다 있으면 시간순 정렬 (교체 로그가 제자리 찾아감)
+    if (a.createdAt !== undefined && b.createdAt !== undefined) {
+      return a.createdAt - b.createdAt;
+    }
+    // 하나만 있으면 없는 쪽(로컬/최신)을 뒤로
+    if (a.createdAt === undefined && b.createdAt !== undefined) return 1;
+    if (a.createdAt !== undefined && b.createdAt === undefined) return -1;
+
+    // 기존 fallback 정렬
     if (a.order !== b.order) return a.order - b.order;
     return a.pitch - b.pitch;
   });
@@ -618,6 +641,12 @@ function normalizePlayerSlot(slot: unknown): PlayerSlot | null {
     order: typeof s.order === 'number' ? s.order : s.order ?? null,
     // [수정] 오타니룰 플래그 보존
     isOhtaniRule: typeof s.isOhtaniRule === 'boolean' ? s.isOhtaniRule : undefined,
+    // [수정] 교체 유형 보존 (추가됨: 이 부분이 없으면 새로고침 시 정보가 사라짐)
+    substitutionType:
+      typeof s.substitutionType === 'string' &&
+      ['대수비', '대타', '대주자'].includes(s.substitutionType)
+        ? (s.substitutionType as '대수비' | '대타' | '대주자')
+        : undefined,
   };
 }
 
@@ -804,6 +833,7 @@ function normalizeMatches(matches: unknown): MatchSchedule[] {
       venue: typeof match.venue === 'string' ? match.venue : '미정',
       status: match.status === 'completed' || match.status === 'inProgress' ? match.status : 'scheduled',
       liveVideoUrl: typeof match.liveVideoUrl === 'string' ? match.liveVideoUrl : undefined,
+      liveDelaySeconds: typeof match.liveDelaySeconds === 'number' ? match.liveDelaySeconds : undefined,
       division: deriveMatchDivision(match.division, match.homeTeamId, match.awayTeamId),
       homeScore: typeof match.homeScore === 'number' ? match.homeScore : null,
       awayScore: typeof match.awayScore === 'number' ? match.awayScore : null,
@@ -830,6 +860,7 @@ function projectSpectatorMatch(match: MatchSchedule): MatchSchedule {
     venue: match.venue,
     status: match.status,
     liveVideoUrl: match.liveVideoUrl,
+    liveDelaySeconds: match.liveDelaySeconds,
     division: match.division,
     homeScore: match.homeScore,
     awayScore: match.awayScore,
@@ -893,6 +924,7 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
     removed: merged.removed ?? base.removed,
     gameStarted,
     liveVideoUrl: typeof merged.liveVideoUrl === 'string' ? merged.liveVideoUrl : base.liveVideoUrl,
+    liveDelaySeconds: typeof merged.liveDelaySeconds === 'number' ? merged.liveDelaySeconds : base.liveDelaySeconds,
     activeMatchId: typeof merged.activeMatchId === 'string' ? merged.activeMatchId : merged.activeMatchId === null ? null : base.activeMatchId,
     scorerUid: typeof merged.scorerUid === 'string' ? merged.scorerUid : null,
     scorerName: typeof merged.scorerName === 'string' ? merged.scorerName : null,
@@ -1392,7 +1424,10 @@ function reducer(state: DemoState, action: Action): DemoState {
       if (state.gameStarted || state.gameOver) return state;
       const startLabel = '경기 시작';
       const broadcast = `*기록원* - ${startLabel}`;
-      const feed = pushFeed(state.feed, createLogEntryForBaserunning(state, broadcast, 0));
+      // [수정] 경기 시작 시 기존 feed를 비우고([]) 새롭게 시작하도록 변경
+      // 기존: const feed = pushFeed(state.feed, createLogEntryForBaserunning(state, broadcast, 0));
+      const feed = pushFeed([], createLogEntryForBaserunning(state, broadcast, 0));
+      
       const matches = state.activeMatchId
         ? updateMatchSchedule(state.matches, state.activeMatchId, { status: 'inProgress' })
         : state.matches;
@@ -1493,7 +1528,7 @@ function reducer(state: DemoState, action: Action): DemoState {
       break;
     }
     case 'substitute':
-      nextState = substitutePlayer(state, action.side, action.benchIndex, action.lineupIndex);
+      nextState = substitutePlayer(state, action.side, action.benchIndex, action.lineupIndex, action.substitutionType);
       break;
     case 'setLiveVideoUrl': {
       const trimmed = action.url.trim();
@@ -1501,6 +1536,14 @@ function reducer(state: DemoState, action: Action): DemoState {
         ? updateMatchSchedule(state.matches, state.activeMatchId, { liveVideoUrl: trimmed })
         : state.matches;
       nextState = { ...state, liveVideoUrl: trimmed, matches: updatedMatches };
+      break;
+    }
+    case 'setLiveDelaySeconds': {
+      const seconds = Math.max(0, action.seconds);
+      const updatedMatches = state.activeMatchId
+        ? updateMatchSchedule(state.matches, state.activeMatchId, { liveDelaySeconds: seconds })
+        : state.matches;
+      nextState = { ...state, liveDelaySeconds: seconds, matches: updatedMatches };
       break;
     }
     case 'endGame':
@@ -1625,6 +1668,7 @@ function reducer(state: DemoState, action: Action): DemoState {
           activeMatchId: selected.id,
           followCurrent: typeof action.followCurrent === 'boolean' ? action.followCurrent : state.followCurrent,
           liveVideoUrl: selected.liveVideoUrl ?? '',
+          liveDelaySeconds: selected.liveDelaySeconds ?? 0,
           teamNames: { home: selected.homeTeamName, away: selected.awayTeamName },
           homeTeamId: selected.homeTeamId ?? state.homeTeamId,
           awayTeamId: selected.awayTeamId ?? state.awayTeamId,
@@ -1641,6 +1685,7 @@ function reducer(state: DemoState, action: Action): DemoState {
           ...resetGameForMatch(state, selected),
           followCurrent: typeof action.followCurrent === 'boolean' ? action.followCurrent : state.followCurrent,
           liveVideoUrl: selected.liveVideoUrl ?? '',
+          liveDelaySeconds: selected.liveDelaySeconds ?? 0,
         };
       }
       break;
@@ -1667,8 +1712,9 @@ function reducer(state: DemoState, action: Action): DemoState {
   return { ...nextState, history: [...state.history, snapshot] };
 }
 
+// [수정] 로컬 업데이트 시 시간순(과거->최신) 유지를 위해 배열 뒤에 추가 (append)
 function pushFeed(feed: PlayLog[], entry: PlayLog) {
-  return [entry, ...feed];
+  return [...feed, entry];
 }
 
 function pushEvent(events: PlayEvent[], entry: PlayEvent) {
@@ -1683,13 +1729,19 @@ function ensureHalfPitcherLogged(state: DemoState, feed: PlayLog[]) {
   const defenseSide: Side = state.half === 'top' ? 'home' : 'away';
   const pitcher = state.lineups[defenseSide].find((slot) => slot.pos.toUpperCase() === 'P');
   if (!pitcher) return feed;
+
+  // 투수 등판 순서 계산
+  const pitcherAppearanceCount = calculatePitcherAppearanceCount(feed, defenseSide);
+  const appearanceLabel = pitcherAppearanceCount === 0 ? '선발' : `${pitcherAppearanceCount}차 계투`;
+
   const pitcherEntry: PlayLog = {
     inning: state.inning,
     half: state.half,
     order: 0,
     batter: '',
     pitch: 0,
-    result: `${pitcher.name}${pitcher.number ? `(${pitcher.number})` : ''} 투수`,
+    result: `${pitcher.name}${pitcher.number ? `(${pitcher.number})` : ''} 투수 (${appearanceLabel})`,
+    createdAt: Date.now(),
   };
   return pushFeed(feed, pitcherEntry);
 }
@@ -1771,6 +1823,7 @@ function createLogEntry(state: DemoState, result: string, pitch: number): PlayLo
     batter: info.batter,
     pitch,
     result,
+    createdAt: Date.now(),
   };
 }
 
@@ -1782,6 +1835,7 @@ function createLogEntryWithBatter(state: DemoState, batter: string, order: numbe
     batter,
     pitch,
     result,
+    createdAt: Date.now(),
   };
 }
 
@@ -1793,6 +1847,7 @@ function createLogEntryForBaserunning(state: DemoState, result: string, pitch: n
     batter: '',
     pitch,
     result,
+    createdAt: Date.now(),
   };
 }
 
@@ -2683,8 +2738,9 @@ function updateMatchSchedule(matches: MatchSchedule[], matchId: string, updates:
 }
 
 function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
-  const lineups = ensureCompleteLineups(match.lineups ?? state.lineups);
-  const benches = match.benches ?? state.benches;
+  // [수정] 경기에 저장된 라인업이 없으면(null/undefined) state.lineups(이전 경기 또는 mock)를 쓰는 대신 빈 라인업으로 초기화
+  const lineups = ensureCompleteLineups(match.lineups ?? { home: [], away: [] });
+  const benches = match.benches ?? { home: [], away: [] };
   return {
     inning: 1,
     half: 'top',
@@ -2707,6 +2763,7 @@ function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
   gameOver: false,
     endedAt: null,
     liveVideoUrl: state.liveVideoUrl,
+    liveDelaySeconds: state.liveDelaySeconds,
     history: [],
     removed: { home: [], away: [] },
     matches: state.matches,
@@ -2752,6 +2809,7 @@ function createNewGame(state: DemoState): DemoState {
     gameOver: false,
     endedAt: null,
     liveVideoUrl: state.liveVideoUrl,
+    liveDelaySeconds: state.liveDelaySeconds,
     history: [],
     removed: { home: [], away: [] },
     matches: state.matches,
@@ -2867,7 +2925,9 @@ function updateLineup(state: DemoState, side: Side, index: number, updates: Part
   // 포지션 변경 시 feed에 기록
   let feed = state.feed;
   let lastPlay = state.lastPlay;
-  if (updates.pos && original?.pos && updates.pos !== original.pos) {
+  
+  // [수정] 경기가 시작된 상태(state.gameStarted)일 때만 포지션 변경 로그를 남기도록 조건 추가
+  if (state.gameStarted && updates.pos && original?.pos && updates.pos !== original.pos) {
     const playerName = original.name || '선수';
     const playerNum = original.number ? `(${original.number})` : '';
     const changeText = `포지션 변경 · ${playerName}${playerNum}: ${original.pos} → ${updates.pos}`;
@@ -2878,14 +2938,46 @@ function updateLineup(state: DemoState, side: Side, index: number, updates: Part
   return { ...state, lineups: { ...state.lineups, [side]: updated }, feed, lastPlay };
 }
 
-function substitutePlayer(state: DemoState, side: Side, benchIndex: number, lineupIndex: number): DemoState {
+// 투수 등판 순서를 계산하는 헬퍼 함수
+function calculatePitcherAppearanceCount(feed: PlayLog[], side: Side): number {
+  let count = 0;
+  const chronological = [...feed].reverse();
+
+  for (const entry of chronological) {
+    const result = entry.result.trim();
+    const entrySide: Side = entry.half === 'top' ? 'away' : 'home';
+    const defenseSide: Side = entrySide === 'home' ? 'away' : 'home';
+
+    // 수비팀(투수팀)만 카운트
+    if (defenseSide !== side) continue;
+
+    // "투수 교체" 또는 "투수"로 끝나는 로그
+    if (result.includes('투수 교체') || result.endsWith('투수')) {
+      count++;
+    }
+  }
+
+  return count;
+}
+
+function substitutePlayer(
+  state: DemoState,
+  side: Side,
+  benchIndex: number,
+  lineupIndex: number,
+  substitutionType?: '대수비' | '대타' | '대주자'
+): DemoState {
   const bench = [...state.benches[side]];
   const lineup = [...state.lineups[side]];
   const benchPlayer = bench[benchIndex];
   if (!benchPlayer) return state;
   const outgoing = lineup[lineupIndex];
   const battingOrder = getBattingOrder(state.lineups[side], lineupIndex);
-  lineup[lineupIndex] = benchPlayer;
+
+  // 교체로 들어온 선수에 교체 유형 저장
+  const incomingPlayer = { ...benchPlayer, substitutionType };
+
+  lineup[lineupIndex] = incomingPlayer;
   bench.splice(benchIndex, 1);
   const removed = {
     ...state.removed,
@@ -2902,9 +2994,35 @@ function substitutePlayer(state: DemoState, side: Side, benchIndex: number, line
     const num = player.number ? `(${player.number})` : '';
     return `${player.name}${num}`;
   };
-  const changeLabel = isPitcherChange ? '투수 교체' : '타자 교체';
+
+  // 교체 유형에 따른 레이블 생성
+  let changeLabel: string;
+  if (substitutionType) {
+    changeLabel = substitutionType;
+  } else {
+    changeLabel = isPitcherChange ? '투수 교체' : '타자 교체';
+  }
+
   const changeText = `${changeLabel} · ${formatPlayer(outgoing)} → ${formatPlayer(benchPlayer)}`;
-  const feed = pushFeed(state.feed, createLogEntryForBaserunning(state, changeText, 0));
+  let feed = pushFeed(state.feed, createLogEntryForBaserunning(state, changeText, 0));
+
+  // 투수 교체 시 새로운 투수 로그 즉시 추가 (ensureHalfPitcherLogged가 나중에 중복 추가하는 것 방지)
+  if (isPitcherChange && incomingIsP) {
+    // 투수 등판 순서 계산
+    const pitcherAppearanceCount = calculatePitcherAppearanceCount(state.feed, side);
+    const appearanceLabel = pitcherAppearanceCount === 0 ? '선발' : `${pitcherAppearanceCount}차 계투`;
+    const newPitcherLog = `${formatPlayer(benchPlayer)} 투수 (${appearanceLabel})`;
+    feed = pushFeed(feed, createLogEntryForBaserunning(state, newPitcherLog, 0));
+  }
+
+  // 대주자 교체 시 베이스 업데이트
+  let bases = state.bases;
+  if (substitutionType === '대주자' && outgoing) {
+    const outgoingUniqueName = formatUniqueName(outgoing.name, outgoing.number);
+    const incomingUniqueName = formatUniqueName(incomingPlayer.name, incomingPlayer.number);
+    bases = state.bases.map((runner) => (runner === outgoingUniqueName ? incomingUniqueName : runner)) as Bases;
+  }
+
   return {
     ...state,
     lineups: { ...state.lineups, [side]: lineup },
@@ -2912,6 +3030,7 @@ function substitutePlayer(state: DemoState, side: Side, benchIndex: number, line
     removed,
     lastPlay: changeText,
     feed,
+    bases,
   };
 }
 
@@ -2975,11 +3094,12 @@ interface DemoStoreValue {
     runnerInterference: (base: 0 | 1 | 2) => void;
     addManualLog: (message: string) => void;
     setLiveVideoUrl: (url: string) => void;
+    setLiveDelaySeconds: (seconds: number) => void;
     setTeamName: (side: Side, name: string) => void;
     setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) => void;
     addBench: (side: Side, player: PlayerSlot) => void;
     removeBench: (side: Side, benchIndex: number) => void;
-    substitute: (side: Side, benchIndex: number, lineupIndex: number) => void;
+    substitute: (side: Side, benchIndex: number, lineupIndex: number, substitutionType?: '대수비' | '대타' | '대주자') => void;
     setPlay: (message: string) => void;
     startGame: () => void;
     endGame: (endedAt: string) => void;
@@ -3264,7 +3384,10 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     if (!matchId) return;
 
     const isScorer = stateRef.current.scorerUid && stateRef.current.scorerUid === (auth.currentUser?.uid ?? null);
-    const maxEntries = isScorer ? SCORER_FEED_LIMIT : FEED_LIMIT;
+    // 기록원이면 구독하지 않음 (로컬 상태가 Firestore 구독으로 덮어써지는 것을 방지)
+    if (isScorer) return;
+
+    const maxEntries = FEED_LIMIT;
 
     const feedQuery = query(
       collection(firestore, 'matchStates', matchId, 'feed'),
@@ -3442,20 +3565,40 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
 
     writeTimerRef.current = setTimeout(() => {
-      const snapshot = snapshotState(stateRef.current);
-      const trimmedFeed = snapshot.feed.slice(0, FEED_DOC_LIMIT);
-      const trimmedEvents = snapshot.events.slice(0, FEED_DOC_LIMIT);
-      const { matches: _matches, ...core } = snapshot;
-      const key = JSON.stringify({ matchId, core, trimmedFeed, trimmedEvents });
+            const snapshot = snapshotState(stateRef.current);
+            const trimmedFeed = snapshot.feed.slice(0, FEED_DOC_LIMIT);
+            const trimmedEvents = snapshot.events.slice(0, FEED_DOC_LIMIT);
+            const { matches: _matches, ...core } = snapshot;
+            const key = JSON.stringify({ matchId, core, trimmedFeed, trimmedEvents });
 
-      if (key !== lastStateKeyRef.current) {
-        lastStateKeyRef.current = key;
-        void setDoc(
-          doc(firestore, 'matchStates', matchId),
-          { ...core, feed: trimmedFeed, events: trimmedEvents, updatedAt: Date.now() },
-          { merge: true },
-        ).catch(() => {});
-      }
+            if (key !== lastStateKeyRef.current) {
+              lastStateKeyRef.current = key;
+
+              // [수정 전]
+              /*
+              void setDoc(
+                doc(firestore, 'matchStates', matchId),
+                { ...core, feed: trimmedFeed, events: trimmedEvents, updatedAt: Date.now() },
+                {  merge: true },
+                ).catch(() => {});
+              */
+
+              // [수정 후] pruneUndefined로 감싸서 undefined 값을 제거합니다.
+              const payload = pruneUndefined({
+                ...core,
+                feed: trimmedFeed,
+                events: trimmedEvents,
+                updatedAt: Date.now()
+              });
+
+              void setDoc(
+                doc(firestore, 'matchStates', matchId),
+                payload,
+                { merge: true },
+              ).catch((err) => {
+                console.error("Firestore Save Error:", err); // 에러 확인용 로그 추가
+              });
+            }
 
       const newFeedCount = stateRef.current.feed.length - lastFeedLengthRef.current;
       const newEventCount = stateRef.current.events.length - lastEventsLengthRef.current;
@@ -3470,7 +3613,8 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       const now = Date.now();
 
       if (newFeedCount > 0) {
-        const newEntries = stateRef.current.feed.slice(0, newFeedCount);
+        // 배열 끝에서부터 새로운 항목 가져오기
+        const newEntries = stateRef.current.feed.slice(-newFeedCount);
         newEntries.forEach((entry, idx) => {
           batch.set(
             doc(collection(firestore, 'matchStates', matchId, 'feed')),
@@ -3480,7 +3624,8 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (newEventCount > 0) {
-        const newEntries = stateRef.current.events.slice(0, newEventCount);
+        // 배열 끝에서부터 새로운 항목 가져오기
+        const newEntries = stateRef.current.events.slice(-newEventCount);
         newEntries.forEach((entry, idx) => {
           batch.set(
             doc(collection(firestore, 'matchStates', matchId, 'events')),
@@ -3598,6 +3743,18 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
           { merge: true },
         ).catch(() => {});
       },
+      setLiveDelaySeconds: (seconds: number) => {
+        dispatch({ type: 'setLiveDelaySeconds', seconds });
+        const matchId = stateRef.current.activeMatchId;
+        if (!matchId) return;
+        const validSeconds = Math.max(0, seconds);
+        // persist to matches collection
+        void setDoc(
+          doc(firestore, 'matches', matchId),
+          { liveDelaySeconds: validSeconds },
+          { merge: true },
+        ).catch(() => {});
+      },
       addOutWithMessage: (note: string, battedBall?: BattedBallDetails | null) =>
         dispatch({ type: 'outWithMessage', note, battedBall }),
       doublePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[]) =>
@@ -3609,8 +3766,8 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'setLineup', side, index, updates }),
       addBench: (side: Side, player: PlayerSlot) => dispatch({ type: 'addBench', side, player }),
       removeBench: (side: Side, benchIndex: number) => dispatch({ type: 'removeBench', side, benchIndex }),
-      substitute: (side: Side, benchIndex: number, lineupIndex: number) =>
-        dispatch({ type: 'substitute', side, benchIndex, lineupIndex }),
+      substitute: (side: Side, benchIndex: number, lineupIndex: number, substitutionType?: '대수비' | '대타' | '대주자') =>
+        dispatch({ type: 'substitute', side, benchIndex, lineupIndex, substitutionType }),
       setPlay: (message: string) => dispatch({ type: 'setPlay', message }),
       startGame: () => {
         dispatch({ type: 'startGame' });
@@ -3762,10 +3919,35 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       },
       purgeTrash: (matchId: string) => {
         dispatch({ type: 'purgeTrash', matchId });
-        void deleteDoc(doc(firestore, 'matches', matchId)).catch(() => {
-          // eslint-disable-next-line no-alert
-          if (typeof window !== 'undefined') window.alert('영구 삭제 권한을 확인해주세요. (삭제 실패)');
-        });
+
+        // [수정] matches 문서뿐만 아니라 matchStates와 하위 컬렉션(feed, events)까지 모두 삭제
+        void (async () => {
+          try {
+            const batch = writeBatch(firestore);
+
+            // 1. matches 컬렉션에서 일정 삭제
+            batch.delete(doc(firestore, 'matches', matchId));
+
+            // 2. matchStates 컬렉션에서 상태 문서 삭제
+            batch.delete(doc(firestore, 'matchStates', matchId));
+
+            // 3. matchStates 하위의 feed, events 컬렉션 데이터 삭제
+            // (클라이언트 사이드 삭제이므로 문서가 많을 경우 배치 처리가 필요할 수 있으나, 현재 규모에서는 일괄 처리 가능)
+            const [feedSnap, eventsSnap] = await Promise.all([
+              getDocs(collection(firestore, 'matchStates', matchId, 'feed')),
+              getDocs(collection(firestore, 'matchStates', matchId, 'events')),
+            ]);
+
+            feedSnap.forEach((d) => batch.delete(d.ref));
+            eventsSnap.forEach((d) => batch.delete(d.ref));
+
+            await batch.commit();
+          } catch (error) {
+            console.error('Purge error:', error);
+            // eslint-disable-next-line no-alert
+            if (typeof window !== 'undefined') window.alert('영구 삭제 권한을 확인해주세요. (삭제 실패)');
+          }
+        })();
       },
       saveMatchLineups: (
         matchId: string,

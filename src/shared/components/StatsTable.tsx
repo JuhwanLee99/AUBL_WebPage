@@ -195,22 +195,60 @@ export default function StatsTable({ title, stats, variant, density = 'regular' 
                             </span>
                           ) : null}
                         </span>
-                        {(row as BatterStatLine).status === 'out' ? (
-                          <span
-                            style={{
-                              padding: '2px 6px',
-                              borderRadius: '999px',
+                        {(() => {
+                          const status = (row as BatterStatLine | PitcherStatLine).status;
+                          // if (status) {
+                          //   console.log(`[StatsTable] ${row.name} - status: ${status}`);
+                          // }
+                          if (!status) return null;
+
+                          const badgeStyles = {
+                            out: {
                               border: '1px solid rgba(239,68,68,0.4)',
                               background: 'rgba(239,68,68,0.12)',
                               color: '#ef4444',
-                              fontWeight: 900,
-                              fontSize: '10px',
-                              lineHeight: 1.2,
-                            }}
-                          >
-                            out
-                          </span>
-                        ) : null}
+                              text: 'out',
+                            },
+                            대수비: {
+                              border: '1px solid rgba(59,130,246,0.4)',
+                              background: 'rgba(59,130,246,0.12)',
+                              color: '#3b82f6',
+                              text: '대수비',
+                            },
+                            대타: {
+                              border: '1px solid rgba(34,197,94,0.4)',
+                              background: 'rgba(34,197,94,0.12)',
+                              color: '#22c55e',
+                              text: '대타',
+                            },
+                            대주자: {
+                              border: '1px solid rgba(251,146,60,0.4)',
+                              background: 'rgba(251,146,60,0.12)',
+                              color: '#fb923c',
+                              text: '대주자',
+                            },
+                          };
+
+                          const badge = badgeStyles[status];
+                          if (!badge) return null;
+
+                          return (
+                            <span
+                              style={{
+                                padding: '2px 6px',
+                                borderRadius: '999px',
+                                border: badge.border,
+                                background: badge.background,
+                                color: badge.color,
+                                fontWeight: 900,
+                                fontSize: '10px',
+                                lineHeight: 1.2,
+                              }}
+                            >
+                              {badge.text}
+                            </span>
+                          );
+                        })()}
                       </span>
                     ) : (
                       (() => {

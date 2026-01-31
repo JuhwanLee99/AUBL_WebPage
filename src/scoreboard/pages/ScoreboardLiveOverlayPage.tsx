@@ -9,12 +9,51 @@ export default function ScoreboardLiveOverlayPage() {
   const navigate = useNavigate();
   const matches = useMemo(() => state.matches.filter((m) => !m.deleted), [state.matches]);
 
-  // 기본값 false: 정방향(가로 모드 16:9)
+  // 모바일 감지 함수
+  const isMobileDevice = () => {
+    const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+    const isMobileUA = /android|ipad|iphone|ipod/i.test(userAgent);
+    const isPortrait = window.innerHeight > window.innerWidth;
+    const isSmallScreen = Math.min(window.innerWidth, window.innerHeight) < 768;
+    return isMobileUA || (isPortrait && isSmallScreen);
+  };
+
+  // 기본값: 모바일이면 회전된 상태(true), 데스크톱이면 정방향(false)
   // true일 경우: 90도 회전(세로 기기에서 꽉 차게 보기 위함)
-  const [isRotated, setIsRotated] = useState(false);
+  const [isRotated, setIsRotated] = useState(isMobileDevice());
 
   // 화면 크기에 따른 UI 스케일 계산 (모바일에서 더 작게 보이도록)
   const [uiScale, setUiScale] = useState(1);
+
+  // 지연된 상태 (유튜브 라이브 지연시간 고려)
+  const [delayedState, setDelayedState] = useState(state);
+
+  // 음소거 상태
+  const [isMuted, setIsMuted] = useState(true);
+
+  // 음소거 버튼 카운트다운 (초)
+  const [unmuteCountdown, setUnmuteCountdown] = useState(10);
+
+  // 카운트다운 타이머
+  useEffect(() => {
+    // 음소거가 해제되었으면 카운트다운 초기화
+    if (!isMuted) {
+      setUnmuteCountdown(10);
+      return;
+    }
+
+    // 카운트다운이 0이면 종료
+    if (unmuteCountdown <= 0) {
+      return;
+    }
+
+    // 1초마다 카운트다운 감소
+    const timer = setInterval(() => {
+      setUnmuteCountdown((prev) => Math.max(0, prev - 1));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isMuted, unmuteCountdown]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -22,7 +61,7 @@ export default function ScoreboardLiveOverlayPage() {
       const width = window.innerWidth;
       const height = window.innerHeight;
       const minDim = Math.min(width, height);
-      
+
       // 기준을 400px ~ 1000px 사이로 잡고 스케일링
       if (minDim < 500) setUiScale(0.75);
       else if (minDim < 800) setUiScale(0.85);
@@ -34,7 +73,25 @@ export default function ScoreboardLiveOverlayPage() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const buildAutoPlaySrc = (url: string) => {
+  // 유튜브 라이브 지연시간을 고려한 상태 업데이트
+  useEffect(() => {
+    const delayMs = state.liveDelaySeconds * 1000;
+
+    // 지연시간이 0이면 즉시 업데이트
+    if (delayMs === 0) {
+      setDelayedState(state);
+      return;
+    }
+
+    // 지연시간만큼 기다린 후 업데이트
+    const timer = setTimeout(() => {
+      setDelayedState(state);
+    }, delayMs);
+
+    return () => clearTimeout(timer);
+  }, [state]);
+
+  const buildAutoPlaySrc = (url: string, muted: boolean) => {
     const base = url || defaultLiveSrc;
     const hasQuery = base.includes('?');
     const hasAutoplay = /[?&]autoplay=/i.test(base);
@@ -44,7 +101,7 @@ export default function ScoreboardLiveOverlayPage() {
 
     const params: string[] = [];
     if (!hasAutoplay) params.push('autoplay=1');
-    if (!hasMute) params.push('mute=1');
+    if (!hasMute) params.push(`mute=${muted ? '1' : '0'}`);
     if (!hasPlaysinline) params.push('playsinline=1');
     if (!hasFs) params.push('fs=0');
 
@@ -52,11 +109,73 @@ export default function ScoreboardLiveOverlayPage() {
     return `${base}${hasQuery ? '&' : '?'}${params.join('&')}`;
   };
 
-  const youtubeLiveSrc = buildAutoPlaySrc((state.liveVideoUrl || '').trim() || defaultLiveSrc);
-  const battingSide = state.half === 'top' ? 'away' : 'home';
-  const inningHalfIcon = state.half === 'top' ? '▲' : '▼';
-  const inningLabel = `${inningHalfIcon} ${state.inning}회${state.half === 'top' ? '초' : '말'}`;
-  const lastPlay = state.lastPlay || '경기 대기 중';
+  const youtubeLiveSrc = buildAutoPlaySrc((state.liveVideoUrl || '').trim() || defaultLiveSrc, isMuted);
+  const battingSide = delayedState.half === 'top' ? 'away' : 'home';
+  const fieldingSide = battingSide === 'home' ? 'away' : 'home';
+  const inningHalfIcon = delayedState.half === 'top' ? '▲' : '▼';
+  const inningLabel = `${inningHalfIcon} ${delayedState.inning}회${delayedState.half === 'top' ? '초' : '말'}`;
+  const lastPlay = delayedState.lastPlay || '경기 대기 중';
+
+  // 현재 투수 정보 (수비팀의 1번 포지션)
+  const currentPitcher = useMemo(() => {
+    const pitcher = delayedState.lineups[fieldingSide]?.[0];
+    if (!pitcher || !pitcher.name) return null;
+    return {
+      name: pitcher.name,
+      pitchCount: delayedState.pitchCount,
+      balls: delayedState.balls,
+      strikes: delayedState.strikes,
+    };
+  }, [delayedState.lineups, delayedState.pitchCount, delayedState.balls, delayedState.strikes, fieldingSide]);
+
+  // 현재 타자 정보
+  const currentBatter = useMemo(() => {
+    const batterIdx = delayedState.batterIndex[battingSide];
+    const batter = delayedState.lineups[battingSide]?.[batterIdx];
+    if (!batter || !batter.name) return null;
+
+    // 타자의 오늘 기록 계산 (events에서)
+    let atBats = 0;
+    let hits = 0;
+    let walks = 0;
+    let strikeouts = 0;
+
+    if (delayedState.events && Array.isArray(delayedState.events)) {
+      delayedState.events.forEach((event: any) => {
+        if (event.batterName === batter.name && event.batterSide === battingSide) {
+          // 타수 계산
+          if (event.result === 'single' || event.result === 'double' ||
+              event.result === 'triple' || event.result === 'homerun' ||
+              event.result === 'out' || event.result === 'fieldersChoice') {
+            atBats++;
+          }
+          // 안타 계산
+          if (event.result === 'single' || event.result === 'double' ||
+              event.result === 'triple' || event.result === 'homerun') {
+            hits++;
+          }
+          // 볼넷
+          if (event.result === 'walk' || event.result === 'intentionalWalk') {
+            walks++;
+          }
+          // 삼진
+          if (event.result === 'strikeOut') {
+            strikeouts++;
+            atBats++;
+          }
+        }
+      });
+    }
+
+    return {
+      name: batter.name,
+      atBats,
+      hits,
+      walks,
+      strikeouts,
+      avg: atBats > 0 ? (hits / atBats).toFixed(3).substring(1) : '.000',
+    };
+  }, [delayedState.lineups, delayedState.batterIndex, delayedState.events, battingSide]);
 
   const toggleFullscreen = () => {
     const root = document.documentElement;
@@ -181,6 +300,20 @@ export default function ScoreboardLiveOverlayPage() {
             </button>
             <button
               type="button"
+              onClick={() => setIsMuted((prev) => !prev)}
+              style={{
+                ...controlButtonStyle,
+                color: isMuted ? '#f87171' : '#22c55e',
+                padding: `${6 * uiScale}px ${10 * uiScale}px`,
+                fontSize: `${11 * uiScale}px`,
+                fontWeight: 900,
+              }}
+              title={isMuted ? "소리 켜기" : "소리 끄기"}
+            >
+              {isMuted ? '🔇 소리 켜기' : '🔊 음소거'}
+            </button>
+            <button
+              type="button"
               onClick={() => setIsRotated((prev) => !prev)}
               style={{ 
                 ...controlButtonStyle, 
@@ -235,8 +368,8 @@ export default function ScoreboardLiveOverlayPage() {
                 lineHeight: 1.1,
               }}
             >
-              <span>{state.teamNames.away || 'AWAY'}</span>
-              <span>{state.score.away}</span>
+              <span>{delayedState.teamNames.away || 'AWAY'}</span>
+              <span>{delayedState.score.away}</span>
             </div>
             {/* Home Score */}
             <div
@@ -249,8 +382,8 @@ export default function ScoreboardLiveOverlayPage() {
                 lineHeight: 1.1,
               }}
             >
-              <span>{state.teamNames.home || 'HOME'}</span>
-              <span>{state.score.home}</span>
+              <span>{delayedState.teamNames.home || 'HOME'}</span>
+              <span>{delayedState.score.home}</span>
             </div>
             {/* Inning */}
             <div
@@ -277,10 +410,67 @@ export default function ScoreboardLiveOverlayPage() {
                 paddingTop: `${2 * uiScale}px`,
               }}
             >
-              <CountLights balls={state.balls} strikes={state.strikes} outs={state.outs} scale={uiScale} />
-              <BaseDiagram bases={state.bases} scale={uiScale} />
+              <CountLights balls={delayedState.balls} strikes={delayedState.strikes} outs={delayedState.outs} scale={uiScale} />
+              <BaseDiagram bases={delayedState.bases} scale={uiScale} />
             </div>
           </div>
+
+          {/* 중앙 음소거 해제 버튼 (음소거 상태일 때만 10초간 표시) */}
+          {isMuted && unmuteCountdown > 0 && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                pointerEvents: 'auto',
+                zIndex: 10,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setIsMuted(false)}
+                style={{
+                  padding: `${20 * uiScale}px ${40 * uiScale}px`,
+                  borderRadius: '16px',
+                  border: '3px solid #ef4444',
+                  background: 'linear-gradient(135deg, rgba(239,68,68,0.95), rgba(220,38,38,0.95))',
+                  color: '#ffffff',
+                  fontSize: `${24 * uiScale}px`,
+                  fontWeight: 900,
+                  cursor: 'pointer',
+                  boxShadow: '0 8px 32px rgba(239,68,68,0.6), 0 0 0 4px rgba(255,255,255,0.2)',
+                  transition: 'all 0.3s',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: `${8 * uiScale}px`,
+                  animation: 'pulse 2s infinite',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                  e.currentTarget.style.boxShadow = '0 12px 40px rgba(239,68,68,0.8), 0 0 0 6px rgba(255,255,255,0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = '0 8px 32px rgba(239,68,68,0.6), 0 0 0 4px rgba(255,255,255,0.2)';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: `${12 * uiScale}px` }}>
+                  <span style={{ fontSize: `${32 * uiScale}px` }}>🔇</span>
+                  <span>소리 켜기</span>
+                </div>
+                <span style={{
+                  fontSize: `${16 * uiScale}px`,
+                  fontWeight: 600,
+                  opacity: 0.9,
+                  color: '#fecaca'
+                }}>
+                  {unmuteCountdown}초 후 자동 숨김
+                </span>
+              </button>
+            </div>
+          )}
 
           {/* 하단 Last Play */}
           <div
@@ -292,28 +482,80 @@ export default function ScoreboardLiveOverlayPage() {
               background: 'rgba(15, 23, 42, 0.85)',
               border: '1px solid rgba(148, 163, 184, 0.3)',
               borderRadius: '10px',
-              padding: `${8 * uiScale}px ${12 * uiScale}px`, // 높이 축소
+              padding: `${8 * uiScale}px ${12 * uiScale}px`,
               display: 'flex',
               alignItems: 'center',
               gap: `${12 * uiScale}px`,
               fontSize: `${14 * uiScale}px`,
             }}
           >
-            <span
-              style={{
-                fontWeight: 700,
-                letterSpacing: '0.05em',
-                color: '#f97316',
-                textTransform: 'uppercase',
-                whiteSpace: 'nowrap',
-                fontSize: `${12 * uiScale}px`,
-              }}
-            >
-              Last Play
-            </span>
-            <span style={{ color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {lastPlay}
-            </span>
+            {/* Last Play 영역 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: `${12 * uiScale}px`, flex: 1, minWidth: 0 }}>
+              <span
+                style={{
+                  fontWeight: 700,
+                  letterSpacing: '0.05em',
+                  color: '#f97316',
+                  textTransform: 'uppercase',
+                  whiteSpace: 'nowrap',
+                  fontSize: `${12 * uiScale}px`,
+                }}
+              >
+                Last Play
+              </span>
+              <span style={{ color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                {lastPlay}
+              </span>
+            </div>
+
+            {/* 투수/타자 정보 영역 */}
+            <div style={{
+              display: 'flex',
+              gap: `${16 * uiScale}px`,
+              alignItems: 'center',
+              borderLeft: '1px solid rgba(148, 163, 184, 0.3)',
+              paddingLeft: `${12 * uiScale}px`,
+            }}>
+              {/* 투수 정보 */}
+              {currentPitcher && (
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: `${2 * uiScale}px`,
+                  alignItems: 'flex-end',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: `${6 * uiScale}px` }}>
+                    <span style={{ fontSize: `${10 * uiScale}px`, color: '#94a3b8', fontWeight: 600 }}>P</span>
+                    <span style={{ fontSize: `${13 * uiScale}px`, fontWeight: 700, color: '#e2e8f0' }}>
+                      {currentPitcher.name}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: `${11 * uiScale}px`, color: '#cbd5e1', fontWeight: 600 }}>
+                    {currentPitcher.pitchCount}구 (B{currentPitcher.balls} S{currentPitcher.strikes})
+                  </div>
+                </div>
+              )}
+
+              {/* 타자 정보 */}
+              {currentBatter && (
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: `${2 * uiScale}px`,
+                  alignItems: 'flex-end',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: `${6 * uiScale}px` }}>
+                    <span style={{ fontSize: `${10 * uiScale}px`, color: '#94a3b8', fontWeight: 600 }}>AB</span>
+                    <span style={{ fontSize: `${13 * uiScale}px`, fontWeight: 700, color: '#e2e8f0' }}>
+                      {currentBatter.name}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: `${11 * uiScale}px`, color: '#cbd5e1', fontWeight: 600 }}>
+                    {currentBatter.atBats}타수 {currentBatter.hits}안타 ({currentBatter.avg})
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
