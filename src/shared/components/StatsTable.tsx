@@ -197,6 +197,9 @@ export default function StatsTable({ title, stats, variant, density = 'regular' 
                         </span>
                         {(() => {
                           const status = (row as BatterStatLine | PitcherStatLine).status;
+                          if (status) {
+                            console.log(`[StatsTable] ${row.name} - status: ${status}`);
+                          }
                           if (!status) return null;
 
                           const badgeStyles = {

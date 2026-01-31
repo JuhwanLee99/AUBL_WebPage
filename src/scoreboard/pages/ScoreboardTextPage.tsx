@@ -731,6 +731,9 @@ function LiveFeed({
               item.type === 'log' &&
               (item.text.includes('투수 교체') ||
                 item.text.includes('타자 교체') ||
+                item.text.includes('대수비') ||
+                item.text.includes('대타') ||
+                item.text.includes('대주자') ||
                 item.text.trim().endsWith('투수'))
             ) {
               return (
@@ -1428,7 +1431,7 @@ function computePitcherLine(feed: ReturnType<typeof useDemoStore>['state']['feed
     const result = entry.result.trim();
 
     // 피드에서 투수 추적
-    if (result.includes('투수 교체')) {
+    if (result.includes('투수 교체') || (result.includes('대수비') && result.includes('→'))) {
       const incoming = result.split('→')[1];
       if (incoming) current[defenseSide] = cleanName(incoming);
     } else if (result.endsWith('투수')) {
