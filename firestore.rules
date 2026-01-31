@@ -3,9 +3,8 @@ rules_version = '2';
 service cloud.firestore {
   // 관리자 권한 확인 함수
   function isAdmin() {
-    return request.auth != null
-      && (request.auth.token.admin == true
-        || request.auth.token.email in ['synapse9983@gmail.com', 'aublcauadmin@aubl.club', 'example@ecam.com']);
+  // ✅ 안전: 오직 set-admin-claim.js로 권한을 받은 계정만 통과
+  return request.auth != null && request.auth.token.admin == true;
   }
 
   match /databases/{database}/documents {

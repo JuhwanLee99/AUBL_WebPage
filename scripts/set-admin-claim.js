@@ -8,8 +8,12 @@ import { getAuth } from 'firebase-admin/auth';
 const require = createRequire(import.meta.url);
 const sa = require('../serviceAccountKey.json');
 
-// ⬇ 여기에 실제 UID 입력
-const TARGET_UID = '여기에 UID 입력';
+const TARGET_UID = process.argv[2]; 
+
+if (!TARGET_UID) {
+  console.error("오류: UID를 인자로 입력해주세요.");
+  process.exit(1);
+}
 
 initializeApp({ credential: cert(sa) });
 
