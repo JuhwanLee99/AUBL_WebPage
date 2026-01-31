@@ -9,9 +9,18 @@ export default function ScoreboardLiveOverlayPage() {
   const navigate = useNavigate();
   const matches = useMemo(() => state.matches.filter((m) => !m.deleted), [state.matches]);
 
-  // 기본값 false: 정방향(가로 모드 16:9)
+  // 모바일 감지 함수
+  const isMobileDevice = () => {
+    const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+    const isMobileUA = /android|ipad|iphone|ipod/i.test(userAgent);
+    const isPortrait = window.innerHeight > window.innerWidth;
+    const isSmallScreen = Math.min(window.innerWidth, window.innerHeight) < 768;
+    return isMobileUA || (isPortrait && isSmallScreen);
+  };
+
+  // 기본값: 모바일이면 회전된 상태(true), 데스크톱이면 정방향(false)
   // true일 경우: 90도 회전(세로 기기에서 꽉 차게 보기 위함)
-  const [isRotated, setIsRotated] = useState(false);
+  const [isRotated, setIsRotated] = useState(isMobileDevice());
 
   // 화면 크기에 따른 UI 스케일 계산 (모바일에서 더 작게 보이도록)
   const [uiScale, setUiScale] = useState(1);
@@ -21,6 +30,30 @@ export default function ScoreboardLiveOverlayPage() {
 
   // 음소거 상태
   const [isMuted, setIsMuted] = useState(true);
+
+  // 음소거 버튼 카운트다운 (초)
+  const [unmuteCountdown, setUnmuteCountdown] = useState(10);
+
+  // 카운트다운 타이머
+  useEffect(() => {
+    // 음소거가 해제되었으면 카운트다운 초기화
+    if (!isMuted) {
+      setUnmuteCountdown(10);
+      return;
+    }
+
+    // 카운트다운이 0이면 종료
+    if (unmuteCountdown <= 0) {
+      return;
+    }
+
+    // 1초마다 카운트다운 감소
+    const timer = setInterval(() => {
+      setUnmuteCountdown((prev) => Math.max(0, prev - 1));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isMuted, unmuteCountdown]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -320,8 +353,8 @@ export default function ScoreboardLiveOverlayPage() {
             </div>
           </div>
 
-          {/* 중앙 음소거 해제 버튼 (음소거 상태일 때만 표시) */}
-          {isMuted && (
+          {/* 중앙 음소거 해제 버튼 (음소거 상태일 때만 10초간 표시) */}
+          {isMuted && unmuteCountdown > 0 && (
             <div
               style={{
                 position: 'absolute',
@@ -347,8 +380,9 @@ export default function ScoreboardLiveOverlayPage() {
                   boxShadow: '0 8px 32px rgba(239,68,68,0.6), 0 0 0 4px rgba(255,255,255,0.2)',
                   transition: 'all 0.3s',
                   display: 'flex',
+                  flexDirection: 'column',
                   alignItems: 'center',
-                  gap: `${12 * uiScale}px`,
+                  gap: `${8 * uiScale}px`,
                   animation: 'pulse 2s infinite',
                 }}
                 onMouseEnter={(e) => {
@@ -360,8 +394,18 @@ export default function ScoreboardLiveOverlayPage() {
                   e.currentTarget.style.boxShadow = '0 8px 32px rgba(239,68,68,0.6), 0 0 0 4px rgba(255,255,255,0.2)';
                 }}
               >
-                <span style={{ fontSize: `${32 * uiScale}px` }}>🔇</span>
-                <span>소리 켜기</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: `${12 * uiScale}px` }}>
+                  <span style={{ fontSize: `${32 * uiScale}px` }}>🔇</span>
+                  <span>소리 켜기</span>
+                </div>
+                <span style={{
+                  fontSize: `${16 * uiScale}px`,
+                  fontWeight: 600,
+                  opacity: 0.9,
+                  color: '#fecaca'
+                }}>
+                  {unmuteCountdown}초 후 자동 숨김
+                </span>
               </button>
             </div>
           )}
