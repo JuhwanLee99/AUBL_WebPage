@@ -45,7 +45,11 @@ export default function Layout() {
 
   // 팀 매핑 초기화 (백엔드에서 팀 목록 가져오기)
   useEffect(() => {
-    void initializeTeamMapping();
+    // 백엔드 연동이 활성화된 경우에만 팀 매핑 초기화
+    const isBackendEnabled = import.meta.env.VITE_ENABLE_BACKEND_INTEGRATION === 'true';
+    if (isBackendEnabled) {
+      void initializeTeamMapping();
+    }
   }, []);
 
   // 첫 방문 모바일 사용자에게 PC 최적화 안내

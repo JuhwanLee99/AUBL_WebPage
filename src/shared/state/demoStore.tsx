@@ -4023,20 +4023,24 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
           }).catch(() => {});
 
           // 백엔드로 경기 데이터 전송 (Firestore 임포트 트리거)
-          // 백엔드가 Firestore에서 완료된 경기를 직접 읽어가므로,
-          // Firestore에 저장 후 임포트 API를 호출하여 백엔드가 데이터를 가져가도록 트리거
-          void import('../api').then(({ importFirestoreMatches }) => {
-            importFirestoreMatches()
-              .then((response) => {
-                console.log('✅ 백엔드 임포트 트리거 성공:', response);
-              })
-              .catch((error) => {
-                console.error('❌ 백엔드 임포트 실패:', error);
-                // 실패해도 Firestore에는 저장되어 있으므로 나중에 재시도 가능
-              });
-          }).catch(() => {
-            console.error('❌ API 모듈 로드 실패');
-          });
+          // 백엔드 연동이 활성화된 경우에만 전송
+          const isBackendEnabled = import.meta.env.VITE_ENABLE_BACKEND_INTEGRATION === 'true';
+          if (isBackendEnabled) {
+            // 백엔드가 Firestore에서 완료된 경기를 직접 읽어가므로,
+            // Firestore에 저장 후 임포트 API를 호출하여 백엔드가 데이터를 가져가도록 트리거
+            void import('../api').then(({ importFirestoreMatches }) => {
+              importFirestoreMatches()
+                .then((response) => {
+                  console.log('✅ 백엔드 임포트 트리거 성공:', response);
+                })
+                .catch((error) => {
+                  console.error('❌ 백엔드 임포트 실패:', error);
+                  // 실패해도 Firestore에는 저장되어 있으므로 나중에 재시도 가능
+                });
+            }).catch(() => {
+              console.error('❌ API 모듈 로드 실패');
+            });
+          }
         }
       },
       resetGame: () => dispatch({ type: 'resetGame' }),
