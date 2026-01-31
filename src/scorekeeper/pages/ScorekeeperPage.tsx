@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { TEAMS } from '../../shared/lib/mockData';
-import { buildGameRecord, useDemoStore } from '../../shared/state/demoStore';
+import { buildGameRecord, canPitcherBat, useDemoStore } from '../../shared/state/demoStore';
 import type {
   BattedBallDetails,
   ErrorDetails,
@@ -14,6 +14,7 @@ import RemovedPlayersPanel from '../../shared/components/RemovedPlayersPanel';
 import type { BatterStatLine, PitcherStatLine } from '../../shared/types/scoreStats';
 import { useAuth } from '../../shared/auth/AuthProvider';
 import { BoxScoreTable } from '../../scoreboard/components/ScoreboardPanel';
+import { GameTimerDisplay } from '../../shared/components/GameTimerDisplay';
 
 // 동명이인 구분을 위한 고유 이름 생성 헬퍼 함수 추가
 // 이미 (등번호)가 붙어있으면 덧붙이지 않도록 안전장치 추가
@@ -41,6 +42,7 @@ const secondaryButtons = [
   { label: '고의4구', color: '#22c55e', action: 'intentional_walk' },
   { label: '사구', color: '#22c55e', action: 'hbp' },
   { label: '타격 방해', color: '#f97316', action: 'catcher_interference' },
+  { label: '더블아웃', color: '#ef4444', action: 'multipleOut' },
   { label: '카운트 리셋', color: '#94a3b8', action: 'resetCount' },
   { label: '주자 클리어', color: '#94a3b8', action: 'clearBases' },
   { label: '이닝 전환', color: '#94a3b8', action: 'nextHalf' },
@@ -65,6 +67,7 @@ const battedBallResultOptions = [
   { label: '라인드라이브', color: '#ef4444', value: 'out_line' as const, helper: '직선타 아웃', group: 'out' as const },
   { label: '병살타(2아웃)', color: '#ef4444', value: 'out_dp2' as const, helper: '타자+주자 아웃', group: 'out' as const },
   { label: '삼중살(3아웃)', color: '#ef4444', value: 'out_tp3' as const, helper: '모두 아웃', group: 'out' as const },
+  { label: '더블아웃(기타)', color: '#ef4444', value: 'out_multiple' as const, helper: '주자 선택 아웃', group: 'out' as const },
   { label: '내야 플라이', color: '#ef4444', value: 'out_infield_fly' as const, helper: '타자만 아웃(인필드 플라이 아님)', group: 'out' as const },
   { label: '인필드 플라이 선언', color: '#ef4444', value: 'out_infield_fly_rule' as const, helper: '주자 묶임 · 선언 상황', group: 'out' as const },
   { label: '외야 플라이', color: '#ef4444', value: 'out_outfield_fly' as const, helper: '외야 플라이 아웃', group: 'out' as const },
@@ -299,7 +302,8 @@ function getZoneOptionsForResult(result: BattedBallResultAction | null) {
     result === 'single_infield' ||
     result === 'out_ground' ||
     result === 'out_dp2' ||
-    result === 'out_tp3'
+    result === 'out_tp3' ||
+    result === 'out_multiple'
   )
     return infieldGroundZoneOptions;
   if (result === 'fc') return fcZoneOptions;
@@ -310,6 +314,8 @@ function getZoneOptionsForResult(result: BattedBallResultAction | null) {
 function getFielderOptionsForResult(result: BattedBallResultAction | null) {
   if (isInfieldFlyResult(result)) return infieldFielderOptions;
   if (isOutfieldFlyResult(result)) return outfieldFielderOptions;
+  // [수정] 더블아웃(기타) 선택 시에도 내야수(투수/포수 포함)를 선택할 수 있도록 옵션 반환
+  if (result === 'out_multiple') return infieldFielderOptions;
   return null;
 }
 
@@ -900,7 +906,10 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   const battingOrders: Record<'home' | 'away', Map<number, string[]>> = { home: new Map(), away: new Map() };
 
   const seedBattingOrders = (side: 'home' | 'away') => {
-    const batting = record.lineups[side].filter((slot) => slot.pos.toUpperCase() !== 'P');
+    // [수정됨] .filter((slot) => slot.pos.toUpperCase() !== 'P') 제거
+    // 이유: 투수가 타석에 들어서면 P 포지션이어도 타자 기록에 포함되어야 함.
+    // 대신 라인업의 상위 9명을 타자로 간주 (오타니 룰 등 고려, 기본 타순은 9명)
+    const batting = record.lineups[side].slice(0, 9);
     // Batting order map에도 uniqueName 저장
     batting.forEach((slot, idx) => battingOrders[side].set(idx + 1, [getUniqueName(slot.name, slot.number)]));
   };
@@ -976,9 +985,26 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   // 대신 '투수', '·' 같은 불필요한 텍스트만 제거
   const cleanName = (raw: string) => raw.replace(/투수/g, '').replace(/·/g, '').trim();
 
+  // [추가] 투수 이름이 로스터의 uniqueName과 일치하지 않을 때(예: "홍길동" vs "홍길동(18)") 찾아주는 헬퍼
+  const resolvePitcherName = (rawName: string, side: 'home' | 'away' | null) => {
+    const checkSides = side ? [side] : ['home', 'away'];
+    for (const s of checkSides as ('home' | 'away')[]) {
+        const roster = s === 'home' ? rosterHome : rosterAway;
+        if (roster.has(rawName)) return rawName;
+        // 이름 뒤에 (등번호)가 붙은 키가 있는지 확인
+        for (const key of roster.keys()) {
+            if (key.startsWith(rawName + '(')) return key;
+        }
+    }
+    return rawName;
+  };
+
   const inferPitcherSide = (name: string): 'home' | 'away' | null => {
     if (rosterHome.has(name) || benchMetaHome.has(name)) return 'home';
     if (rosterAway.has(name) || benchMetaAway.has(name)) return 'away';
+    // 로스터 키 매칭 시도
+    for (const key of rosterHome.keys()) if (key.startsWith(name + '(')) return 'home';
+    for (const key of rosterAway.keys()) if (key.startsWith(name + '(')) return 'away';
     return null;
   };
 
@@ -992,14 +1018,20 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     if (result.includes('투수 교체')) {
       const incoming = result.split('→')[1];
       if (incoming) {
-        const cleaned = cleanName(incoming);
+        let cleaned = cleanName(incoming);
         const inferred = inferPitcherSide(cleaned) ?? defenseSide;
+        // [수정] 고유 이름으로 변환하여 사용 (중복 방지)
+        cleaned = resolvePitcherName(cleaned, inferred);
+        
         currentPitcher[inferred] = cleaned;
         addPitch(inferred, cleaned);
       }
     } else if (result.endsWith('투수')) {
-      const cleaned = cleanName(result.replace('투수', ''));
+      let cleaned = cleanName(result.replace('투수', ''));
       const inferred = inferPitcherSide(cleaned) ?? defenseSide;
+      // [수정] 고유 이름으로 변환하여 사용
+      cleaned = resolvePitcherName(cleaned, inferred);
+
       currentPitcher[inferred] = cleaned;
       addPitch(inferred, cleaned);
     }
@@ -1041,7 +1073,24 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     }
 
     const pitchSide = side === 'home' ? 'away' : 'home';
-    const pitcherName = currentPitcher[pitchSide];
+    
+    // [수정됨] 투수 기록 집계 안전장치 추가
+    // 1. 피드에서 투수 이름을 찾음
+    let pitcherName = currentPitcher[pitchSide];
+    
+    // 2. 피드에 투수 정보가 없다면(null), 현재 로스터에서 'P' 포지션인 선수를 찾음 (Fallback)
+    if (!pitcherName) {
+      const roster = pitchSide === 'home' ? rosterHome : rosterAway;
+      // 로스터 맵을 순회하며 포지션이 P인 선수 찾기
+      for (const [pName, info] of roster.entries()) {
+        if (info.pos && info.pos.toUpperCase() === 'P') {
+          pitcherName = pName;
+          // 피드 처리의 일관성을 위해 currentPitcher 캐시에도 저장
+          currentPitcher[pitchSide] = pName; 
+          break;
+        }
+      }
+    }
     const pitcherStat = pitcherName ? addPitch(pitchSide, pitcherName) : null;
     const pitchInfo = classifyPitch(result);
     if (pitcherStat && pitchInfo.pitch) {
@@ -1245,7 +1294,15 @@ export default function ScorekeeperPage() {
   const hittingSide: Side = state.half === 'top' ? 'away' : 'home';
   const defenseSide: Side = hittingSide === 'home' ? 'away' : 'home';
   const offenseLineupEntries = state.lineups[hittingSide].map((slot, idx) => ({ slot, idx }));
-  const offenseBattingEntries = offenseLineupEntries.filter((entry) => entry.slot.pos.toUpperCase() !== 'P');
+  // 타석에 들어갈 수 있는 선수만 필터링 (오타니룰 고려)
+  const offenseBattingEntries = offenseLineupEntries.filter((entry) => {
+    // 1. 타순 1~9번(인덱스 0~8)은 무조건 포함
+    if (entry.idx < 9) return true;
+    
+    // 2. 그 외(10번 등)는 기존 로직 (투수가 아니거나 canPitcherBat 만족 시)
+    if (entry.slot.pos.toUpperCase() !== 'P') return true;
+    return canPitcherBat(entry.slot, state.lineups[hittingSide]);
+  });
   const activeOffenseEntries = offenseBattingEntries.length ? offenseBattingEntries : offenseLineupEntries;
   const defenseLineup = state.lineups[defenseSide];
   const activeLineupLength = activeOffenseEntries.length || 1;
@@ -1283,11 +1340,17 @@ export default function ScorekeeperPage() {
     fcOutType: 'force' | 'tag';
     pathNote: string;
   }>(null);
+  const [doublePlayModal, setDoublePlayModal] = useState<null | {
+    outsCount: 2 | 3;
+    battedBall?: BattedBallDetails | null;
+  }>(null);
+  const [multipleRunnersOutModal, setMultipleRunnersOutModal] = useState(false);
   const [lastHitWizard, setLastHitWizard] = useState<HitWizardState | null>(null);
   const [errorOnPlayModal, setErrorOnPlayModal] = useState<null | { selections: RunnerAdvanceSelections; batterResult: 'out' | 'hold' | 1 | 2 | 3 | 4; errorType: string; context: string; fielder: string }>(null);
   const [showDroppedThirdStrike, setShowDroppedThirdStrike] = useState(false);
   const [battedBallType, setBattedBallType] = useState(baseBattedBallType);
   const [battedBallZone, setBattedBallZone] = useState(defaultZoneOptions[0]);
+  const [gameLimitInput, setGameLimitInput] = useState('');
   const recordPayload = useMemo(() => buildGameRecord(state), [state]);
   const { user } = useAuth();
   const [pendingExportId, setPendingExportId] = useState<string | null>(null);
@@ -1314,23 +1377,29 @@ export default function ScorekeeperPage() {
   const canUndo = state.history.length > 0;
   const playerStats = useMemo(() => buildPlayerStats(recordPayload), [recordPayload]);
   const boxScore = useMemo(() => {
-    const totals = activeMatch?.postGame?.totals;
-    const lineScore = activeMatch?.postGame?.lineScore;
-    const baseInnings = Array.from({ length: 9 }, (_v, idx) => idx + 1);
-    const hasExtrasFromRecord = (lineScore?.innings?.length ?? 0) > 9;
-    const hasExtrasLive = state.inning > 9;
-    const hasExtras = hasExtrasFromRecord || hasExtrasLive;
-    const innings = hasExtras ? [...baseInnings, '10+'] : baseInnings;
-    const padInnings = (arr: number[] | undefined) => {
-      const core = innings.map((_, idx) => {
-        if (hasExtras && idx === innings.length - 1) {
-          const extras = (arr ?? []).slice(9).reduce((acc, cur) => acc + (cur ?? 0), 0);
-          return (arr ?? []).length > 9 ? extras : '—';
-        }
-        return arr && arr[idx] != null ? arr[idx] : '—';
-      });
-      return core;
+    const { lineScore: liveLine, hits: liveHits, errors: liveErrors } = recordPayload.liveStats;
+    const maxInning = Math.max(state.inning, liveLine.home.length, liveLine.away.length);
+    const inningsHeader = Array.from({ length: Math.max(9, maxInning) }, (_, i) => i + 1);
+
+    const padInnings = (arr: number[]) =>
+      inningsHeader.map((_, idx) => (arr[idx] != null ? arr[idx] : '—'));
+
+    const totals = activeMatch?.postGame?.totals ?? {
+      home: { runs: state.score.home, hits: liveHits.home, errors: liveErrors.home },
+      away: { runs: state.score.away, hits: liveHits.away, errors: liveErrors.away },
     };
+
+    const lineScore =
+      activeMatch?.postGame?.lineScore && activeMatch.postGame.lineScore.innings.length
+        ? activeMatch.postGame.lineScore
+        : {
+            innings: inningsHeader,
+            home: liveLine.home,
+            away: liveLine.away,
+          };
+    const baseInnings = Array.from({ length: 9 }, (_v, idx) => idx + 1);
+    const hasExtras = (lineScore?.innings?.length ?? 0) > 9;
+    const innings = hasExtras ? [...baseInnings, '10+'] : baseInnings;
     const mk = (side: 'home' | 'away') => ({
       name: state.teamNames[side] || (side === 'home' ? homeTeam?.name : awayTeam?.name) || side.toUpperCase(),
       runs: state.score[side],
@@ -1340,41 +1409,7 @@ export default function ScorekeeperPage() {
       color: side === 'home' ? '#f97316' : '#60a5fa',
     });
     return { innings, rows: [mk('away'), mk('home')] };
-  }, [activeMatch?.postGame?.lineScore, activeMatch?.postGame?.totals, awayTeam?.name, homeTeam?.name, state.inning, state.score, state.teamNames]);
-  const statusBadge = !hasActiveMatch
-    ? {
-        text: '경기 미선택 · 기록 대기',
-        color: '#fbbf24',
-        background: 'rgba(251,191,36,0.12)',
-        border: 'rgba(251,191,36,0.4)',
-      }
-    : lockedByOther
-      ? {
-          text: '다른 기록원이 기록 중',
-          color: '#fca5a5',
-          background: 'rgba(248,113,113,0.12)',
-          border: 'rgba(248,113,113,0.45)',
-        }
-    : isGameOver
-      ? {
-          text: '경기 종료됨 · 기록 잠금',
-          color: '#fca5a5',
-          background: 'rgba(248,113,113,0.12)',
-        border: 'rgba(248,113,113,0.4)',
-      }
-    : !isGameStarted
-      ? {
-          text: '대기 중 · 경기 시작 필요',
-          color: '#e2e8f0',
-          background: 'rgba(148,163,184,0.16)',
-          border: 'rgba(148,163,184,0.35)',
-        }
-      : {
-          text: '실시간 입력 가능',
-          color: '#67e8f9',
-          background: 'rgba(56,189,248,0.12)',
-          border: 'rgba(56,189,248,0.35)',
-        };
+  }, [recordPayload, state.inning, state.score, state.teamNames, activeMatch, homeTeam, awayTeam]);
   const hasLiveUrlChange = liveVideoUrlInput.trim() !== state.liveVideoUrl.trim();
   const battedBallDetails = useMemo<BattedBallDetails | null>(() => {
     return buildBattedBallDetailsFromValues(battedBallType, battedBallZone);
@@ -1417,6 +1452,15 @@ export default function ScorekeeperPage() {
     const timer = setInterval(update, 1000);
     return () => clearInterval(timer);
   }, [state.scorerLockedAt, hasActiveMatch, LOCK_TTL_MS]);
+
+  // 경기 시간제한 입력값 동기화
+  useEffect(() => {
+    if (state.gameLimitMinutes !== null) {
+      setGameLimitInput(state.gameLimitMinutes.toString());
+    } else {
+      setGameLimitInput('');
+    }
+  }, [state.gameLimitMinutes]);
 
   useEffect(() => {
     if (state.gameOver) {
@@ -1613,12 +1657,33 @@ const handleConfirmHitWizard = () => {
       case 'out_line':
         actions.addOutWithMessage('라인드라이브 아웃', details);
         break;
-      case 'out_dp2':
-        actions.doublePlay(details);
+      case 'out_dp2': {
+        const runnersOnBase = state.bases.filter((r) => r !== null).length;
+        if (runnersOnBase >= 1) {
+          setDoublePlayModal({ outsCount: 2, battedBall: details });
+        } else {
+          actions.doublePlay(details);
+        }
         break;
-      case 'out_tp3':
-        actions.triplePlay(details);
+      }
+      case 'out_tp3': {
+        const runnersOnBase = state.bases.filter((r) => r !== null).length;
+        if (runnersOnBase >= 2) {
+          setDoublePlayModal({ outsCount: 3, battedBall: details });
+        } else {
+          actions.triplePlay(details);
+        }
         break;
+      }
+      case 'out_multiple': {
+        const runnersOnBase = state.bases.filter((r) => r !== null).length;
+        if (runnersOnBase >= 1) {
+          setMultipleRunnersOutModal(true);
+        } else {
+          actions.addOutWithMessage('기타 더블아웃', details);
+        }
+        break;
+      }
       case 'out_infield_fly':
         actions.addOutWithMessage(`내야 플라이 아웃${fielderNote}`, details);
         break;
@@ -1695,12 +1760,24 @@ const handleConfirmHitWizard = () => {
       case 'out_line':
         actions.addOutWithMessage('라인드라이브 아웃', battedBallDetails);
         break;
-      case 'out_dp2':
-        actions.doublePlay(battedBallDetails);
+      case 'out_dp2': {
+        const runnersOnBase = state.bases.filter((r) => r !== null).length;
+        if (runnersOnBase >= 1) {
+          setDoublePlayModal({ outsCount: 2, battedBall: battedBallDetails });
+        } else {
+          actions.doublePlay(battedBallDetails);
+        }
         break;
-      case 'out_tp3':
-        actions.triplePlay(battedBallDetails);
+      }
+      case 'out_tp3': {
+        const runnersOnBase = state.bases.filter((r) => r !== null).length;
+        if (runnersOnBase >= 2) {
+          setDoublePlayModal({ outsCount: 3, battedBall: battedBallDetails });
+        } else {
+          actions.triplePlay(battedBallDetails);
+        }
         break;
+      }
       case 'out_infield_fly':
         actions.addOutWithMessage('내야 플라이 아웃', battedBallDetails);
         break;
@@ -1722,6 +1799,13 @@ const handleConfirmHitWizard = () => {
       case 'nextHalf':
         actions.nextHalf();
         break;
+      case 'multipleOut': {
+        const runnersOnBase = state.bases.filter((r) => r !== null).length;
+        if (runnersOnBase >= 1) {
+          setMultipleRunnersOutModal(true);
+        }
+        break;
+      }
       case 'undo':
         actions.undo();
         break;
@@ -1992,26 +2076,113 @@ const handleConfirmHitWizard = () => {
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'flex-end',
-                  gap: '6px',
+                  gap: '8px',
                   width: '100%',
                   marginTop: '-35px',
                 }}
               >
-                {/* 상단: 상태 뱃지 + 경기 시작 버튼 (Command Center 줄 오른쪽 끝) */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  <span
-                    style={{
-                      fontSize: '12px',
-                      fontWeight: 800,
-                      color: statusBadge.color,
-                      background: statusBadge.background,
-                      border: `1px solid ${statusBadge.border}`,
-                      borderRadius: '999px',
-                      padding: '6px 10px',
-                    }}
-                  >
-                    {statusBadge.text}
-                  </span>
+                {/* 경기 시간제한 입력 (경기 시작 전에만 표시) - 별도 줄 */}
+                {!isGameOver && hasActiveMatch && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: '#94a3b8' }}>
+                      경기 시간 제한:
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={gameLimitInput}
+                      onChange={(e) => setGameLimitInput(e.target.value)}
+                      placeholder="분 입력 (예: 90)"
+                      disabled={lockedByOther}
+                      style={{
+                        width: '100px',
+                        padding: '8px',
+                        borderRadius: '8px',
+                        border: '1px solid #374151',
+                        background: '#1f2937',
+                        color: '#f8fafc',
+                        fontSize: '13px',
+                      }}
+                    />
+                    <span style={{ fontSize: '12px', color: '#94a3b8' }}>분</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const trimmed = gameLimitInput.trim();
+                        if (!trimmed) {
+                          console.log('제한시간 설정: 빈 값으로 null 설정');
+                          actions.setGameLimit(null);
+                          return;
+                        }
+                        const parsed = parseInt(trimmed, 10);
+                        if (isNaN(parsed) || parsed < 0) {
+                          console.log('제한시간 설정: 유효하지 않은 값', trimmed);
+                          alert('유효한 숫자를 입력해주세요 (0 이상)');
+                          return;
+                        }
+                        console.log('제한시간 설정:', parsed, '분');
+                        actions.setGameLimit(parsed);
+                      }}
+                      disabled={lockedByOther}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid #3b82f6',
+                        background: '#1e40af',
+                        color: '#fff',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: lockedByOther ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      설정
+                    </button>
+                    {state.gameLimitMinutes !== null && (
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#22c55e' }}>
+                        ✓ {state.gameLimitMinutes}분 설정됨
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* 상태 뱃지 + 타이머 + 일시정지 + 경기 시작 버튼 줄 */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    {state.gameStarted && !state.gameOver && state.gameLimitMinutes !== null && (
+                      <>
+                        <GameTimerDisplay
+                          gameLimitMinutes={state.gameLimitMinutes}
+                          gameStartTimestamp={state.gameStartTimestamp}
+                          gamePausedAt={state.gamePausedAt}
+                          gamePausedDuration={state.gamePausedDuration}
+                          gameStarted={state.gameStarted}
+                          style={{
+                            padding: '6px 10px',
+                            fontSize: '12px',
+                          }}
+                        />
+                        {!lockedByOther && (
+                          <button
+                            type="button"
+                            onClick={() => state.gamePausedAt !== null ? actions.resumeGameTimer() : actions.pauseGameTimer()}
+                            style={{
+                              padding: '6px 10px',
+                              borderRadius: '8px',
+                              border: `1px solid ${state.gamePausedAt !== null ? '#10b981' : '#f97316'}`,
+                              background: state.gamePausedAt !== null ? '#059669' : '#ea580c',
+                              color: '#fff',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {state.gamePausedAt !== null ? '⏵ 타이머 재개' : '⏸ 타이머 일시정지'}
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={handleStartGame}
@@ -2522,6 +2693,47 @@ const handleConfirmHitWizard = () => {
           }}
         />
       )}
+      {doublePlayModal && (
+        <DoublePlayModal
+          outsCount={doublePlayModal.outsCount}
+          basesState={state.bases}
+          onClose={() => setDoublePlayModal(null)}
+          onConfirm={(selectedRunners) => {
+            if (doublePlayModal.outsCount === 2) {
+              actions.doublePlay(doublePlayModal.battedBall, selectedRunners);
+            } else {
+              actions.triplePlay(doublePlayModal.battedBall, selectedRunners);
+            }
+            setDoublePlayModal(null);
+          }}
+        />
+      )}
+      {multipleRunnersOutModal && (
+        <MultipleRunnersOutModal
+          basesState={state.bases}
+          minOuts={1}
+          onClose={() => setMultipleRunnersOutModal(false)}
+          // [중요] onConfirm 핸들러 수정: isBatterSafe 매개변수 추가 및 분기 처리
+          onConfirm={(selectedRunners, label, isBatterSafe) => {
+            if (isBatterSafe) {
+              // 1. 타자 출루 시 (타격 상황): 야수선택(Fielder's Choice) 액션 사용
+              // 선택된 주자들의 결과를 'out'으로 설정하여 넘겨줍니다.
+              const selections: RunnerAdvanceSelections = {};
+              selectedRunners.forEach((baseIdx) => {
+                selections[baseIdx as 0 | 1 | 2] = 'out';
+              });
+        
+              // fielderChoice 액션은 내부적으로 '타자를 1루에 배치'하고 '타순을 변경'합니다.
+              actions.fielderChoice(selections, null, label);
+            } else {
+              // 2. 타자 출루 없음 (주루사 상황): 기존 multipleRunnersOut 액션 사용
+              // 이 액션은 타자를 그대로 둡니다.
+              actions.multipleRunnersOut(selectedRunners, label);
+            }
+            setMultipleRunnersOutModal(false);
+          }}
+        />
+      )}
       {showDroppedThirdStrike && (
         <DroppedThirdStrikeModal
           batterName={currentBatter}
@@ -2635,7 +2847,7 @@ function FieldView({
     first: { x: 72, y: 63 },
     third: { x: 28, y: 63 },
     home: { x: 50, y: 92 },
-    batter: { x: 58, y: 90 },
+    batter: { x: 65, y: 90 },
   };
   return (
     <div
@@ -3002,6 +3214,403 @@ function buildRunnerOutcomeOptions(baseIndex: 0 | 1 | 2) {
 
 function baseLabelForIndex(baseIndex: number) {
   return `${baseIndex + 1}루`;
+}
+
+function DoublePlayModal({
+  outsCount,
+  basesState,
+  onClose,
+  onConfirm,
+}: {
+  outsCount: 2 | 3;
+  basesState: (string | null)[];
+  onClose: () => void;
+  onConfirm: (selectedRunners: number[]) => void;
+}) {
+  const modalTitle = outsCount === 2 ? '병살타 주자 선택' : '삼중살 주자 선택';
+  const runners = basesState
+    .map((runner, idx) => (runner ? { runner, baseIndex: idx as 0 | 1 | 2 } : null))
+    .filter(Boolean) as { runner: string; baseIndex: 0 | 1 | 2 }[];
+
+  const [selectedRunners, setSelectedRunners] = useState<number[]>([]);
+
+  const toggleRunner = (baseIndex: number) => {
+    if (selectedRunners.includes(baseIndex)) {
+      setSelectedRunners(selectedRunners.filter((idx) => idx !== baseIndex));
+    } else {
+      if (selectedRunners.length < outsCount - 1) {
+        setSelectedRunners([...selectedRunners, baseIndex]);
+      }
+    }
+  };
+
+  const handleConfirm = () => {
+    if (selectedRunners.length === outsCount - 1) {
+      onConfirm(selectedRunners);
+    }
+  };
+
+  const canConfirm = selectedRunners.length === outsCount - 1;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'grid',
+        placeItems: 'center',
+        zIndex: 1000,
+        padding: '20px',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: '#1e293b',
+          borderRadius: '20px',
+          border: '1px solid rgba(148,163,184,0.25)',
+          maxWidth: '500px',
+          width: '100%',
+          maxHeight: '90vh',
+          overflow: 'auto',
+        }}
+      >
+        <div
+          style={{
+            padding: '20px 24px',
+            borderBottom: '1px solid rgba(148,163,184,0.2)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <h3 style={{ fontSize: '18px', fontWeight: 900, color: '#f8fafc', margin: 0 }}>
+            {modalTitle}
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: 'rgba(148,163,184,0.2)',
+              border: 'none',
+              color: '#e2e8f0',
+              borderRadius: '8px',
+              padding: '6px 10px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: 700,
+            }}
+          >
+            취소
+          </button>
+        </div>
+        <div style={{ padding: '24px' }}>
+          <p style={{ color: '#cbd5e1', fontSize: '14px', marginBottom: '16px', marginTop: 0 }}>
+            타자는 자동으로 아웃됩니다. 추가로 아웃될 주자 {outsCount - 1}명을 선택하세요.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {runners.map((entry) => {
+              const isSelected = selectedRunners.includes(entry.baseIndex);
+              return (
+                <button
+                  key={entry.baseIndex}
+                  type="button"
+                  onClick={() => toggleRunner(entry.baseIndex)}
+                  style={{
+                    padding: '16px',
+                    borderRadius: '12px',
+                    border: isSelected ? '2px solid #ef4444' : '1px solid rgba(148,163,184,0.3)',
+                    background: isSelected ? 'rgba(239,68,68,0.15)' : 'rgba(15,23,42,0.6)',
+                    color: isSelected ? '#fca5a5' : '#e2e8f0',
+                    fontWeight: 700,
+                    fontSize: '15px',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      border: isSelected ? '2px solid #ef4444' : '2px solid rgba(148,163,184,0.4)',
+                      background: isSelected ? '#ef4444' : 'transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '12px',
+                    }}
+                  >
+                    {isSelected && '✓'}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '4px' }}>
+                      {baseLabelForIndex(entry.baseIndex)} 주자
+                    </div>
+                    <div style={{ fontSize: '16px', fontWeight: 900 }}>{entry.runner}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={!canConfirm}
+            style={{
+              marginTop: '20px',
+              width: '100%',
+              padding: '14px',
+              borderRadius: '12px',
+              border: 'none',
+              background: canConfirm ? 'linear-gradient(90deg, #ef4444, #dc2626)' : 'rgba(148,163,184,0.2)',
+              color: canConfirm ? '#fff' : '#64748b',
+              fontWeight: 900,
+              fontSize: '15px',
+              cursor: canConfirm ? 'pointer' : 'not-allowed',
+              opacity: canConfirm ? 1 : 0.6,
+            }}
+          >
+            {canConfirm ? '확인' : `주자 ${outsCount - 1}명을 선택하세요`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// [수정 1] MultipleRunnersOutModal 컴포넌트 (약 1925라인 근처)
+function MultipleRunnersOutModal({
+  basesState,
+  minOuts = 1,
+  maxOuts,
+  onClose,
+  onConfirm,
+}: {
+  basesState: (string | null)[];
+  minOuts?: number;
+  maxOuts?: number;
+  onClose: () => void;
+  // [중요] onConfirm 함수 타입 정의에 isBatterSafe(boolean) 추가
+  onConfirm: (selectedRunners: number[], label: string, isBatterSafe: boolean) => void;
+}) {
+  const runners = basesState
+    .map((runner, idx) => (runner ? { runner, baseIndex: idx as 0 | 1 | 2 } : null))
+    .filter(Boolean) as { runner: string; baseIndex: 0 | 1 | 2 }[];
+
+  const [selectedRunners, setSelectedRunners] = useState<number[]>([]);
+  const [customLabel, setCustomLabel] = useState('');
+  const [isBatterSafe, setIsBatterSafe] = useState(false); // [추가] 타자 출루 여부 상태
+
+  const effectiveMaxOuts = maxOuts ?? runners.length;
+
+  const toggleRunner = (baseIndex: number) => {
+    if (selectedRunners.includes(baseIndex)) {
+      setSelectedRunners(selectedRunners.filter((idx) => idx !== baseIndex));
+    } else {
+      if (selectedRunners.length < effectiveMaxOuts) {
+        setSelectedRunners([...selectedRunners, baseIndex]);
+      }
+    }
+  };
+
+  const handleConfirm = () => {
+    if (selectedRunners.length >= minOuts && selectedRunners.length <= effectiveMaxOuts) {
+      const defaultLabel = selectedRunners.length === 2 ? '더블아웃' : `${selectedRunners.length}명 아웃`;
+      // [수정] 부모에게 isBatterSafe 값 전달
+      onConfirm(selectedRunners, customLabel.trim() || defaultLabel, isBatterSafe);
+    }
+  };
+
+  const canConfirm = selectedRunners.length >= minOuts && selectedRunners.length <= effectiveMaxOuts;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'grid',
+        placeItems: 'center',
+        zIndex: 1000,
+        padding: '20px',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: '#1e293b',
+          borderRadius: '20px',
+          border: '1px solid rgba(148,163,184,0.25)',
+          maxWidth: '500px',
+          width: '100%',
+          maxHeight: '90vh',
+          overflow: 'auto',
+        }}
+      >
+        <div
+          style={{
+            padding: '20px 24px',
+            borderBottom: '1px solid rgba(148,163,184,0.2)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <h3 style={{ fontSize: '18px', fontWeight: 900, color: '#f8fafc', margin: 0 }}>
+            주루 아웃 선택
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: 'rgba(148,163,184,0.2)',
+              border: 'none',
+              color: '#e2e8f0',
+              borderRadius: '8px',
+              padding: '6px 10px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: 700,
+            }}
+          >
+            취소
+          </button>
+        </div>
+        <div style={{ padding: '24px' }}>
+          <p style={{ color: '#cbd5e1', fontSize: '14px', marginBottom: '16px', marginTop: 0 }}>
+            아웃될 주자를 선택하세요. ({minOuts}명 이상 선택 가능)
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+            {runners.map((entry) => {
+              const isSelected = selectedRunners.includes(entry.baseIndex);
+              return (
+                <button
+                  key={entry.baseIndex}
+                  type="button"
+                  onClick={() => toggleRunner(entry.baseIndex)}
+                  style={{
+                    padding: '16px',
+                    borderRadius: '12px',
+                    border: isSelected ? '2px solid #ef4444' : '1px solid rgba(148,163,184,0.3)',
+                    background: isSelected ? 'rgba(239,68,68,0.15)' : 'rgba(15,23,42,0.6)',
+                    color: isSelected ? '#fca5a5' : '#e2e8f0',
+                    fontWeight: 700,
+                    fontSize: '15px',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      border: isSelected ? '2px solid #ef4444' : '2px solid rgba(148,163,184,0.4)',
+                      background: isSelected ? '#ef4444' : 'transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '12px',
+                    }}
+                  >
+                    {isSelected && '✓'}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '4px' }}>
+                      {baseLabelForIndex(entry.baseIndex)} 주자
+                    </div>
+                    <div style={{ fontSize: '16px', fontWeight: 900 }}>{entry.runner}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* [추가] 타자 출루 선택 체크박스 UI */}
+          <div style={{ marginBottom: '16px' }}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                background: 'rgba(255,255,255,0.05)',
+                padding: '12px',
+                borderRadius: '8px',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={isBatterSafe}
+                onChange={(e) => setIsBatterSafe(e.target.checked)}
+                style={{ width: '18px', height: '18px', accentColor: '#3b82f6' }}
+              />
+              <span style={{ color: '#e2e8f0', fontSize: '14px', fontWeight: 700 }}>
+                타자 출루 (타격 상황/야수선택)
+              </span>
+            </label>
+            {isBatterSafe && (
+              <p style={{ margin: '6px 0 0 28px', fontSize: '12px', color: '#94a3b8' }}>
+                체크 시 타자가 1루로 진루하며 '야수선택'으로 기록됩니다. (타수 포함)
+              </p>
+            )}
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '13px', color: '#cbd5e1', display: 'block', marginBottom: '8px' }}>
+              기록 라벨 (선택사항)
+            </label>
+            <input
+              type="text"
+              value={customLabel}
+              onChange={(e) => setCustomLabel(e.target.value)}
+              placeholder={selectedRunners.length === 2 ? '더블아웃' : `${selectedRunners.length}명 아웃`}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                border: '1px solid rgba(148,163,184,0.3)',
+                background: 'rgba(15,23,42,0.6)',
+                color: '#e2e8f0',
+                fontSize: '14px',
+              }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={!canConfirm}
+            style={{
+              width: '100%',
+              padding: '14px',
+              borderRadius: '12px',
+              border: 'none',
+              background: canConfirm ? 'linear-gradient(90deg, #ef4444, #dc2626)' : 'rgba(148,163,184,0.2)',
+              color: canConfirm ? '#fff' : '#64748b',
+              fontWeight: 900,
+              fontSize: '15px',
+              cursor: canConfirm ? 'pointer' : 'not-allowed',
+              opacity: canConfirm ? 1 : 0.6,
+            }}
+          >
+            {canConfirm ? '확인' : `주자 ${minOuts}명 이상 선택하세요`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function HitAdvanceModal({
@@ -4571,27 +5180,43 @@ function TeamEditor({
   defaultName: string;
   side: Side;
   teamName: string;
-  lineup: { name: string; pos: string; number: string; throws: string; bats: string }[];
-  bench: { name: string; pos: string; number: string; throws: string; bats: string }[];
+  // [수정] isOhtaniRule 타입 추가
+  lineup: { name: string; pos: string; number: string; throws: string; bats: string; isOhtaniRule?: boolean }[];
+  bench: { name: string; pos: string; number: string; throws: string; bats: string; isOhtaniRule?: boolean }[];
   benchInput: { name: string; pos: string; number: string; throws: string; bats: string };
   onChangeBenchInput: (val: { name: string; pos: string; number: string; throws: string; bats: string }) => void;
   onSetTeamName: (side: Side, name: string) => void;
-  onSetLineup: (side: Side, index: number, updates: { name?: string; pos?: string; number?: string; throws?: string; bats?: string }) => void;
-  onAddBench: (side: Side, player: { name: string; pos: string; number: string; throws: string; bats: string }) => void;
+  // [수정] updates 타입에 isOhtaniRule 추가
+  onSetLineup: (
+    side: Side,
+    index: number,
+    updates: { name?: string; pos?: string; number?: string; throws?: string; bats?: string; isOhtaniRule?: boolean },
+  ) => void;
+  onAddBench: (
+    side: Side,
+    player: { name: string; pos: string; number: string; throws: string; bats: string; isOhtaniRule?: boolean },
+  ) => void;
   onRemoveBench: (side: Side, benchIndex: number) => void;
   onSubstitute: (side: Side, benchIndex: number, lineupIndex: number) => void;
   highlightBatterName?: string;
   highlightPitcherName?: string;
 }) {
   const lineupEntries = lineup.map((slot, idx) => ({ slot, idx }));
-  const battingEntries = lineupEntries.filter((entry) => entry.slot.pos.toUpperCase() !== 'P');
+  
+  // [핵심 수정] 투수(P) 여부와 상관없이 항상 라인업의 앞 9명을 타자로 표시합니다.
+  // 이렇게 하면 투수가 타석에 들어서도 입력칸이 유지됩니다.
+  const battingEntries = lineupEntries.slice(0, 9);
+  
+  // 투수는 전체 라인업에서 포지션이 'P'인 선수를 찾아서 하단에 별도 표시합니다.
   const pitcherEntry = lineupEntries.find((entry) => entry.slot.pos.toUpperCase() === 'P');
+  
   const positionOptions = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'OF', 'IF', 'PH', 'PR'];
   const filterPositionOptions = (value: string) => {
     const normalized = value.trim().toUpperCase();
     if (!normalized) return positionOptions;
     return positionOptions.filter((option) => option.includes(normalized));
   };
+
   return (
     <div style={{ display: 'grid', gap: '8px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between' }}>
@@ -4621,6 +5246,7 @@ function TeamEditor({
           gap: '8px',
         }}
       >
+        {/* 타자 목록 (1~9번) */}
         {battingEntries.map((entry, orderIdx) => (
           <div
             key={entry.idx}
@@ -4632,10 +5258,14 @@ function TeamEditor({
               padding: '4px',
               borderRadius: '10px',
               border: `1px solid ${
-                highlightBatterName && entry.slot.name === highlightBatterName ? 'rgba(56,189,248,0.6)' : 'transparent'
+                highlightBatterName && entry.slot.name === highlightBatterName
+                  ? 'rgba(56,189,248,0.6)'
+                  : 'transparent'
               }`,
               background:
-                highlightBatterName && entry.slot.name === highlightBatterName ? 'rgba(56,189,248,0.12)' : 'transparent',
+                highlightBatterName && entry.slot.name === highlightBatterName
+                  ? 'rgba(56,189,248,0.12)'
+                  : 'transparent',
               boxSizing: 'border-box',
             }}
           >
@@ -4716,6 +5346,8 @@ function TeamEditor({
             </select>
           </div>
         ))}
+
+        {/* 투수 정보 및 오타니룰 토글 */}
         <div
           style={{
             marginTop: '6px',
@@ -4727,7 +5359,38 @@ function TeamEditor({
             gap: '6px',
           }}
         >
-          <span style={{ fontWeight: 800, color: '#cbd5e1' }}>투수</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontWeight: 800, color: '#cbd5e1' }}>투수</span>
+            
+            {/* [추가] 오타니룰 토글 버튼 */}
+            {pitcherEntry && (
+              <button
+                type="button"
+                onClick={() =>
+                  onSetLineup(side, pitcherEntry.idx, {
+                    isOhtaniRule: !pitcherEntry.slot.isOhtaniRule,
+                  })
+                }
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  border: pitcherEntry.slot.isOhtaniRule
+                    ? '1px solid rgba(16, 185, 129, 0.5)'
+                    : '1px solid rgba(148, 163, 184, 0.3)',
+                  background: pitcherEntry.slot.isOhtaniRule
+                    ? 'rgba(16, 185, 129, 0.15)'
+                    : 'transparent',
+                  color: pitcherEntry.slot.isOhtaniRule ? '#34d399' : '#94a3b8',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                {pitcherEntry.slot.isOhtaniRule ? '오타니룰 ON' : '오타니룰 OFF'}
+              </button>
+            )}
+          </div>
+
           {pitcherEntry ? (
             <div
               style={{
@@ -4738,16 +5401,22 @@ function TeamEditor({
                 padding: '4px',
                 borderRadius: '10px',
                 border: `1px solid ${
-                  highlightPitcherName && pitcherEntry.slot.name === highlightPitcherName ? 'rgba(244,114,182,0.6)' : 'transparent'
+                  highlightPitcherName && pitcherEntry.slot.name === highlightPitcherName
+                    ? 'rgba(244,114,182,0.6)'
+                    : 'transparent'
                 }`,
                 background:
-                  highlightPitcherName && pitcherEntry.slot.name === highlightPitcherName ? 'rgba(244,114,182,0.12)' : 'transparent',
+                  highlightPitcherName && pitcherEntry.slot.name === highlightPitcherName
+                    ? 'rgba(244,114,182,0.12)'
+                    : 'transparent',
                 boxSizing: 'border-box',
               }}
             >
               <input
                 value={pitcherEntry.slot.name}
-                onChange={(e) => onSetLineup(side, pitcherEntry.idx, { name: e.target.value, pos: 'P' })}
+                onChange={(e) =>
+                  onSetLineup(side, pitcherEntry.idx, { name: e.target.value, pos: 'P' })
+                }
                 style={{
                   background: 'rgba(255,255,255,0.04)',
                   border: '1px solid rgba(148, 163, 184, 0.25)',
@@ -4815,7 +5484,9 @@ function TeamEditor({
               />
             </div>
           ) : (
-            <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>투수 미지정</span>
+            <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>
+              투수 미지정
+            </span>
           )}
         </div>
       </div>

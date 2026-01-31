@@ -2,7 +2,13 @@ import type { CSSProperties, FormEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
-import type { MatchSchedule, MatchStatus, PostGameRecord } from '../../shared/state/demoStore';
+import type {
+  MatchSchedule,
+  MatchStatus,
+  PostGameRecord,
+  PostGameBatterLine,
+  PostGamePitcherLine,
+} from '../../shared/state/demoStore';
 import type { LeagueDivision } from '../../shared/types';
 import { TEAMS } from '../../shared/lib/mockData';
 import { useAdmin } from '../../shared/auth/useAdmin';
@@ -23,8 +29,9 @@ const emptyForm = {
 
 type Side = 'home' | 'away';
 type PlayerSlot = NonNullable<MatchSchedule['lineups']>['home'][number];
-type PostGamePitcher = PostGameRecord['pitchers'] extends { home?: (infer P)[] } ? P : never;
-type PostGameBatter = PostGameRecord['batters'] extends { home?: (infer B)[] } ? B : never;
+// [수정] 직접 타입 import 사용 (기존 infer 로직 제거)
+type PostGamePitcher = PostGamePitcherLine;
+type PostGameBatter = PostGameBatterLine;
 
 const defaultPlayerSlot: PlayerSlot = {
   name: '',
@@ -257,11 +264,12 @@ export default function MatchSchedulePage() {
     const upcoming = sortedMatches.filter(
       (match) => match.status === 'scheduled' && getSafeTime(match.startTime) >= now,
     );
+    // [수정] match.status === 'scheduled' 이면 'inProgress'일 수 없으므로 redundant check 제거
     const past = sortedMatches.filter(
       (match) =>
         match.status === 'completed' ||
         match.status === 'canceled' ||
-        (match.status === 'scheduled' && match.status !== 'inProgress' && getSafeTime(match.startTime) < now),
+        (match.status === 'scheduled' && getSafeTime(match.startTime) < now),
     );
     return { live, upcoming, past };
   }, [sortedMatches]);
@@ -693,23 +701,32 @@ export default function MatchSchedulePage() {
   );
 
   return (
-    <div style={{ display: 'grid', gap: '24px' }}>
-      {tooltip && (
-        <div
-          style={{
-            position: 'fixed',
-            left: tooltip.x,
-            top: tooltip.y + 10,
-            transform: 'translate(-50%, 0)',
-            background: 'rgba(15,23,42,0.95)',
-            color: '#f97316',
-            padding: '8px 12px',
-            borderRadius: '10px',
-            border: '1px solid rgba(148,163,184,0.35)',
-            fontSize: '12px',
-            fontWeight: 700,
-            whiteSpace: 'nowrap',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+    <>
+      <style>
+        {`
+          input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            cursor: pointer;
+          }
+        `}
+      </style>
+      <div style={{ display: 'grid', gap: '24px' }}>
+        {tooltip && (
+          <div
+            style={{
+              position: 'fixed',
+              left: tooltip.x,
+              top: tooltip.y + 10,
+              transform: 'translate(-50%, 0)',
+              background: 'rgba(15,23,42,0.95)',
+              color: '#f97316',
+              padding: '8px 12px',
+              borderRadius: '10px',
+              border: '1px solid rgba(148,163,184,0.35)',
+              fontSize: '12px',
+              fontWeight: 700,
+              whiteSpace: 'nowrap',
+            boxShadow: '0 10px 30px rgba(56, 46, 46, 0.25)',
             zIndex: 2000,
           }}
         >
@@ -807,16 +824,7 @@ export default function MatchSchedulePage() {
             gap: '16px',
           }}
         >
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-            <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
-              홈 팀
-              <input
-                value={form.homeTeamName}
-                onChange={(event) => setForm((prev) => ({ ...prev, homeTeamName: event.target.value }))}
-                placeholder="홈 팀 이름"
-                style={inputStyle}
-              />
-            </label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 300px 1fr 150px', gap: '12px' }}>
             <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
               원정 팀
               <input
@@ -827,11 +835,20 @@ export default function MatchSchedulePage() {
               />
             </label>
             <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
+              홈 팀
+              <input
+                value={form.homeTeamName}
+                onChange={(event) => setForm((prev) => ({ ...prev, homeTeamName: event.target.value }))}
+                placeholder="홈 팀 이름"
+                style={inputStyle}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
               경기 일시
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '1.2fr 0.8fr 0.8fr',
+                  gridTemplateColumns: '140px 75px 75px',
                   gap: '8px',
                   alignItems: 'center',
                 }}
@@ -840,7 +857,10 @@ export default function MatchSchedulePage() {
                   type="date"
                   value={startTimeParts.date}
                   onChange={(event) => updateStartTime({ date: event.target.value })}
-                  style={inputStyle}
+                  style={{
+                    ...inputStyle,
+                    colorScheme: 'white',
+                  }}
                 />
                 <select
                   value={startTimeParts.hour}
@@ -935,11 +955,11 @@ export default function MatchSchedulePage() {
             <div style={{ display: 'grid', gap: '12px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '12px' }}>
                 <ScheduleLineupEditor
-                  label="홈 라인업 & 후보"
-                  side="home"
-                  lineup={formLineups.home}
-                  bench={formBenches.home}
-                  benchInput={benchInputs.home}
+                  label="원정 라인업 & 후보"
+                  side="away"
+                  lineup={formLineups.away}
+                  bench={formBenches.away}
+                  benchInput={benchInputs.away}
                   onSetLineup={(side, index, updates) =>
                     setFormLineups((prev) => ({
                       ...prev,
@@ -957,11 +977,11 @@ export default function MatchSchedulePage() {
                   }
                 />
                 <ScheduleLineupEditor
-                  label="원정 라인업 & 후보"
-                  side="away"
-                  lineup={formLineups.away}
-                  bench={formBenches.away}
-                  benchInput={benchInputs.away}
+                  label="홈 라인업 & 후보"
+                  side="home"
+                  lineup={formLineups.home}
+                  bench={formBenches.home}
+                  benchInput={benchInputs.home}
                   onSetLineup={(side, index, updates) =>
                     setFormLineups((prev) => ({
                       ...prev,
@@ -1203,6 +1223,7 @@ export default function MatchSchedulePage() {
         </div>
       )}
     </div>
+    </>
   );
 }
 
@@ -1272,11 +1293,19 @@ function CompletedResultCard({ match }: { match: MatchSchedule }) {
   );
 }
 
+// [수정] 인터페이스 명시하여 유니온 타입 속성 오류 해결
+interface LineScoreCell {
+  text: string;
+  bold?: boolean;
+  color?: string;
+}
+
 function LineScoreCompact({ teams, detail }: { teams: { home: string; away: string }; detail: PostGameRecord }) {
   if (!detail.lineScore) return null;
   const innings = detail.lineScore.innings || [];
   const header = ['팀', ...innings, 'R', 'H', 'E', 'LOB'];
-  const row = (label: string, scores: number[] = [], totals?: { runs?: number; hits?: number; errors?: number; lob?: number }, color?: string) => [
+  // [수정] 반환 타입 명시
+  const row = (label: string, scores: number[] = [], totals?: { runs?: number; hits?: number; errors?: number; lob?: number }, color?: string): LineScoreCell[] => [
     { text: label, bold: true, color },
     ...innings.map((_, idx) => ({ text: scores[idx] != null ? String(scores[idx]) : '-' })),
     { text: totals?.runs != null ? String(totals.runs) : '-', bold: true },
@@ -1389,7 +1418,9 @@ function PitchingMiniTable({
   color: string;
 }) {
   const header = ['투수', 'IP', 'BF', 'H', 'HR', 'BB', 'HBP', 'SO', 'R', 'ER', 'NP'];
-  const value = (v: unknown) => (v == null ? '-' : v);
+  // [수정] v가 unknown 타입이므로 렌더링 안전성을 위해 String()으로 명시적 변환
+  const value = (v: unknown) => (v == null ? '-' : String(v));
+  
   return (
     <div
       style={{
@@ -1442,7 +1473,9 @@ function BattingMiniTable({
 }) {
   if (!batters.length) return null;
   const header = ['순번', '선수', '포지션', 'AB', 'H', 'R', 'RBI', 'SB', 'AVG', '시즌'];
-  const value = (v: unknown) => (v == null ? '-' : v);
+  // [수정] v가 unknown 타입이므로 렌더링 안전성을 위해 String()으로 명시적 변환
+  const value = (v: unknown) => (v == null ? '-' : String(v));
+  
   const formatAvg = (n?: number) => {
     if (n == null) return '-';
     const fixed = Number(n).toFixed(3);
@@ -1550,8 +1583,8 @@ function ScheduleLineupEditor({
   onRemoveBench: (side: Side, index: number) => void;
 }) {
   const lineupEntries = lineup.map((slot, idx) => ({ slot, idx }));
-  const battingEntries = lineupEntries.filter((entry) => entry.slot.pos.toUpperCase() !== 'P');
-  const pitcherEntry = lineupEntries.find((entry) => entry.slot.pos.toUpperCase() === 'P');
+  const battingEntries = lineupEntries.slice(0, 9);
+  const pitcherEntry = lineupEntries[9];
   return (
     <div style={{ display: 'grid', gap: '8px' }}>
       <span style={{ fontWeight: 800, color: '#cbd5e1' }}>{label}</span>

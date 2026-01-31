@@ -25,6 +25,16 @@ const formatUniqueName = (name: string, number: string | number | undefined | nu
   return number ? `${name}(${number})` : name;
 };
 
+const extractRuns = (result: string): number => {
+  const match = result.match(/(\d+)\s*득점/);
+  if (match) {
+    const n = Number(match[1]);
+    return Number.isFinite(n) && n > 0 ? n : 1;
+  }
+  if (result.includes('득점')) return 1;
+  return 0;
+};
+
 const TRASH_RETENTION_MS = 1000 * 60 * 60 * 24 * 30; // 30일 보관
 const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
   .split(',')
@@ -65,6 +75,9 @@ interface PlayerSlot {
   throws: string;
   bats: string;
   order?: number | null;
+  // 오타니룰: 투수가 DH 역할을 하는 경우 true
+  // 이 플래그가 true인 투수는 마운드에서 내려와도 타석에 계속 들어갈 수 있음
+  isOhtaniRule?: boolean;
 }
 
 export type PostGameLineScore = { innings: number[]; home: number[]; away: number[] };
@@ -231,6 +244,10 @@ interface DemoSnapshot {
   scorerRole: string | null;
   scorerPaused: boolean;
   followCurrent: boolean;
+  gameLimitMinutes: number | null;
+  gameStartTimestamp: number | null;
+  gamePausedAt: number | null;
+  gamePausedDuration: number;
 }
 
 interface DemoState extends DemoSnapshot {
@@ -266,6 +283,10 @@ type SharedGameState = Pick<
   | 'scorerRole'
   | 'scorerPaused'
   | 'followCurrent'
+  | 'gameLimitMinutes'
+  | 'gameStartTimestamp'
+  | 'gamePausedAt'
+  | 'gamePausedDuration'
 > & { updatedAt?: number };
 
 type Action =
@@ -276,8 +297,8 @@ type Action =
   | { type: 'droppedThirdStrike' }
   | { type: 'out'; battedBall?: BattedBallDetails | null }
   | { type: 'outWithMessage'; note: string; battedBall?: BattedBallDetails | null }
-  | { type: 'doublePlay'; battedBall?: BattedBallDetails | null }
-  | { type: 'triplePlay'; battedBall?: BattedBallDetails | null }
+  | { type: 'doublePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[] }
+  | { type: 'triplePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[] }
   | { type: 'hit'; bases: 1 | 2 | 3 | 4; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null }
   | { type: 'fielderChoice'; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null; context?: string }
   | { type: 'walk' }
@@ -298,6 +319,7 @@ type Action =
   | { type: 'runnerCaught'; base: 0 | 1 | 2 }
   | { type: 'runnerPickoff'; base: 0 | 1 | 2 }
   | { type: 'runnerOut'; base: 0 | 1 | 2 }
+  | { type: 'multipleRunnersOut'; bases: number[]; label?: string }
   | { type: 'manualLog'; message: string }
   | { type: 'setTeamName'; side: Side; name: string }
   | { type: 'setLineup'; side: Side; index: number; updates: Partial<PlayerSlot> }
@@ -328,7 +350,10 @@ type Action =
   | { type: 'setFeed'; feed: PlayLog[] }
   | { type: 'setEvents'; events: PlayEvent[] }
   | { type: 'releaseLock' }
-  | { type: 'resumeLock'; payload: { scorerUid: string; scorerName: string | null; scorerEmail: string | null; scorerRole: string | null; lockedAt: number } };
+  | { type: 'resumeLock'; payload: { scorerUid: string; scorerName: string | null; scorerEmail: string | null; scorerRole: string | null; lockedAt: number } }
+  | { type: 'setGameLimit'; minutes: number | null }
+  | { type: 'pauseGameTimer' }
+  | { type: 'resumeGameTimer' };
 
 const demoLineups: { home: PlayerSlot[]; away: PlayerSlot[] } = {
   home: [
@@ -369,6 +394,7 @@ const cloneBenches = (benches: { home: PlayerSlot[]; away: PlayerSlot[] }) => ({
 
 const emptyPlayerSlot: PlayerSlot = { name: '', pos: '', number: '', throws: 'R', bats: 'R', order: null };
 
+// 게임 로직용 슬롯 정규화 함수 (isOhtaniRule 보존 추가)
 const normalizePlayerSlotForGame = (player: PlayerSlot): PlayerSlot => ({
   name: typeof player.name === 'string' ? player.name : '',
   pos: typeof player.pos === 'string' ? player.pos : '',
@@ -376,20 +402,31 @@ const normalizePlayerSlotForGame = (player: PlayerSlot): PlayerSlot => ({
   throws: player.throws === 'L' ? 'L' : 'R',
   bats: player.bats === 'L' ? 'L' : 'R',
   order: typeof player.order === 'number' ? player.order : null,
+  // [수정] 오타니룰 플래그 보존
+  isOhtaniRule: !!player.isOhtaniRule, 
 });
 
+// 라인업 채움 로직 (UI 9칸 유지 보장 수정)
 const ensureLineupFilled = (lineup: PlayerSlot[]) => {
   const normalized = lineup.map(normalizePlayerSlotForGame);
-  let hasPitcher = normalized.some((slot) => slot.pos.toUpperCase() === 'P');
-  let battingCount = normalized.reduce((count, slot) => (slot.pos.toUpperCase() === 'P' ? count : count + 1), 0);
+  const hasPitcher = normalized.some((slot) => slot.pos.toUpperCase() === 'P');
+
+  // [수정] DH 유무와 관계없이 항상 "투수가 아닌 타자 9명"을 확보하여 UI(TeamEditor) 입력칸 9개를 유지함.
+  // TeamEditor에서는 pos !== 'P' 인 슬롯들만 상단 타자 리스트에 표시하므로,
+  // 여기서 투수가 아닌 슬롯이 9개가 되도록 맞춰줍니다.
+  let battingCount = normalized.reduce((count, slot) =>
+    (slot.pos.toUpperCase() === 'P' ? count : count + 1), 0);
+
   while (battingCount < 9) {
     normalized.push({ ...emptyPlayerSlot });
     battingCount += 1;
   }
+
+  // 투수가 명시적으로 없으면 별도 슬롯 추가 (TeamEditor 하단 투수칸용)
   if (!hasPitcher) {
     normalized.push({ ...emptyPlayerSlot, pos: 'P' });
-    hasPitcher = true;
   }
+
   return normalized;
 };
 
@@ -397,6 +434,17 @@ const ensureCompleteLineups = (lineups: { home: PlayerSlot[]; away: PlayerSlot[]
   home: ensureLineupFilled(lineups.home),
   away: ensureLineupFilled(lineups.away),
 });
+
+// 오타니룰 관련 헬퍼 함수
+// 투수가 타석에 들어갈 수 있는지 확인 (오타니룰 적용 투수 또는 DH가 없는 경우)
+export const canPitcherBat = (player: PlayerSlot, lineup: PlayerSlot[]): boolean => {
+  if (player.pos.toUpperCase() !== 'P') return false;
+  // 오타니룰 플래그가 설정된 경우
+  if (player.isOhtaniRule) return true;
+  // DH가 없는 리그인 경우 투수도 타석에 들어감
+  const hasDH = lineup.some((slot) => slot.pos.toUpperCase() === 'DH');
+  return !hasDH;
+};
 
 const teamDivisionById = (teamId?: string): LeagueDivision | undefined => TEAMS.find((team) => team.id === teamId)?.division;
 const deriveMatchDivision = (
@@ -457,11 +505,15 @@ const initialState: DemoState = {
   scorerRole: null,
   scorerPaused: false,
   followCurrent: true,
+  gameLimitMinutes: null,
+  gameStartTimestamp: null,
+  gamePausedAt: null,
+  gamePausedDuration: 0,
 };
 
 function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }): PlayLog[] {
   if (!Array.isArray(feed)) return [];
-  return feed.map((entry) => {
+  const normalized = feed.map((entry) => {
     if (typeof entry === 'string') {
       return {
         inning: fallback.inning,
@@ -492,6 +544,14 @@ function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }):
       pitch: 0,
       result: String(entry),
     };
+  });
+
+  // 투구 순서대로 정렬: inning → half (초→말) → order (타순) → pitch (투구수)
+  return normalized.sort((a, b) => {
+    if (a.inning !== b.inning) return a.inning - b.inning;
+    if (a.half !== b.half) return a.half === 'top' ? -1 : 1;
+    if (a.order !== b.order) return a.order - b.order;
+    return a.pitch - b.pitch;
   });
 }
 
@@ -545,6 +605,7 @@ function normalizeEvents(events: unknown, fallback: { inning: number; half: Half
   });
 }
 
+// 데이터 로딩 시 사용되는 정규화 함수 (isOhtaniRule 보존 추가)
 function normalizePlayerSlot(slot: unknown): PlayerSlot | null {
   if (!slot || typeof slot !== 'object') return null;
   const s = slot as Partial<PlayerSlot>;
@@ -555,6 +616,8 @@ function normalizePlayerSlot(slot: unknown): PlayerSlot | null {
     throws: typeof s.throws === 'string' ? s.throws : 'R',
     bats: typeof s.bats === 'string' ? s.bats : 'R',
     order: typeof s.order === 'number' ? s.order : s.order ?? null,
+    // [수정] 오타니룰 플래그 보존
+    isOhtaniRule: typeof s.isOhtaniRule === 'boolean' ? s.isOhtaniRule : undefined,
   };
 }
 
@@ -867,6 +930,11 @@ export interface GameRecord {
   feed: PlayLog[];
   events: PlayEvent[];
   lastPlay: string;
+  liveStats: {
+    lineScore: { home: number[]; away: number[] };
+    hits: { home: number; away: number };
+    errors: { home: number; away: number };
+  };
 }
 
 // [추가] 통계 집계 로직을 demoStore 내부에 추가합니다.
@@ -943,6 +1011,62 @@ export function buildGameRecord(state: DemoState): GameRecord {
     name: formatUniqueName(p.name, p.number),
   });
 
+  // [추가] 실시간 라인스코어 및 집계 로직
+  const chronologicalFeed = [...state.feed].reverse();
+
+  const liveHits = chronologicalFeed.reduce(
+    (acc, entry) => {
+      const offense = entry.half === 'top' ? 'away' : 'home';
+      const txt = entry.result.replace(/\s+/g, '');
+      if (txt.includes('1루타') || txt.includes('2루타') || txt.includes('3루타') || txt.includes('홈런')) {
+        acc[offense] += 1;
+      }
+      return acc;
+    },
+    { home: 0, away: 0 },
+  );
+
+  const liveErrors = chronologicalFeed.reduce(
+    (acc, entry) => {
+      const txt = entry.result.replace(/\s+/g, '');
+      const hasError = txt.includes('실책') || /\bE[1-6]\b/i.test(txt);
+      if (hasError) {
+        const side = entry.half === 'top' ? 'home' : 'away';
+        acc[side] += 1;
+      }
+      return acc;
+    },
+    { home: 0, away: 0 },
+  );
+
+  const liveLine = chronologicalFeed.reduce(
+    (acc, entry) => {
+      const runs = extractRuns(entry.result);
+      if (!runs) return acc;
+      const inningIdx = Math.max(0, entry.inning - 1);
+      const side = entry.half === 'top' ? 'away' : 'home';
+      const target = side === 'home' ? acc.home : acc.away;
+      if (target.length <= inningIdx) target.length = inningIdx + 1;
+      target[inningIdx] = (target[inningIdx] ?? 0) + runs;
+      acc.maxInning = Math.max(acc.maxInning, entry.inning);
+      return acc;
+    },
+    { home: [] as number[], away: [] as number[], maxInning: state.inning },
+  );
+
+  const reconcileRuns = (arr: number[], side: 'home' | 'away') => {
+    const filled = Array.from({ length: arr.length }, (_, i) => arr[i] ?? 0);
+    const sum = filled.reduce((s, v) => s + v, 0);
+    const diff = state.score[side] - sum;
+    if (diff === 0) return filled;
+    const idx = Math.max(0, (liveLine.maxInning || state.inning) - 1);
+    if (filled.length <= idx) {
+      for (let k = filled.length; k <= idx; k++) filled[k] = 0;
+    }
+    filled[idx] = Math.max(0, filled[idx] + diff);
+    return filled;
+  };
+
   return {
     meta: {
       homeTeamId: state.homeTeamId,
@@ -1001,6 +1125,11 @@ export function buildGameRecord(state: DemoState): GameRecord {
         : null,
     })),
     lastPlay: state.lastPlay,
+    liveStats: {
+      lineScore: { home: reconcileRuns(liveLine.home, 'home'), away: reconcileRuns(liveLine.away, 'away') },
+      hits: liveHits,
+      errors: liveErrors,
+    },
   };
 }
 
@@ -1200,10 +1329,10 @@ function reducer(state: DemoState, action: Action): DemoState {
       nextState = applyOut(state, action.note, { pitchNumber: state.pitchCount + 1, battedBall: action.battedBall });
       break;
     case 'doublePlay':
-      nextState = applyDoublePlay(state, 2, '병살타', action.battedBall);
+      nextState = applyDoublePlay(state, 2, '병살타', action.battedBall, action.selectedRunners);
       break;
     case 'triplePlay':
-      nextState = applyDoublePlay(state, 3, '삼중살', action.battedBall);
+      nextState = applyDoublePlay(state, 3, '삼중살', action.battedBall, action.selectedRunners);
       break;
     case 'hit':
       nextState = applyHitWithAdvances(state, action.bases, state.pitchCount + 1, action.advances, action.battedBall);
@@ -1287,6 +1416,9 @@ function reducer(state: DemoState, action: Action): DemoState {
         history: [],
         removed: { ...state.removed },
         matches,
+        gameStartTimestamp: state.gameLimitMinutes !== null ? Date.now() : null,
+        gamePausedAt: null,
+        gamePausedDuration: 0,
       };
       break;
     }
@@ -1330,6 +1462,9 @@ function reducer(state: DemoState, action: Action): DemoState {
       break;
     case 'runnerOut':
       nextState = applyRunnerOut(state, action.base, '주루사');
+      break;
+    case 'multipleRunnersOut':
+      nextState = applyMultipleRunnersOut(state, action.bases, action.label);
       break;
     case 'setTeamName':
       nextState = { ...state, teamNames: { ...state.teamNames, [action.side]: action.name } };
@@ -1384,6 +1519,39 @@ function reducer(state: DemoState, action: Action): DemoState {
     case 'resetGame':
       nextState = createNewGame(state);
       break;
+    case 'setGameLimit': {
+      // 경기 종료 후에는 설정 불가
+      if (state.gameOver) return state;
+
+      // 경기 시작 후에 제한시간을 설정하면 타이머를 현재 시간부터 시작
+      if (state.gameStarted && action.minutes !== null) {
+        nextState = {
+          ...state,
+          gameLimitMinutes: action.minutes,
+          gameStartTimestamp: Date.now(),
+          gamePausedAt: null,
+          gamePausedDuration: 0,
+        };
+      } else {
+        nextState = { ...state, gameLimitMinutes: action.minutes };
+      }
+      break;
+    }
+    case 'pauseGameTimer': {
+      if (!state.gameStarted || state.gameOver || state.gamePausedAt !== null) return state;
+      nextState = { ...state, gamePausedAt: Date.now() };
+      break;
+    }
+    case 'resumeGameTimer': {
+      if (!state.gameStarted || state.gameOver || state.gamePausedAt === null) return state;
+      const pauseDuration = Date.now() - state.gamePausedAt;
+      nextState = {
+        ...state,
+        gamePausedAt: null,
+        gamePausedDuration: state.gamePausedDuration + pauseDuration,
+      };
+      break;
+    }
     case 'addMatch':
       nextState = {
         ...state,
@@ -1572,13 +1740,21 @@ function formatRunnerMove({
 function currentBatterInfo(state: DemoState) {
   const side = hittingSide(state);
   const lineup = state.lineups[side];
-  const battingLineup = lineup.filter((slot) => slot.pos.toUpperCase() !== 'P');
+
+  // [수정] 1~9번 타자는 포지션 불문하고 타자로 인정
+  const battingLineup = lineup.filter((slot, idx) => {
+    if (idx < 9) return true; // 타순 1~9번 강제 포함
+    if (slot.pos.toUpperCase() !== 'P') return true;
+    return canPitcherBat(slot, lineup);
+  });
+
   const activeLineup = battingLineup.length ? battingLineup : lineup;
   const safeLength = activeLineup.length || 1;
   const idx = state.batterIndex[side] % safeLength;
+  const batterSlot = activeLineup[idx];
   return {
     order: idx + 1,
-    batter: activeLineup[idx]?.name ?? '타자',
+    batter: batterSlot ? formatUniqueName(batterSlot.name, batterSlot.number) : '타자',
   };
 }
 
@@ -2371,11 +2547,58 @@ function applyRunnerOut(state: DemoState, baseIndex: 0 | 1 | 2, message: string)
   };
 }
 
+function applyMultipleRunnersOut(state: DemoState, bases: number[], label?: string): DemoState {
+  const newBases = [...state.bases] as Bases;
+  const runnersOut: { name: string; base: number }[] = [];
+
+  // 선택된 베이스의 주자들을 아웃시킴
+  for (const baseIndex of bases) {
+    if (newBases[baseIndex]) {
+      runnersOut.push({ name: newBases[baseIndex] as string, base: baseIndex });
+      newBases[baseIndex] = null;
+    }
+  }
+
+  if (runnersOut.length === 0) return state;
+
+  const outs = Math.min(3, state.outs + runnersOut.length);
+  const runnerDesc = runnersOut
+    .map((r) => `${r.name} ${baseLabel(r.base)}`)
+    .join(', ');
+  const finalLabel = label || (runnersOut.length === 2 ? '더블아웃' : `${runnersOut.length}명 아웃`);
+  const feedText = `${finalLabel} · ${runnerDesc} 아웃`;
+  const lastPlay = feedText;
+
+  const eventEntry = createPlayEventForBaserunning(
+    state,
+    { type: 'runner_out', runners: runnersOut.map(r => `${r.name} ${baseLabel(r.base)}`), notes: feedText },
+    state.pitchCount,
+  );
+
+  const feedEntry = createLogEntryForBaserunning(state, feedText, state.pitchCount);
+
+  const nextState = {
+    ...state,
+    bases: newBases,
+    outs,
+    lastPlay,
+    pitchCount: state.pitchCount,
+    feed: pushFeed(state.feed, feedEntry),
+    events: pushEvent(state.events, eventEntry),
+  };
+
+  if (outs >= 3) {
+    return changeHalf(nextState, lastPlay, state.pitchCount, state);
+  }
+  return nextState;
+}
+
 function applyDoublePlay(
   state: DemoState,
   outsToAdd: 2 | 3,
   label: string,
   battedBall?: BattedBallDetails | null,
+  selectedRunners?: number[],
 ): DemoState {
   const bases = [...state.bases] as Bases;
   const current = currentBatterInfo(state);
@@ -2387,11 +2610,22 @@ function applyDoublePlay(
   // Batter out
   runnersOut.push({ name: batterName, base: -1 });
 
-  // Remove lead runners
-  for (let i = 2; i >= 0 && runnersOut.length < outsToAdd; i -= 1) {
-    if (bases[i]) {
-      runnersOut.push({ name: bases[i] as string, base: i });
-      bases[i] = null;
+  // Remove selected runners or default to lead runners
+  if (selectedRunners && selectedRunners.length > 0) {
+    // 선택된 주자들을 아웃시킴
+    for (const baseIndex of selectedRunners) {
+      if (bases[baseIndex]) {
+        runnersOut.push({ name: bases[baseIndex] as string, base: baseIndex });
+        bases[baseIndex] = null;
+      }
+    }
+  } else {
+    // 기존 방식: 3루부터 역순으로 주자를 아웃시킴
+    for (let i = 2; i >= 0 && runnersOut.length < outsToAdd; i -= 1) {
+      if (bases[i]) {
+        runnersOut.push({ name: bases[i] as string, base: i });
+        bases[i] = null;
+      }
     }
   }
 
@@ -2440,6 +2674,7 @@ function applyEndGame(state: DemoState, endedAt: string): DemoState {
     endedAt,
     lastPlay: message,
     feed: pushFeed(state.feed, feedEntry),
+    gamePausedAt: null,
   };
 }
 
@@ -2483,6 +2718,10 @@ function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
   scorerRole: state.scorerRole,
   scorerPaused: false,
   followCurrent: state.followCurrent,
+  gameLimitMinutes: null,
+  gameStartTimestamp: null,
+  gamePausedAt: null,
+  gamePausedDuration: 0,
   };
 }
 
@@ -2524,6 +2763,10 @@ function createNewGame(state: DemoState): DemoState {
     scorerRole: state.scorerRole,
     scorerPaused: false,
     followCurrent: state.followCurrent,
+    gameLimitMinutes: null,
+    gameStartTimestamp: null,
+    gamePausedAt: null,
+    gamePausedDuration: 0,
   };
 }
 
@@ -2600,18 +2843,39 @@ function advanceBasesOnWalk(currentBases: Bases, batterName: string) {
 function nextBatter(state: DemoState) {
   const side = hittingSide(state);
   const lineup = state.lineups[side];
-  const battingLineup = lineup.filter((slot) => slot.pos.toUpperCase() !== 'P');
+
+  // [수정] 타석에 들어갈 수 있는 선수 필터링 (1~9번 무조건 포함)
+  const battingLineup = lineup.filter((slot, idx) => {
+    if (idx < 9) return true; // 타순 1~9번 강제 포함
+    if (slot.pos.toUpperCase() !== 'P') return true;
+    return canPitcherBat(slot, lineup);
+  }); // <--- 주의: 여기서 함수를 닫는 '}'가 있으면 안 됩니다! '; '로 끝나야 합니다.
+
   const activeLineup = battingLineup.length ? battingLineup : lineup;
   const safeLength = activeLineup.length || 1;
   const idx = state.batterIndex[side] % safeLength;
-  const batterName = activeLineup[idx]?.name ?? '타자';
+  const batterSlot = activeLineup[idx];
+  const batterName = batterSlot ? formatUniqueName(batterSlot.name, batterSlot.number) : '타자';
   const batterIndex = { ...state.batterIndex, [side]: (idx + 1) % safeLength };
   return { batterName, batterIndex };
 }
 
 function updateLineup(state: DemoState, side: Side, index: number, updates: Partial<PlayerSlot>): DemoState {
+  const original = state.lineups[side][index];
   const updated = state.lineups[side].map((slot, idx) => (idx === index ? { ...slot, ...updates } : slot));
-  return { ...state, lineups: { ...state.lineups, [side]: updated } };
+
+  // 포지션 변경 시 feed에 기록
+  let feed = state.feed;
+  let lastPlay = state.lastPlay;
+  if (updates.pos && original?.pos && updates.pos !== original.pos) {
+    const playerName = original.name || '선수';
+    const playerNum = original.number ? `(${original.number})` : '';
+    const changeText = `포지션 변경 · ${playerName}${playerNum}: ${original.pos} → ${updates.pos}`;
+    feed = pushFeed(state.feed, createLogEntryForBaserunning(state, changeText, 0));
+    lastPlay = changeText;
+  }
+
+  return { ...state, lineups: { ...state.lineups, [side]: updated }, feed, lastPlay };
 }
 
 function substitutePlayer(state: DemoState, side: Side, benchIndex: number, lineupIndex: number): DemoState {
@@ -2653,12 +2917,24 @@ function substitutePlayer(state: DemoState, side: Side, benchIndex: number, line
 
 function getBattingOrder(lineup: PlayerSlot[], lineupIndex: number) {
   const slot = lineup[lineupIndex];
-  if (!slot || slot.pos.toUpperCase() === 'P') return null;
+  if (!slot) return null;
+
+  // [수정] 1~9번 타순이거나, 투수가 아니거나, 타격 가능한 투수인 경우
+  const isBatter = lineupIndex < 9 || slot.pos.toUpperCase() !== 'P' || canPitcherBat(slot, lineup);
+
+  if (!isBatter) {
+    return null;
+  }
+
   let order = 0;
   for (let i = 0; i < lineup.length; i += 1) {
     const player = lineup[i];
-    if (player.pos.toUpperCase() === 'P') continue;
-    order += 1;
+    // [수정] 카운트 할 때도 동일한 조건 적용
+    const isCountable = i < 9 || player.pos.toUpperCase() !== 'P' || canPitcherBat(player, lineup);
+    
+    if (isCountable) {
+      order += 1;
+    }
     if (i === lineupIndex) return order;
   }
   return order || null;
@@ -2694,6 +2970,7 @@ interface DemoStoreValue {
     runnerCaught: (base: 0 | 1 | 2) => void;
     runnerPickoff: (base: 0 | 1 | 2) => void;
     runnerOut: (base: 0 | 1 | 2) => void;
+    multipleRunnersOut: (bases: number[], label?: string) => void;
     runnerRundownOut: (base: 0 | 1 | 2) => void;
     runnerInterference: (base: 0 | 1 | 2) => void;
     addManualLog: (message: string) => void;
@@ -2709,8 +2986,8 @@ interface DemoStoreValue {
     resetGame: () => void;
     undo: () => void;
     addOutWithMessage: (note: string, battedBall?: BattedBallDetails | null) => void;
-    doublePlay: (battedBall?: BattedBallDetails | null) => void;
-    triplePlay: (battedBall?: BattedBallDetails | null) => void;
+    doublePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[]) => void;
+    triplePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[]) => void;
     addMatch: (match: MatchSchedule) => void;
     updateMatch: (matchId: string, updates: Partial<MatchSchedule>) => void;
     deleteMatch: (matchId: string) => void;
@@ -2726,6 +3003,9 @@ interface DemoStoreValue {
     loadFullSchedule: () => Promise<void>;
     releaseLock: () => void;
     resumeLock: () => void;
+    setGameLimit: (minutes: number | null) => void;
+    pauseGameTimer: () => void;
+    resumeGameTimer: () => void;
   };
 }
 
@@ -2854,7 +3134,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
           id: docSnap.id,
           ...(docSnap.data() as Partial<MatchSchedule>),
         }));
-        const normalized = normalizeMatches(incoming).filter((m) => !m.deleted);
+        const normalized = normalizeMatches(incoming);
         const projected = isAdmin ? normalized : normalized.map(projectSpectatorMatch);
         const merged = isAdmin
           ? projected
@@ -3304,6 +3584,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       runnerCaught: (base: 0 | 1 | 2) => dispatch({ type: 'runnerCaught', base }),
       runnerPickoff: (base: 0 | 1 | 2) => dispatch({ type: 'runnerPickoff', base }),
       runnerOut: (base: 0 | 1 | 2) => dispatch({ type: 'runnerOut', base }),
+      multipleRunnersOut: (bases: number[], label?: string) => dispatch({ type: 'multipleRunnersOut', bases, label }),
       addManualLog: (message: string) => dispatch({ type: 'manualLog', message }),
       setLiveVideoUrl: (url: string) => {
         dispatch({ type: 'setLiveVideoUrl', url });
@@ -3319,8 +3600,10 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       },
       addOutWithMessage: (note: string, battedBall?: BattedBallDetails | null) =>
         dispatch({ type: 'outWithMessage', note, battedBall }),
-      doublePlay: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'doublePlay', battedBall }),
-      triplePlay: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'triplePlay', battedBall }),
+      doublePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[]) =>
+        dispatch({ type: 'doublePlay', battedBall, selectedRunners }),
+      triplePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[]) =>
+        dispatch({ type: 'triplePlay', battedBall, selectedRunners }),
       setTeamName: (side: Side, name: string) => dispatch({ type: 'setTeamName', side, name }),
       setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) =>
         dispatch({ type: 'setLineup', side, index, updates }),
@@ -3566,7 +3849,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
             id: docSnap.id,
             ...(docSnap.data() as Partial<MatchSchedule>),
           }));
-          const normalized = normalizeMatches(incoming).filter((m) => !m.deleted);
+          const normalized = normalizeMatches(incoming);
           const projected = isAdmin ? normalized : normalized.map(projectSpectatorMatch);
           skipMatchesWriteRef.current = true;
           matchesReadyRef.current = true;
@@ -3633,6 +3916,9 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
           },
         });
       },
+      setGameLimit: (minutes: number | null) => dispatch({ type: 'setGameLimit', minutes }),
+      pauseGameTimer: () => dispatch({ type: 'pauseGameTimer' }),
+      resumeGameTimer: () => dispatch({ type: 'resumeGameTimer' }),
     }),
     [isAdmin],
   );
