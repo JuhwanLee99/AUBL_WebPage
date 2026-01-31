@@ -2988,7 +2988,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
           id: docSnap.id,
           ...(docSnap.data() as Partial<MatchSchedule>),
         }));
-        const normalized = normalizeMatches(incoming).filter((m) => !m.deleted);
+        const normalized = normalizeMatches(incoming);
         const projected = isAdmin ? normalized : normalized.map(projectSpectatorMatch);
         const merged = isAdmin
           ? projected
@@ -3700,7 +3700,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
             id: docSnap.id,
             ...(docSnap.data() as Partial<MatchSchedule>),
           }));
-          const normalized = normalizeMatches(incoming).filter((m) => !m.deleted);
+          const normalized = normalizeMatches(incoming);
           const projected = isAdmin ? normalized : normalized.map(projectSpectatorMatch);
           skipMatchesWriteRef.current = true;
           matchesReadyRef.current = true;
