@@ -637,7 +637,7 @@ export default function LandingPage() {
               gap: '8px',
             }}
           >
-            라이브 전광판 전체보기 →
+            실시간 경기 목록 전체 보기 →
           </Link>
         </div>
 
