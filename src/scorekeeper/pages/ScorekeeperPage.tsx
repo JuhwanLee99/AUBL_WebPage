@@ -2713,8 +2713,23 @@ const handleConfirmHitWizard = () => {
           basesState={state.bases}
           minOuts={1}
           onClose={() => setMultipleRunnersOutModal(false)}
-          onConfirm={(selectedRunners, label) => {
-            actions.multipleRunnersOut(selectedRunners, label);
+          // [중요] onConfirm 핸들러 수정: isBatterSafe 매개변수 추가 및 분기 처리
+          onConfirm={(selectedRunners, label, isBatterSafe) => {
+            if (isBatterSafe) {
+              // 1. 타자 출루 시 (타격 상황): 야수선택(Fielder's Choice) 액션 사용
+              // 선택된 주자들의 결과를 'out'으로 설정하여 넘겨줍니다.
+              const selections: RunnerAdvanceSelections = {};
+              selectedRunners.forEach((baseIdx) => {
+                selections[baseIdx as 0 | 1 | 2] = 'out';
+              });
+        
+              // fielderChoice 액션은 내부적으로 '타자를 1루에 배치'하고 '타순을 변경'합니다.
+              actions.fielderChoice(selections, null, label);
+            } else {
+              // 2. 타자 출루 없음 (주루사 상황): 기존 multipleRunnersOut 액션 사용
+              // 이 액션은 타자를 그대로 둡니다.
+              actions.multipleRunnersOut(selectedRunners, label);
+            }
             setMultipleRunnersOutModal(false);
           }}
         />
@@ -3382,7 +3397,7 @@ function MultipleRunnersOutModal({
   minOuts?: number;
   maxOuts?: number;
   onClose: () => void;
-  // onConfirm 시그니처 변경: isBatterSafe 추가
+  // [중요] onConfirm 함수 타입 정의에 isBatterSafe(boolean) 추가
   onConfirm: (selectedRunners: number[], label: string, isBatterSafe: boolean) => void;
 }) {
   const runners = basesState
@@ -3391,13 +3406,11 @@ function MultipleRunnersOutModal({
 
   const [selectedRunners, setSelectedRunners] = useState<number[]>([]);
   const [customLabel, setCustomLabel] = useState('');
-  // [추가] 타자 출루 여부 상태
-  const [isBatterSafe, setIsBatterSafe] = useState(false);
+  const [isBatterSafe, setIsBatterSafe] = useState(false); // [추가] 타자 출루 여부 상태
 
   const effectiveMaxOuts = maxOuts ?? runners.length;
 
   const toggleRunner = (baseIndex: number) => {
-    // ... (기존 로직 동일)
     if (selectedRunners.includes(baseIndex)) {
       setSelectedRunners(selectedRunners.filter((idx) => idx !== baseIndex));
     } else {
@@ -3410,7 +3423,7 @@ function MultipleRunnersOutModal({
   const handleConfirm = () => {
     if (selectedRunners.length >= minOuts && selectedRunners.length <= effectiveMaxOuts) {
       const defaultLabel = selectedRunners.length === 2 ? '더블아웃' : `${selectedRunners.length}명 아웃`;
-      // [수정] isBatterSafe 전달
+      // [수정] 부모에게 isBatterSafe 값 전달
       onConfirm(selectedRunners, customLabel.trim() || defaultLabel, isBatterSafe);
     }
   };
@@ -3524,7 +3537,8 @@ function MultipleRunnersOutModal({
               );
             })}
           </div>
-          {/* [추가] 타자 출루 체크박스 UI */}
+
+          {/* [추가] 타자 출루 선택 체크박스 UI */}
           <div style={{ marginBottom: '16px' }}>
             <label
               style={{
@@ -3533,7 +3547,7 @@ function MultipleRunnersOutModal({
                 gap: '8px',
                 cursor: 'pointer',
                 background: 'rgba(255,255,255,0.05)',
-                padding: '10px',
+                padding: '12px',
                 borderRadius: '8px',
               }}
             >
@@ -3541,7 +3555,7 @@ function MultipleRunnersOutModal({
                 type="checkbox"
                 checked={isBatterSafe}
                 onChange={(e) => setIsBatterSafe(e.target.checked)}
-                style={{ width: '16px', height: '16px', accentColor: '#3b82f6' }}
+                style={{ width: '18px', height: '18px', accentColor: '#3b82f6' }}
               />
               <span style={{ color: '#e2e8f0', fontSize: '14px', fontWeight: 700 }}>
                 타자 출루 (타격 상황/야수선택)
@@ -3549,10 +3563,11 @@ function MultipleRunnersOutModal({
             </label>
             {isBatterSafe && (
               <p style={{ margin: '6px 0 0 28px', fontSize: '12px', color: '#94a3b8' }}>
-                체크 시 타자가 1루로 진루하며 '야수선택'으로 기록됩니다.
+                체크 시 타자가 1루로 진루하며 '야수선택'으로 기록됩니다. (타수 포함)
               </p>
             )}
           </div>
+
           <div style={{ marginBottom: '16px' }}>
             <label style={{ fontSize: '13px', color: '#cbd5e1', display: 'block', marginBottom: '8px' }}>
               기록 라벨 (선택사항)
