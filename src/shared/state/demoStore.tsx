@@ -1723,7 +1723,14 @@ function formatRunnerMove({
 function currentBatterInfo(state: DemoState) {
   const side = hittingSide(state);
   const lineup = state.lineups[side];
-  const battingLineup = lineup.filter((slot) => slot.pos.toUpperCase() !== 'P');
+  
+  // [수정] 1~9번 타자는 포지션 불문하고 타자로 인정
+  const battingLineup = lineup.filter((slot, idx) => {
+    if (idx < 9) return true; // 타순 1~9번 강제 포함
+    if (slot.pos.toUpperCase() !== 'P') return true;
+    return canPitcherBat(slot, lineup);
+  });
+
   const activeLineup = battingLineup.length ? battingLineup : lineup;
   const safeLength = activeLineup.length || 1;
   const idx = state.batterIndex[side] % safeLength;
@@ -2761,13 +2768,12 @@ function nextBatter(state: DemoState) {
   const side = hittingSide(state);
   const lineup = state.lineups[side];
 
-  // 타석에 들어갈 수 있는 선수만 필터링 (오타니룰 고려)
-  const battingLineup = lineup.filter((slot) => {
-    // 투수가 아니면 타석에 들어감
+  // [수정] 타석에 들어갈 수 있는 선수 필터링 (1~9번 무조건 포함)
+  const battingLineup = lineup.filter((slot, idx) => {
+    if (idx < 9) return true; // 타순 1~9번 강제 포함
     if (slot.pos.toUpperCase() !== 'P') return true;
-    // 투수인 경우, 타석에 들어갈 수 있는지 확인 (오타니룰 고려)
     return canPitcherBat(slot, lineup);
-  });
+  }); // <--- 주의: 여기서 함수를 닫는 '}'가 있으면 안 됩니다! '; '로 끝나야 합니다.
 
   const activeLineup = battingLineup.length ? battingLineup : lineup;
   const safeLength = activeLineup.length || 1;
@@ -2836,19 +2842,22 @@ function getBattingOrder(lineup: PlayerSlot[], lineupIndex: number) {
   const slot = lineup[lineupIndex];
   if (!slot) return null;
 
-  // 투수인 경우, 타석에 들어갈 수 있는지 확인 (오타니룰 고려)
-  if (slot.pos.toUpperCase() === 'P' && !canPitcherBat(slot, lineup)) {
+  // [수정] 1~9번 타순이거나, 투수가 아니거나, 타격 가능한 투수인 경우
+  const isBatter = lineupIndex < 9 || slot.pos.toUpperCase() !== 'P' || canPitcherBat(slot, lineup);
+
+  if (!isBatter) {
     return null;
   }
 
   let order = 0;
   for (let i = 0; i < lineup.length; i += 1) {
     const player = lineup[i];
-    // 투수는 타석에 들어갈 수 있는 경우만 카운트 (오타니룰 고려)
-    if (player.pos.toUpperCase() === 'P' && !canPitcherBat(player, lineup)) {
-      continue;
+    // [수정] 카운트 할 때도 동일한 조건 적용
+    const isCountable = i < 9 || player.pos.toUpperCase() !== 'P' || canPitcherBat(player, lineup);
+    
+    if (isCountable) {
+      order += 1;
     }
-    order += 1;
     if (i === lineupIndex) return order;
   }
   return order || null;
