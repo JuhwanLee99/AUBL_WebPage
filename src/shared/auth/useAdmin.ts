@@ -1,12 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from './AuthProvider';
 
-// -----------------------------------------------------------
-// [로컬 테스트용 설정]
-// true로 설정하면 무조건 관리자 권한을 가진 것으로 처리합니다.
 // 개발 모드(DEV)에서만 true로 설정 가능하도록 제한
-const FORCE_ADMIN = import.meta.env.DEV && false;
-// -----------------------------------------------------------
+const FORCE_ADMIN = import.meta.env.DEV && false; 
 
 export function useAdmin() {
   const { user } = useAuth();
@@ -26,14 +22,27 @@ export function useAdmin() {
       return;
     }
 
-    // ✅ 오직 Custom Claim만 확인
-    user.getIdTokenResult()
+    // true를 전달하여 강제로 최신 권한 정보를 가져옵니다.
+    user.getIdTokenResult(true)
       .then((idTokenResult) => {
         setIsAdmin(!!idTokenResult.claims.admin);
       })
-      .catch(() => setIsAdmin(false))
+      .catch((err) => {
+        console.error("권한 확인 실패:", err);
+        setIsAdmin(false);
+      })
       .finally(() => setLoading(false));
   }, [user]);
 
-  return { isAdmin, loading };
+  // ✅ [복구됨] UI에서 사용하는 텍스트 라벨 추가
+  const roleLabel = isAdmin ? '관리자' : '일반';
+  // 이메일 권한 방식이 사라졌으므로, 관리자는 모두 '정식 승인'으로 표기
+  const roleDetail = isAdmin ? '정식 승인' : '사용자'; 
+
+  return { 
+    isAdmin, 
+    loading, 
+    roleLabel,
+    roleDetail 
+  };
 }
