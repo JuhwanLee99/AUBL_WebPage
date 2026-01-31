@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useContent, type ContentState } from '../../shared/state/contentProvider';
 import { useRef } from 'react';
+import { useDemoStore } from '../../shared/state/demoStore';
+import { transformMatchToGameDetail, sendGameDetail } from '../../shared/api';
 
 const cardStyle = {
   borderRadius: '16px',
@@ -30,6 +32,15 @@ export default function AdminPage() {
   const { content, updateContent, resetContent } = useContent();
   const intro = content.intro;
   const previewRef = useRef<HTMLDivElement>(null);
+  const { state } = useDemoStore();
+
+  // 경기 재전송 상태
+  const [resendStatus, setResendStatus] = useState<Record<string, 'pending' | 'sending' | 'success' | 'error'>>({});
+
+  // 시즌 ID 설정
+  const [seasonId, setSeasonId] = useState(
+    String(import.meta.env.VITE_CURRENT_SEASON_ID || '1')
+  );
 
   const [tickerDraft, setTickerDraft] = useState(lines(content.tickerItems));
 
@@ -187,6 +198,52 @@ export default function AdminPage() {
     setStatus('모든 문구를 기본값으로 복원했습니다.');
   };
 
+  // 경기 재전송 함수
+  const handleResendMatch = async (matchId: string) => {
+    const match = state.matches.find(m => m.id === matchId);
+    if (!match || match.status !== 'completed' || !match.postGame) {
+      setStatus('전송할 수 없는 경기입니다. (완료되지 않았거나 기록이 없음)');
+      return;
+    }
+
+    setResendStatus(prev => ({ ...prev, [matchId]: 'sending' }));
+
+    try {
+      // 로컬스토리지 또는 환경 변수에서 시즌 ID 가져오기
+      const savedSeasonId = localStorage.getItem('aubl:current-season-id');
+      const seasonId = savedSeasonId ? Number(savedSeasonId) : (Number(import.meta.env.VITE_CURRENT_SEASON_ID) || 1);
+      const gameDetail = transformMatchToGameDetail(match, seasonId);
+
+      if (!gameDetail) {
+        throw new Error('경기 데이터 변환 실패');
+      }
+
+      await sendGameDetail(gameDetail);
+
+      setResendStatus(prev => ({ ...prev, [matchId]: 'success' }));
+      setStatus(`✅ ${match.homeTeamName} vs ${match.awayTeamName} 경기 데이터 전송 성공`);
+    } catch (error) {
+      setResendStatus(prev => ({ ...prev, [matchId]: 'error' }));
+      setStatus(`❌ 경기 데이터 전송 실패: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  // 완료된 경기 목록
+  const completedMatches = state.matches.filter(m => m.status === 'completed' && m.postGame);
+
+  // 시즌 ID 저장 함수 (로컬스토리지에 저장)
+  const handleSaveSeasonId = () => {
+    const newId = Number(seasonId);
+    if (isNaN(newId) || newId < 1) {
+      setStatus('❌ 유효하지 않은 시즌 ID입니다. (1 이상의 숫자를 입력하세요)');
+      return;
+    }
+
+    // 로컬스토리지에 저장 (환경 변수는 빌드 시에만 적용되므로)
+    localStorage.setItem('aubl:current-season-id', String(newId));
+    setStatus(`✅ 시즌 ID를 ${newId}(으)로 설정했습니다. (새로고침 후 적용)`);
+  };
+
   const infoText = useMemo(
     () =>
       [
@@ -234,6 +291,147 @@ export default function AdminPage() {
           {status}
         </div>
       )}
+
+      {/* 시즌 설정 섹션 */}
+      <div style={cardStyle}>
+        <h3 style={{ margin: '0 0 16px 0', color: '#e2e8f0' }}>시즌 설정</h3>
+        <p style={{ margin: '0 0 12px 0', color: '#94a3b8', fontSize: '14px' }}>
+          백엔드로 전송할 경기의 시즌 ID를 설정합니다. (현재: {import.meta.env.VITE_CURRENT_SEASON_ID || '1'})
+        </p>
+
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle} htmlFor="season-id">
+              시즌 ID
+            </label>
+            <input
+              id="season-id"
+              type="number"
+              min="1"
+              style={inputStyle}
+              value={seasonId}
+              onChange={(e) => setSeasonId(e.target.value)}
+              placeholder="예) 1, 2, 3..."
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSaveSeasonId}
+            style={{
+              padding: '10px 16px',
+              borderRadius: '10px',
+              border: '1px solid rgba(96,165,250,0.4)',
+              background: 'rgba(96,165,250,0.16)',
+              color: '#bfdbfe',
+              fontWeight: 800,
+              fontSize: '14px',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            저장
+          </button>
+        </div>
+
+        <p style={{ margin: '12px 0 0 0', color: '#64748b', fontSize: '13px', fontStyle: 'italic' }}>
+          ⚠️ 변경 사항은 로컬스토리지에 저장되며, 새로고침 후 적용됩니다.
+        </p>
+      </div>
+
+      {/* 경기 재전송 섹션 */}
+      <div style={cardStyle}>
+        <h3 style={{ margin: '0 0 16px 0', color: '#e2e8f0' }}>경기 데이터 백엔드 재전송</h3>
+        <p style={{ margin: '0 0 12px 0', color: '#94a3b8', fontSize: '14px' }}>
+          완료된 경기 데이터를 백엔드 DB로 재전송합니다. (실패한 경기 또는 재처리가 필요한 경우)
+        </p>
+
+        {completedMatches.length === 0 ? (
+          <p style={{ color: '#64748b', fontSize: '14px', fontStyle: 'italic' }}>
+            완료된 경기가 없습니다.
+          </p>
+        ) : (
+          <div style={{ display: 'grid', gap: '12px', maxHeight: '400px', overflowY: 'auto' }}>
+            {completedMatches.map((match) => {
+              const status = resendStatus[match.id] || 'pending';
+              const statusColors = {
+                pending: { bg: 'rgba(100,116,139,0.12)', border: 'rgba(100,116,139,0.3)', color: '#94a3b8' },
+                sending: { bg: 'rgba(234,179,8,0.12)', border: 'rgba(234,179,8,0.4)', color: '#fef08a' },
+                success: { bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.35)', color: '#bbf7d0' },
+                error: { bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.4)', color: '#fca5a5' },
+              };
+
+              const statusLabels = {
+                pending: '대기',
+                sending: '전송 중...',
+                success: '전송 완료',
+                error: '전송 실패',
+              };
+
+              return (
+                <div
+                  key={match.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '12px 14px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(71,85,105,0.3)',
+                    background: 'rgba(15,23,42,0.5)',
+                    gap: '12px',
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: '4px' }}>
+                      {match.awayTeamName} vs {match.homeTeamName}
+                    </div>
+                    <div style={{ color: '#94a3b8', fontSize: '13px' }}>
+                      {new Date(match.startTime).toLocaleDateString('ko-KR')} · {match.homeScore}-{match.awayScore}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        ...statusColors[status],
+                        border: `1px solid ${statusColors[status].border}`,
+                        background: statusColors[status].bg,
+                        color: statusColors[status].color,
+                      }}
+                    >
+                      {statusLabels[status]}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => handleResendMatch(match.id)}
+                      disabled={status === 'sending'}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(59,130,246,0.4)',
+                        background: status === 'sending' ? 'rgba(71,85,105,0.2)' : 'rgba(59,130,246,0.16)',
+                        color: status === 'sending' ? '#64748b' : '#93c5fd',
+                        fontWeight: 700,
+                        fontSize: '13px',
+                        cursor: status === 'sending' ? 'not-allowed' : 'pointer',
+                        opacity: status === 'sending' ? 0.5 : 1,
+                      }}
+                    >
+                      {status === 'sending' ? '전송 중...' : '재전송'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       <div style={cardStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>

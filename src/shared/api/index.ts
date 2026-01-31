@@ -5,4 +5,5 @@
 export * from './types';
 export * from './client';
 export * from './games';
+export * from './teams';
 export * from './transformers';

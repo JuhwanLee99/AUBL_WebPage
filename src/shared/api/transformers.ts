@@ -4,6 +4,7 @@
 
 import type { MatchSchedule, PostGameBatterLine, PostGamePitcherLine } from '../state/demoStore';
 import type { GameDetailRequest, BatterLog, PitcherLog } from './types';
+import { getTeams, createTeamMapping } from './teams';
 
 /**
  * 팀 이름을 백엔드 팀 ID로 매핑
@@ -202,4 +203,30 @@ export function updateTeamMapping(teamName: string, teamId: number): void {
  */
 export function getTeamMapping(): Record<string, number> {
   return { ...TEAM_NAME_TO_ID };
+}
+
+/**
+ * 백엔드 API에서 팀 목록을 가져와서 매핑 테이블 초기화
+ */
+export async function initializeTeamMapping(): Promise<void> {
+  try {
+    const teams = await getTeams();
+
+    if (teams.length > 0) {
+      const mapping = createTeamMapping(teams);
+
+      // 기존 매핑 테이블 업데이트
+      Object.keys(TEAM_NAME_TO_ID).forEach(key => {
+        delete TEAM_NAME_TO_ID[key];
+      });
+
+      Object.assign(TEAM_NAME_TO_ID, mapping);
+
+      console.log('✅ 팀 매핑 테이블 초기화 완료:', TEAM_NAME_TO_ID);
+    } else {
+      console.warn('⚠️ 백엔드에서 팀 목록을 가져오지 못했습니다. 기본 매핑 사용');
+    }
+  } catch (error) {
+    console.error('❌ 팀 매핑 초기화 실패:', error);
+  }
 }
