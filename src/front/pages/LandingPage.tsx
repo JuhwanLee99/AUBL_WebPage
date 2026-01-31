@@ -222,10 +222,11 @@ export default function LandingPage() {
   const snapshotRef = useRef<HTMLDivElement>(null);
   const [liveMatchesRealtime, setLiveMatchesRealtime] = useState<MatchSchedule[]>([]);
   const [liveScores, setLiveScores] = useState<Record<string, LiveSnapshot>>({});
-  // 1. 오늘 경기 계산 (기존 코드)
+  // 1. 오늘 경기 계산
   const todaysScheduled = useMemo(() => {
     const todayKey = dateKey(new Date().toISOString());
-    const source = liveMatchesRealtime.length ? liveMatchesRealtime : state.matches;
+    // 수정됨: liveMatchesRealtime 대신 항상 state.matches(전체 일정)를 사용
+    const source = state.matches; 
     return source
       .filter(
         (match) =>
@@ -234,15 +235,16 @@ export default function LandingPage() {
           dateKey(match.startTime) === todayKey,
       )
       .sort((a, b) => safeMatchTime(a.startTime) - safeMatchTime(b.startTime));
-  }, [liveMatchesRealtime, state.matches]);
+  }, [state.matches]); // 의존성 배열에서 liveMatchesRealtime 제거
 
-  // 2. [추가됨] 내일 경기 계산
+  // 2. 내일 경기 계산
   const tomorrowsScheduled = useMemo(() => {
     const d = new Date();
-    d.setDate(d.getDate() + 1); // 내일 날짜 계산
+    d.setDate(d.getDate() + 1);
     const tomorrowKey = dateKey(d.toISOString());
     
-    const source = liveMatchesRealtime.length ? liveMatchesRealtime : state.matches;
+    // 수정됨: liveMatchesRealtime 대신 항상 state.matches(전체 일정)를 사용
+    const source = state.matches;
     return source
       .filter(
         (match) =>
@@ -251,7 +253,7 @@ export default function LandingPage() {
           dateKey(match.startTime) === tomorrowKey,
       )
       .sort((a, b) => safeMatchTime(a.startTime) - safeMatchTime(b.startTime));
-  }, [liveMatchesRealtime, state.matches]);
+  }, [state.matches]); // 의존성 배열에서 liveMatchesRealtime 제거
 
   // 3. 라이브 경기 계산 (중복 선언 주의: 이 부분은 한 번만 있어야 합니다!)
   const liveMatches = useMemo(() => {
