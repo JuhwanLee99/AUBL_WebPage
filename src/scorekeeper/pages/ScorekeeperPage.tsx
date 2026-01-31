@@ -4678,13 +4678,24 @@ function TeamEditor({
   defaultName: string;
   side: Side;
   teamName: string;
-  lineup: { name: string; pos: string; number: string; throws: string; bats: string }[];
-  bench: { name: string; pos: string; number: string; throws: string; bats: string }[];
+  // [수정] lineup 요소 타입에 isOhtaniRule 추가
+  lineup: { name: string; pos: string; number: string; throws: string; bats: string; isOhtaniRule?: boolean }[];
+  // [수정] bench 요소 타입에 isOhtaniRule 추가
+  bench: { name: string; pos: string; number: string; throws: string; bats: string; isOhtaniRule?: boolean }[];
   benchInput: { name: string; pos: string; number: string; throws: string; bats: string };
   onChangeBenchInput: (val: { name: string; pos: string; number: string; throws: string; bats: string }) => void;
   onSetTeamName: (side: Side, name: string) => void;
-  onSetLineup: (side: Side, index: number, updates: { name?: string; pos?: string; number?: string; throws?: string; bats?: string }) => void;
-  onAddBench: (side: Side, player: { name: string; pos: string; number: string; throws: string; bats: string }) => void;
+  // [수정] updates 타입에 isOhtaniRule 추가
+  onSetLineup: (
+    side: Side,
+    index: number,
+    updates: { name?: string; pos?: string; number?: string; throws?: string; bats?: string; isOhtaniRule?: boolean },
+  ) => void;
+  // [수정] player 타입에 isOhtaniRule 추가
+  onAddBench: (
+    side: Side,
+    player: { name: string; pos: string; number: string; throws: string; bats: string; isOhtaniRule?: boolean },
+  ) => void;
   onRemoveBench: (side: Side, benchIndex: number) => void;
   onSubstitute: (side: Side, benchIndex: number, lineupIndex: number) => void;
   highlightBatterName?: string;
@@ -4834,27 +4845,65 @@ function TeamEditor({
             gap: '6px',
           }}
         >
-          <span style={{ fontWeight: 800, color: '#cbd5e1' }}>투수</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontWeight: 800, color: '#cbd5e1' }}>투수</span>
+            
+            {/* [추가] 오타니룰 토글 버튼 */}
+            {pitcherEntry && (
+              <button
+                type="button"
+                onClick={() =>
+                  onSetLineup(side, pitcherEntry.idx, {
+                    isOhtaniRule: !pitcherEntry.slot.isOhtaniRule,
+                  })
+                }
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  border: pitcherEntry.slot.isOhtaniRule
+                    ? '1px solid rgba(16, 185, 129, 0.5)'
+                    : '1px solid rgba(148, 163, 184, 0.3)',
+                  background: pitcherEntry.slot.isOhtaniRule
+                    ? 'rgba(16, 185, 129, 0.15)'
+                    : 'transparent',
+                  color: pitcherEntry.slot.isOhtaniRule ? '#34d399' : '#94a3b8',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                {pitcherEntry.slot.isOhtaniRule ? '오타니룰 ON' : '오타니룰 OFF'}
+              </button>
+            )}
+          </div>
+
           {pitcherEntry ? (
             <div
               style={{
                 display: 'grid',
+                // [수정] 오타니룰 버튼이 위로 갔으므로 그리드 레이아웃 유지
                 gridTemplateColumns: '85px 50px 70px 70px 50px',
                 gap: '8px',
                 alignItems: 'center',
                 padding: '4px',
                 borderRadius: '10px',
                 border: `1px solid ${
-                  highlightPitcherName && pitcherEntry.slot.name === highlightPitcherName ? 'rgba(244,114,182,0.6)' : 'transparent'
+                  highlightPitcherName && pitcherEntry.slot.name === highlightPitcherName
+                    ? 'rgba(244,114,182,0.6)'
+                    : 'transparent'
                 }`,
                 background:
-                  highlightPitcherName && pitcherEntry.slot.name === highlightPitcherName ? 'rgba(244,114,182,0.12)' : 'transparent',
+                  highlightPitcherName && pitcherEntry.slot.name === highlightPitcherName
+                    ? 'rgba(244,114,182,0.12)'
+                    : 'transparent',
                 boxSizing: 'border-box',
               }}
             >
               <input
                 value={pitcherEntry.slot.name}
-                onChange={(e) => onSetLineup(side, pitcherEntry.idx, { name: e.target.value, pos: 'P' })}
+                onChange={(e) =>
+                  onSetLineup(side, pitcherEntry.idx, { name: e.target.value, pos: 'P' })
+                }
                 style={{
                   background: 'rgba(255,255,255,0.04)',
                   border: '1px solid rgba(148, 163, 184, 0.25)',
