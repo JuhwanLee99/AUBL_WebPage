@@ -157,6 +157,7 @@ export interface MatchSchedule {
   venue: string;
   status: MatchStatus;
   liveVideoUrl?: string;
+  liveDelaySeconds?: number;
   division?: LeagueDivision; // 으뜸/버금 구분 (관리자 지정)
   homeScore?: number | null;
   awayScore?: number | null;
@@ -235,6 +236,7 @@ interface DemoSnapshot {
   gameOver: boolean;
   endedAt: string | null;
   liveVideoUrl: string;
+  liveDelaySeconds: number;
   matches: MatchSchedule[];
   activeMatchId: string | null;
   scorerUid: string | null;
@@ -275,6 +277,7 @@ type SharedGameState = Pick<
   | 'gameOver'
   | 'endedAt'
   | 'liveVideoUrl'
+  | 'liveDelaySeconds'
   | 'activeMatchId'
   | 'scorerUid'
   | 'scorerName'
@@ -327,6 +330,7 @@ type Action =
   | { type: 'removeBench'; side: Side; benchIndex: number }
   | { type: 'substitute'; side: Side; benchIndex: number; lineupIndex: number }
   | { type: 'setLiveVideoUrl'; url: string }
+  | { type: 'setLiveDelaySeconds'; seconds: number }
   | { type: 'startGame' }
   | { type: 'endGame'; endedAt: string }
   | { type: 'resetGame' }
@@ -495,6 +499,7 @@ const initialState: DemoState = {
   gameOver: false,
   endedAt: null,
   liveVideoUrl: '',
+  liveDelaySeconds: 0,
   history: [],
   matches: [],
   activeMatchId: null,
@@ -804,6 +809,7 @@ function normalizeMatches(matches: unknown): MatchSchedule[] {
       venue: typeof match.venue === 'string' ? match.venue : '미정',
       status: match.status === 'completed' || match.status === 'inProgress' ? match.status : 'scheduled',
       liveVideoUrl: typeof match.liveVideoUrl === 'string' ? match.liveVideoUrl : undefined,
+      liveDelaySeconds: typeof match.liveDelaySeconds === 'number' ? match.liveDelaySeconds : undefined,
       division: deriveMatchDivision(match.division, match.homeTeamId, match.awayTeamId),
       homeScore: typeof match.homeScore === 'number' ? match.homeScore : null,
       awayScore: typeof match.awayScore === 'number' ? match.awayScore : null,
@@ -830,6 +836,7 @@ function projectSpectatorMatch(match: MatchSchedule): MatchSchedule {
     venue: match.venue,
     status: match.status,
     liveVideoUrl: match.liveVideoUrl,
+    liveDelaySeconds: match.liveDelaySeconds,
     division: match.division,
     homeScore: match.homeScore,
     awayScore: match.awayScore,
@@ -893,6 +900,7 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
     removed: merged.removed ?? base.removed,
     gameStarted,
     liveVideoUrl: typeof merged.liveVideoUrl === 'string' ? merged.liveVideoUrl : base.liveVideoUrl,
+    liveDelaySeconds: typeof merged.liveDelaySeconds === 'number' ? merged.liveDelaySeconds : base.liveDelaySeconds,
     activeMatchId: typeof merged.activeMatchId === 'string' ? merged.activeMatchId : merged.activeMatchId === null ? null : base.activeMatchId,
     scorerUid: typeof merged.scorerUid === 'string' ? merged.scorerUid : null,
     scorerName: typeof merged.scorerName === 'string' ? merged.scorerName : null,
@@ -1503,6 +1511,14 @@ function reducer(state: DemoState, action: Action): DemoState {
       nextState = { ...state, liveVideoUrl: trimmed, matches: updatedMatches };
       break;
     }
+    case 'setLiveDelaySeconds': {
+      const seconds = Math.max(0, action.seconds);
+      const updatedMatches = state.activeMatchId
+        ? updateMatchSchedule(state.matches, state.activeMatchId, { liveDelaySeconds: seconds })
+        : state.matches;
+      nextState = { ...state, liveDelaySeconds: seconds, matches: updatedMatches };
+      break;
+    }
     case 'endGame':
       nextState = applyEndGame(state, action.endedAt);
       if (state.activeMatchId) {
@@ -1625,6 +1641,7 @@ function reducer(state: DemoState, action: Action): DemoState {
           activeMatchId: selected.id,
           followCurrent: typeof action.followCurrent === 'boolean' ? action.followCurrent : state.followCurrent,
           liveVideoUrl: selected.liveVideoUrl ?? '',
+          liveDelaySeconds: selected.liveDelaySeconds ?? 0,
           teamNames: { home: selected.homeTeamName, away: selected.awayTeamName },
           homeTeamId: selected.homeTeamId ?? state.homeTeamId,
           awayTeamId: selected.awayTeamId ?? state.awayTeamId,
@@ -1641,6 +1658,7 @@ function reducer(state: DemoState, action: Action): DemoState {
           ...resetGameForMatch(state, selected),
           followCurrent: typeof action.followCurrent === 'boolean' ? action.followCurrent : state.followCurrent,
           liveVideoUrl: selected.liveVideoUrl ?? '',
+          liveDelaySeconds: selected.liveDelaySeconds ?? 0,
         };
       }
       break;
@@ -2707,6 +2725,7 @@ function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
   gameOver: false,
     endedAt: null,
     liveVideoUrl: state.liveVideoUrl,
+    liveDelaySeconds: state.liveDelaySeconds,
     history: [],
     removed: { home: [], away: [] },
     matches: state.matches,
@@ -2752,6 +2771,7 @@ function createNewGame(state: DemoState): DemoState {
     gameOver: false,
     endedAt: null,
     liveVideoUrl: state.liveVideoUrl,
+    liveDelaySeconds: state.liveDelaySeconds,
     history: [],
     removed: { home: [], away: [] },
     matches: state.matches,
@@ -2975,6 +2995,7 @@ interface DemoStoreValue {
     runnerInterference: (base: 0 | 1 | 2) => void;
     addManualLog: (message: string) => void;
     setLiveVideoUrl: (url: string) => void;
+    setLiveDelaySeconds: (seconds: number) => void;
     setTeamName: (side: Side, name: string) => void;
     setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) => void;
     addBench: (side: Side, player: PlayerSlot) => void;
@@ -3595,6 +3616,18 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         void setDoc(
           doc(firestore, 'matches', matchId),
           { liveVideoUrl: trimmed },
+          { merge: true },
+        ).catch(() => {});
+      },
+      setLiveDelaySeconds: (seconds: number) => {
+        dispatch({ type: 'setLiveDelaySeconds', seconds });
+        const matchId = stateRef.current.activeMatchId;
+        if (!matchId) return;
+        const validSeconds = Math.max(0, seconds);
+        // persist to matches collection
+        void setDoc(
+          doc(firestore, 'matches', matchId),
+          { liveDelaySeconds: validSeconds },
           { merge: true },
         ).catch(() => {});
       },

@@ -1328,6 +1328,7 @@ export default function ScorekeeperPage() {
   const [hitWizard, setHitWizard] = useState<HitWizardState | null>(null);
   const [manualBroadcast, setManualBroadcast] = useState('');
   const [liveVideoUrlInput, setLiveVideoUrlInput] = useState('');
+  const [liveDelayInput, setLiveDelayInput] = useState('');
   const [lockRemainingMs, setLockRemainingMs] = useState(0);
   const [hitAdvanceModal, setHitAdvanceModal] = useState<null | {
     bases: 1 | 2 | 3;
@@ -1411,6 +1412,7 @@ export default function ScorekeeperPage() {
     return { innings, rows: [mk('away'), mk('home')] };
   }, [recordPayload, state.inning, state.score, state.teamNames, activeMatch, homeTeam, awayTeam]);
   const hasLiveUrlChange = liveVideoUrlInput.trim() !== state.liveVideoUrl.trim();
+  const hasLiveDelayChange = parseInt(liveDelayInput || '0', 10) !== state.liveDelaySeconds;
   const battedBallDetails = useMemo<BattedBallDetails | null>(() => {
     return buildBattedBallDetailsFromValues(battedBallType, battedBallZone);
   }, [battedBallType, battedBallZone]);
@@ -1477,6 +1479,10 @@ export default function ScorekeeperPage() {
     const sanitized = incoming.includes('YOUR_CHANNEL_ID') ? '' : incoming;
     setLiveVideoUrlInput(sanitized);
   }, [state.liveVideoUrl]);
+
+  useEffect(() => {
+    setLiveDelayInput(String(state.liveDelaySeconds));
+  }, [state.liveDelaySeconds]);
 
   useEffect(() => {
     if (!pendingExportId) return;
@@ -1851,6 +1857,16 @@ const handleConfirmHitWizard = () => {
     setLiveVideoUrlInput(normalized);
     if (normalized !== state.liveVideoUrl) {
       actions.setLiveVideoUrl(normalized);
+    }
+  };
+
+  const handleLiveDelaySave = () => {
+    if (lockedByOther) return;
+    const parsed = parseInt(liveDelayInput || '0', 10);
+    const seconds = isNaN(parsed) ? 0 : Math.max(0, parsed);
+    setLiveDelayInput(String(seconds));
+    if (seconds !== state.liveDelaySeconds) {
+      actions.setLiveDelaySeconds(seconds);
     }
   };
 
@@ -2437,6 +2453,66 @@ const handleConfirmHitWizard = () => {
                   영상 링크 적용
                 </button>
               </div>
+            </div>
+            <div
+              style={{
+                marginTop: '8px',
+                padding: '12px',
+                borderRadius: '12px',
+                border: '1px solid rgba(148, 163, 184, 0.3)',
+                background: 'rgba(15,23,42,0.48)',
+                display: 'grid',
+                gap: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 900, color: '#e2e8f0' }}>라이브 지연시간</span>
+                <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 800 }}>유튜브 라이브 싱크 조정</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={liveDelayInput}
+                  onChange={(e) => setLiveDelayInput(e.target.value)}
+                  placeholder="0"
+                  disabled={lockedByOther}
+                  style={{
+                    width: '120px',
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(148,163,184,0.35)',
+                    background: '#0f172a',
+                    color: '#e2e8f0',
+                    fontWeight: 800,
+                    fontSize: '13px',
+                  }}
+                />
+                <span style={{ color: '#94a3b8', fontSize: '13px', fontWeight: 700 }}>초</span>
+                <button
+                  type="button"
+                  onClick={handleLiveDelaySave}
+                  disabled={!hasLiveDelayChange || lockedByOther}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(16,185,129,0.45)',
+                    background: hasLiveDelayChange ? 'linear-gradient(90deg, #10b981, #059669)' : 'rgba(148,163,184,0.18)',
+                    color: hasLiveDelayChange ? '#0b0f1a' : '#cbd5e1',
+                    fontWeight: 900,
+                    fontSize: '13px',
+                    cursor: hasLiveDelayChange ? 'pointer' : 'not-allowed',
+                    boxShadow: hasLiveDelayChange ? '0 10px 20px rgba(16,185,129,0.24)' : 'none',
+                    opacity: hasLiveDelayChange ? 1 : 0.8,
+                  }}
+                >
+                  지연시간 적용
+                </button>
+              </div>
+              <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
+                유튜브 라이브 지연시간을 고려하여 오버레이 업데이트 시점을 조정합니다. (일반적으로 10-30초)
+              </span>
             </div>
             <div
               style={{
