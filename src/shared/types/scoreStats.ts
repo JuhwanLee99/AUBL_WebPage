@@ -2,7 +2,7 @@ export type BatterStatLine = {
   name: string;
   pos?: string;
   order?: number | null;
-  status?: 'out';
+  status?: 'out' | '대수비' | '대타' | '대주자';
   pa: number;
   ab: number;
   h: number;
@@ -21,6 +21,7 @@ export type BatterStatLine = {
 export type PitcherStatLine = {
   name: string;
   pos?: string;
+  status?: 'out' | '대수비';
   bf: number;
   pitches: number;
   strikes: number;

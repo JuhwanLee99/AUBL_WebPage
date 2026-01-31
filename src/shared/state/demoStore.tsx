@@ -78,6 +78,8 @@ interface PlayerSlot {
   // 오타니룰: 투수가 DH 역할을 하는 경우 true
   // 이 플래그가 true인 투수는 마운드에서 내려와도 타석에 계속 들어갈 수 있음
   isOhtaniRule?: boolean;
+  // 교체 유형: 대수비, 대타, 대주자
+  substitutionType?: '대수비' | '대타' | '대주자';
 }
 
 export type PostGameLineScore = { innings: number[]; home: number[]; away: number[] };
@@ -328,7 +330,7 @@ type Action =
   | { type: 'setLineup'; side: Side; index: number; updates: Partial<PlayerSlot> }
   | { type: 'addBench'; side: Side; player: PlayerSlot }
   | { type: 'removeBench'; side: Side; benchIndex: number }
-  | { type: 'substitute'; side: Side; benchIndex: number; lineupIndex: number }
+  | { type: 'substitute'; side: Side; benchIndex: number; lineupIndex: number; substitutionType?: '대수비' | '대타' | '대주자' }
   | { type: 'setLiveVideoUrl'; url: string }
   | { type: 'setLiveDelaySeconds'; seconds: number }
   | { type: 'startGame' }
@@ -1501,7 +1503,7 @@ function reducer(state: DemoState, action: Action): DemoState {
       break;
     }
     case 'substitute':
-      nextState = substitutePlayer(state, action.side, action.benchIndex, action.lineupIndex);
+      nextState = substitutePlayer(state, action.side, action.benchIndex, action.lineupIndex, action.substitutionType);
       break;
     case 'setLiveVideoUrl': {
       const trimmed = action.url.trim();
@@ -2898,14 +2900,24 @@ function updateLineup(state: DemoState, side: Side, index: number, updates: Part
   return { ...state, lineups: { ...state.lineups, [side]: updated }, feed, lastPlay };
 }
 
-function substitutePlayer(state: DemoState, side: Side, benchIndex: number, lineupIndex: number): DemoState {
+function substitutePlayer(
+  state: DemoState,
+  side: Side,
+  benchIndex: number,
+  lineupIndex: number,
+  substitutionType?: '대수비' | '대타' | '대주자'
+): DemoState {
   const bench = [...state.benches[side]];
   const lineup = [...state.lineups[side]];
   const benchPlayer = bench[benchIndex];
   if (!benchPlayer) return state;
   const outgoing = lineup[lineupIndex];
   const battingOrder = getBattingOrder(state.lineups[side], lineupIndex);
-  lineup[lineupIndex] = benchPlayer;
+
+  // 교체로 들어온 선수에 교체 유형 저장
+  const incomingPlayer = { ...benchPlayer, substitutionType };
+
+  lineup[lineupIndex] = incomingPlayer;
   bench.splice(benchIndex, 1);
   const removed = {
     ...state.removed,
@@ -2922,7 +2934,15 @@ function substitutePlayer(state: DemoState, side: Side, benchIndex: number, line
     const num = player.number ? `(${player.number})` : '';
     return `${player.name}${num}`;
   };
-  const changeLabel = isPitcherChange ? '투수 교체' : '타자 교체';
+
+  // 교체 유형에 따른 레이블 생성
+  let changeLabel: string;
+  if (substitutionType) {
+    changeLabel = substitutionType;
+  } else {
+    changeLabel = isPitcherChange ? '투수 교체' : '타자 교체';
+  }
+
   const changeText = `${changeLabel} · ${formatPlayer(outgoing)} → ${formatPlayer(benchPlayer)}`;
   const feed = pushFeed(state.feed, createLogEntryForBaserunning(state, changeText, 0));
   return {
@@ -3000,7 +3020,7 @@ interface DemoStoreValue {
     setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) => void;
     addBench: (side: Side, player: PlayerSlot) => void;
     removeBench: (side: Side, benchIndex: number) => void;
-    substitute: (side: Side, benchIndex: number, lineupIndex: number) => void;
+    substitute: (side: Side, benchIndex: number, lineupIndex: number, substitutionType?: '대수비' | '대타' | '대주자') => void;
     setPlay: (message: string) => void;
     startGame: () => void;
     endGame: (endedAt: string) => void;
@@ -3642,8 +3662,8 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'setLineup', side, index, updates }),
       addBench: (side: Side, player: PlayerSlot) => dispatch({ type: 'addBench', side, player }),
       removeBench: (side: Side, benchIndex: number) => dispatch({ type: 'removeBench', side, benchIndex }),
-      substitute: (side: Side, benchIndex: number, lineupIndex: number) =>
-        dispatch({ type: 'substitute', side, benchIndex, lineupIndex }),
+      substitute: (side: Side, benchIndex: number, lineupIndex: number, substitutionType?: '대수비' | '대타' | '대주자') =>
+        dispatch({ type: 'substitute', side, benchIndex, lineupIndex, substitutionType }),
       setPlay: (message: string) => dispatch({ type: 'setPlay', message }),
       startGame: () => {
         dispatch({ type: 'startGame' });
