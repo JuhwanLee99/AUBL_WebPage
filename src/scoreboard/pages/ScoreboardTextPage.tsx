@@ -1595,6 +1595,9 @@ function buildDisplayItems(
     }
 
     let isSubstitute = false;
+    // [수정] 교체 상태 변수 추가
+    let subStatus: 'out' | '대수비' | '대타' | '대주자' | undefined;
+
     if (batterName && order) {
       const slot = battingSlots[offenseSide];
       const prevOccupant = slot.get(order);
@@ -1616,6 +1619,16 @@ function buildDisplayItems(
       slot.set(order, batterName);
     }
 
+    // [수정] 교체 선수일 경우, 직전 로그를 확인하여 교체 유형(대타/대주자/대수비) 추론
+    if (isSubstitute) {
+      const prevItem = idx > 0 ? chronological[idx - 1] : null;
+      if (prevItem) {
+        if (prevItem.result.includes('대타')) subStatus = '대타';
+        else if (prevItem.result.includes('대주자')) subStatus = '대주자';
+        else if (prevItem.result.includes('대수비')) subStatus = '대수비';
+      }
+    }
+
     if (batterName) {
       const jersey = resolveJersey(jerseyMap, offenseSide, batterName);
       const batterText = formatWithJersey(batterName, jersey);
@@ -1629,6 +1642,8 @@ function buildDisplayItems(
           order,
           jersey,
           isSubstitute,
+          // [수정] 추론된 교체 유형 상태 적용
+          status: subStatus,
         });
         prevBatter = batterName;
       }
@@ -1645,7 +1660,7 @@ function buildDisplayItems(
 
     prevHalf = entry.half;
     prevInning = entry.inning;
-  });
+  }); 
 
   return items;
 }
@@ -1773,17 +1788,20 @@ function ensurePitcherStat(name: string, pos?: string): PitcherStatExt {
 // [수정] buildPlayerStats: ScorekeeperPage.tsx의 로직을 그대로 이식
 // 투수/타자 구분 로직, 고유 이름(uniqueName)을 Key로 사용하는 로직 적용
 function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
-  // 1. Roster Map의 Key를 uniqueName으로 변경
-  const rosterHome = new Map<string, { pos?: string; order: number }>();
-  const rosterAway = new Map<string, { pos?: string; order: number }>();
+  // 1. Roster Map의 Value 타입 확장 및 데이터 저장
+  // { pos?: string; order: number; substitutionType?: string } 형태로 저장
+  const rosterHome = new Map<string, { pos?: string; order: number; substitutionType?: string }>();
+  const rosterAway = new Map<string, { pos?: string; order: number; substitutionType?: string }>();
   
-  record.lineups.home.forEach((p, idx) => rosterHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx }));
-  record.lineups.away.forEach((p, idx) => rosterAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx }));
+  // [수정] substitutionType 저장 추가
+  record.lineups.home.forEach((p, idx) => rosterHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType }));
+  record.lineups.away.forEach((p, idx) => rosterAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType }));
 
-  const benchMetaHome = new Map<string, { pos?: string; order: number }>();
-  const benchMetaAway = new Map<string, { pos?: string; order: number }>();
-  record.benches.home.forEach((p, idx) => benchMetaHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx }));
-  record.benches.away.forEach((p, idx) => benchMetaAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx }));
+  const benchMetaHome = new Map<string, { pos?: string; order: number; substitutionType?: string }>();
+  const benchMetaAway = new Map<string, { pos?: string; order: number; substitutionType?: string }>();
+  // [수정] substitutionType 저장 추가
+  record.benches.home.forEach((p, idx) => benchMetaHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, substitutionType: p.substitutionType }));
+  record.benches.away.forEach((p, idx) => benchMetaAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, substitutionType: p.substitutionType }));
 
   const extraOrder: Record<'home' | 'away', number> = { home: 100, away: 100 };
   const battingOrders: Record<'home' | 'away', Map<number, string[]>> = { home: new Map(), away: new Map() };
@@ -1823,7 +1841,8 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     if (roster.has(name)) return roster.get(name)!;
     const benchMeta = side === 'home' ? benchMetaHome : benchMetaAway;
     const meta = benchMeta.get(name);
-    const entry = { pos: meta?.pos, order: meta?.order ?? extraOrder[side] };
+    // [수정] substitutionType 전달
+    const entry = { pos: meta?.pos, order: meta?.order ?? extraOrder[side], substitutionType: meta?.substitutionType };
     extraOrder[side] += 1;
     roster.set(name, entry);
     return entry;
@@ -2011,7 +2030,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     }
   });
 
-  const toArray = (side: 'home' | 'away', roster: Map<string, { pos?: string; order: number }>, store: Map<string, PlayerStat>) => {
+  const toArray = (side: 'home' | 'away', roster: Map<string, { pos?: string; order: number; substitutionType?: string }>, store: Map<string, PlayerStat>) => {
     const rows: PlayerStat[] = [];
     const orderMap = battingOrders[side];
     const orderKeys = [...orderMap.keys()].sort((a, b) => a - b);
@@ -2022,7 +2041,17 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
         const stat = store.get(playerName);
         const base = ensurePlayerStat(playerName, meta?.pos);
         const row = stat ? { ...base, ...stat, pos: stat.pos ?? base.pos } : base;
-        rows.push({ ...row, order, status: idx < players.length - 1 ? 'out' : undefined });
+        
+        // [수정] status 결정 로직: 교체 아웃된 경우 'out', 아니면 교체 유형(대타/대주자 등) 표시
+        let status: 'out' | '대타' | '대주자' | '대수비' | undefined = undefined;
+        if (idx < players.length - 1) {
+          status = 'out';
+        } else if (meta?.substitutionType) {
+          // as casting을 통해 타입 호환성 확보
+          status = meta.substitutionType as 'out' | '대타' | '대주자' | '대수비';
+        }
+
+        rows.push({ ...row, order, status });
       });
     });
     const remaining = [...store.values()].filter(

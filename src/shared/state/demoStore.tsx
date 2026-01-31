@@ -409,7 +409,9 @@ const normalizePlayerSlotForGame = (player: PlayerSlot): PlayerSlot => ({
   bats: player.bats === 'L' ? 'L' : 'R',
   order: typeof player.order === 'number' ? player.order : null,
   // [수정] 오타니룰 플래그 보존
-  isOhtaniRule: !!player.isOhtaniRule, 
+  isOhtaniRule: !!player.isOhtaniRule,
+  // [수정] 교체 유형 보존 (추가됨: 이 부분이 없으면 게임 로직 진행 중 정보가 사라질 수 있음)
+  substitutionType: player.substitutionType,
 });
 
 // 라인업 채움 로직 (UI 9칸 유지 보장 수정)
@@ -625,6 +627,12 @@ function normalizePlayerSlot(slot: unknown): PlayerSlot | null {
     order: typeof s.order === 'number' ? s.order : s.order ?? null,
     // [수정] 오타니룰 플래그 보존
     isOhtaniRule: typeof s.isOhtaniRule === 'boolean' ? s.isOhtaniRule : undefined,
+    // [수정] 교체 유형 보존 (추가됨: 이 부분이 없으면 새로고침 시 정보가 사라짐)
+    substitutionType:
+      typeof s.substitutionType === 'string' &&
+      ['대수비', '대타', '대주자'].includes(s.substitutionType)
+        ? (s.substitutionType as '대수비' | '대타' | '대주자')
+        : undefined,
   };
 }
 
