@@ -886,7 +886,10 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
   const feed = normalizeFeed(merged.feed, { inning: merged.inning, half: merged.half });
   const events = normalizeEvents(merged.events, { inning: merged.inning, half: merged.half });
   const matches = normalizeMatches(merged.matches ?? base.matches);
-  const safeLineups = ensureCompleteLineups(merged.lineups ?? base.lineups);
+  // [수정] 라인업이 완전히 비어있는 경우 자동 채움을 하지 않음
+  const rawLineups = merged.lineups ?? base.lineups;
+  const hasLineups = rawLineups.home.length > 0 || rawLineups.away.length > 0;
+  const safeLineups = hasLineups ? ensureCompleteLineups(rawLineups) : rawLineups;
   const history = Array.isArray(merged.history)
     ? merged.history.map((snap) => {
         const normalizedHistoryFeed = normalizeFeed((snap as DemoSnapshot).feed, { inning: snap.inning, half: snap.half });
@@ -2739,7 +2742,10 @@ function updateMatchSchedule(matches: MatchSchedule[], matchId: string, updates:
 
 function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
   // [수정] 경기에 저장된 라인업이 없으면(null/undefined) state.lineups(이전 경기 또는 mock)를 쓰는 대신 빈 라인업으로 초기화
-  const lineups = ensureCompleteLineups(match.lineups ?? { home: [], away: [] });
+  // [수정] 라인업이 완전히 비어있는 경우(공유 링크 등) 자동 채움을 하지 않음
+  const rawLineups = match.lineups ?? { home: [], away: [] };
+  const hasLineups = rawLineups.home.length > 0 || rawLineups.away.length > 0;
+  const lineups = hasLineups ? ensureCompleteLineups(rawLineups) : rawLineups;
   const benches = match.benches ?? { home: [], away: [] };
   return {
     inning: 1,
@@ -2919,13 +2925,21 @@ function nextBatter(state: DemoState) {
 }
 
 function updateLineup(state: DemoState, side: Side, index: number, updates: Partial<PlayerSlot>): DemoState {
-  const original = state.lineups[side][index];
-  const updated = state.lineups[side].map((slot, idx) => (idx === index ? { ...slot, ...updates } : slot));
+  const lineup = [...state.lineups[side]];
+
+  // [수정] 배열 경계를 넘어가는 경우 빈 슬롯 추가 (빈 라인업에서 편집 시)
+  const emptySlot: PlayerSlot = { name: '', pos: '', number: '', throws: 'R', bats: 'R', order: null };
+  while (lineup.length <= index) {
+    lineup.push({ ...emptySlot });
+  }
+
+  const original = lineup[index];
+  lineup[index] = { ...lineup[index], ...updates };
 
   // 포지션 변경 시 feed에 기록
   let feed = state.feed;
   let lastPlay = state.lastPlay;
-  
+
   // [수정] 경기가 시작된 상태(state.gameStarted)일 때만 포지션 변경 로그를 남기도록 조건 추가
   if (state.gameStarted && updates.pos && original?.pos && updates.pos !== original.pos) {
     const playerName = original.name || '선수';
@@ -2935,7 +2949,7 @@ function updateLineup(state: DemoState, side: Side, index: number, updates: Part
     lastPlay = changeText;
   }
 
-  return { ...state, lineups: { ...state.lineups, [side]: updated }, feed, lastPlay };
+  return { ...state, lineups: { ...state.lineups, [side]: lineup }, feed, lastPlay };
 }
 
 // 투수 등판 순서를 계산하는 헬퍼 함수
