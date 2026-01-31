@@ -1899,6 +1899,8 @@ const handleConfirmHitWizard = () => {
     setLiveDelayInput(String(seconds));
     if (seconds !== state.liveDelaySeconds) {
       actions.setLiveDelaySeconds(seconds);
+      // 확인 메시지 표시
+      alert(`라이브 오버레이 지연시간이 ${seconds}초로 설정되었습니다.`);
     }
   };
 
@@ -5635,7 +5637,7 @@ function TeamEditor({
   highlightPitcherName?: string;
 }) {
   // [수정] 빈 라인업을 받아도 UI 입력칸을 유지하기 위해 동적으로 빈 슬롯 생성
-  const filledLineup = React.useMemo(() => {
+  const filledLineup = useMemo(() => {
     const result = [...lineup];
     const emptySlot = { name: '', pos: '', number: '', throws: 'R' as const, bats: 'R' as const };
 
