@@ -1842,7 +1842,8 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   seedBattingOrders('away');
 
   const addRemovedOrders = (side: 'home' | 'away') => {
-    (record.removed?.[side] ?? []).forEach((p) => {
+    // [수정] 교체된 순서대로 정렬하기 위해 removed 배열을 역순으로 순회
+    [...(record.removed?.[side] ?? [])].reverse().forEach((p) => {
       const ord = typeof p.order === 'number' && p.order > 0 ? p.order : null;
       if (!ord) return;
       const list = battingOrders[side].get(ord) ?? [];
