@@ -112,6 +112,10 @@ export const router = createBrowserRouter([
         element: <ScoreboardTextPage />,
       },
       {
+        path: 'scoreboard-text/:matchId',
+        element: <ScoreboardTextPage />,
+      },
+      {
         path: 'live-overlay',
         element: <ScoreboardLiveOverlayPage />,
       },

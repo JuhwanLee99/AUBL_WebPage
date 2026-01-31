@@ -1,8 +1,8 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import ScoreboardFrame from '../components/ScoreboardFrame';
 import { useDemoStore, buildGameRecord } from '../../shared/state/demoStore';
-import type { PlayEvent, ErrorDetails, RunnerAdvanceOutcome, BattedBallDetails } from '../../shared/state/demoStore'; // [추가] 타입 임포트
+import type { PlayEvent, ErrorDetails, RunnerAdvanceOutcome, BattedBallDetails } from '../../shared/state/demoStore';
 import StatsTable from '../../shared/components/StatsTable';
 import RemovedPlayersPanel from '../../shared/components/RemovedPlayersPanel';
 import { GameTimerDisplay } from '../../shared/components/GameTimerDisplay';
@@ -48,7 +48,7 @@ type DisplayItem =
       half: Half;
       order: number | null;
       jersey?: string;
-      status?: 'out';
+      status?: 'out' | '대수비' | '대타' | '대주자';
       isSubstitute?: boolean;
     }
   | { type: 'log'; text: string; key: string; chip: string; inning: number; half: Half };
@@ -103,10 +103,22 @@ function resolveJersey(jerseyMap: JerseyMap, side: 'home' | 'away', name: string
 }
 
 export default function ScoreboardTextPage() {
-  const { state } = useDemoStore();
+  const { state, actions } = useDemoStore();
+  const { matchId } = useParams<{ matchId?: string }>();
   const [showReplay, setShowReplay] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const navigate = useNavigate(); // [수정] 훅 초기화
+
+  // URL에서 matchId가 있으면 해당 경기 자동 선택
+  useEffect(() => {
+    if (matchId && matchId !== state.activeMatchId) {
+      // matchId가 유효한지 확인
+      const matchExists = state.matches.some((m) => m.id === matchId);
+      if (matchExists) {
+        actions.selectMatch(matchId);
+      }
+    }
+  }, [matchId, state.activeMatchId, state.matches, actions]);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -356,6 +368,32 @@ export default function ScoreboardTextPage() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>총 {feed.length}건</span>
+              {!noActiveMatch && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = `${window.location.origin}/scoreboard-text/${state.activeMatchId}`;
+                    navigator.clipboard.writeText(url).then(() => {
+                      alert('링크가 복사되었습니다!\n' + url);
+                    }).catch(() => {
+                      alert('링크 복사에 실패했습니다.');
+                    });
+                  }}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(34,197,94,0.5)',
+                    background: 'rgba(34,197,94,0.12)',
+                    color: '#22c55e',
+                    fontWeight: 800,
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                  }}
+                  title="이 경기 문자중계 링크 복사"
+                >
+                  🔗 링크 복사
+                </button>
+              )}
               {hasLiveOverlay ? (
                 <button
                   type="button"
@@ -624,17 +662,82 @@ function LiveFeed({
               );
             }
             if (item.type === 'batter') {
+              const badgeStyles = {
+                out: {
+                  border: '1px solid rgba(239,68,68,0.4)',
+                  background: 'rgba(239,68,68,0.12)',
+                  color: '#ef4444',
+                  text: 'out',
+                },
+                대수비: {
+                  border: '1px solid rgba(59,130,246,0.4)',
+                  background: 'rgba(59,130,246,0.12)',
+                  color: '#3b82f6',
+                  text: '대수비',
+                },
+                대타: {
+                  border: '1px solid rgba(34,197,94,0.4)',
+                  background: 'rgba(34,197,94,0.12)',
+                  color: '#22c55e',
+                  text: '대타',
+                },
+                대주자: {
+                  border: '1px solid rgba(251,146,60,0.4)',
+                  background: 'rgba(251,146,60,0.12)',
+                  color: '#fb923c',
+                  text: '대주자',
+                },
+              };
+
+              const badge = item.status ? badgeStyles[item.status] : null;
+
               return (
-                <div key={item.key} style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '13px', padding: '2px 0' }}>
-                  {item.order ? `${item.order}번 ` : ''}
-                  {item.text} 타석
+                <div
+                  key={item.key}
+                  style={{
+                    color: '#e2e8f0',
+                    fontWeight: 800,
+                    fontSize: '13px',
+                    padding: '2px 0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <span>
+                    {item.order ? `${item.order}번 ` : ''}
+                    {item.text} 타석
+                  </span>
+                  {badge && (
+                    <span
+                      style={{
+                        padding: '2px 6px',
+                        borderRadius: '999px',
+                        border: badge.border,
+                        background: badge.background,
+                        color: badge.color,
+                        fontWeight: 900,
+                        fontSize: '10px',
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      {badge.text}
+                    </span>
+                  )}
                 </div>
               );
             }
+            // [수정] 교체 로그 판별 조건 완화 및 렌더링
+            // 기존에는 item.text.includes(...) 만 체크했으나, colorizeText에서 하이라이팅이 되면
+            // 일반 로그 형태(박스)보다는 텍스트 형태(한 줄)로 보여주는 것이 깔끔할 수 있습니다.
+            // 여기서는 교체 관련 키워드가 포함된 경우 텍스트 형태로 렌더링하도록 합니다.
             if (
               item.type === 'log' &&
               (item.text.includes('투수 교체') ||
                 item.text.includes('타자 교체') ||
+                item.text.includes('대수비') ||
+                item.text.includes('대타') ||
+                item.text.includes('대주자') ||
                 item.text.trim().endsWith('투수'))
             ) {
               return (
@@ -647,6 +750,7 @@ function LiveFeed({
                 </div>
               );
             }
+            // 일반 로그 (박스 형태)
             return (
               <div
                 key={item.key}
@@ -680,7 +784,8 @@ function LiveFeed({
     });
 
     if (gameOverInfo) {
-      items.push({
+      // ... (game over info 렌더링 유지) ...
+       items.push({
         key: 'game-over',
         estimatedHeight: 42,
         render: () => (
@@ -1332,7 +1437,7 @@ function computePitcherLine(feed: ReturnType<typeof useDemoStore>['state']['feed
     const result = entry.result.trim();
 
     // 피드에서 투수 추적
-    if (result.includes('투수 교체')) {
+    if (result.includes('투수 교체') || (result.includes('대수비') && result.includes('→'))) {
       const incoming = result.split('→')[1];
       if (incoming) current[defenseSide] = cleanName(incoming);
     } else if (result.endsWith('투수')) {
@@ -1441,7 +1546,9 @@ function buildDisplayItems(
   feed: ReturnType<typeof useDemoStore>['state']['feed'],
   jerseyMap: JerseyMap,
 ): DisplayItem[] {
-  const chronological = [...feed];
+  // [수정] demoStore가 이미 올바른 시간순(Oldest -> Newest)으로 정렬되어 있으므로 reverse() 제거
+  // createdAt 기반 정렬 덕분에 선수 교체 로그도 정확한 시점에 위치함
+  const chronological = feed; 
   const items: DisplayItem[] = [];
 
   const markerText = (inning: number, half: Half, type: 'start' | 'end') => {
@@ -1496,6 +1603,9 @@ function buildDisplayItems(
     }
 
     let isSubstitute = false;
+    // [수정] 교체 상태 변수 추가
+    let subStatus: 'out' | '대수비' | '대타' | '대주자' | undefined;
+
     if (batterName && order) {
       const slot = battingSlots[offenseSide];
       const prevOccupant = slot.get(order);
@@ -1517,6 +1627,16 @@ function buildDisplayItems(
       slot.set(order, batterName);
     }
 
+    // [수정] 교체 선수일 경우, 직전 로그를 확인하여 교체 유형(대타/대주자/대수비) 추론
+    if (isSubstitute) {
+      const prevItem = idx > 0 ? chronological[idx - 1] : null;
+      if (prevItem) {
+        if (prevItem.result.includes('대타')) subStatus = '대타';
+        else if (prevItem.result.includes('대주자')) subStatus = '대주자';
+        else if (prevItem.result.includes('대수비')) subStatus = '대수비';
+      }
+    }
+
     if (batterName) {
       const jersey = resolveJersey(jerseyMap, offenseSide, batterName);
       const batterText = formatWithJersey(batterName, jersey);
@@ -1530,6 +1650,8 @@ function buildDisplayItems(
           order,
           jersey,
           isSubstitute,
+          // [수정] 추론된 교체 유형 상태 적용
+          status: subStatus,
         });
         prevBatter = batterName;
       }
@@ -1546,7 +1668,7 @@ function buildDisplayItems(
 
     prevHalf = entry.half;
     prevInning = entry.inning;
-  });
+  }); 
 
   return items;
 }
@@ -1561,9 +1683,13 @@ function groupByInning(items: DisplayItem[]) {
   return [...map.values()].sort((a, b) => a.inning - b.inning);
 }
 
+// [수정] colorizeText 함수: 선수 교체 관련 키워드 추가하여 하이라이팅 적용
+// -------------------------------------------------------------------------
 function colorizeText(text: string) {
+  // 기존 패턴에 '투수 교체', '타자 교체', '대수비', '대타', '대주자' 등 추가
   const pattern =
-    /(\d+\s*안타|\d+\s*아웃|득점|점수|도루\s*성공|도루\s*실패|도루|안타|2루타|3루타|루타|홈런|볼넷|몸에\s*맞는\s*공|몸에맞는공|HBP|HP|사구|아웃|삼진|낫아웃|견제사|실책|E[1-6]|WP|PB|BK|야수선택|FC|F\.C)/g;
+    /(\d+\s*안타|\d+\s*아웃|득점|점수|도루\s*성공|도루\s*실패|도루|안타|2루타|3루타|루타|홈런|볼넷|몸에\s*맞는\s*공|몸에맞는공|HBP|HP|사구|아웃|삼진|낫아웃|견제사|실책|E[1-6]|WP|PB|BK|야수선택|FC|F\.C|투수\s*교체|타자\s*교체|대수비|대타|대주자)/g;
+  
   const colorMap: Record<string, string> = {
     득점: '#facc15',
     점수: '#facc15',
@@ -1611,15 +1737,30 @@ function colorizeText(text: string) {
     '3아웃': '#f87171',
     삼진: '#f87171',
     견제사: '#f87171',
+    // [추가] 교체 관련 키워드 색상 정의 (녹색 계열)
+    '투수 교체': '#4ade80',
+    '투수교체': '#4ade80',
+    '타자 교체': '#4ade80',
+    '타자교체': '#4ade80',
+    대수비: '#4ade80',
+    대타: '#4ade80',
+    대주자: '#4ade80',
   };
+
   const parts: Array<{ text: string; color?: string; key: string }> = [];
   let lastIndex = 0;
   text.replace(pattern, (match, _p1, offset) => {
-    const key = match.replace(/\s+/g, '');
+    // 공백 제거하여 키 매칭
+    const key = match.replace(/\s+/g, ' ').trim(); // 정규화 (공백 하나로)
+    const normalizedKey = match.replace(/\s+/g, ''); // 맵 매칭용 (공백 제거)
+    
+    // colorMap에서 키를 찾을 때 공백 있는 버전과 없는 버전 모두 시도
+    const color = colorMap[key] || colorMap[normalizedKey];
+
     if (lastIndex < offset) {
       parts.push({ text: text.slice(lastIndex, offset), key: `${lastIndex}-${offset}` });
     }
-    parts.push({ text: match, color: colorMap[key], key: `${offset}-${offset + match.length}` });
+    parts.push({ text: match, color: color, key: `${offset}-${offset + match.length}` });
     lastIndex = offset + match.length;
     return match;
   });
@@ -1674,17 +1815,20 @@ function ensurePitcherStat(name: string, pos?: string): PitcherStatExt {
 // [수정] buildPlayerStats: ScorekeeperPage.tsx의 로직을 그대로 이식
 // 투수/타자 구분 로직, 고유 이름(uniqueName)을 Key로 사용하는 로직 적용
 function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
-  // 1. Roster Map의 Key를 uniqueName으로 변경
-  const rosterHome = new Map<string, { pos?: string; order: number }>();
-  const rosterAway = new Map<string, { pos?: string; order: number }>();
+  // 1. Roster Map의 Value 타입 확장 및 데이터 저장
+  // { pos?: string; order: number; substitutionType?: string } 형태로 저장
+  const rosterHome = new Map<string, { pos?: string; order: number; substitutionType?: string }>();
+  const rosterAway = new Map<string, { pos?: string; order: number; substitutionType?: string }>();
   
-  record.lineups.home.forEach((p, idx) => rosterHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx }));
-  record.lineups.away.forEach((p, idx) => rosterAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx }));
+  // [수정] substitutionType 저장 추가
+  record.lineups.home.forEach((p, idx) => rosterHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType }));
+  record.lineups.away.forEach((p, idx) => rosterAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType }));
 
-  const benchMetaHome = new Map<string, { pos?: string; order: number }>();
-  const benchMetaAway = new Map<string, { pos?: string; order: number }>();
-  record.benches.home.forEach((p, idx) => benchMetaHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx }));
-  record.benches.away.forEach((p, idx) => benchMetaAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx }));
+  const benchMetaHome = new Map<string, { pos?: string; order: number; substitutionType?: string }>();
+  const benchMetaAway = new Map<string, { pos?: string; order: number; substitutionType?: string }>();
+  // [수정] substitutionType 저장 추가
+  record.benches.home.forEach((p, idx) => benchMetaHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, substitutionType: p.substitutionType }));
+  record.benches.away.forEach((p, idx) => benchMetaAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, substitutionType: p.substitutionType }));
 
   const extraOrder: Record<'home' | 'away', number> = { home: 100, away: 100 };
   const battingOrders: Record<'home' | 'away', Map<number, string[]>> = { home: new Map(), away: new Map() };
@@ -1698,7 +1842,8 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   seedBattingOrders('away');
 
   const addRemovedOrders = (side: 'home' | 'away') => {
-    (record.removed?.[side] ?? []).forEach((p) => {
+    // [수정] 교체된 순서대로 정렬하기 위해 removed 배열을 역순으로 순회
+    [...(record.removed?.[side] ?? [])].reverse().forEach((p) => {
       const ord = typeof p.order === 'number' && p.order > 0 ? p.order : null;
       if (!ord) return;
       const list = battingOrders[side].get(ord) ?? [];
@@ -1724,7 +1869,8 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     if (roster.has(name)) return roster.get(name)!;
     const benchMeta = side === 'home' ? benchMetaHome : benchMetaAway;
     const meta = benchMeta.get(name);
-    const entry = { pos: meta?.pos, order: meta?.order ?? extraOrder[side] };
+    // [수정] substitutionType 전달
+    const entry = { pos: meta?.pos, order: meta?.order ?? extraOrder[side], substitutionType: meta?.substitutionType };
     extraOrder[side] += 1;
     roster.set(name, entry);
     return entry;
@@ -1912,7 +2058,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     }
   });
 
-  const toArray = (side: 'home' | 'away', roster: Map<string, { pos?: string; order: number }>, store: Map<string, PlayerStat>) => {
+  const toArray = (side: 'home' | 'away', roster: Map<string, { pos?: string; order: number; substitutionType?: string }>, store: Map<string, PlayerStat>) => {
     const rows: PlayerStat[] = [];
     const orderMap = battingOrders[side];
     const orderKeys = [...orderMap.keys()].sort((a, b) => a - b);
@@ -1923,7 +2069,17 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
         const stat = store.get(playerName);
         const base = ensurePlayerStat(playerName, meta?.pos);
         const row = stat ? { ...base, ...stat, pos: stat.pos ?? base.pos } : base;
-        rows.push({ ...row, order, status: idx < players.length - 1 ? 'out' : undefined });
+        
+        // [수정] status 결정 로직: 교체 아웃된 경우 'out', 아니면 교체 유형(대타/대주자 등) 표시
+        let status: 'out' | '대타' | '대주자' | '대수비' | undefined = undefined;
+        if (idx < players.length - 1) {
+          status = 'out';
+        } else if (meta?.substitutionType) {
+          // as casting을 통해 타입 호환성 확보
+          status = meta.substitutionType as 'out' | '대타' | '대주자' | '대수비';
+        }
+
+        rows.push({ ...row, order, status });
       });
     });
     const remaining = [...store.values()].filter(
