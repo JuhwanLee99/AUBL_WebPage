@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { TEAMS } from '../../shared/lib/mockData';
-import { buildGameRecord, useDemoStore } from '../../shared/state/demoStore';
+import { buildGameRecord, canPitcherBat, useDemoStore } from '../../shared/state/demoStore';
 import type {
   BattedBallDetails,
   ErrorDetails,
@@ -1246,7 +1246,13 @@ export default function ScorekeeperPage() {
   const hittingSide: Side = state.half === 'top' ? 'away' : 'home';
   const defenseSide: Side = hittingSide === 'home' ? 'away' : 'home';
   const offenseLineupEntries = state.lineups[hittingSide].map((slot, idx) => ({ slot, idx }));
-  const offenseBattingEntries = offenseLineupEntries.filter((entry) => entry.slot.pos.toUpperCase() !== 'P');
+  // 타석에 들어갈 수 있는 선수만 필터링 (오타니룰 고려)
+  const offenseBattingEntries = offenseLineupEntries.filter((entry) => {
+    // 투수가 아니면 타석에 들어감
+    if (entry.slot.pos.toUpperCase() !== 'P') return true;
+    // 투수인 경우, 타석에 들어갈 수 있는지 확인 (오타니룰 고려)
+    return canPitcherBat(entry.slot, state.lineups[hittingSide]);
+  });
   const activeOffenseEntries = offenseBattingEntries.length ? offenseBattingEntries : offenseLineupEntries;
   const defenseLineup = state.lineups[defenseSide];
   const activeLineupLength = activeOffenseEntries.length || 1;

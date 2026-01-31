@@ -75,6 +75,9 @@ interface PlayerSlot {
   throws: string;
   bats: string;
   order?: number | null;
+  // 오타니룰: 투수가 DH 역할을 하는 경우 true
+  // 이 플래그가 true인 투수는 마운드에서 내려와도 타석에 계속 들어갈 수 있음
+  isOhtaniRule?: boolean;
 }
 
 export type PostGameLineScore = { innings: number[]; home: number[]; away: number[] };
@@ -401,16 +404,35 @@ const normalizePlayerSlotForGame = (player: PlayerSlot): PlayerSlot => ({
 
 const ensureLineupFilled = (lineup: PlayerSlot[]) => {
   const normalized = lineup.map(normalizePlayerSlotForGame);
-  let hasPitcher = normalized.some((slot) => slot.pos.toUpperCase() === 'P');
-  let battingCount = normalized.reduce((count, slot) => (slot.pos.toUpperCase() === 'P' ? count : count + 1), 0);
-  while (battingCount < 9) {
-    normalized.push({ ...emptyPlayerSlot });
-    battingCount += 1;
+  const hasPitcher = normalized.some((slot) => slot.pos.toUpperCase() === 'P');
+  const hasDH = normalized.some((slot) => slot.pos.toUpperCase() === 'DH');
+
+  // DH가 있는 경우: 타자 9명 (DH 포함) + 투수 1명 = 10명
+  // DH가 없는 경우: 타자 9명 (투수 포함) = 9명
+  if (hasDH) {
+    // DH 리그: 투수를 제외한 타자 9명 보장
+    let battingCount = normalized.reduce((count, slot) =>
+      (slot.pos.toUpperCase() === 'P' ? count : count + 1), 0);
+    while (battingCount < 9) {
+      normalized.push({ ...emptyPlayerSlot });
+      battingCount += 1;
+    }
+    // 투수 1명 보장 (타석에 들어가지 않음)
+    if (!hasPitcher) {
+      normalized.push({ ...emptyPlayerSlot, pos: 'P' });
+    }
+  } else {
+    // 비DH 리그: 투수를 포함한 타자 9명 보장
+    while (normalized.length < 9) {
+      normalized.push({ ...emptyPlayerSlot });
+    }
+    // 투수가 없으면 마지막 슬롯을 투수로 설정
+    if (!hasPitcher) {
+      const lastIndex = normalized.length - 1;
+      normalized[lastIndex] = { ...normalized[lastIndex], pos: 'P' };
+    }
   }
-  if (!hasPitcher) {
-    normalized.push({ ...emptyPlayerSlot, pos: 'P' });
-    hasPitcher = true;
-  }
+
   return normalized;
 };
 
@@ -418,6 +440,17 @@ const ensureCompleteLineups = (lineups: { home: PlayerSlot[]; away: PlayerSlot[]
   home: ensureLineupFilled(lineups.home),
   away: ensureLineupFilled(lineups.away),
 });
+
+// 오타니룰 관련 헬퍼 함수
+// 투수가 타석에 들어갈 수 있는지 확인 (오타니룰 적용 투수 또는 DH가 없는 경우)
+export const canPitcherBat = (player: PlayerSlot, lineup: PlayerSlot[]): boolean => {
+  if (player.pos.toUpperCase() !== 'P') return false;
+  // 오타니룰 플래그가 설정된 경우
+  if (player.isOhtaniRule) return true;
+  // DH가 없는 리그인 경우 투수도 타석에 들어감
+  const hasDH = lineup.some((slot) => slot.pos.toUpperCase() === 'DH');
+  return !hasDH;
+};
 
 const teamDivisionById = (teamId?: string): LeagueDivision | undefined => TEAMS.find((team) => team.id === teamId)?.division;
 const deriveMatchDivision = (
@@ -2731,7 +2764,15 @@ function advanceBasesOnWalk(currentBases: Bases, batterName: string) {
 function nextBatter(state: DemoState) {
   const side = hittingSide(state);
   const lineup = state.lineups[side];
-  const battingLineup = lineup.filter((slot) => slot.pos.toUpperCase() !== 'P');
+
+  // 타석에 들어갈 수 있는 선수만 필터링 (오타니룰 고려)
+  const battingLineup = lineup.filter((slot) => {
+    // 투수가 아니면 타석에 들어감
+    if (slot.pos.toUpperCase() !== 'P') return true;
+    // 투수인 경우, 타석에 들어갈 수 있는지 확인 (오타니룰 고려)
+    return canPitcherBat(slot, lineup);
+  });
+
   const activeLineup = battingLineup.length ? battingLineup : lineup;
   const safeLength = activeLineup.length || 1;
   const idx = state.batterIndex[side] % safeLength;
@@ -2741,8 +2782,21 @@ function nextBatter(state: DemoState) {
 }
 
 function updateLineup(state: DemoState, side: Side, index: number, updates: Partial<PlayerSlot>): DemoState {
+  const original = state.lineups[side][index];
   const updated = state.lineups[side].map((slot, idx) => (idx === index ? { ...slot, ...updates } : slot));
-  return { ...state, lineups: { ...state.lineups, [side]: updated } };
+
+  // 포지션 변경 시 feed에 기록
+  let feed = state.feed;
+  let lastPlay = state.lastPlay;
+  if (updates.pos && original?.pos && updates.pos !== original.pos) {
+    const playerName = original.name || '선수';
+    const playerNum = original.number ? `(${original.number})` : '';
+    const changeText = `포지션 변경 · ${playerName}${playerNum}: ${original.pos} → ${updates.pos}`;
+    feed = pushFeed(state.feed, createLogEntryForBaserunning(state, changeText, 0));
+    lastPlay = changeText;
+  }
+
+  return { ...state, lineups: { ...state.lineups, [side]: updated }, feed, lastPlay };
 }
 
 function substitutePlayer(state: DemoState, side: Side, benchIndex: number, lineupIndex: number): DemoState {
@@ -2784,11 +2838,20 @@ function substitutePlayer(state: DemoState, side: Side, benchIndex: number, line
 
 function getBattingOrder(lineup: PlayerSlot[], lineupIndex: number) {
   const slot = lineup[lineupIndex];
-  if (!slot || slot.pos.toUpperCase() === 'P') return null;
+  if (!slot) return null;
+
+  // 투수인 경우, 타석에 들어갈 수 있는지 확인 (오타니룰 고려)
+  if (slot.pos.toUpperCase() === 'P' && !canPitcherBat(slot, lineup)) {
+    return null;
+  }
+
   let order = 0;
   for (let i = 0; i < lineup.length; i += 1) {
     const player = lineup[i];
-    if (player.pos.toUpperCase() === 'P') continue;
+    // 투수는 타석에 들어갈 수 있는 경우만 카운트 (오타니룰 고려)
+    if (player.pos.toUpperCase() === 'P' && !canPitcherBat(player, lineup)) {
+      continue;
+    }
     order += 1;
     if (i === lineupIndex) return order;
   }
