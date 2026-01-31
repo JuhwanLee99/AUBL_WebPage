@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import { TEAMS } from '../../shared/lib/mockData';
 import { useDemoStore, buildGameRecord } from '../../shared/state/demoStore';
 import MatchSelectorBar from './MatchSelectorBar';
+import { GameTimerDisplay } from '../../shared/components/GameTimerDisplay';
 
 // [수정됨] ScorekeeperPage와 동일한 로직의 헬퍼 함수 추가 (또는 shared/utils로 분리 권장)
 const getUniqueName = (name: string, number: string | number | undefined | null) => {
@@ -125,6 +126,14 @@ export default function ScoreboardPanel({
     >
       <div style={{ display: 'grid', gap: 'clamp(8px, 1.3vw, 12px)' }}>
         <MatchSelectorBar summaryTime={summaryTime} summaryVenue={summaryVenue} />
+
+        <GameTimerDisplay
+          gameLimitMinutes={state.gameLimitMinutes}
+          gameStartTimestamp={state.gameStartTimestamp}
+          gamePausedAt={state.gamePausedAt}
+          gamePausedDuration={state.gamePausedDuration}
+          gameStarted={state.gameStarted}
+        />
 
         <div
           style={{
