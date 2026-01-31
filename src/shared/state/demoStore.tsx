@@ -2945,6 +2945,15 @@ function substitutePlayer(
 
   const changeText = `${changeLabel} · ${formatPlayer(outgoing)} → ${formatPlayer(benchPlayer)}`;
   const feed = pushFeed(state.feed, createLogEntryForBaserunning(state, changeText, 0));
+
+  // 대주자 교체 시 베이스 업데이트
+  let bases = state.bases;
+  if (substitutionType === '대주자' && outgoing) {
+    const outgoingUniqueName = formatUniqueName(outgoing.name, outgoing.number);
+    const incomingUniqueName = formatUniqueName(incomingPlayer.name, incomingPlayer.number);
+    bases = state.bases.map((runner) => (runner === outgoingUniqueName ? incomingUniqueName : runner)) as Bases;
+  }
+
   return {
     ...state,
     lineups: { ...state.lineups, [side]: lineup },
@@ -2952,6 +2961,7 @@ function substitutePlayer(
     removed,
     lastPlay: changeText,
     feed,
+    bases,
   };
 }
 
