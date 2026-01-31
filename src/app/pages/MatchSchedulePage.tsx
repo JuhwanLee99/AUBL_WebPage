@@ -2,7 +2,13 @@ import type { CSSProperties, FormEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
-import type { MatchSchedule, MatchStatus, PostGameRecord } from '../../shared/state/demoStore';
+import type {
+  MatchSchedule,
+  MatchStatus,
+  PostGameRecord,
+  PostGameBatterLine,
+  PostGamePitcherLine,
+} from '../../shared/state/demoStore';
 import type { LeagueDivision } from '../../shared/types';
 import { TEAMS } from '../../shared/lib/mockData';
 import { useAdmin } from '../../shared/auth/useAdmin';
@@ -23,8 +29,9 @@ const emptyForm = {
 
 type Side = 'home' | 'away';
 type PlayerSlot = NonNullable<MatchSchedule['lineups']>['home'][number];
-type PostGamePitcher = PostGameRecord['pitchers'] extends { home?: (infer P)[] } ? P : never;
-type PostGameBatter = PostGameRecord['batters'] extends { home?: (infer B)[] } ? B : never;
+// [수정] 직접 타입 import 사용 (기존 infer 로직 제거)
+type PostGamePitcher = PostGamePitcherLine;
+type PostGameBatter = PostGameBatterLine;
 
 const defaultPlayerSlot: PlayerSlot = {
   name: '',
@@ -257,11 +264,12 @@ export default function MatchSchedulePage() {
     const upcoming = sortedMatches.filter(
       (match) => match.status === 'scheduled' && getSafeTime(match.startTime) >= now,
     );
+    // [수정] match.status === 'scheduled' 이면 'inProgress'일 수 없으므로 redundant check 제거
     const past = sortedMatches.filter(
       (match) =>
         match.status === 'completed' ||
         match.status === 'canceled' ||
-        (match.status === 'scheduled' && match.status !== 'inProgress' && getSafeTime(match.startTime) < now),
+        (match.status === 'scheduled' && getSafeTime(match.startTime) < now),
     );
     return { live, upcoming, past };
   }, [sortedMatches]);
@@ -1272,11 +1280,19 @@ function CompletedResultCard({ match }: { match: MatchSchedule }) {
   );
 }
 
+// [수정] 인터페이스 명시하여 유니온 타입 속성 오류 해결
+interface LineScoreCell {
+  text: string;
+  bold?: boolean;
+  color?: string;
+}
+
 function LineScoreCompact({ teams, detail }: { teams: { home: string; away: string }; detail: PostGameRecord }) {
   if (!detail.lineScore) return null;
   const innings = detail.lineScore.innings || [];
   const header = ['팀', ...innings, 'R', 'H', 'E', 'LOB'];
-  const row = (label: string, scores: number[] = [], totals?: { runs?: number; hits?: number; errors?: number; lob?: number }, color?: string) => [
+  // [수정] 반환 타입 명시
+  const row = (label: string, scores: number[] = [], totals?: { runs?: number; hits?: number; errors?: number; lob?: number }, color?: string): LineScoreCell[] => [
     { text: label, bold: true, color },
     ...innings.map((_, idx) => ({ text: scores[idx] != null ? String(scores[idx]) : '-' })),
     { text: totals?.runs != null ? String(totals.runs) : '-', bold: true },
@@ -1389,7 +1405,9 @@ function PitchingMiniTable({
   color: string;
 }) {
   const header = ['투수', 'IP', 'BF', 'H', 'HR', 'BB', 'HBP', 'SO', 'R', 'ER', 'NP'];
-  const value = (v: unknown) => (v == null ? '-' : v);
+  // [수정] v가 unknown 타입이므로 렌더링 안전성을 위해 String()으로 명시적 변환
+  const value = (v: unknown) => (v == null ? '-' : String(v));
+  
   return (
     <div
       style={{
@@ -1442,7 +1460,9 @@ function BattingMiniTable({
 }) {
   if (!batters.length) return null;
   const header = ['순번', '선수', '포지션', 'AB', 'H', 'R', 'RBI', 'SB', 'AVG', '시즌'];
-  const value = (v: unknown) => (v == null ? '-' : v);
+  // [수정] v가 unknown 타입이므로 렌더링 안전성을 위해 String()으로 명시적 변환
+  const value = (v: unknown) => (v == null ? '-' : String(v));
+  
   const formatAvg = (n?: number) => {
     if (n == null) return '-';
     const fixed = Number(n).toFixed(3);
