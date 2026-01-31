@@ -3370,6 +3370,7 @@ function DoublePlayModal({
   );
 }
 
+// [수정 1] MultipleRunnersOutModal 컴포넌트 (약 1925라인 근처)
 function MultipleRunnersOutModal({
   basesState,
   minOuts = 1,
@@ -3381,7 +3382,8 @@ function MultipleRunnersOutModal({
   minOuts?: number;
   maxOuts?: number;
   onClose: () => void;
-  onConfirm: (selectedRunners: number[], label: string) => void;
+  // onConfirm 시그니처 변경: isBatterSafe 추가
+  onConfirm: (selectedRunners: number[], label: string, isBatterSafe: boolean) => void;
 }) {
   const runners = basesState
     .map((runner, idx) => (runner ? { runner, baseIndex: idx as 0 | 1 | 2 } : null))
@@ -3389,10 +3391,13 @@ function MultipleRunnersOutModal({
 
   const [selectedRunners, setSelectedRunners] = useState<number[]>([]);
   const [customLabel, setCustomLabel] = useState('');
+  // [추가] 타자 출루 여부 상태
+  const [isBatterSafe, setIsBatterSafe] = useState(false);
 
   const effectiveMaxOuts = maxOuts ?? runners.length;
 
   const toggleRunner = (baseIndex: number) => {
+    // ... (기존 로직 동일)
     if (selectedRunners.includes(baseIndex)) {
       setSelectedRunners(selectedRunners.filter((idx) => idx !== baseIndex));
     } else {
@@ -3405,7 +3410,8 @@ function MultipleRunnersOutModal({
   const handleConfirm = () => {
     if (selectedRunners.length >= minOuts && selectedRunners.length <= effectiveMaxOuts) {
       const defaultLabel = selectedRunners.length === 2 ? '더블아웃' : `${selectedRunners.length}명 아웃`;
-      onConfirm(selectedRunners, customLabel.trim() || defaultLabel);
+      // [수정] isBatterSafe 전달
+      onConfirm(selectedRunners, customLabel.trim() || defaultLabel, isBatterSafe);
     }
   };
 
@@ -3517,6 +3523,35 @@ function MultipleRunnersOutModal({
                 </button>
               );
             })}
+          </div>
+          {/* [추가] 타자 출루 체크박스 UI */}
+          <div style={{ marginBottom: '16px' }}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                background: 'rgba(255,255,255,0.05)',
+                padding: '10px',
+                borderRadius: '8px',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={isBatterSafe}
+                onChange={(e) => setIsBatterSafe(e.target.checked)}
+                style={{ width: '16px', height: '16px', accentColor: '#3b82f6' }}
+              />
+              <span style={{ color: '#e2e8f0', fontSize: '14px', fontWeight: 700 }}>
+                타자 출루 (타격 상황/야수선택)
+              </span>
+            </label>
+            {isBatterSafe && (
+              <p style={{ margin: '6px 0 0 28px', fontSize: '12px', color: '#94a3b8' }}>
+                체크 시 타자가 1루로 진루하며 '야수선택'으로 기록됩니다.
+              </p>
+            )}
           </div>
           <div style={{ marginBottom: '16px' }}>
             <label style={{ fontSize: '13px', color: '#cbd5e1', display: 'block', marginBottom: '8px' }}>
