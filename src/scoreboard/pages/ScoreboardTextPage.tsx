@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import ScoreboardFrame from '../components/ScoreboardFrame';
 import { useDemoStore, buildGameRecord } from '../../shared/state/demoStore';
 import type { PlayEvent, ErrorDetails, RunnerAdvanceOutcome, BattedBallDetails } from '../../shared/state/demoStore'; // [추가] 타입 임포트
@@ -103,10 +103,22 @@ function resolveJersey(jerseyMap: JerseyMap, side: 'home' | 'away', name: string
 }
 
 export default function ScoreboardTextPage() {
-  const { state } = useDemoStore();
+  const { state, actions } = useDemoStore();
+  const { matchId } = useParams<{ matchId?: string }>();
   const [showReplay, setShowReplay] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const navigate = useNavigate(); // [수정] 훅 초기화
+
+  // URL에서 matchId가 있으면 해당 경기 자동 선택
+  useEffect(() => {
+    if (matchId && matchId !== state.activeMatchId) {
+      // matchId가 유효한지 확인
+      const matchExists = state.matches.some((m) => m.id === matchId);
+      if (matchExists) {
+        actions.selectMatch(matchId);
+      }
+    }
+  }, [matchId, state.activeMatchId, state.matches, actions]);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -356,6 +368,32 @@ export default function ScoreboardTextPage() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>총 {feed.length}건</span>
+              {!noActiveMatch && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = `${window.location.origin}/scoreboard-text/${state.activeMatchId}`;
+                    navigator.clipboard.writeText(url).then(() => {
+                      alert('링크가 복사되었습니다!\n' + url);
+                    }).catch(() => {
+                      alert('링크 복사에 실패했습니다.');
+                    });
+                  }}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(34,197,94,0.5)',
+                    background: 'rgba(34,197,94,0.12)',
+                    color: '#22c55e',
+                    fontWeight: 800,
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                  }}
+                  title="이 경기 문자중계 링크 복사"
+                >
+                  🔗 링크 복사
+                </button>
+              )}
               {hasLiveOverlay ? (
                 <button
                   type="button"
