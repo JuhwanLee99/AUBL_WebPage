@@ -1316,7 +1316,7 @@ function computePitcherLine(feed: ReturnType<typeof useDemoStore>['state']['feed
     const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
     const defenseSide: 'home' | 'away' = offenseSide === 'home' ? 'away' : 'home';
     const result = entry.result.trim();
-    
+
     // 피드에서 투수 추적
     if (result.includes('투수 교체')) {
       const incoming = result.split('→')[1];
@@ -1325,9 +1325,10 @@ function computePitcherLine(feed: ReturnType<typeof useDemoStore>['state']['feed
       current[defenseSide] = cleanName(result.replace('투수', ''));
     }
 
-    const activePitcher = current[defenseSide];
+    // 투수 교체가 명시되지 않은 경우, 현재 투수(pitcher)를 기본값으로 사용
+    const activePitcher = current[defenseSide] || pitcher;
     // pitcher(현재 투수)와 피드 상의 투수 비교
-    if (!activePitcher || !isSamePlayerName(activePitcher, pitcher)) return;
+    if (!isSamePlayerName(activePitcher, pitcher)) return;
 
     const pitchInfo = classifyPitch(result);
     if (pitchInfo.pitch) {

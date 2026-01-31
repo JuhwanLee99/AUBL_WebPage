@@ -1723,7 +1723,7 @@ function formatRunnerMove({
 function currentBatterInfo(state: DemoState) {
   const side = hittingSide(state);
   const lineup = state.lineups[side];
-  
+
   // [수정] 1~9번 타자는 포지션 불문하고 타자로 인정
   const battingLineup = lineup.filter((slot, idx) => {
     if (idx < 9) return true; // 타순 1~9번 강제 포함
@@ -1734,9 +1734,10 @@ function currentBatterInfo(state: DemoState) {
   const activeLineup = battingLineup.length ? battingLineup : lineup;
   const safeLength = activeLineup.length || 1;
   const idx = state.batterIndex[side] % safeLength;
+  const batterSlot = activeLineup[idx];
   return {
     order: idx + 1,
-    batter: activeLineup[idx]?.name ?? '타자',
+    batter: batterSlot ? formatUniqueName(batterSlot.name, batterSlot.number) : '타자',
   };
 }
 
@@ -2778,7 +2779,8 @@ function nextBatter(state: DemoState) {
   const activeLineup = battingLineup.length ? battingLineup : lineup;
   const safeLength = activeLineup.length || 1;
   const idx = state.batterIndex[side] % safeLength;
-  const batterName = activeLineup[idx]?.name ?? '타자';
+  const batterSlot = activeLineup[idx];
+  const batterName = batterSlot ? formatUniqueName(batterSlot.name, batterSlot.number) : '타자';
   const batterIndex = { ...state.batterIndex, [side]: (idx + 1) % safeLength };
   return { batterName, batterIndex };
 }
