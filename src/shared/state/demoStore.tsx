@@ -18,7 +18,6 @@ import {
 import { auth, firestore } from '../firebase/client';
 import { TEAMS } from '../lib/mockData';
 import type { LeagueDivision } from '../types';
-import { sendGameDetail, transformMatchToGameDetail } from '../api';
 
 // 헬퍼 함수 추가
 const formatUniqueName = (name: string, number: string | number | undefined | null) => {
@@ -3820,6 +3819,39 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
               });
           };
 
+          // 투수 기록 추출 함수 (기본 정보만)
+          const toPitcherLines = (side: 'home' | 'away'): PostGamePitcherLine[] => {
+            // lineup과 bench에서 투수 찾기
+            const allPlayers = [...snapshot.lineups[side], ...snapshot.benches[side]];
+            const pitchers = allPlayers.filter(p => p.pos.toUpperCase() === 'P');
+
+            return pitchers.map(p => {
+              const uniqueName = p.number ? `${p.name}(${p.number})` : p.name;
+
+              // TODO: 실제 투수 통계 계산 로직 추가
+              // 현재는 기본 정보만 포함
+              return {
+                name: uniqueName,
+                result: undefined, // 승/패/세/홀드 등 (수동 입력 필요)
+                ip: 0,
+                bf: 0,
+                ab: 0,
+                h: 0,
+                hr: 0,
+                bb: 0,
+                hbp: 0,
+                so: 0,
+                r: 0,
+                er: 0,
+                pitches: 0,
+                wp: 0,
+                bk: 0,
+                sh: 0,
+                sf: 0,
+              };
+            });
+          };
+
           const postGame: PostGameRecord = {
             lineScore: { innings: [], home: [], away: [] }, // 라인스코어는 별도 로직이 있거나 비워둠
             totals: { // 팀 합계 (간단 계산)
@@ -3830,7 +3862,10 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
               home: toBatterLines('home'),
               away: toBatterLines('away'),
             },
-            // 투수 기록 등도 필요하면 여기서 추가 (현재는 타자 위주)
+            pitchers: {
+              home: toPitcherLines('home'),
+              away: toPitcherLines('away'),
+            },
           };
 
           void pushMatchUpdate(matchId, {
@@ -3840,35 +3875,21 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
             postGame, // 상세 기록 저장
           }).catch(() => {});
 
-          // 백엔드로 경기 데이터 전송
-          const currentMatch = snapshot.matches.find(m => m.id === matchId);
-          if (currentMatch) {
-            const matchWithPostGame: MatchSchedule = {
-              ...currentMatch,
-              status: 'completed',
-              homeScore: snapshot.score.home,
-              awayScore: snapshot.score.away,
-              postGame,
-            };
-
-            // TODO: seasonId를 동적으로 가져오기 (현재는 하드코딩)
-            const CURRENT_SEASON_ID = 1;
-
-            const gameDetail = transformMatchToGameDetail(matchWithPostGame, CURRENT_SEASON_ID);
-
-            if (gameDetail) {
-              void sendGameDetail(gameDetail)
-                .then((response) => {
-                  console.log('✅ 경기 데이터 백엔드 전송 성공:', response);
-                })
-                .catch((error) => {
-                  console.error('❌ 경기 데이터 백엔드 전송 실패:', error);
-                  // 실패해도 Firestore에는 저장되어 있으므로 나중에 재시도 가능
-                });
-            } else {
-              console.warn('⚠️ 경기 데이터 변환 실패: 백엔드 전송 생략');
-            }
-          }
+          // 백엔드로 경기 데이터 전송 (Firestore 임포트 트리거)
+          // 백엔드가 Firestore에서 완료된 경기를 직접 읽어가므로,
+          // Firestore에 저장 후 임포트 API를 호출하여 백엔드가 데이터를 가져가도록 트리거
+          void import('../api').then(({ importFirestoreMatches }) => {
+            importFirestoreMatches()
+              .then((response) => {
+                console.log('✅ 백엔드 임포트 트리거 성공:', response);
+              })
+              .catch((error) => {
+                console.error('❌ 백엔드 임포트 실패:', error);
+                // 실패해도 Firestore에는 저장되어 있으므로 나중에 재시도 가능
+              });
+          }).catch(() => {
+            console.error('❌ API 모듈 로드 실패');
+          });
         }
       },
       resetGame: () => dispatch({ type: 'resetGame' }),
