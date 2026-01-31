@@ -198,7 +198,7 @@ function requiresAdvanceModal(result: BattedBallResultAction | null) {
 type ActionModalData =
   | { role: 'runner'; name: string; base: 0 | 1 | 2 }
   | { role: 'batter'; name: string; side: Side; lineupIndex: number }
-  | { role: 'fielder'; name: string; pos: string };
+  | { role: 'fielder'; name: string; pos: string; side: Side; lineupIndex: number };
 
 function downloadCsv(content: string, filenamePrefix: string) {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
@@ -891,11 +891,15 @@ function classifyPitch(result: string) {
 
 function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   // Roster Map의 Key를 uniqueName으로 변경
-  const rosterHome = new Map<string, { pos?: string; order: number }>();
-  const rosterAway = new Map<string, { pos?: string; order: number }>();
-  
-  record.lineups.home.forEach((p, idx) => rosterHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx }));
-  record.lineups.away.forEach((p, idx) => rosterAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx }));
+  const rosterHome = new Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자' }>();
+  const rosterAway = new Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자' }>();
+
+  record.lineups.home.forEach((p, idx) =>
+    rosterHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType })
+  );
+  record.lineups.away.forEach((p, idx) =>
+    rosterAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType })
+  );
 
   const benchMetaHome = new Map<string, { pos?: string; order: number }>();
   const benchMetaAway = new Map<string, { pos?: string; order: number }>();
@@ -1213,7 +1217,11 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     }
   });
 
-  const toArray = (side: 'home' | 'away', roster: Map<string, { pos?: string; order: number }>, store: Map<string, PlayerStat>) => {
+  const toArray = (
+    side: 'home' | 'away',
+    roster: Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자' }>,
+    store: Map<string, PlayerStat>
+  ) => {
     const rows: PlayerStat[] = [];
     const orderMap = battingOrders[side];
     const orderKeys = [...orderMap.keys()].sort((a, b) => a - b);
@@ -1224,34 +1232,47 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
         const stat = store.get(playerName);
         const base = ensurePlayerStat(playerName, meta?.pos);
         const row = stat ? { ...base, ...stat, pos: stat.pos ?? base.pos } : base;
-        rows.push({ ...row, order, status: idx < players.length - 1 ? 'out' : undefined });
+
+        // 교체된 선수는 'out', 교체로 들어온 선수는 substitutionType을 status로 설정
+        let status: 'out' | '대수비' | '대타' | '대주자' | undefined;
+        if (idx < players.length - 1) {
+          status = 'out';
+        } else if (meta?.substitutionType) {
+          status = meta.substitutionType;
+        }
+
+        rows.push({ ...row, order, status });
       });
     });
     const remaining = [...store.values()].filter(
       (s) =>
         !rows.some((r) => r.name === s.name) &&
-        ![...orderMap.values()].some((list) => list.includes(s.name)),
+        ![...orderMap.values()].some((list) => list.includes(s.name))
     );
     remaining.forEach((stat) => rows.push({ ...stat, order: null }));
     return rows;
   };
 
   const toPitcherArray = (
-    roster: Map<string, { pos?: string; order: number }>,
+    roster: Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자' }>,
     store: Map<string, PitcherStat>,
-    appearance: Map<string, number>,
-  ) => {
+    appearance: Map<string, number>
+  ): PitcherStatLine[] => {
     const names = new Set<string>();
     roster.forEach((meta, name) => {
       if ((meta.pos ?? '').toUpperCase() === 'P') names.add(name);
     });
     store.forEach((_stat, name) => names.add(name));
 
-    const combined = [...names].map((name) => {
+    const combined: PitcherStatLine[] = [...names].map((name) => {
       const meta = roster.get(name);
       const base = ensurePitcherStat(name, meta?.pos);
       const stat = store.get(name);
       const appearanceOrder = appearance.get(name);
+
+      // 투수의 경우 대수비만 해당 (교체로 들어온 투수)
+      const status: 'out' | '대수비' | undefined = meta?.substitutionType === '대수비' ? '대수비' : undefined;
+
       return {
         ...(stat ? { ...base, ...stat, pos: stat.pos ?? base.pos } : base),
         appearanceOrder,
@@ -1261,6 +1282,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
             : Number.isFinite(appearanceOrder)
               ? `계투(${appearanceOrder})`
               : undefined,
+        status,
       };
     });
 
@@ -2059,7 +2081,9 @@ const handleConfirmHitWizard = () => {
             }}
             onSelectFielder={(payload) => {
               if (controlsDisabled) return;
-              setActionModal({ role: 'fielder', ...payload });
+              // 수비수의 lineupIndex 찾기
+              const lineupIndex = defenseLineup.findIndex((slot) => slot.name === payload.name);
+              setActionModal({ role: 'fielder', ...payload, side: defenseSide, lineupIndex });
             }}
           />
           <div
@@ -2714,8 +2738,8 @@ const handleConfirmHitWizard = () => {
           onClose={() => setActionModal(null)}
           actions={actions}
           bases={state.bases}
-          bench={state.benches[hittingSide]}
-          lineup={state.lineups[hittingSide]}
+          bench={actionModal.role === 'fielder' ? state.benches[defenseSide] : state.benches[hittingSide]}
+          lineup={actionModal.role === 'fielder' ? state.lineups[defenseSide] : state.lineups[hittingSide]}
         />
       )}
       {hitAdvanceModal && (
@@ -4850,9 +4874,9 @@ function ActionModal({
 
   const currentSlot = data.role === 'batter' ? lineup[data.lineupIndex] : null;
 
-  const handleSubstitute = (benchIndex: number) => {
-    if (data.role !== 'batter') return;
-    actions.substitute(data.side, benchIndex, data.lineupIndex);
+  const handleSubstitute = (benchIndex: number, substitutionType?: '대수비' | '대타' | '대주자') => {
+    if (data.role !== 'batter' && data.role !== 'fielder') return;
+    actions.substitute(data.side, benchIndex, data.lineupIndex, substitutionType);
     onClose();
   };
 
@@ -4996,7 +5020,7 @@ function ActionModal({
                         gap: '6px',
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'grid', gap: '8px' }}>
                         <div style={{ display: 'grid', gap: '2px' }}>
                           <span style={{ fontWeight: 900, color: '#e2e8f0' }}>
                             {player.name} · {player.pos}
@@ -5005,22 +5029,72 @@ function ActionModal({
                             등번호 {player.number || '-'} · 투 {player.throws || '-'} · 타 {player.bats || '-'}
                           </span>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => handleSubstitute(idx)}
-                          style={{
-                            padding: '8px 12px',
-                            borderRadius: '10px',
-                            border: '1px solid rgba(74,222,128,0.5)',
-                            background: 'linear-gradient(90deg, #22c55e, #16a34a)',
-                            color: '#0b0f1a',
-                            fontWeight: 900,
-                            cursor: 'pointer',
-                            boxShadow: '0 8px 16px rgba(34,197,94,0.25)',
-                          }}
-                        >
-                          이 선수로 교체
-                        </button>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleSubstitute(idx, '대타')}
+                            style={{
+                              padding: '8px 10px',
+                              borderRadius: '8px',
+                              border: '1px solid rgba(34,197,94,0.4)',
+                              background: 'rgba(34,197,94,0.12)',
+                              color: '#22c55e',
+                              fontWeight: 900,
+                              fontSize: '11px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            대타
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSubstitute(idx, '대주자')}
+                            style={{
+                              padding: '8px 10px',
+                              borderRadius: '8px',
+                              border: '1px solid rgba(251,146,60,0.4)',
+                              background: 'rgba(251,146,60,0.12)',
+                              color: '#fb923c',
+                              fontWeight: 900,
+                              fontSize: '11px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            대주자
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSubstitute(idx, '대수비')}
+                            style={{
+                              padding: '8px 10px',
+                              borderRadius: '8px',
+                              border: '1px solid rgba(59,130,246,0.4)',
+                              background: 'rgba(59,130,246,0.12)',
+                              color: '#3b82f6',
+                              fontWeight: 900,
+                              fontSize: '11px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            대수비
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSubstitute(idx)}
+                            style={{
+                              padding: '8px 10px',
+                              borderRadius: '8px',
+                              border: '1px solid rgba(148,163,184,0.4)',
+                              background: 'rgba(148,163,184,0.12)',
+                              color: '#cbd5e1',
+                              fontWeight: 900,
+                              fontSize: '11px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            일반 교체
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -5189,6 +5263,139 @@ function ActionModal({
                   <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>현재 주자 없음</span>
                 ) : null}
               </div>
+            </div>
+          </div>
+        ) : null}
+        {data.role === 'fielder' ? (
+          <div
+            style={{
+              padding: '10px 12px',
+              borderRadius: '12px',
+              border: '1px solid rgba(148, 163, 184, 0.25)',
+              background: 'rgba(15,23,42,0.55)',
+              display: 'grid',
+              gap: '10px',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'grid', gap: '4px' }}>
+                <span style={{ fontWeight: 900, color: '#e2e8f0' }}>수비수 교체/대수비</span>
+                <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>포지션 {data.pos}</span>
+              </div>
+              <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>교체 즉시 라인업/피드 반영</span>
+            </div>
+            <div
+              style={{
+                padding: '10px',
+                borderRadius: '10px',
+                border: '1px dashed rgba(148,163,184,0.35)',
+                background: 'rgba(255,255,255,0.03)',
+                display: 'grid',
+                gap: '4px',
+              }}
+            >
+              <span style={{ color: '#cbd5e1', fontWeight: 800 }}>현재 수비수</span>
+              <span style={{ color: '#e2e8f0', fontWeight: 900 }}>{data.name}</span>
+              <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>포지션 {data.pos}</span>
+            </div>
+            <div style={{ display: 'grid', gap: '8px' }}>
+              <span style={{ fontWeight: 800, color: '#cbd5e1', fontSize: '13px' }}>벤치에서 교체할 선수를 선택하세요</span>
+              {bench.length ? (
+                <div style={{ display: 'grid', gap: '8px' }}>
+                  {bench.map((player, idx) => (
+                    <div
+                      key={`${player.name}-${idx}`}
+                      style={{
+                        borderRadius: '12px',
+                        border: '1px solid rgba(148,163,184,0.25)',
+                        padding: '10px',
+                        background: 'rgba(255,255,255,0.03)',
+                        display: 'grid',
+                        gap: '6px',
+                      }}
+                    >
+                      <div style={{ display: 'grid', gap: '8px' }}>
+                        <div style={{ display: 'grid', gap: '2px' }}>
+                          <span style={{ fontWeight: 900, color: '#e2e8f0' }}>
+                            {player.name} · {player.pos}
+                          </span>
+                          <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
+                            등번호 {player.number || '-'} · 투 {player.throws || '-'} · 타 {player.bats || '-'}
+                          </span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleSubstitute(idx, '대수비')}
+                            style={{
+                              padding: '8px 10px',
+                              borderRadius: '8px',
+                              border: '1px solid rgba(59,130,246,0.4)',
+                              background: 'rgba(59,130,246,0.12)',
+                              color: '#3b82f6',
+                              fontWeight: 900,
+                              fontSize: '11px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            대수비
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSubstitute(idx)}
+                            style={{
+                              padding: '8px 10px',
+                              borderRadius: '8px',
+                              border: '1px solid rgba(148,163,184,0.4)',
+                              background: 'rgba(148,163,184,0.12)',
+                              color: '#cbd5e1',
+                              fontWeight: 900,
+                              fontSize: '11px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            일반 교체
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div
+                  style={{
+                    borderRadius: '12px',
+                    border: '1px dashed rgba(148,163,184,0.35)',
+                    padding: '12px',
+                    color: '#94a3b8',
+                    fontWeight: 700,
+                    textAlign: 'center',
+                    background: 'rgba(255,255,255,0.02)',
+                  }}
+                >
+                  벤치 명단이 없습니다. Team Editor에서 선수를 추가하세요.
+                </div>
+              )}
+            </div>
+            <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
+              교체 시 이전 선수는 교체 out 패널에 기록되고 수비 위치가 변경됩니다.
+            </span>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  background: 'transparent',
+                  color: '#cbd5e1',
+                  fontWeight: 900,
+                  cursor: 'pointer',
+                }}
+              >
+                닫기
+              </button>
             </div>
           </div>
         ) : null}

@@ -48,7 +48,7 @@ type DisplayItem =
       half: Half;
       order: number | null;
       jersey?: string;
-      status?: 'out';
+      status?: 'out' | '대수비' | '대타' | '대주자';
       isSubstitute?: boolean;
     }
   | { type: 'log'; text: string; key: string; chip: string; inning: number; half: Half };
@@ -662,10 +662,68 @@ function LiveFeed({
               );
             }
             if (item.type === 'batter') {
+              const badgeStyles = {
+                out: {
+                  border: '1px solid rgba(239,68,68,0.4)',
+                  background: 'rgba(239,68,68,0.12)',
+                  color: '#ef4444',
+                  text: 'out',
+                },
+                대수비: {
+                  border: '1px solid rgba(59,130,246,0.4)',
+                  background: 'rgba(59,130,246,0.12)',
+                  color: '#3b82f6',
+                  text: '대수비',
+                },
+                대타: {
+                  border: '1px solid rgba(34,197,94,0.4)',
+                  background: 'rgba(34,197,94,0.12)',
+                  color: '#22c55e',
+                  text: '대타',
+                },
+                대주자: {
+                  border: '1px solid rgba(251,146,60,0.4)',
+                  background: 'rgba(251,146,60,0.12)',
+                  color: '#fb923c',
+                  text: '대주자',
+                },
+              };
+
+              const badge = item.status ? badgeStyles[item.status] : null;
+
               return (
-                <div key={item.key} style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '13px', padding: '2px 0' }}>
-                  {item.order ? `${item.order}번 ` : ''}
-                  {item.text} 타석
+                <div
+                  key={item.key}
+                  style={{
+                    color: '#e2e8f0',
+                    fontWeight: 800,
+                    fontSize: '13px',
+                    padding: '2px 0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <span>
+                    {item.order ? `${item.order}번 ` : ''}
+                    {item.text} 타석
+                  </span>
+                  {badge && (
+                    <span
+                      style={{
+                        padding: '2px 6px',
+                        borderRadius: '999px',
+                        border: badge.border,
+                        background: badge.background,
+                        color: badge.color,
+                        fontWeight: 900,
+                        fontSize: '10px',
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      {badge.text}
+                    </span>
+                  )}
                 </div>
               );
             }
