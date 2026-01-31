@@ -2,7 +2,9 @@
  * 백엔드 API 클라이언트 설정
  */
 
-const API_BASE_URL = import.meta.env.VITE_BACKEND_API_URL || 'https://api.aubl.club';
+// 개발 환경에서는 Vite 프록시를 사용하고, 프로덕션에서는 실제 API URL 사용
+const isDev = import.meta.env.DEV;
+const API_BASE_URL = isDev ? '' : (import.meta.env.VITE_BACKEND_API_URL || 'https://api.aubl.club');
 
 export interface ApiError {
   message: string;
