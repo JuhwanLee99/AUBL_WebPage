@@ -319,6 +319,7 @@ type Action =
   | { type: 'runnerCaught'; base: 0 | 1 | 2 }
   | { type: 'runnerPickoff'; base: 0 | 1 | 2 }
   | { type: 'runnerOut'; base: 0 | 1 | 2 }
+  | { type: 'multipleRunnersOut'; bases: number[]; label?: string }
   | { type: 'manualLog'; message: string }
   | { type: 'setTeamName'; side: Side; name: string }
   | { type: 'setLineup'; side: Side; index: number; updates: Partial<PlayerSlot> }
@@ -1462,6 +1463,9 @@ function reducer(state: DemoState, action: Action): DemoState {
     case 'runnerOut':
       nextState = applyRunnerOut(state, action.base, '주루사');
       break;
+    case 'multipleRunnersOut':
+      nextState = applyMultipleRunnersOut(state, action.bases, action.label);
+      break;
     case 'setTeamName':
       nextState = { ...state, teamNames: { ...state.teamNames, [action.side]: action.name } };
       break;
@@ -2543,6 +2547,52 @@ function applyRunnerOut(state: DemoState, baseIndex: 0 | 1 | 2, message: string)
   };
 }
 
+function applyMultipleRunnersOut(state: DemoState, bases: number[], label?: string): DemoState {
+  const newBases = [...state.bases] as Bases;
+  const runnersOut: { name: string; base: number }[] = [];
+
+  // 선택된 베이스의 주자들을 아웃시킴
+  for (const baseIndex of bases) {
+    if (newBases[baseIndex]) {
+      runnersOut.push({ name: newBases[baseIndex] as string, base: baseIndex });
+      newBases[baseIndex] = null;
+    }
+  }
+
+  if (runnersOut.length === 0) return state;
+
+  const outs = Math.min(3, state.outs + runnersOut.length);
+  const runnerDesc = runnersOut
+    .map((r) => `${r.name} ${baseLabel(r.base)}`)
+    .join(', ');
+  const finalLabel = label || (runnersOut.length === 2 ? '더블아웃' : `${runnersOut.length}명 아웃`);
+  const feedText = `${finalLabel} · ${runnerDesc} 아웃`;
+  const lastPlay = feedText;
+
+  const eventEntry = createPlayEventForBaserunning(
+    state,
+    { type: 'runner_out', runners: runnersOut.map(r => `${r.name} ${baseLabel(r.base)}`), notes: feedText },
+    state.pitchCount,
+  );
+
+  const feedEntry = createLogEntryForBaserunning(state, feedText, state.pitchCount);
+
+  const nextState = {
+    ...state,
+    bases: newBases,
+    outs,
+    lastPlay,
+    pitchCount: state.pitchCount,
+    feed: pushFeed(state.feed, feedEntry),
+    events: pushEvent(state.events, eventEntry),
+  };
+
+  if (outs >= 3) {
+    return changeHalf(nextState, lastPlay, state.pitchCount, state);
+  }
+  return nextState;
+}
+
 function applyDoublePlay(
   state: DemoState,
   outsToAdd: 2 | 3,
@@ -2920,6 +2970,7 @@ interface DemoStoreValue {
     runnerCaught: (base: 0 | 1 | 2) => void;
     runnerPickoff: (base: 0 | 1 | 2) => void;
     runnerOut: (base: 0 | 1 | 2) => void;
+    multipleRunnersOut: (bases: number[], label?: string) => void;
     runnerRundownOut: (base: 0 | 1 | 2) => void;
     runnerInterference: (base: 0 | 1 | 2) => void;
     addManualLog: (message: string) => void;
@@ -3533,6 +3584,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       runnerCaught: (base: 0 | 1 | 2) => dispatch({ type: 'runnerCaught', base }),
       runnerPickoff: (base: 0 | 1 | 2) => dispatch({ type: 'runnerPickoff', base }),
       runnerOut: (base: 0 | 1 | 2) => dispatch({ type: 'runnerOut', base }),
+      multipleRunnersOut: (bases: number[], label?: string) => dispatch({ type: 'multipleRunnersOut', bases, label }),
       addManualLog: (message: string) => dispatch({ type: 'manualLog', message }),
       setLiveVideoUrl: (url: string) => {
         dispatch({ type: 'setLiveVideoUrl', url });
