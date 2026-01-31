@@ -1546,7 +1546,9 @@ function buildDisplayItems(
   feed: ReturnType<typeof useDemoStore>['state']['feed'],
   jerseyMap: JerseyMap,
 ): DisplayItem[] {
-  const chronological = [...feed];
+  // [수정] demoStore가 이미 올바른 시간순(Oldest -> Newest)으로 정렬되어 있으므로 reverse() 제거
+  // createdAt 기반 정렬 덕분에 선수 교체 로그도 정확한 시점에 위치함
+  const chronological = feed; 
   const items: DisplayItem[] = [];
 
   const markerText = (inning: number, half: Half, type: 'start' | 'end') => {

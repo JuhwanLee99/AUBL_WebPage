@@ -200,6 +200,8 @@ export interface PlayLog {
   batter: string;
   pitch: number;
   result: string;
+  // [수정] 정렬을 위해 생성 시간 필드 추가
+  createdAt?: number;
 }
 
 export interface PlayEvent {
@@ -543,6 +545,8 @@ function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }):
         batter: typeof e.batter === 'string' ? e.batter : '',
         pitch: typeof e.pitch === 'number' ? e.pitch : 0,
         result: typeof e.result === 'string' ? e.result : '',
+        // [수정] createdAt 보존
+        createdAt: typeof e.createdAt === 'number' ? e.createdAt : undefined,
       };
     }
     return {
@@ -555,10 +559,20 @@ function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }):
     };
   });
 
-  // 투구 순서대로 정렬: inning → half (초→말) → order (타순) → pitch (투구수)
+  // [수정] 정렬 로직 개선: createdAt이 있으면 최우선으로 사용하여 교체 로그 위치 보정
   return normalized.sort((a, b) => {
     if (a.inning !== b.inning) return a.inning - b.inning;
     if (a.half !== b.half) return a.half === 'top' ? -1 : 1;
+    
+    // createdAt이 둘 다 있으면 시간순 정렬 (교체 로그가 제자리 찾아감)
+    if (a.createdAt !== undefined && b.createdAt !== undefined) {
+      return a.createdAt - b.createdAt;
+    }
+    // 하나만 있으면 없는 쪽(로컬/최신)을 뒤로
+    if (a.createdAt === undefined && b.createdAt !== undefined) return 1;
+    if (a.createdAt !== undefined && b.createdAt === undefined) return -1;
+
+    // 기존 fallback 정렬
     if (a.order !== b.order) return a.order - b.order;
     return a.pitch - b.pitch;
   });
@@ -1695,8 +1709,9 @@ function reducer(state: DemoState, action: Action): DemoState {
   return { ...nextState, history: [...state.history, snapshot] };
 }
 
+// [수정] 로컬 업데이트 시 시간순(과거->최신) 유지를 위해 배열 뒤에 추가 (append)
 function pushFeed(feed: PlayLog[], entry: PlayLog) {
-  return [entry, ...feed];
+  return [...feed, entry];
 }
 
 function pushEvent(events: PlayEvent[], entry: PlayEvent) {
