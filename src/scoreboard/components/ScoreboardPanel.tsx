@@ -476,9 +476,10 @@ export function BoxScoreTable({
         overflow: 'hidden',
         background: 'rgba(255,255,255,0.02)',
         display: 'grid',
-        gridTemplateRows: 'auto 1fr',
-        height: '100%',
+        gridTemplateRows: 'auto auto',
+        height: 'fit-content',
         minHeight: '0',
+        alignSelf: 'center',
       }}
     >
       <div
@@ -493,7 +494,7 @@ export function BoxScoreTable({
           <div
             key={h}
             style={{
-              padding: '6px 8px',
+              padding: '3px 2px',
               textAlign: 'center',
               fontWeight: 800,
               fontSize: '12px',
@@ -505,7 +506,7 @@ export function BoxScoreTable({
           </div>
         ))}
       </div>
-      <div style={{ display: 'grid', gridAutoRows: '1fr' }}>
+      <div style={{ display: 'grid', gridAutoRows: 'auto' }}>
         {rows.map((row, idx) => (
           <div
             key={row.name}
@@ -517,7 +518,7 @@ export function BoxScoreTable({
           >
             <div
               style={{
-                padding: '8px',
+                padding: '4px',
                 fontWeight: 900,
                 color: row.color,
                 fontSize: '12px',
@@ -530,7 +531,7 @@ export function BoxScoreTable({
               <div
                 key={`${row.name}-${vIdx}`}
                 style={{
-                  padding: '8px',
+                  padding: '4px 2px',
                   textAlign: 'center',
                   color: '#cbd5e1',
                   fontWeight: 800,
