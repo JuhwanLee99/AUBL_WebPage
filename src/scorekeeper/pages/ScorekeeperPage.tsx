@@ -1314,23 +1314,29 @@ export default function ScorekeeperPage() {
   const canUndo = state.history.length > 0;
   const playerStats = useMemo(() => buildPlayerStats(recordPayload), [recordPayload]);
   const boxScore = useMemo(() => {
-    const totals = activeMatch?.postGame?.totals;
-    const lineScore = activeMatch?.postGame?.lineScore;
-    const baseInnings = Array.from({ length: 9 }, (_v, idx) => idx + 1);
-    const hasExtrasFromRecord = (lineScore?.innings?.length ?? 0) > 9;
-    const hasExtrasLive = state.inning > 9;
-    const hasExtras = hasExtrasFromRecord || hasExtrasLive;
-    const innings = hasExtras ? [...baseInnings, '10+'] : baseInnings;
-    const padInnings = (arr: number[] | undefined) => {
-      const core = innings.map((_, idx) => {
-        if (hasExtras && idx === innings.length - 1) {
-          const extras = (arr ?? []).slice(9).reduce((acc, cur) => acc + (cur ?? 0), 0);
-          return (arr ?? []).length > 9 ? extras : '—';
-        }
-        return arr && arr[idx] != null ? arr[idx] : '—';
-      });
-      return core;
+    const { lineScore: liveLine, hits: liveHits, errors: liveErrors } = recordPayload.liveStats;
+    const maxInning = Math.max(state.inning, liveLine.home.length, liveLine.away.length);
+    const inningsHeader = Array.from({ length: Math.max(9, maxInning) }, (_, i) => i + 1);
+
+    const padInnings = (arr: number[]) =>
+      inningsHeader.map((_, idx) => (arr[idx] != null ? arr[idx] : '—'));
+
+    const totals = activeMatch?.postGame?.totals ?? {
+      home: { runs: state.score.home, hits: liveHits.home, errors: liveErrors.home },
+      away: { runs: state.score.away, hits: liveHits.away, errors: liveErrors.away },
     };
+
+    const lineScore =
+      activeMatch?.postGame?.lineScore && activeMatch.postGame.lineScore.innings.length
+        ? activeMatch.postGame.lineScore
+        : {
+            innings: inningsHeader,
+            home: liveLine.home,
+            away: liveLine.away,
+          };
+    const baseInnings = Array.from({ length: 9 }, (_v, idx) => idx + 1);
+    const hasExtras = (lineScore?.innings?.length ?? 0) > 9;
+    const innings = hasExtras ? [...baseInnings, '10+'] : baseInnings;
     const mk = (side: 'home' | 'away') => ({
       name: state.teamNames[side] || (side === 'home' ? homeTeam?.name : awayTeam?.name) || side.toUpperCase(),
       runs: state.score[side],
@@ -1340,7 +1346,7 @@ export default function ScorekeeperPage() {
       color: side === 'home' ? '#f97316' : '#60a5fa',
     });
     return { innings, rows: [mk('away'), mk('home')] };
-  }, [activeMatch?.postGame?.lineScore, activeMatch?.postGame?.totals, awayTeam?.name, homeTeam?.name, state.inning, state.score, state.teamNames]);
+  }, [recordPayload, state.inning, state.score, state.teamNames, activeMatch, homeTeam, awayTeam]);
   const statusBadge = !hasActiveMatch
     ? {
         text: '경기 미선택 · 기록 대기',
