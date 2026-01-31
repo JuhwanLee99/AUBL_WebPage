@@ -393,6 +393,7 @@ const cloneBenches = (benches: { home: PlayerSlot[]; away: PlayerSlot[] }) => ({
 
 const emptyPlayerSlot: PlayerSlot = { name: '', pos: '', number: '', throws: 'R', bats: 'R', order: null };
 
+// 게임 로직용 슬롯 정규화 함수 (isOhtaniRule 보존 추가)
 const normalizePlayerSlotForGame = (player: PlayerSlot): PlayerSlot => ({
   name: typeof player.name === 'string' ? player.name : '',
   pos: typeof player.pos === 'string' ? player.pos : '',
@@ -400,37 +401,29 @@ const normalizePlayerSlotForGame = (player: PlayerSlot): PlayerSlot => ({
   throws: player.throws === 'L' ? 'L' : 'R',
   bats: player.bats === 'L' ? 'L' : 'R',
   order: typeof player.order === 'number' ? player.order : null,
+  // [수정] 오타니룰 플래그 보존
+  isOhtaniRule: !!player.isOhtaniRule, 
 });
 
+// 라인업 채움 로직 (UI 9칸 유지 보장 수정)
 const ensureLineupFilled = (lineup: PlayerSlot[]) => {
   const normalized = lineup.map(normalizePlayerSlotForGame);
   const hasPitcher = normalized.some((slot) => slot.pos.toUpperCase() === 'P');
-  const hasDH = normalized.some((slot) => slot.pos.toUpperCase() === 'DH');
 
-  // DH가 있는 경우: 타자 9명 (DH 포함) + 투수 1명 = 10명
-  // DH가 없는 경우: 타자 9명 (투수 포함) = 9명
-  if (hasDH) {
-    // DH 리그: 투수를 제외한 타자 9명 보장
-    let battingCount = normalized.reduce((count, slot) =>
-      (slot.pos.toUpperCase() === 'P' ? count : count + 1), 0);
-    while (battingCount < 9) {
-      normalized.push({ ...emptyPlayerSlot });
-      battingCount += 1;
-    }
-    // 투수 1명 보장 (타석에 들어가지 않음)
-    if (!hasPitcher) {
-      normalized.push({ ...emptyPlayerSlot, pos: 'P' });
-    }
-  } else {
-    // 비DH 리그: 투수를 포함한 타자 9명 보장
-    while (normalized.length < 9) {
-      normalized.push({ ...emptyPlayerSlot });
-    }
-    // 투수가 없으면 마지막 슬롯을 투수로 설정
-    if (!hasPitcher) {
-      const lastIndex = normalized.length - 1;
-      normalized[lastIndex] = { ...normalized[lastIndex], pos: 'P' };
-    }
+  // [수정] DH 유무와 관계없이 항상 "투수가 아닌 타자 9명"을 확보하여 UI(TeamEditor) 입력칸 9개를 유지함.
+  // TeamEditor에서는 pos !== 'P' 인 슬롯들만 상단 타자 리스트에 표시하므로,
+  // 여기서 투수가 아닌 슬롯이 9개가 되도록 맞춰줍니다.
+  let battingCount = normalized.reduce((count, slot) =>
+    (slot.pos.toUpperCase() === 'P' ? count : count + 1), 0);
+
+  while (battingCount < 9) {
+    normalized.push({ ...emptyPlayerSlot });
+    battingCount += 1;
+  }
+
+  // 투수가 명시적으로 없으면 별도 슬롯 추가 (TeamEditor 하단 투수칸용)
+  if (!hasPitcher) {
+    normalized.push({ ...emptyPlayerSlot, pos: 'P' });
   }
 
   return normalized;
@@ -611,6 +604,7 @@ function normalizeEvents(events: unknown, fallback: { inning: number; half: Half
   });
 }
 
+// 데이터 로딩 시 사용되는 정규화 함수 (isOhtaniRule 보존 추가)
 function normalizePlayerSlot(slot: unknown): PlayerSlot | null {
   if (!slot || typeof slot !== 'object') return null;
   const s = slot as Partial<PlayerSlot>;
@@ -621,6 +615,8 @@ function normalizePlayerSlot(slot: unknown): PlayerSlot | null {
     throws: typeof s.throws === 'string' ? s.throws : 'R',
     bats: typeof s.bats === 'string' ? s.bats : 'R',
     order: typeof s.order === 'number' ? s.order : s.order ?? null,
+    // [수정] 오타니룰 플래그 보존
+    isOhtaniRule: typeof s.isOhtaniRule === 'boolean' ? s.isOhtaniRule : undefined,
   };
 }
 
