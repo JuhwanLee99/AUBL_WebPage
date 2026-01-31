@@ -16,13 +16,19 @@ export default function ScoreboardLiveOverlayPage() {
   // 화면 크기에 따른 UI 스케일 계산 (모바일에서 더 작게 보이도록)
   const [uiScale, setUiScale] = useState(1);
 
+  // 지연된 상태 (유튜브 라이브 지연시간 고려)
+  const [delayedState, setDelayedState] = useState(state);
+
+  // 음소거 상태
+  const [isMuted, setIsMuted] = useState(true);
+
   useEffect(() => {
     const handleResize = () => {
       // 화면 너비가 작을수록(모바일) 스케일을 줄임 (기본 1, 모바일 약 0.8~0.9)
       const width = window.innerWidth;
       const height = window.innerHeight;
       const minDim = Math.min(width, height);
-      
+
       // 기준을 400px ~ 1000px 사이로 잡고 스케일링
       if (minDim < 500) setUiScale(0.75);
       else if (minDim < 800) setUiScale(0.85);
@@ -34,7 +40,25 @@ export default function ScoreboardLiveOverlayPage() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const buildAutoPlaySrc = (url: string) => {
+  // 유튜브 라이브 지연시간을 고려한 상태 업데이트
+  useEffect(() => {
+    const delayMs = state.liveDelaySeconds * 1000;
+
+    // 지연시간이 0이면 즉시 업데이트
+    if (delayMs === 0) {
+      setDelayedState(state);
+      return;
+    }
+
+    // 지연시간만큼 기다린 후 업데이트
+    const timer = setTimeout(() => {
+      setDelayedState(state);
+    }, delayMs);
+
+    return () => clearTimeout(timer);
+  }, [state]);
+
+  const buildAutoPlaySrc = (url: string, muted: boolean) => {
     const base = url || defaultLiveSrc;
     const hasQuery = base.includes('?');
     const hasAutoplay = /[?&]autoplay=/i.test(base);
@@ -44,7 +68,7 @@ export default function ScoreboardLiveOverlayPage() {
 
     const params: string[] = [];
     if (!hasAutoplay) params.push('autoplay=1');
-    if (!hasMute) params.push('mute=1');
+    if (!hasMute) params.push(`mute=${muted ? '1' : '0'}`);
     if (!hasPlaysinline) params.push('playsinline=1');
     if (!hasFs) params.push('fs=0');
 
@@ -52,11 +76,11 @@ export default function ScoreboardLiveOverlayPage() {
     return `${base}${hasQuery ? '&' : '?'}${params.join('&')}`;
   };
 
-  const youtubeLiveSrc = buildAutoPlaySrc((state.liveVideoUrl || '').trim() || defaultLiveSrc);
-  const battingSide = state.half === 'top' ? 'away' : 'home';
-  const inningHalfIcon = state.half === 'top' ? '▲' : '▼';
-  const inningLabel = `${inningHalfIcon} ${state.inning}회${state.half === 'top' ? '초' : '말'}`;
-  const lastPlay = state.lastPlay || '경기 대기 중';
+  const youtubeLiveSrc = buildAutoPlaySrc((state.liveVideoUrl || '').trim() || defaultLiveSrc, isMuted);
+  const battingSide = delayedState.half === 'top' ? 'away' : 'home';
+  const inningHalfIcon = delayedState.half === 'top' ? '▲' : '▼';
+  const inningLabel = `${inningHalfIcon} ${delayedState.inning}회${delayedState.half === 'top' ? '초' : '말'}`;
+  const lastPlay = delayedState.lastPlay || '경기 대기 중';
 
   const toggleFullscreen = () => {
     const root = document.documentElement;
@@ -181,6 +205,20 @@ export default function ScoreboardLiveOverlayPage() {
             </button>
             <button
               type="button"
+              onClick={() => setIsMuted((prev) => !prev)}
+              style={{
+                ...controlButtonStyle,
+                color: isMuted ? '#f87171' : '#22c55e',
+                padding: `${6 * uiScale}px ${10 * uiScale}px`,
+                fontSize: `${11 * uiScale}px`,
+                fontWeight: 900,
+              }}
+              title={isMuted ? "소리 켜기" : "소리 끄기"}
+            >
+              {isMuted ? '🔇 소리 켜기' : '🔊 음소거'}
+            </button>
+            <button
+              type="button"
               onClick={() => setIsRotated((prev) => !prev)}
               style={{ 
                 ...controlButtonStyle, 
@@ -235,8 +273,8 @@ export default function ScoreboardLiveOverlayPage() {
                 lineHeight: 1.1,
               }}
             >
-              <span>{state.teamNames.away || 'AWAY'}</span>
-              <span>{state.score.away}</span>
+              <span>{delayedState.teamNames.away || 'AWAY'}</span>
+              <span>{delayedState.score.away}</span>
             </div>
             {/* Home Score */}
             <div
@@ -249,8 +287,8 @@ export default function ScoreboardLiveOverlayPage() {
                 lineHeight: 1.1,
               }}
             >
-              <span>{state.teamNames.home || 'HOME'}</span>
-              <span>{state.score.home}</span>
+              <span>{delayedState.teamNames.home || 'HOME'}</span>
+              <span>{delayedState.score.home}</span>
             </div>
             {/* Inning */}
             <div
@@ -277,10 +315,56 @@ export default function ScoreboardLiveOverlayPage() {
                 paddingTop: `${2 * uiScale}px`,
               }}
             >
-              <CountLights balls={state.balls} strikes={state.strikes} outs={state.outs} scale={uiScale} />
-              <BaseDiagram bases={state.bases} scale={uiScale} />
+              <CountLights balls={delayedState.balls} strikes={delayedState.strikes} outs={delayedState.outs} scale={uiScale} />
+              <BaseDiagram bases={delayedState.bases} scale={uiScale} />
             </div>
           </div>
+
+          {/* 중앙 음소거 해제 버튼 (음소거 상태일 때만 표시) */}
+          {isMuted && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                pointerEvents: 'auto',
+                zIndex: 10,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setIsMuted(false)}
+                style={{
+                  padding: `${20 * uiScale}px ${40 * uiScale}px`,
+                  borderRadius: '16px',
+                  border: '3px solid #ef4444',
+                  background: 'linear-gradient(135deg, rgba(239,68,68,0.95), rgba(220,38,38,0.95))',
+                  color: '#ffffff',
+                  fontSize: `${24 * uiScale}px`,
+                  fontWeight: 900,
+                  cursor: 'pointer',
+                  boxShadow: '0 8px 32px rgba(239,68,68,0.6), 0 0 0 4px rgba(255,255,255,0.2)',
+                  transition: 'all 0.3s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: `${12 * uiScale}px`,
+                  animation: 'pulse 2s infinite',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                  e.currentTarget.style.boxShadow = '0 12px 40px rgba(239,68,68,0.8), 0 0 0 6px rgba(255,255,255,0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = '0 8px 32px rgba(239,68,68,0.6), 0 0 0 4px rgba(255,255,255,0.2)';
+                }}
+              >
+                <span style={{ fontSize: `${32 * uiScale}px` }}>🔇</span>
+                <span>소리 켜기</span>
+              </button>
+            </div>
+          )}
 
           {/* 하단 Last Play */}
           <div
