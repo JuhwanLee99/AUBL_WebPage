@@ -4678,9 +4678,8 @@ function TeamEditor({
   defaultName: string;
   side: Side;
   teamName: string;
-  // [수정] lineup 요소 타입에 isOhtaniRule 추가
+  // [수정] isOhtaniRule 타입 추가
   lineup: { name: string; pos: string; number: string; throws: string; bats: string; isOhtaniRule?: boolean }[];
-  // [수정] bench 요소 타입에 isOhtaniRule 추가
   bench: { name: string; pos: string; number: string; throws: string; bats: string; isOhtaniRule?: boolean }[];
   benchInput: { name: string; pos: string; number: string; throws: string; bats: string };
   onChangeBenchInput: (val: { name: string; pos: string; number: string; throws: string; bats: string }) => void;
@@ -4691,7 +4690,6 @@ function TeamEditor({
     index: number,
     updates: { name?: string; pos?: string; number?: string; throws?: string; bats?: string; isOhtaniRule?: boolean },
   ) => void;
-  // [수정] player 타입에 isOhtaniRule 추가
   onAddBench: (
     side: Side,
     player: { name: string; pos: string; number: string; throws: string; bats: string; isOhtaniRule?: boolean },
@@ -4702,14 +4700,21 @@ function TeamEditor({
   highlightPitcherName?: string;
 }) {
   const lineupEntries = lineup.map((slot, idx) => ({ slot, idx }));
-  const battingEntries = lineupEntries.filter((entry) => entry.slot.pos.toUpperCase() !== 'P');
+  
+  // [핵심 수정] 투수(P) 여부와 상관없이 항상 라인업의 앞 9명을 타자로 표시합니다.
+  // 이렇게 하면 투수가 타석에 들어서도 입력칸이 유지됩니다.
+  const battingEntries = lineupEntries.slice(0, 9);
+  
+  // 투수는 전체 라인업에서 포지션이 'P'인 선수를 찾아서 하단에 별도 표시합니다.
   const pitcherEntry = lineupEntries.find((entry) => entry.slot.pos.toUpperCase() === 'P');
+  
   const positionOptions = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'OF', 'IF', 'PH', 'PR'];
   const filterPositionOptions = (value: string) => {
     const normalized = value.trim().toUpperCase();
     if (!normalized) return positionOptions;
     return positionOptions.filter((option) => option.includes(normalized));
   };
+
   return (
     <div style={{ display: 'grid', gap: '8px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between' }}>
@@ -4739,6 +4744,7 @@ function TeamEditor({
           gap: '8px',
         }}
       >
+        {/* 타자 목록 (1~9번) */}
         {battingEntries.map((entry, orderIdx) => (
           <div
             key={entry.idx}
@@ -4750,10 +4756,14 @@ function TeamEditor({
               padding: '4px',
               borderRadius: '10px',
               border: `1px solid ${
-                highlightBatterName && entry.slot.name === highlightBatterName ? 'rgba(56,189,248,0.6)' : 'transparent'
+                highlightBatterName && entry.slot.name === highlightBatterName
+                  ? 'rgba(56,189,248,0.6)'
+                  : 'transparent'
               }`,
               background:
-                highlightBatterName && entry.slot.name === highlightBatterName ? 'rgba(56,189,248,0.12)' : 'transparent',
+                highlightBatterName && entry.slot.name === highlightBatterName
+                  ? 'rgba(56,189,248,0.12)'
+                  : 'transparent',
               boxSizing: 'border-box',
             }}
           >
@@ -4834,6 +4844,8 @@ function TeamEditor({
             </select>
           </div>
         ))}
+
+        {/* 투수 정보 및 오타니룰 토글 */}
         <div
           style={{
             marginTop: '6px',
@@ -4881,7 +4893,6 @@ function TeamEditor({
             <div
               style={{
                 display: 'grid',
-                // [수정] 오타니룰 버튼이 위로 갔으므로 그리드 레이아웃 유지
                 gridTemplateColumns: '85px 50px 70px 70px 50px',
                 gap: '8px',
                 alignItems: 'center',
@@ -4971,7 +4982,9 @@ function TeamEditor({
               />
             </div>
           ) : (
-            <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>투수 미지정</span>
+            <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>
+              투수 미지정
+            </span>
           )}
         </div>
       </div>
