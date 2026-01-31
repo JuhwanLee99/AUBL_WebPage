@@ -887,8 +887,12 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
   const events = normalizeEvents(merged.events, { inning: merged.inning, half: merged.half });
   const matches = normalizeMatches(merged.matches ?? base.matches);
   // [수정] 라인업이 완전히 비어있는 경우 자동 채움을 하지 않음
+  // 실제 선수가 있는지 확인 (name이 비어있지 않은 슬롯)
+  const hasActualPlayers = (lineup: PlayerSlot[]) =>
+    lineup.some(slot => slot.name && slot.name.trim() !== '');
+
   const rawLineups = merged.lineups ?? base.lineups;
-  const hasLineups = rawLineups.home.length > 0 || rawLineups.away.length > 0;
+  const hasLineups = hasActualPlayers(rawLineups.home) || hasActualPlayers(rawLineups.away);
   const safeLineups = hasLineups ? ensureCompleteLineups(rawLineups) : rawLineups;
   const history = Array.isArray(merged.history)
     ? merged.history.map((snap) => {
@@ -1170,7 +1174,17 @@ export function buildGameRecord(state: DemoState): GameRecord {
 
 function snapshotState(state: DemoState): DemoSnapshot {
   const { history: _history, ...snapshot } = state;
-  return snapshot;
+  // [수정] Firestore에 저장 시 빈 슬롯 필터링하여 깜빡임 방지
+  const filterEmptySlots = (lineup: PlayerSlot[]) =>
+    lineup.filter(slot => slot.name && slot.name.trim() !== '');
+
+  return {
+    ...snapshot,
+    lineups: {
+      home: filterEmptySlots(snapshot.lineups.home),
+      away: filterEmptySlots(snapshot.lineups.away),
+    },
+  };
 }
 
 function shouldTrackHistory(actionType: Action['type']) {
@@ -2743,8 +2757,12 @@ function updateMatchSchedule(matches: MatchSchedule[], matchId: string, updates:
 function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
   // [수정] 경기에 저장된 라인업이 없으면(null/undefined) state.lineups(이전 경기 또는 mock)를 쓰는 대신 빈 라인업으로 초기화
   // [수정] 라인업이 완전히 비어있는 경우(공유 링크 등) 자동 채움을 하지 않음
+  // 실제 선수가 있는지 확인 (name이 비어있지 않은 슬롯)
+  const hasActualPlayers = (lineup: PlayerSlot[]) =>
+    lineup.some(slot => slot.name && slot.name.trim() !== '');
+
   const rawLineups = match.lineups ?? { home: [], away: [] };
-  const hasLineups = rawLineups.home.length > 0 || rawLineups.away.length > 0;
+  const hasLineups = hasActualPlayers(rawLineups.home) || hasActualPlayers(rawLineups.away);
   const lineups = hasLineups ? ensureCompleteLineups(rawLineups) : rawLineups;
   const benches = match.benches ?? { home: [], away: [] };
   return {
@@ -3189,7 +3207,21 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     const current = stateRef.current.matches.find((m) => m.id === matchId);
     if (!current) return Promise.resolve();
     matchesReadyRef.current = true;
-    const payload = pruneUndefined({ ...current, ...overrides });
+
+    // [수정] Firestore에 저장 시 빈 슬롯 필터링하여 깜빡임 방지
+    const filterEmptySlots = (lineup: PlayerSlot[]) =>
+      lineup.filter(slot => slot.name && slot.name.trim() !== '');
+
+    const merged = { ...current, ...overrides };
+    const cleanedMatch = {
+      ...merged,
+      lineups: merged.lineups ? {
+        home: filterEmptySlots(merged.lineups.home),
+        away: filterEmptySlots(merged.lineups.away),
+      } : undefined,
+    };
+
+    const payload = pruneUndefined(cleanedMatch);
     return setDoc(doc(firestore, 'matches', matchId), payload, { merge: true });
   }, []);
 
@@ -3682,8 +3714,19 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     lastMatchesKeyRef.current = key;
     const syncMatches = async () => {
       const batch = writeBatch(firestore);
+      const filterEmptySlots = (lineup: PlayerSlot[]) =>
+        lineup.filter(slot => slot.name && slot.name.trim() !== '');
+
       state.matches.forEach((match) => {
-        batch.set(doc(firestore, 'matches', match.id), pruneUndefined(match), { merge: true });
+        // [수정] Firestore에 저장 시 빈 슬롯 필터링하여 깜빡임 방지
+        const cleanedMatch = {
+          ...match,
+          lineups: match.lineups ? {
+            home: filterEmptySlots(match.lineups.home),
+            away: filterEmptySlots(match.lineups.away),
+          } : undefined,
+        };
+        batch.set(doc(firestore, 'matches', match.id), pruneUndefined(cleanedMatch), { merge: true });
       });
       await batch.commit();
     };
