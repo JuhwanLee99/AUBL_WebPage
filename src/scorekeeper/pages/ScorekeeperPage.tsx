@@ -67,6 +67,7 @@ const battedBallResultOptions = [
   { label: '라인드라이브', color: '#ef4444', value: 'out_line' as const, helper: '직선타 아웃', group: 'out' as const },
   { label: '병살타(2아웃)', color: '#ef4444', value: 'out_dp2' as const, helper: '타자+주자 아웃', group: 'out' as const },
   { label: '삼중살(3아웃)', color: '#ef4444', value: 'out_tp3' as const, helper: '모두 아웃', group: 'out' as const },
+  { label: '더블아웃(기타)', color: '#ef4444', value: 'out_multiple' as const, helper: '주자 선택 아웃', group: 'out' as const },
   { label: '내야 플라이', color: '#ef4444', value: 'out_infield_fly' as const, helper: '타자만 아웃(인필드 플라이 아님)', group: 'out' as const },
   { label: '인필드 플라이 선언', color: '#ef4444', value: 'out_infield_fly_rule' as const, helper: '주자 묶임 · 선언 상황', group: 'out' as const },
   { label: '외야 플라이', color: '#ef4444', value: 'out_outfield_fly' as const, helper: '외야 플라이 아웃', group: 'out' as const },
@@ -301,7 +302,8 @@ function getZoneOptionsForResult(result: BattedBallResultAction | null) {
     result === 'single_infield' ||
     result === 'out_ground' ||
     result === 'out_dp2' ||
-    result === 'out_tp3'
+    result === 'out_tp3' ||
+    result === 'out_multiple'
   )
     return infieldGroundZoneOptions;
   if (result === 'fc') return fcZoneOptions;
@@ -312,6 +314,8 @@ function getZoneOptionsForResult(result: BattedBallResultAction | null) {
 function getFielderOptionsForResult(result: BattedBallResultAction | null) {
   if (isInfieldFlyResult(result)) return infieldFielderOptions;
   if (isOutfieldFlyResult(result)) return outfieldFielderOptions;
+  // [수정] 더블아웃(기타) 선택 시에도 내야수(투수/포수 포함)를 선택할 수 있도록 옵션 반환
+  if (result === 'out_multiple') return infieldFielderOptions;
   return null;
 }
 
@@ -1668,6 +1672,15 @@ const handleConfirmHitWizard = () => {
           setDoublePlayModal({ outsCount: 3, battedBall: details });
         } else {
           actions.triplePlay(details);
+        }
+        break;
+      }
+      case 'out_multiple': {
+        const runnersOnBase = state.bases.filter((r) => r !== null).length;
+        if (runnersOnBase >= 1) {
+          setMultipleRunnersOutModal(true);
+        } else {
+          actions.addOutWithMessage('기타 더블아웃', details);
         }
         break;
       }
