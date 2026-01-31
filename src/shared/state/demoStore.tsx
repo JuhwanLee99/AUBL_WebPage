@@ -25,6 +25,16 @@ const formatUniqueName = (name: string, number: string | number | undefined | nu
   return number ? `${name}(${number})` : name;
 };
 
+const extractRuns = (result: string): number => {
+  const match = result.match(/(\d+)\s*득점/);
+  if (match) {
+    const n = Number(match[1]);
+    return Number.isFinite(n) && n > 0 ? n : 1;
+  }
+  if (result.includes('득점')) return 1;
+  return 0;
+};
+
 const TRASH_RETENTION_MS = 1000 * 60 * 60 * 24 * 30; // 30일 보관
 const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
   .split(',')
@@ -867,6 +877,11 @@ export interface GameRecord {
   feed: PlayLog[];
   events: PlayEvent[];
   lastPlay: string;
+  liveStats: {
+    lineScore: { home: number[]; away: number[] };
+    hits: { home: number; away: number };
+    errors: { home: number; away: number };
+  };
 }
 
 // [추가] 통계 집계 로직을 demoStore 내부에 추가합니다.
@@ -943,6 +958,62 @@ export function buildGameRecord(state: DemoState): GameRecord {
     name: formatUniqueName(p.name, p.number),
   });
 
+  // [추가] 실시간 라인스코어 및 집계 로직
+  const chronologicalFeed = [...state.feed].reverse();
+
+  const liveHits = chronologicalFeed.reduce(
+    (acc, entry) => {
+      const offense = entry.half === 'top' ? 'away' : 'home';
+      const txt = entry.result.replace(/\s+/g, '');
+      if (txt.includes('1루타') || txt.includes('2루타') || txt.includes('3루타') || txt.includes('홈런')) {
+        acc[offense] += 1;
+      }
+      return acc;
+    },
+    { home: 0, away: 0 },
+  );
+
+  const liveErrors = chronologicalFeed.reduce(
+    (acc, entry) => {
+      const txt = entry.result.replace(/\s+/g, '');
+      const hasError = txt.includes('실책') || /\bE[1-6]\b/i.test(txt);
+      if (hasError) {
+        const side = entry.half === 'top' ? 'home' : 'away';
+        acc[side] += 1;
+      }
+      return acc;
+    },
+    { home: 0, away: 0 },
+  );
+
+  const liveLine = chronologicalFeed.reduce(
+    (acc, entry) => {
+      const runs = extractRuns(entry.result);
+      if (!runs) return acc;
+      const inningIdx = Math.max(0, entry.inning - 1);
+      const side = entry.half === 'top' ? 'away' : 'home';
+      const target = side === 'home' ? acc.home : acc.away;
+      if (target.length <= inningIdx) target.length = inningIdx + 1;
+      target[inningIdx] = (target[inningIdx] ?? 0) + runs;
+      acc.maxInning = Math.max(acc.maxInning, entry.inning);
+      return acc;
+    },
+    { home: [] as number[], away: [] as number[], maxInning: state.inning },
+  );
+
+  const reconcileRuns = (arr: number[], side: 'home' | 'away') => {
+    const filled = Array.from({ length: arr.length }, (_, i) => arr[i] ?? 0);
+    const sum = filled.reduce((s, v) => s + v, 0);
+    const diff = state.score[side] - sum;
+    if (diff === 0) return filled;
+    const idx = Math.max(0, (liveLine.maxInning || state.inning) - 1);
+    if (filled.length <= idx) {
+      for (let k = filled.length; k <= idx; k++) filled[k] = 0;
+    }
+    filled[idx] = Math.max(0, filled[idx] + diff);
+    return filled;
+  };
+
   return {
     meta: {
       homeTeamId: state.homeTeamId,
@@ -1001,6 +1072,11 @@ export function buildGameRecord(state: DemoState): GameRecord {
         : null,
     })),
     lastPlay: state.lastPlay,
+    liveStats: {
+      lineScore: { home: reconcileRuns(liveLine.home, 'home'), away: reconcileRuns(liveLine.away, 'away') },
+      hits: liveHits,
+      errors: liveErrors,
+    },
   };
 }
 

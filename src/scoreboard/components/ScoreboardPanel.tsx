@@ -16,33 +16,6 @@ const countLights = (filled: number, total: number, color: string) =>
     color,
   }));
 
-// 간단한 결과 분류: 안타/아웃/볼넷/사구/삼진/희생 여부만 필요
-function classifyResult(result: string) {
-  const normalized = result.replace(/\s+/g, '');
-  if (normalized.includes('홈런')) return 'hr' as const;
-  if (normalized.includes('3루타')) return 'triple' as const;
-  if (normalized.includes('2루타')) return 'double' as const;
-  if (normalized.includes('1루타')) return 'single' as const;
-  if (normalized.includes('볼넷') || normalized.includes('고의') || normalized.toUpperCase().includes('IB')) return 'bb' as const;
-  if (normalized.includes('몸에맞는공') || normalized.toUpperCase().includes('HBP')) return 'hbp' as const;
-  if (normalized.includes('희생')) return 'sac' as const;
-  if (normalized.includes('낫아웃')) return 'so_reach' as const;
-  if (normalized.includes('삼진')) return 'so' as const;
-  if (normalized.includes('아웃') && !normalized.includes('도루')) return 'out' as const;
-  return null;
-}
-
-// 로그 텍스트에서 득점 숫자를 추출 (예: "2득점" -> 2, "득점" -> 1)
-function extractRuns(result: string): number {
-  const match = result.match(/(\d+)\s*득점/);
-  if (match) {
-    const n = Number(match[1]);
-    return Number.isFinite(n) && n > 0 ? n : 1;
-  }
-  if (result.includes('득점')) return 1;
-  return 0;
-}
-
 export default function ScoreboardPanel({
   style,
   showFootnote = true,
@@ -86,75 +59,16 @@ export default function ScoreboardPanel({
   const boxScore = useMemo(() => {
     const record = buildGameRecord(state);
 
-    const liveHits = record.feed.reduce(
-      (acc, entry) => {
-        const offense: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
-        const kind = classifyResult(entry.result);
-        if (kind && ['single', 'double', 'triple', 'hr'].includes(kind)) {
-          acc[offense] += 1;
-        }
-        return acc;
-      },
-      { home: 0, away: 0 },
-    );
+    const { lineScore: liveLine, hits: liveHits, errors: liveErrors } = record.liveStats;
+    const maxInning = Math.max(state.inning, liveLine.home.length, liveLine.away.length);
+    const inningsHeader = Array.from({ length: Math.max(9, maxInning) }, (_, i) => i + 1);
 
-    const liveErrorsFromFeed = record.feed.reduce(
-      (acc, entry) => {
-        const txt = (entry.result || '').replace(/\s+/g, '');
-        const hasError = txt.includes('실책') || /\bE[1-6]\b/i.test(txt);
-        if (hasError) {
-          const side: 'home' | 'away' = entry.half === 'top' ? 'home' : 'away'; // 수비 쪽에 에러 반영
-          acc[side] += 1;
-        }
-        return acc;
-      },
-      { home: 0, away: 0 },
-    );
-
-    // 실시간 라인스코어 (이닝별 득점) 계산
-    const liveLine = record.feed
-      .slice()
-      .reverse() // chrono
-      .reduce(
-        (acc, entry) => {
-          const runs = extractRuns(entry.result);
-          if (!runs) return acc;
-          const inningIdx = Math.max(0, entry.inning - 1);
-          const side: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
-          if (side === 'home') {
-            if (acc.home.length <= inningIdx) acc.home.length = inningIdx + 1;
-            acc.home[inningIdx] = (acc.home[inningIdx] ?? 0) + runs;
-          } else {
-            if (acc.away.length <= inningIdx) acc.away.length = inningIdx + 1;
-            acc.away[inningIdx] = (acc.away[inningIdx] ?? 0) + runs;
-          }
-          acc.maxInning = Math.max(acc.maxInning, entry.inning);
-          return acc;
-        },
-        { home: [] as number[], away: [] as number[], maxInning: state.inning },
-      );
-
-    // 총합이 현재 스코어와 맞지 않으면(중복 로그 등) 마지막 이닝에 보정
-    const reconcileRuns = (arr: number[], side: 'home' | 'away') => {
-      const sum = arr.reduce((s, v) => s + (Number(v) || 0), 0);
-      const diff = state.score[side] - sum;
-      if (diff === 0) return arr;
-      const idx = Math.max(0, liveLine.maxInning - 1);
-      if (arr.length <= idx) arr.length = idx + 1;
-      arr[idx] = Math.max(0, (arr[idx] ?? 0) + diff);
-      return arr;
-    };
-
-    reconcileRuns(liveLine.home, 'home');
-    reconcileRuns(liveLine.away, 'away');
-
-    const inningsHeader = Array.from({ length: Math.max(9, liveLine.maxInning) }, (_, i) => i + 1);
-    const padInnings = (arr: number[] | undefined) =>
-      inningsHeader.map((_, idx) => (arr && arr[idx] != null ? arr[idx] : '—'));
+    const padInnings = (arr: number[]) =>
+      inningsHeader.map((_, idx) => (arr[idx] != null ? arr[idx] : '—'));
 
     const totals = activeMatch?.postGame?.totals ?? {
-      home: { runs: state.score.home, hits: liveHits.home, errors: liveErrorsFromFeed.home },
-      away: { runs: state.score.away, hits: liveHits.away, errors: liveErrorsFromFeed.away },
+      home: { runs: state.score.home, hits: liveHits.home, errors: liveErrors.home },
+      away: { runs: state.score.away, hits: liveHits.away, errors: liveErrors.away },
     };
 
     const lineScore =
@@ -162,8 +76,8 @@ export default function ScoreboardPanel({
         ? activeMatch.postGame.lineScore
         : {
             innings: inningsHeader,
-            home: padInnings(liveLine.home) as number[],
-            away: padInnings(liveLine.away) as number[],
+            home: liveLine.home,
+            away: liveLine.away,
           };
     const baseInnings = Array.from({ length: 9 }, (_v, idx) => idx + 1);
     const hasExtras = (lineScore?.innings?.length ?? 0) > 9;
@@ -177,7 +91,7 @@ export default function ScoreboardPanel({
       color: side === 'home' ? '#f97316' : '#60a5fa',
     });
     return { innings, rows: [mk('away'), mk('home')] };
-  }, [activeMatch?.postGame?.lineScore, activeMatch?.postGame?.totals, awayTeam?.name, homeTeam?.name, state.score, state.teamNames]);
+  }, [state, activeMatch, homeTeam, awayTeam]);
   const summaryTime = useMemo(() => {
     if (!activeMatch?.startTime) return '일시 미정';
     const date = new Date(activeMatch.startTime);
