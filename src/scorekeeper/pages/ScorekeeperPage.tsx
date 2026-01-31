@@ -2094,7 +2094,7 @@ const handleConfirmHitWizard = () => {
                       value={gameLimitInput}
                       onChange={(e) => setGameLimitInput(e.target.value)}
                       placeholder="분 입력 (예: 90)"
-                      disabled={lockedByOther}
+                      disabled={lockedByOther || (state.gameStarted && state.gamePausedAt === null)}
                       style={{
                         width: '100px',
                         padding: '8px',
@@ -2103,6 +2103,7 @@ const handleConfirmHitWizard = () => {
                         background: '#1f2937',
                         color: '#f8fafc',
                         fontSize: '13px',
+                        opacity: (lockedByOther || (state.gameStarted && state.gamePausedAt === null)) ? 0.5 : 1,
                       }}
                     />
                     <span style={{ fontSize: '12px', color: '#94a3b8' }}>분</span>
@@ -2124,7 +2125,7 @@ const handleConfirmHitWizard = () => {
                         console.log('제한시간 설정:', parsed, '분');
                         actions.setGameLimit(parsed);
                       }}
-                      disabled={lockedByOther}
+                      disabled={lockedByOther || (state.gameStarted && state.gamePausedAt === null)}
                       style={{
                         padding: '8px 12px',
                         borderRadius: '8px',
@@ -2133,7 +2134,8 @@ const handleConfirmHitWizard = () => {
                         color: '#fff',
                         fontSize: '12px',
                         fontWeight: 700,
-                        cursor: lockedByOther ? 'not-allowed' : 'pointer',
+                        cursor: (lockedByOther || (state.gameStarted && state.gamePausedAt === null)) ? 'not-allowed' : 'pointer',
+                        opacity: (lockedByOther || (state.gameStarted && state.gamePausedAt === null)) ? 0.5 : 1,
                       }}
                     >
                       설정
