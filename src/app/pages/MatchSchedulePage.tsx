@@ -826,20 +826,20 @@ export default function MatchSchedulePage() {
         >
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 300px 1fr 150px', gap: '12px' }}>
             <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
-              홈 팀
-              <input
-                value={form.homeTeamName}
-                onChange={(event) => setForm((prev) => ({ ...prev, homeTeamName: event.target.value }))}
-                placeholder="홈 팀 이름"
-                style={inputStyle}
-              />
-            </label>
-            <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
               원정 팀
               <input
                 value={form.awayTeamName}
                 onChange={(event) => setForm((prev) => ({ ...prev, awayTeamName: event.target.value }))}
                 placeholder="원정 팀 이름"
+                style={inputStyle}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
+              홈 팀
+              <input
+                value={form.homeTeamName}
+                onChange={(event) => setForm((prev) => ({ ...prev, homeTeamName: event.target.value }))}
+                placeholder="홈 팀 이름"
                 style={inputStyle}
               />
             </label>
@@ -955,11 +955,11 @@ export default function MatchSchedulePage() {
             <div style={{ display: 'grid', gap: '12px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '12px' }}>
                 <ScheduleLineupEditor
-                  label="홈 라인업 & 후보"
-                  side="home"
-                  lineup={formLineups.home}
-                  bench={formBenches.home}
-                  benchInput={benchInputs.home}
+                  label="원정 라인업 & 후보"
+                  side="away"
+                  lineup={formLineups.away}
+                  bench={formBenches.away}
+                  benchInput={benchInputs.away}
                   onSetLineup={(side, index, updates) =>
                     setFormLineups((prev) => ({
                       ...prev,
@@ -977,11 +977,11 @@ export default function MatchSchedulePage() {
                   }
                 />
                 <ScheduleLineupEditor
-                  label="원정 라인업 & 후보"
-                  side="away"
-                  lineup={formLineups.away}
-                  bench={formBenches.away}
-                  benchInput={benchInputs.away}
+                  label="홈 라인업 & 후보"
+                  side="home"
+                  lineup={formLineups.home}
+                  bench={formBenches.home}
+                  benchInput={benchInputs.home}
                   onSetLineup={(side, index, updates) =>
                     setFormLineups((prev) => ({
                       ...prev,
