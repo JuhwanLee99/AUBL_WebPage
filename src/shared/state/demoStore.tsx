@@ -297,8 +297,8 @@ type Action =
   | { type: 'droppedThirdStrike' }
   | { type: 'out'; battedBall?: BattedBallDetails | null }
   | { type: 'outWithMessage'; note: string; battedBall?: BattedBallDetails | null }
-  | { type: 'doublePlay'; battedBall?: BattedBallDetails | null }
-  | { type: 'triplePlay'; battedBall?: BattedBallDetails | null }
+  | { type: 'doublePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[] }
+  | { type: 'triplePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[] }
   | { type: 'hit'; bases: 1 | 2 | 3 | 4; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null }
   | { type: 'fielderChoice'; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null; context?: string }
   | { type: 'walk' }
@@ -1328,10 +1328,10 @@ function reducer(state: DemoState, action: Action): DemoState {
       nextState = applyOut(state, action.note, { pitchNumber: state.pitchCount + 1, battedBall: action.battedBall });
       break;
     case 'doublePlay':
-      nextState = applyDoublePlay(state, 2, '병살타', action.battedBall);
+      nextState = applyDoublePlay(state, 2, '병살타', action.battedBall, action.selectedRunners);
       break;
     case 'triplePlay':
-      nextState = applyDoublePlay(state, 3, '삼중살', action.battedBall);
+      nextState = applyDoublePlay(state, 3, '삼중살', action.battedBall, action.selectedRunners);
       break;
     case 'hit':
       nextState = applyHitWithAdvances(state, action.bases, state.pitchCount + 1, action.advances, action.battedBall);
@@ -2548,6 +2548,7 @@ function applyDoublePlay(
   outsToAdd: 2 | 3,
   label: string,
   battedBall?: BattedBallDetails | null,
+  selectedRunners?: number[],
 ): DemoState {
   const bases = [...state.bases] as Bases;
   const current = currentBatterInfo(state);
@@ -2559,11 +2560,22 @@ function applyDoublePlay(
   // Batter out
   runnersOut.push({ name: batterName, base: -1 });
 
-  // Remove lead runners
-  for (let i = 2; i >= 0 && runnersOut.length < outsToAdd; i -= 1) {
-    if (bases[i]) {
-      runnersOut.push({ name: bases[i] as string, base: i });
-      bases[i] = null;
+  // Remove selected runners or default to lead runners
+  if (selectedRunners && selectedRunners.length > 0) {
+    // 선택된 주자들을 아웃시킴
+    for (const baseIndex of selectedRunners) {
+      if (bases[baseIndex]) {
+        runnersOut.push({ name: bases[baseIndex] as string, base: baseIndex });
+        bases[baseIndex] = null;
+      }
+    }
+  } else {
+    // 기존 방식: 3루부터 역순으로 주자를 아웃시킴
+    for (let i = 2; i >= 0 && runnersOut.length < outsToAdd; i -= 1) {
+      if (bases[i]) {
+        runnersOut.push({ name: bases[i] as string, base: i });
+        bases[i] = null;
+      }
     }
   }
 
@@ -2923,8 +2935,8 @@ interface DemoStoreValue {
     resetGame: () => void;
     undo: () => void;
     addOutWithMessage: (note: string, battedBall?: BattedBallDetails | null) => void;
-    doublePlay: (battedBall?: BattedBallDetails | null) => void;
-    triplePlay: (battedBall?: BattedBallDetails | null) => void;
+    doublePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[]) => void;
+    triplePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[]) => void;
     addMatch: (match: MatchSchedule) => void;
     updateMatch: (matchId: string, updates: Partial<MatchSchedule>) => void;
     deleteMatch: (matchId: string) => void;
@@ -3536,8 +3548,10 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       },
       addOutWithMessage: (note: string, battedBall?: BattedBallDetails | null) =>
         dispatch({ type: 'outWithMessage', note, battedBall }),
-      doublePlay: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'doublePlay', battedBall }),
-      triplePlay: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'triplePlay', battedBall }),
+      doublePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[]) =>
+        dispatch({ type: 'doublePlay', battedBall, selectedRunners }),
+      triplePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[]) =>
+        dispatch({ type: 'triplePlay', battedBall, selectedRunners }),
       setTeamName: (side: Side, name: string) => dispatch({ type: 'setTeamName', side, name }),
       setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) =>
         dispatch({ type: 'setLineup', side, index, updates }),

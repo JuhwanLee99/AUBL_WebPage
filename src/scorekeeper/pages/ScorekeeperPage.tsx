@@ -1335,6 +1335,10 @@ export default function ScorekeeperPage() {
     fcOutType: 'force' | 'tag';
     pathNote: string;
   }>(null);
+  const [doublePlayModal, setDoublePlayModal] = useState<null | {
+    outsCount: 2 | 3;
+    battedBall?: BattedBallDetails | null;
+  }>(null);
   const [lastHitWizard, setLastHitWizard] = useState<HitWizardState | null>(null);
   const [errorOnPlayModal, setErrorOnPlayModal] = useState<null | { selections: RunnerAdvanceSelections; batterResult: 'out' | 'hold' | 1 | 2 | 3 | 4; errorType: string; context: string; fielder: string }>(null);
   const [showDroppedThirdStrike, setShowDroppedThirdStrike] = useState(false);
@@ -1647,12 +1651,24 @@ const handleConfirmHitWizard = () => {
       case 'out_line':
         actions.addOutWithMessage('라인드라이브 아웃', details);
         break;
-      case 'out_dp2':
-        actions.doublePlay(details);
+      case 'out_dp2': {
+        const runnersOnBase = state.bases.filter((r) => r !== null).length;
+        if (runnersOnBase >= 1) {
+          setDoublePlayModal({ outsCount: 2, battedBall: details });
+        } else {
+          actions.doublePlay(details);
+        }
         break;
-      case 'out_tp3':
-        actions.triplePlay(details);
+      }
+      case 'out_tp3': {
+        const runnersOnBase = state.bases.filter((r) => r !== null).length;
+        if (runnersOnBase >= 2) {
+          setDoublePlayModal({ outsCount: 3, battedBall: details });
+        } else {
+          actions.triplePlay(details);
+        }
         break;
+      }
       case 'out_infield_fly':
         actions.addOutWithMessage(`내야 플라이 아웃${fielderNote}`, details);
         break;
@@ -1729,12 +1745,24 @@ const handleConfirmHitWizard = () => {
       case 'out_line':
         actions.addOutWithMessage('라인드라이브 아웃', battedBallDetails);
         break;
-      case 'out_dp2':
-        actions.doublePlay(battedBallDetails);
+      case 'out_dp2': {
+        const runnersOnBase = state.bases.filter((r) => r !== null).length;
+        if (runnersOnBase >= 1) {
+          setDoublePlayModal({ outsCount: 2, battedBall: battedBallDetails });
+        } else {
+          actions.doublePlay(battedBallDetails);
+        }
         break;
-      case 'out_tp3':
-        actions.triplePlay(battedBallDetails);
+      }
+      case 'out_tp3': {
+        const runnersOnBase = state.bases.filter((r) => r !== null).length;
+        if (runnersOnBase >= 2) {
+          setDoublePlayModal({ outsCount: 3, battedBall: battedBallDetails });
+        } else {
+          actions.triplePlay(battedBallDetails);
+        }
         break;
+      }
       case 'out_infield_fly':
         actions.addOutWithMessage('내야 플라이 아웃', battedBallDetails);
         break;
@@ -2643,6 +2671,21 @@ const handleConfirmHitWizard = () => {
           }}
         />
       )}
+      {doublePlayModal && (
+        <DoublePlayModal
+          outsCount={doublePlayModal.outsCount}
+          basesState={state.bases}
+          onClose={() => setDoublePlayModal(null)}
+          onConfirm={(selectedRunners) => {
+            if (doublePlayModal.outsCount === 2) {
+              actions.doublePlay(doublePlayModal.battedBall, selectedRunners);
+            } else {
+              actions.triplePlay(doublePlayModal.battedBall, selectedRunners);
+            }
+            setDoublePlayModal(null);
+          }}
+        />
+      )}
       {showDroppedThirdStrike && (
         <DroppedThirdStrikeModal
           batterName={currentBatter}
@@ -3123,6 +3166,175 @@ function buildRunnerOutcomeOptions(baseIndex: 0 | 1 | 2) {
 
 function baseLabelForIndex(baseIndex: number) {
   return `${baseIndex + 1}루`;
+}
+
+function DoublePlayModal({
+  outsCount,
+  basesState,
+  onClose,
+  onConfirm,
+}: {
+  outsCount: 2 | 3;
+  basesState: (string | null)[];
+  onClose: () => void;
+  onConfirm: (selectedRunners: number[]) => void;
+}) {
+  const modalTitle = outsCount === 2 ? '병살타 주자 선택' : '삼중살 주자 선택';
+  const runners = basesState
+    .map((runner, idx) => (runner ? { runner, baseIndex: idx as 0 | 1 | 2 } : null))
+    .filter(Boolean) as { runner: string; baseIndex: 0 | 1 | 2 }[];
+
+  const [selectedRunners, setSelectedRunners] = useState<number[]>([]);
+
+  const toggleRunner = (baseIndex: number) => {
+    if (selectedRunners.includes(baseIndex)) {
+      setSelectedRunners(selectedRunners.filter((idx) => idx !== baseIndex));
+    } else {
+      if (selectedRunners.length < outsCount - 1) {
+        setSelectedRunners([...selectedRunners, baseIndex]);
+      }
+    }
+  };
+
+  const handleConfirm = () => {
+    if (selectedRunners.length === outsCount - 1) {
+      onConfirm(selectedRunners);
+    }
+  };
+
+  const canConfirm = selectedRunners.length === outsCount - 1;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'grid',
+        placeItems: 'center',
+        zIndex: 1000,
+        padding: '20px',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: '#1e293b',
+          borderRadius: '20px',
+          border: '1px solid rgba(148,163,184,0.25)',
+          maxWidth: '500px',
+          width: '100%',
+          maxHeight: '90vh',
+          overflow: 'auto',
+        }}
+      >
+        <div
+          style={{
+            padding: '20px 24px',
+            borderBottom: '1px solid rgba(148,163,184,0.2)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <h3 style={{ fontSize: '18px', fontWeight: 900, color: '#f8fafc', margin: 0 }}>
+            {modalTitle}
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: 'rgba(148,163,184,0.2)',
+              border: 'none',
+              color: '#e2e8f0',
+              borderRadius: '8px',
+              padding: '6px 10px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: 700,
+            }}
+          >
+            취소
+          </button>
+        </div>
+        <div style={{ padding: '24px' }}>
+          <p style={{ color: '#cbd5e1', fontSize: '14px', marginBottom: '16px', marginTop: 0 }}>
+            타자는 자동으로 아웃됩니다. 추가로 아웃될 주자 {outsCount - 1}명을 선택하세요.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {runners.map((entry) => {
+              const isSelected = selectedRunners.includes(entry.baseIndex);
+              return (
+                <button
+                  key={entry.baseIndex}
+                  type="button"
+                  onClick={() => toggleRunner(entry.baseIndex)}
+                  style={{
+                    padding: '16px',
+                    borderRadius: '12px',
+                    border: isSelected ? '2px solid #ef4444' : '1px solid rgba(148,163,184,0.3)',
+                    background: isSelected ? 'rgba(239,68,68,0.15)' : 'rgba(15,23,42,0.6)',
+                    color: isSelected ? '#fca5a5' : '#e2e8f0',
+                    fontWeight: 700,
+                    fontSize: '15px',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      border: isSelected ? '2px solid #ef4444' : '2px solid rgba(148,163,184,0.4)',
+                      background: isSelected ? '#ef4444' : 'transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '12px',
+                    }}
+                  >
+                    {isSelected && '✓'}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '4px' }}>
+                      {baseLabelForIndex(entry.baseIndex)} 주자
+                    </div>
+                    <div style={{ fontSize: '16px', fontWeight: 900 }}>{entry.runner}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={!canConfirm}
+            style={{
+              marginTop: '20px',
+              width: '100%',
+              padding: '14px',
+              borderRadius: '12px',
+              border: 'none',
+              background: canConfirm ? 'linear-gradient(90deg, #ef4444, #dc2626)' : 'rgba(148,163,184,0.2)',
+              color: canConfirm ? '#fff' : '#64748b',
+              fontWeight: 900,
+              fontSize: '15px',
+              cursor: canConfirm ? 'pointer' : 'not-allowed',
+              opacity: canConfirm ? 1 : 0.6,
+            }}
+          >
+            {canConfirm ? '확인' : `주자 ${outsCount - 1}명을 선택하세요`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function HitAdvanceModal({
