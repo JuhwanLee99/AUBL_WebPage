@@ -294,7 +294,51 @@ export default function AdminPage() {
 
       {/* 시즌 설정 섹션 */}
       <div style={cardStyle}>
-        <h3 style={{ margin: '0 0 16px 0', color: '#e2e8f0' }}>시즌 설정</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h3 style={{ margin: 0, color: '#e2e8f0' }}>시즌 설정</h3>
+
+          {/* 백엔드 연동 상태 표시 */}
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <span
+              style={{
+                padding: '4px 10px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 700,
+                background: import.meta.env.VITE_ENABLE_BACKEND_INTEGRATION === 'true'
+                  ? 'rgba(34,197,94,0.15)'
+                  : 'rgba(148,163,184,0.15)',
+                color: import.meta.env.VITE_ENABLE_BACKEND_INTEGRATION === 'true'
+                  ? '#86efac'
+                  : '#94a3b8',
+                border: `1px solid ${
+                  import.meta.env.VITE_ENABLE_BACKEND_INTEGRATION === 'true'
+                    ? 'rgba(34,197,94,0.3)'
+                    : 'rgba(148,163,184,0.3)'
+                }`,
+              }}
+            >
+              {import.meta.env.VITE_ENABLE_BACKEND_INTEGRATION === 'true' ? '자동 전송 ON' : '자동 전송 OFF'}
+            </span>
+
+            {import.meta.env.VITE_BACKEND_TEST_MODE === 'true' && (
+              <span
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  background: 'rgba(234,179,8,0.15)',
+                  color: '#fef08a',
+                  border: '1px solid rgba(234,179,8,0.3)',
+                }}
+              >
+                테스트 모드
+              </span>
+            )}
+          </div>
+        </div>
+
         <p style={{ margin: '0 0 12px 0', color: '#94a3b8', fontSize: '14px' }}>
           백엔드로 전송할 경기의 시즌 ID를 설정합니다. (현재: {import.meta.env.VITE_CURRENT_SEASON_ID || '1'})
         </p>

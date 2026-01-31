@@ -4,7 +4,13 @@
 
 // 개발 환경에서는 Vite 프록시를 사용하고, 프로덕션에서는 실제 API URL 사용
 const isDev = import.meta.env.DEV;
-const API_BASE_URL = isDev ? '' : (import.meta.env.VITE_BACKEND_API_URL || 'https://api.aubl.club');
+const isTestMode = import.meta.env.VITE_BACKEND_TEST_MODE === 'true';
+const testUrl = import.meta.env.VITE_BACKEND_TEST_URL || 'http://localhost:8080';
+
+// 테스트 모드면 테스트 URL, 개발 모드면 프록시, 프로덕션이면 실제 URL
+const API_BASE_URL = isTestMode
+  ? testUrl
+  : (isDev ? '' : (import.meta.env.VITE_BACKEND_API_URL || 'https://api.aubl.club'));
 
 export interface ApiError {
   message: string;
