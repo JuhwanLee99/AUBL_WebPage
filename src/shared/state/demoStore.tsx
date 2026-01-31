@@ -1424,7 +1424,10 @@ function reducer(state: DemoState, action: Action): DemoState {
       if (state.gameStarted || state.gameOver) return state;
       const startLabel = '경기 시작';
       const broadcast = `*기록원* - ${startLabel}`;
-      const feed = pushFeed(state.feed, createLogEntryForBaserunning(state, broadcast, 0));
+      // [수정] 경기 시작 시 기존 feed를 비우고([]) 새롭게 시작하도록 변경
+      // 기존: const feed = pushFeed(state.feed, createLogEntryForBaserunning(state, broadcast, 0));
+      const feed = pushFeed([], createLogEntryForBaserunning(state, broadcast, 0));
+      
       const matches = state.activeMatchId
         ? updateMatchSchedule(state.matches, state.activeMatchId, { status: 'inProgress' })
         : state.matches;
@@ -2913,7 +2916,9 @@ function updateLineup(state: DemoState, side: Side, index: number, updates: Part
   // 포지션 변경 시 feed에 기록
   let feed = state.feed;
   let lastPlay = state.lastPlay;
-  if (updates.pos && original?.pos && updates.pos !== original.pos) {
+  
+  // [수정] 경기가 시작된 상태(state.gameStarted)일 때만 포지션 변경 로그를 남기도록 조건 추가
+  if (state.gameStarted && updates.pos && original?.pos && updates.pos !== original.pos) {
     const playerName = original.name || '선수';
     const playerNum = original.number ? `(${original.number})` : '';
     const changeText = `포지션 변경 · ${playerName}${playerNum}: ${original.pos} → ${updates.pos}`;
@@ -3869,10 +3874,35 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       },
       purgeTrash: (matchId: string) => {
         dispatch({ type: 'purgeTrash', matchId });
-        void deleteDoc(doc(firestore, 'matches', matchId)).catch(() => {
-          // eslint-disable-next-line no-alert
-          if (typeof window !== 'undefined') window.alert('영구 삭제 권한을 확인해주세요. (삭제 실패)');
-        });
+
+        // [수정] matches 문서뿐만 아니라 matchStates와 하위 컬렉션(feed, events)까지 모두 삭제
+        void (async () => {
+          try {
+            const batch = writeBatch(firestore);
+
+            // 1. matches 컬렉션에서 일정 삭제
+            batch.delete(doc(firestore, 'matches', matchId));
+
+            // 2. matchStates 컬렉션에서 상태 문서 삭제
+            batch.delete(doc(firestore, 'matchStates', matchId));
+
+            // 3. matchStates 하위의 feed, events 컬렉션 데이터 삭제
+            // (클라이언트 사이드 삭제이므로 문서가 많을 경우 배치 처리가 필요할 수 있으나, 현재 규모에서는 일괄 처리 가능)
+            const [feedSnap, eventsSnap] = await Promise.all([
+              getDocs(collection(firestore, 'matchStates', matchId, 'feed')),
+              getDocs(collection(firestore, 'matchStates', matchId, 'events')),
+            ]);
+
+            feedSnap.forEach((d) => batch.delete(d.ref));
+            eventsSnap.forEach((d) => batch.delete(d.ref));
+
+            await batch.commit();
+          } catch (error) {
+            console.error('Purge error:', error);
+            // eslint-disable-next-line no-alert
+            if (typeof window !== 'undefined') window.alert('영구 삭제 권한을 확인해주세요. (삭제 실패)');
+          }
+        })();
       },
       saveMatchLineups: (
         matchId: string,
