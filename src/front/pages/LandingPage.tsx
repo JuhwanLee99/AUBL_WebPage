@@ -623,7 +623,7 @@ export default function LandingPage() {
             </div>
           </div>
           <Link
-            to="/scoreboard"
+            to="/schedule/live"
             style={{
               padding: '12px 14px',
               borderRadius: '12px',
