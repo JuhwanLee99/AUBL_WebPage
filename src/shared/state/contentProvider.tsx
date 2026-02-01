@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { firestore } from '../firebase/client';
 
 type HistoryHighlight = { title: string; desc: string; accent: string };
 type GovernanceItem = { label: string; value: string; detail: string };
@@ -108,6 +110,7 @@ type ContentContextValue = {
 };
 
 const STORAGE_KEY = 'aubl:content:v1';
+const FIRESTORE_DOC = 'settings/content';
 
 const ContentContext = createContext<ContentContextValue>({
   content: defaultContent,
@@ -126,36 +129,135 @@ const deepMerge = (base: ContentState, patch: Partial<ContentState>): ContentSta
 export function ContentProvider({ children }: { children: ReactNode }) {
   const [content, setContent] = useState<ContentState>(defaultContent);
   const loadedRef = useRef(false);
+  const savingRef = useRef(false);
 
+  // localStorage → Firestore 마이그레이션 (한 번만 실행)
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    const migrate = async () => {
+      if (typeof window === 'undefined') return;
+
+      try {
+        const contentDocRef = doc(firestore, FIRESTORE_DOC);
+        const snapshot = await getDoc(contentDocRef);
+
+        // Firestore에 문서가 없고 localStorage에 데이터가 있으면 마이그레이션
+        if (!snapshot.exists()) {
+          const raw = window.localStorage.getItem(STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw) as Partial<ContentState>;
+            const migratedContent = deepMerge(defaultContent, parsed);
+            await setDoc(contentDocRef, migratedContent);
+            console.info('[ContentProvider] Migrated localStorage data to Firestore');
+          }
+        }
+      } catch (error) {
+        console.error('[ContentProvider] Migration failed:', error);
+      }
+    };
+
+    void migrate();
+  }, []);
+
+  // Firestore 구독 및 초기 로드
+  useEffect(() => {
+    const contentDocRef = doc(firestore, FIRESTORE_DOC);
+
+    // Firestore 실시간 구독
+    const unsubscribe = onSnapshot(
+      contentDocRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data() as Partial<ContentState>;
+          setContent((prev) => deepMerge(defaultContent, data));
+
+          // localStorage에도 캐시
+          if (typeof window !== 'undefined') {
+            try {
+              window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            } catch {
+              // ignore quota errors
+            }
+          }
+        } else {
+          // Firestore에 문서가 없으면 기본값 사용
+          setContent(defaultContent);
+        }
+        loadedRef.current = true;
+      },
+      (error) => {
+        console.error('[ContentProvider] Firestore subscription error:', error);
+        // Firestore 에러 시 localStorage 폴백
+        if (typeof window !== 'undefined') {
+          try {
+            const raw = window.localStorage.getItem(STORAGE_KEY);
+            if (raw) {
+              const parsed = JSON.parse(raw) as Partial<ContentState>;
+              setContent((prev) => deepMerge(prev, parsed));
+            }
+          } catch {
+            // ignore malformed cache
+          }
+        }
+        loadedRef.current = true;
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  const updateContent = useCallback(async (next: Partial<ContentState>) => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+
     try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as Partial<ContentState>;
-      setContent((prev) => deepMerge(prev, parsed));
-    } catch {
-      // ignore malformed cache
+      const contentDocRef = doc(firestore, FIRESTORE_DOC);
+
+      // 현재 상태를 가져와서 병합
+      let newContent: ContentState;
+      setContent((prev) => {
+        newContent = deepMerge(prev, next);
+        return newContent;
+      });
+
+      // Firestore에 저장
+      await setDoc(contentDocRef, newContent!, { merge: true });
+
+      // localStorage에도 저장
+      if (typeof window !== 'undefined') {
+        try {
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(newContent));
+        } catch {
+          // ignore quota errors
+        }
+      }
+    } catch (error) {
+      console.error('[ContentProvider] Failed to save content:', error);
+      // 에러 시에도 로컬 상태는 업데이트 (localStorage 폴백)
+      setContent((prev) => deepMerge(prev, next));
     } finally {
-      loadedRef.current = true;
+      savingRef.current = false;
     }
   }, []);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (!loadedRef.current) return;
+  const resetContent = useCallback(async () => {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(content));
-    } catch {
-      // ignore quota errors
+      const contentDocRef = doc(firestore, FIRESTORE_DOC);
+      await setDoc(contentDocRef, defaultContent);
+      setContent(defaultContent);
+
+      // localStorage도 초기화
+      if (typeof window !== 'undefined') {
+        try {
+          window.localStorage.removeItem(STORAGE_KEY);
+        } catch {
+          // ignore
+        }
+      }
+    } catch (error) {
+      console.error('[ContentProvider] Failed to reset content:', error);
+      setContent(defaultContent);
     }
-  }, [content]);
-
-  const updateContent = useCallback((next: Partial<ContentState>) => {
-    setContent((prev) => deepMerge(prev, next));
   }, []);
-
-  const resetContent = useCallback(() => setContent(defaultContent), []);
 
   const value = useMemo(() => ({ content, updateContent, resetContent }), [content, updateContent, resetContent]);
 

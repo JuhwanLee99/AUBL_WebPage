@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
 
 type Props = {
@@ -8,7 +9,18 @@ type Props = {
 
 export default function MatchSelectorBar({ summaryTime, summaryVenue }: Props) {
   const { state, actions } = useDemoStore();
-  const matches = useMemo(() => state.matches.filter((m) => !m.deleted), [state.matches]);
+  const [searchParams] = useSearchParams();
+  const filterParam = searchParams.get('filter');
+
+  // URL 쿼리 파라미터로 필터링: ?filter=live이면 진행 중인 경기만
+  const matches = useMemo(() => {
+    const allMatches = state.matches.filter((m) => !m.deleted);
+    if (filterParam === 'live') {
+      return allMatches.filter((m) => m.status === 'inProgress');
+    }
+    return allMatches;
+  }, [state.matches, filterParam]);
+
   const hasActive = Boolean(state.activeMatchId);
 
   return (
