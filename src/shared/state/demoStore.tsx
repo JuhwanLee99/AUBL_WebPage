@@ -994,9 +994,8 @@ function calculateGameStats(record: GameRecord) {
     return stats.get(name)!;
   };
 
-  // 기록된 이벤트를 역순(오래된 순)으로 순회하며 집계
-  // (record.feed는 최신순이므로 reverse() 사용)
-  const chronological = [...record.feed].reverse();
+  // record.feed는 이미 오래된 순(oldest → newest)으로 정렬되어 있음
+  const chronological = record.feed;
   
   chronological.forEach((entry) => {
     const name = entry.batter?.trim();
@@ -1051,7 +1050,8 @@ export function buildGameRecord(state: DemoState): GameRecord {
   });
 
   // [추가] 실시간 라인스코어 및 집계 로직
-  const chronologicalFeed = [...state.feed].reverse();
+  // state.feed는 이미 오래된 순(oldest → newest)으로 정렬되어 있음
+  const chronologicalFeed = state.feed;
 
   const liveHits = chronologicalFeed.reduce(
     (acc, entry) => {
@@ -2973,7 +2973,8 @@ function updateLineup(state: DemoState, side: Side, index: number, updates: Part
 // 투수 등판 순서를 계산하는 헬퍼 함수
 function calculatePitcherAppearanceCount(feed: PlayLog[], side: Side): number {
   let count = 0;
-  const chronological = [...feed].reverse();
+  // Feed is already in chronological order (oldest → newest), no need to reverse
+  const chronological = feed;
 
   for (const entry of chronological) {
     const result = entry.result.trim();
