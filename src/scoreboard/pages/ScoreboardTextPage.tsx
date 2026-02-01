@@ -463,13 +463,13 @@ export default function ScoreboardTextPage() {
 
       <div className="stats-grid">
         <div style={{ display: 'grid', gap: '8px' }}>
-          <StatsTable title={`${state.teamNames.home} 타자 기록`} stats={playerStats.hitters.home} variant="batter" density="compact" />
-          <StatsTable title={`${state.teamNames.home} 투수 기록`} stats={playerStats.pitchers.home} variant="pitcher" density="compact" />
+          <StatsTable title={`${state.teamNames.away} 타자 기록`} stats={playerStats.hitters.away} variant="batter" density="compact" />
+          <StatsTable title={`${state.teamNames.away} 투수 기록`} stats={playerStats.pitchers.away} variant="pitcher" density="compact" />
 
         </div>
         <div style={{ display: 'grid', gap: '8px' }}>
-          <StatsTable title={`${state.teamNames.away} 타자 기록`} stats={playerStats.hitters.away} variant="batter" density="compact" />
-          <StatsTable title={`${state.teamNames.away} 투수 기록`} stats={playerStats.pitchers.away} variant="pitcher" density="compact" />
+          <StatsTable title={`${state.teamNames.home} 타자 기록`} stats={playerStats.hitters.home} variant="batter" density="compact" />
+          <StatsTable title={`${state.teamNames.home} 투수 기록`} stats={playerStats.pitchers.home} variant="pitcher" density="compact" />
         </div>
       </div>
 
@@ -1426,7 +1426,8 @@ function computePitcherLine(feed: ReturnType<typeof useDemoStore>['state']['feed
   const base: PitcherLine = { bf: 0, outs: 0, hits: 0, hr: 0, bb: 0, hbp: 0, so: 0, pitches: 0, strikes: 0, balls: 0 };
   if (!pitcher) return base;
   
-  const chronological = [...feed].reverse();
+  // Feed is already in chronological order (oldest → newest) per pushFeed implementation
+  const chronological = feed;
   const current: Record<'home' | 'away', string | null> = { home: null, away: null };
   // [중요] ScorekeeperPage와 동일하게 괄호 제거하지 않음
   const cleanName = (raw: string) => raw.replace(/투수/g, '').replace(/·/g, '').trim();
@@ -1902,7 +1903,8 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     return store.get(name)!;
   };
 
-  const chronological = [...record.feed].reverse();
+  // Feed is already in chronological order (oldest → newest) per pushFeed implementation
+  const chronological = record.feed;
   const currentPitcher: Record<'home' | 'away', string | null> = { home: null, away: null };
   const cleanName = (raw: string) => raw.replace(/투수/g, '').replace(/·/g, '').trim();
 
@@ -1927,11 +1929,12 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     return null;
   };
 
+  // [수정] 투수 등판 순서 문제 해결을 위해 두 패스로 분리
+  // 첫 번째 패스: 투수 관련 로그만 먼저 처리하여 등판 순서 확립
   chronological.forEach((entry) => {
     const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
     const defenseSide: 'home' | 'away' = offenseSide === 'home' ? 'away' : 'home';
     const result = entry.result.trim();
-    const orderNum = typeof entry.order === 'number' && entry.order > 0 ? entry.order : null;
 
     if (result.includes('투수 교체')) {
       const incoming = result.split('→')[1];
@@ -1942,12 +1945,42 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
         currentPitcher[inferred] = cleaned;
         addPitch(inferred, cleaned);
       }
-    } else if (result.endsWith('투수')) {
-      let cleaned = cleanName(result.replace('투수', ''));
+    } else if (result.includes('투수 (선발)') || (result.includes('투수 (') && result.includes('차 계투)'))) {
+      // 자동 생성된 투수 등판 항목: "홍길동(18) 투수 (선발)" 또는 "홍길동(18) 투수 (1차 계투)"
+      let cleaned = cleanName(result.split('투수')[0]);
+      const inferred = inferPitcherSide(cleaned) ?? defenseSide;
+      cleaned = resolvePitcherName(cleaned, inferred);
+
+      currentPitcher[inferred] = cleaned;
+      addPitch(inferred, cleaned);
+    }
+  });
+
+  // 두 번째 패스: 타석 결과 처리 (투수 등판 순서가 이미 확립된 상태)
+  // currentPitcher 초기화하여 피드 순서대로 다시 추적
+  currentPitcher.home = null;
+  currentPitcher.away = null;
+
+  chronological.forEach((entry) => {
+    const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
+    const defenseSide: 'home' | 'away' = offenseSide === 'home' ? 'away' : 'home';
+    const result = entry.result.trim();
+    const orderNum = typeof entry.order === 'number' && entry.order > 0 ? entry.order : null;
+
+    // 투수 관련 로그에서 currentPitcher 업데이트 (등판 순서는 첫 번째 패스에서 이미 처리됨)
+    if (result.includes('투수 교체')) {
+      const incoming = result.split('→')[1];
+      if (incoming) {
+        let cleaned = cleanName(incoming);
+        const inferred = inferPitcherSide(cleaned) ?? defenseSide;
+        cleaned = resolvePitcherName(cleaned, inferred);
+        currentPitcher[inferred] = cleaned;
+      }
+    } else if (result.includes('투수 (선발)') || (result.includes('투수 (') && result.includes('차 계투)'))) {
+      let cleaned = cleanName(result.split('투수')[0]);
       const inferred = inferPitcherSide(cleaned) ?? defenseSide;
       cleaned = resolvePitcherName(cleaned, inferred);
       currentPitcher[inferred] = cleaned;
-      addPitch(inferred, cleaned);
     }
 
     let name = entry.batter?.trim();
