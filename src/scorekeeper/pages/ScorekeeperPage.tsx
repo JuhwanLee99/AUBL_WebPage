@@ -496,8 +496,18 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
     if (event.type === 'hbp' || normalized.includes('몸에맞는공')) return 'HP';
     if (event.type === 'sac' || normalized.includes('희생')) return 'SAC';
     if (event.type === 'error' || normalized.includes('실책')) return 'E';
-    if (normalized.includes('병살')) return 'GDP';
-    if (normalized.includes('삼진')) return 'K';
+    if (normalized.includes('병살')) {
+      if (event.dpRoute && event.dpRoute.length > 0) {
+        return `GDP(${event.dpRoute.join('-')})`;
+      }
+      return 'GDP';
+    }
+    if (normalized.includes('삼진')) {
+      if (event.strikeType === 'looking' || normalized.includes('루킹')) {
+        return 'Kc';
+      }
+      return 'K';
+    }
     if (event.type === 'steal') return 'SB';
     if (event.type === 'steal_fail') return 'CS';
     if (event.type === 'runner_out') return 'RUN OUT';
@@ -1410,6 +1420,8 @@ export default function ScorekeeperPage() {
   const [lastHitWizard, setLastHitWizard] = useState<HitWizardState | null>(null);
   const [errorOnPlayModal, setErrorOnPlayModal] = useState<null | { selections: RunnerAdvanceSelections; batterResult: 'out' | 'hold' | 1 | 2 | 3 | 4; errorType: string; context: string; fielder: string }>(null);
   const [showDroppedThirdStrike, setShowDroppedThirdStrike] = useState(false);
+  const [showStrikeOutTypeModal, setShowStrikeOutTypeModal] = useState(false);
+  const [pendingStrikeType, setPendingStrikeType] = useState<'swinging' | 'looking' | null>(null);
   const [battedBallType, setBattedBallType] = useState(baseBattedBallType);
   const [battedBallZone, setBattedBallZone] = useState(defaultZoneOptions[0]);
   const [gameLimitInput, setGameLimitInput] = useState('');
@@ -1779,7 +1791,7 @@ const handleConfirmHitWizard = () => {
     }
 
     if (action === 'strike' && state.strikes >= 2) {
-      setShowDroppedThirdStrike(true);
+      setShowStrikeOutTypeModal(true);
       setHitWizard(null);
       return;
     }
@@ -1940,13 +1952,17 @@ const handleConfirmHitWizard = () => {
     actions.startGame();
   };
 
-  const handleDroppedThirdStrike = (isDropped: boolean) => {
+  const handleStrikeOutType = (type: 'swinging' | 'looking') => {
+    setShowStrikeOutTypeModal(false);
+    setPendingStrikeType(type);
+    setShowDroppedThirdStrike(true);
+  };
+
+  const handleDroppedThirdStrike = (variant: 'strikeout' | 'reach' | 'tag_out') => {
     setShowDroppedThirdStrike(false);
-    if (isDropped) {
-      actions.droppedThirdStrike();
-    } else {
-      actions.strikeOut();
-    }
+    const strikeType = pendingStrikeType ?? undefined;
+    setPendingStrikeType(null);
+    actions.droppedThirdStrike(variant, strikeType);
   };
 
   const handleEndGame = () => {
@@ -2880,11 +2896,21 @@ const handleConfirmHitWizard = () => {
           }}
         />
       )}
+      {showStrikeOutTypeModal && (
+        <StrikeOutTypeModal
+          batterName={currentBatter}
+          onClose={() => setShowStrikeOutTypeModal(false)}
+          onSelect={handleStrikeOutType}
+        />
+      )}
       {showDroppedThirdStrike && (
         <DroppedThirdStrikeModal
           batterName={currentBatter}
-          onClose={() => setShowDroppedThirdStrike(false)}
-          onSelect={(isDropped) => handleDroppedThirdStrike(isDropped)}
+          onClose={() => {
+            setShowDroppedThirdStrike(false);
+            setPendingStrikeType(null);
+          }}
+          onSelect={(variant) => handleDroppedThirdStrike(variant)}
         />
       )}
 
@@ -4379,6 +4405,107 @@ function ErrorOnPlayModal({
   );
 }
 
+function StrikeOutTypeModal({
+  batterName,
+  onClose,
+  onSelect,
+}: {
+  batterName: string;
+  onClose: () => void;
+  onSelect: (type: 'swinging' | 'looking') => void;
+}) {
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'grid',
+        placeItems: 'center',
+        zIndex: 1000,
+        padding: '20px',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 'min(480px, 100%)',
+          background: '#0f172a',
+          borderRadius: '16px',
+          border: '1px solid rgba(148, 163, 184, 0.25)',
+          padding: '18px',
+          display: 'grid',
+          gap: '14px',
+          color: '#e2e8f0',
+          boxShadow: '0 24px 60px rgba(0,0,0,0.4)',
+        }}
+      >
+        <div style={{ display: 'grid', gap: '4px' }}>
+          <span style={{ fontWeight: 900 }}>삼진 유형 선택</span>
+          <span style={{ color: '#94a3b8', fontWeight: 700 }}>
+            {batterName} · 삼진 유형을 선택하세요.
+          </span>
+        </div>
+        <div style={{ display: 'grid', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={() => onSelect('swinging')}
+            style={{
+              width: '100%',
+              borderRadius: '12px',
+              border: '1px solid rgba(239,68,68,0.5)',
+              background: 'rgba(239,68,68,0.15)',
+              color: '#fecaca',
+              fontWeight: 800,
+              padding: '14px 12px',
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            <div>헛스윙 삼진 (K)</div>
+            <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>배트를 휘둘러 스트라이크</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelect('looking')}
+            style={{
+              width: '100%',
+              borderRadius: '12px',
+              border: '1px solid rgba(251,191,36,0.5)',
+              background: 'rgba(251,191,36,0.15)',
+              color: '#fef08a',
+              fontWeight: 800,
+              padding: '14px 12px',
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            <div>루킹 삼진 (Kc)</div>
+            <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>배트를 휘두르지 않고 스트라이크</div>
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              width: '100%',
+              borderRadius: '12px',
+              border: '1px solid rgba(148,163,184,0.5)',
+              background: 'transparent',
+              color: '#e2e8f0',
+              fontWeight: 700,
+              padding: '8px 12px',
+              cursor: 'pointer',
+            }}
+          >
+            취소
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DroppedThirdStrikeModal({
   batterName,
   onClose,
@@ -4386,7 +4513,7 @@ function DroppedThirdStrikeModal({
 }: {
   batterName: string;
   onClose: () => void;
-  onSelect: (isDropped: boolean) => void;
+  onSelect: (variant: 'strikeout' | 'reach' | 'tag_out') => void;
 }) {
   return (
     <div
@@ -4424,7 +4551,7 @@ function DroppedThirdStrikeModal({
         <div style={{ display: 'grid', gap: '10px' }}>
           <button
             type="button"
-            onClick={() => onSelect(false)}
+            onClick={() => onSelect('strikeout')}
             style={{
               width: '100%',
               borderRadius: '12px',
@@ -4440,7 +4567,7 @@ function DroppedThirdStrikeModal({
           </button>
           <button
             type="button"
-            onClick={() => onSelect(true)}
+            onClick={() => onSelect('reach')}
             style={{
               width: '100%',
               borderRadius: '12px',
@@ -4453,6 +4580,22 @@ function DroppedThirdStrikeModal({
             }}
           >
             낫아웃 출루
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelect('tag_out')}
+            style={{
+              width: '100%',
+              borderRadius: '12px',
+              border: '1px solid rgba(249,115,22,0.5)',
+              background: 'rgba(249,115,22,0.15)',
+              color: '#fed7aa',
+              fontWeight: 800,
+              padding: '10px 12px',
+              cursor: 'pointer',
+            }}
+          >
+            낫아웃 실패(포수 태그)
           </button>
           <button
             type="button"

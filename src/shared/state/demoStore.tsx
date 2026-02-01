@@ -215,6 +215,10 @@ export interface PlayEvent {
   battedBall?: BattedBallDetails | null;
   error?: ErrorDetails | string | null;
   notes?: string;
+  strikeType?: 'swinging' | 'looking';
+  rbi?: number;
+  dpRoute?: number[];
+  earnedRunsBy?: Record<string, number>;
 }
 
 interface DemoSnapshot {
@@ -300,12 +304,12 @@ type Action =
   | { type: 'ball' }
   | { type: 'strike' }
   | { type: 'foul' }
-  | { type: 'strikeOut' }
-  | { type: 'droppedThirdStrike' }
+  | { type: 'strikeOut'; strikeType?: 'swinging' | 'looking' }
+  | { type: 'droppedThirdStrike'; variant?: 'strikeout' | 'reach' | 'tag_out'; strikeType?: 'swinging' | 'looking' }
   | { type: 'out'; battedBall?: BattedBallDetails | null }
   | { type: 'outWithMessage'; note: string; battedBall?: BattedBallDetails | null }
-  | { type: 'doublePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[] }
-  | { type: 'triplePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[] }
+  | { type: 'doublePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[]; route?: number[] }
+  | { type: 'triplePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[]; route?: number[] }
   | { type: 'hit'; bases: 1 | 2 | 3 | 4; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null }
   | { type: 'fielderChoice'; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null; context?: string }
   | { type: 'walk' }
@@ -1365,12 +1369,23 @@ function reducer(state: DemoState, action: Action): DemoState {
         };
       }
       break;
-    case 'strikeOut':
-      nextState = applyOut(state, '삼진', { pitchNumber: state.pitchCount + 1 });
+    case 'strikeOut': {
+      const strikeLabel = action.strikeType === 'looking' ? '삼진(루킹)' : '삼진';
+      nextState = applyOut(state, strikeLabel, { pitchNumber: state.pitchCount + 1, strikeType: action.strikeType });
       break;
-    case 'droppedThirdStrike':
-      nextState = applyDroppedThirdStrike(state);
+    }
+    case 'droppedThirdStrike': {
+      if (action.variant === 'strikeout') {
+        const strikeLabel = action.strikeType === 'looking' ? '삼진(루킹)' : '삼진';
+        nextState = applyOut(state, strikeLabel, { pitchNumber: state.pitchCount + 1, strikeType: action.strikeType });
+      } else if (action.variant === 'tag_out') {
+        const tagLabel = action.strikeType === 'looking' ? '삼진 낫아웃 실패(포수 태그/루킹)' : '삼진 낫아웃 실패(포수 태그)';
+        nextState = applyOut(state, tagLabel, { pitchNumber: state.pitchCount + 1, strikeType: action.strikeType });
+      } else {
+        nextState = applyDroppedThirdStrike(state, action.strikeType);
+      }
       break;
+    }
     case 'out':
       nextState = applyOut(state, '아웃', { pitchNumber: state.pitchCount + 1, battedBall: action.battedBall });
       break;
@@ -1876,6 +1891,10 @@ function createPlayEvent(
     battedBall?: BattedBallDetails | null;
     error?: ErrorDetails | string | null;
     notes?: string;
+    strikeType?: 'swinging' | 'looking';
+    rbi?: number;
+    dpRoute?: number[];
+    earnedRunsBy?: Record<string, number>;
   },
   pitch: number,
 ): PlayEvent {
@@ -1891,6 +1910,10 @@ function createPlayEvent(
     battedBall: details.battedBall ?? null,
     error: details.error ?? null,
     notes: details.notes,
+    strikeType: details.strikeType,
+    rbi: details.rbi,
+    dpRoute: details.dpRoute,
+    earnedRunsBy: details.earnedRunsBy,
   };
 }
 
@@ -1961,6 +1984,7 @@ function applyOut(
     battedBall?: BattedBallDetails | null;
     error?: string | null;
     notes?: string;
+    strikeType?: 'swinging' | 'looking';
   },
 ): DemoState {
   const outs = state.outs + 1;
@@ -1978,6 +2002,7 @@ function applyOut(
       battedBall: options?.battedBall ?? null,
       error: options?.error ?? null,
       notes: options?.notes ?? message,
+      strikeType: options?.strikeType,
     },
     advanceBatter ? pitchNumber : 0,
   );
@@ -2253,7 +2278,7 @@ function applyWalk(state: DemoState, message: string, pitchNumber: number): Demo
   };
 }
 
-function applyDroppedThirdStrike(state: DemoState): DemoState {
+function applyDroppedThirdStrike(state: DemoState, strikeType?: 'swinging' | 'looking'): DemoState {
   const pitchNumber = Math.max(1, state.pitchCount + 1);
   const { batterName, batterIndex } = nextBatter(state);
   const { bases, runs } = advanceBasesOnWalk(state.bases, batterName);
@@ -2262,13 +2287,14 @@ function applyDroppedThirdStrike(state: DemoState): DemoState {
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
-  const message = '삼진 낫아웃';
+  const message = strikeType === 'looking' ? '삼진 낫아웃(루킹)' : '삼진 낫아웃';
   const eventEntry = createPlayEvent(
     state,
     {
       type: 'dropped_third_strike',
       runners: getRunnerNames(state.bases),
       notes: `${message} · ${batterName}`,
+      strikeType,
     },
     pitchNumber,
   );
@@ -3098,8 +3124,8 @@ interface DemoStoreValue {
     addBall: () => void;
     addStrike: () => void;
     addFoul: () => void;
-    strikeOut: () => void;
-    droppedThirdStrike: () => void;
+    strikeOut: (strikeType?: 'swinging' | 'looking') => void;
+    droppedThirdStrike: (variant?: 'strikeout' | 'reach' | 'tag_out', strikeType?: 'swinging' | 'looking') => void;
     addOut: (battedBall?: BattedBallDetails | null) => void;
     hitSingle: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) => void;
     hitDouble: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) => void;
@@ -3757,8 +3783,8 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       addBall: () => dispatch({ type: 'ball' }),
       addStrike: () => dispatch({ type: 'strike' }),
       addFoul: () => dispatch({ type: 'foul' }),
-      strikeOut: () => dispatch({ type: 'strikeOut' }),
-      droppedThirdStrike: () => dispatch({ type: 'droppedThirdStrike' }),
+      strikeOut: (strikeType?: 'swinging' | 'looking') => dispatch({ type: 'strikeOut', strikeType }),
+      droppedThirdStrike: (variant?: 'strikeout' | 'reach' | 'tag_out', strikeType?: 'swinging' | 'looking') => dispatch({ type: 'droppedThirdStrike', variant, strikeType }),
       addOut: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'out', battedBall }),
       hitSingle: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) =>
         dispatch({ type: 'hit', bases: 1, advances, battedBall }),
