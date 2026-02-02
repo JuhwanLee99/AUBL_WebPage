@@ -336,7 +336,7 @@ type Action =
   | { type: 'manualLog'; message: string }
   | { type: 'setTeamName'; side: Side; name: string }
   | { type: 'setLineup'; side: Side; index: number; updates: Partial<PlayerSlot> }
-  | { type: 'swapPositions'; side: Side; swaps: { index: number; newPos: string }[] }
+  | { type: 'swapPositions'; side: Side; swaps: { index: number; newPos: string }[]; benchSwaps?: { index: number; newPos: string }[] }
   | { type: 'addBench'; side: Side; player: PlayerSlot }
   | { type: 'removeBench'; side: Side; benchIndex: number }
   | { type: 'substitute'; side: Side; benchIndex: number; lineupIndex: number; substitutionType?: '대수비' | '대타' | '대주자' }
@@ -1554,7 +1554,7 @@ function reducer(state: DemoState, action: Action): DemoState {
       nextState = updateLineup(state, action.side, action.index, action.updates);
       break;
     case 'swapPositions':
-      nextState = swapPositions(state, action.side, action.swaps);
+      nextState = swapPositions(state, action.side, action.swaps, action.benchSwaps);
       break;
     case 'addBench':
       nextState = {
@@ -3073,13 +3073,16 @@ function updateLineup(state: DemoState, side: Side, index: number, updates: Part
 function swapPositions(
   state: DemoState,
   side: Side,
-  swaps: { index: number; newPos: string }[]
+  swaps: { index: number; newPos: string }[],
+  benchSwaps?: { index: number; newPos: string }[]
 ): DemoState {
-  if (swaps.length === 0) return state;
+  if (swaps.length === 0 && (!benchSwaps || benchSwaps.length === 0)) return state;
 
   const lineup = [...state.lineups[side]];
+  const bench = [...state.benches[side]];
   const changes: string[] = [];
 
+  // 라인업 포지션 변경
   for (const { index, newPos } of swaps) {
     if (index >= 0 && index < lineup.length) {
       const original = lineup[index];
@@ -3089,6 +3092,22 @@ function swapPositions(
         const playerNum = original.number ? `(${original.number})` : '';
         changes.push(`${playerName}${playerNum}: ${original.pos} → ${normalizedNewPos}`);
         lineup[index] = { ...original, pos: normalizedNewPos };
+      }
+    }
+  }
+
+  // 벤치 포지션 변경
+  if (benchSwaps) {
+    for (const { index, newPos } of benchSwaps) {
+      if (index >= 0 && index < bench.length) {
+        const original = bench[index];
+        const normalizedNewPos = newPos.toUpperCase();
+        if (original && original.pos.toUpperCase() !== normalizedNewPos) {
+          const playerName = original.name || '선수';
+          const playerNum = original.number ? `(${original.number})` : '';
+          changes.push(`${playerName}${playerNum}: ${original.pos} → ${normalizedNewPos}`);
+          bench[index] = { ...original, pos: normalizedNewPos };
+        }
       }
     }
   }
@@ -3106,7 +3125,13 @@ function swapPositions(
     lastPlay = changeText;
   }
 
-  return { ...state, lineups: { ...state.lineups, [side]: lineup }, feed, lastPlay };
+  return {
+    ...state,
+    lineups: { ...state.lineups, [side]: lineup },
+    benches: { ...state.benches, [side]: bench },
+    feed,
+    lastPlay,
+  };
 }
 
 // 투수 등판 순서를 계산하는 헬퍼 함수
@@ -3269,7 +3294,7 @@ interface DemoStoreValue {
     setLiveDelaySeconds: (seconds: number) => void;
     setTeamName: (side: Side, name: string) => void;
     setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) => void;
-    swapPositions: (side: Side, swaps: { index: number; newPos: string }[]) => void;
+    swapPositions: (side: Side, swaps: { index: number; newPos: string }[], benchSwaps?: { index: number; newPos: string }[]) => void;
     addBench: (side: Side, player: PlayerSlot) => void;
     removeBench: (side: Side, benchIndex: number) => void;
     substitute: (side: Side, benchIndex: number, lineupIndex: number, substitutionType?: '대수비' | '대타' | '대주자') => void;
@@ -3962,8 +3987,8 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       setTeamName: (side: Side, name: string) => dispatch({ type: 'setTeamName', side, name }),
       setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) =>
         dispatch({ type: 'setLineup', side, index, updates }),
-      swapPositions: (side: Side, swaps: { index: number; newPos: string }[]) =>
-        dispatch({ type: 'swapPositions', side, swaps }),
+      swapPositions: (side: Side, swaps: { index: number; newPos: string }[], benchSwaps?: { index: number; newPos: string }[]) =>
+        dispatch({ type: 'swapPositions', side, swaps, benchSwaps }),
       addBench: (side: Side, player: PlayerSlot) => dispatch({ type: 'addBench', side, player }),
       removeBench: (side: Side, benchIndex: number) => dispatch({ type: 'removeBench', side, benchIndex }),
       substitute: (side: Side, benchIndex: number, lineupIndex: number, substitutionType?: '대수비' | '대타' | '대주자') =>
