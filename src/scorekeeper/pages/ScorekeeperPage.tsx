@@ -33,7 +33,7 @@ type Side = 'home' | 'away';
 
 const mainButtons = [
   { label: '볼', color: '#22c55e', action: 'ball' },
-  { label: '스트라이크', color: '#22c55e', action: 'strike' },
+  { label: '스트라이크', color: '#facc15', action: 'strike' },
   { label: '타격 입력', color: '#3b82f6', action: 'hitMenu' },
   { label: '실행 취소', color: '#94a3b8', action: 'undo' },
 ];
@@ -2859,7 +2859,13 @@ const handleConfirmHitWizard = () => {
               setHitWizard({ ...lastHitWizard, step: 'zone' });
             }
           }}
-          onConfirm={({ fielder, errorType, context, batterResult, selections }) => {
+          onConfirm={({ fielder, errorType, context, batterResult, selections, pitchResult }) => {
+            // 폭투/포일 시 볼/스트라이크 카운트 추가
+            if (pitchResult === 'ball') {
+              actions.addBall();
+            } else if (pitchResult === 'strike') {
+              actions.addStrike();
+            }
             actions.recordError({
               fielderPos: fielder || '수비',
               errorType: decorateErrorType(errorType, fielder || '수비'),
@@ -4412,13 +4418,16 @@ function ErrorOnPlayModal({
   defaultContext: string;
   onClose: () => void;
   onBack?: () => void;
-  onConfirm: (details: { fielder: string; errorType: string; context: string; batterResult: 'out' | 'hold' | 1 | 2 | 3 | 4; selections: RunnerAdvanceSelections }) => void;
+  onConfirm: (details: { fielder: string; errorType: string; context: string; batterResult: 'out' | 'hold' | 1 | 2 | 3 | 4; selections: RunnerAdvanceSelections; pitchResult?: 'ball' | 'strike' }) => void;
 }) {
   const [fielder, setFielder] = useState(defaultFielder);
   const [errorType, setErrorType] = useState(defaultErrorType);
   const [context, setContext] = useState(defaultContext);
   const [batterResult, setBatterResult] = useState<'out' | 'hold' | 1 | 2 | 3 | 4>(defaultBatterResult);
   const [selections, setSelections] = useState<RunnerAdvanceSelections>(defaultSelections);
+  const [pitchResult, setPitchResult] = useState<'ball' | 'strike' | null>(null);
+
+  const isWildPitchOrPassedBall = errorType === 'WP(폭투)' || errorType === 'PB(포일)';
 
   const runners = basesState
     .map((runner, idx) => (runner ? { runner, baseIndex: idx as 0 | 1 | 2 } : null))
@@ -4507,6 +4516,41 @@ function ErrorOnPlayModal({
           </select>
             </div>
           </div>
+
+        {isWildPitchOrPassedBall && (
+          <div style={{ display: 'grid', gap: '6px' }}>
+            <span style={{ fontWeight: 800, color: '#cbd5e1', fontSize: '13px' }}>투구 결과 (볼/스트라이크)</span>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+              {[
+                { value: 'ball' as const, label: '볼', color: '#22c55e' },
+                { value: 'strike' as const, label: '스트라이크', color: '#facc15' },
+              ].map((opt) => {
+                const isSelected = pitchResult === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setPitchResult(opt.value)}
+                    style={{
+                      padding: '12px',
+                      borderRadius: '10px',
+                      border: isSelected ? `1px solid ${opt.color}` : '1px solid rgba(148,163,184,0.3)',
+                      background: isSelected ? `${opt.color}22` : 'rgba(255,255,255,0.03)',
+                      color: isSelected ? opt.color : '#e2e8f0',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+            <span style={{ color: '#94a3b8', fontSize: '12px' }}>
+              폭투/포일 발생 시 해당 투구의 볼/스트라이크 카운트도 함께 기록됩니다.
+            </span>
+          </div>
+        )}
 
         <div style={{ display: 'grid', gap: '6px' }}>
           <span style={{ fontWeight: 800, color: '#cbd5e1', fontSize: '13px' }}>타자 결과</span>
@@ -4657,7 +4701,7 @@ function ErrorOnPlayModal({
           </button>
           <button
             type="button"
-            onClick={() => onConfirm({ fielder, errorType, context, batterResult, selections })}
+            onClick={() => onConfirm({ fielder, errorType, context, batterResult, selections, pitchResult: isWildPitchOrPassedBall ? pitchResult ?? undefined : undefined })}
             style={{
               padding: '10px 14px',
               borderRadius: '10px',
