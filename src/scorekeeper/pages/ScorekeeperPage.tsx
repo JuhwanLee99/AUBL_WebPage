@@ -1423,6 +1423,7 @@ export default function ScorekeeperPage() {
   const [showDroppedThirdStrike, setShowDroppedThirdStrike] = useState(false);
   const [showStrikeOutTypeModal, setShowStrikeOutTypeModal] = useState(false);
   const [pendingStrikeType, setPendingStrikeType] = useState<'swinging' | 'looking' | null>(null);
+  const [showFoulTypeModal, setShowFoulTypeModal] = useState(false);
   const [battedBallType, setBattedBallType] = useState(baseBattedBallType);
   const [battedBallZone, setBattedBallZone] = useState(defaultZoneOptions[0]);
   const [gameLimitInput, setGameLimitInput] = useState('');
@@ -1626,7 +1627,7 @@ export default function ScorekeeperPage() {
   const handleSelectHitResult = (result: BattedBallResultAction) => {
     if (controlsDisabled) return;
     if (result === 'foul') {
-      actions.addFoul();
+      setShowFoulTypeModal(true);
       setHitWizard(null);
       return;
     }
@@ -1777,7 +1778,7 @@ const handleConfirmHitWizard = () => {
         actions.addOutWithMessage('기타 아웃', details);
         break;
       case 'foul':
-        actions.addFoul();
+        setShowFoulTypeModal(true);
         break;
       default:
         break;
@@ -1805,7 +1806,7 @@ const handleConfirmHitWizard = () => {
         actions.addStrike();
         break;
       case 'foul':
-        actions.addFoul();
+        setShowFoulTypeModal(true);
         break;
       case 'single':
         openHitAdvanceModal(1);
@@ -2915,6 +2916,17 @@ const handleConfirmHitWizard = () => {
           batterName={currentBatter}
           onClose={() => setShowStrikeOutTypeModal(false)}
           onSelect={handleStrikeOutType}
+        />
+      )}
+      {showFoulTypeModal && (
+        <FoulTypeModal
+          batterName={currentBatter}
+          strikes={state.strikes}
+          onClose={() => setShowFoulTypeModal(false)}
+          onSelect={(isBunt) => {
+            actions.addFoul(isBunt);
+            setShowFoulTypeModal(false);
+          }}
         />
       )}
       {showDroppedThirdStrike && (
@@ -4742,6 +4754,114 @@ function StrikeOutTypeModal({
           >
             <div>루킹 삼진 (Kc)</div>
             <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>배트를 휘두르지 않고 스트라이크</div>
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              width: '100%',
+              borderRadius: '12px',
+              border: '1px solid rgba(148,163,184,0.5)',
+              background: 'transparent',
+              color: '#e2e8f0',
+              fontWeight: 700,
+              padding: '8px 12px',
+              cursor: 'pointer',
+            }}
+          >
+            취소
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FoulTypeModal({
+  batterName,
+  strikes,
+  onClose,
+  onSelect,
+}: {
+  batterName: string;
+  strikes: number;
+  onClose: () => void;
+  onSelect: (isBunt: boolean) => void;
+}) {
+  const isTwoStrikes = strikes >= 2;
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'grid',
+        placeItems: 'center',
+        zIndex: 1000,
+        padding: '20px',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 'min(480px, 100%)',
+          background: '#0f172a',
+          borderRadius: '16px',
+          border: '1px solid rgba(148, 163, 184, 0.25)',
+          padding: '18px',
+          display: 'grid',
+          gap: '14px',
+          color: '#e2e8f0',
+          boxShadow: '0 24px 60px rgba(0,0,0,0.4)',
+        }}
+      >
+        <div style={{ display: 'grid', gap: '4px' }}>
+          <span style={{ fontWeight: 900 }}>파울 유형 선택</span>
+          <span style={{ color: '#94a3b8', fontWeight: 700 }}>
+            {batterName} · 파울 유형을 선택하세요.
+          </span>
+        </div>
+        <div style={{ display: 'grid', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={() => onSelect(false)}
+            style={{
+              width: '100%',
+              borderRadius: '12px',
+              border: '1px solid rgba(250,204,21,0.5)',
+              background: 'rgba(250,204,21,0.15)',
+              color: '#fef08a',
+              fontWeight: 800,
+              padding: '14px 12px',
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            <div>타격 파울</div>
+            <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>
+              {isTwoStrikes ? '2스트라이크 이후 파울 (카운트 유지)' : '스트라이크 카운트 +1'}
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelect(true)}
+            style={{
+              width: '100%',
+              borderRadius: '12px',
+              border: isTwoStrikes ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(250,204,21,0.5)',
+              background: isTwoStrikes ? 'rgba(239,68,68,0.15)' : 'rgba(250,204,21,0.15)',
+              color: isTwoStrikes ? '#fecaca' : '#fef08a',
+              fontWeight: 800,
+              padding: '14px 12px',
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            <div>번트 파울{isTwoStrikes && ' (쓰리번트 아웃)'}</div>
+            <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>
+              {isTwoStrikes ? '2스트라이크 이후 번트 파울 → 삼진 아웃' : '스트라이크 카운트 +1'}
+            </div>
           </button>
           <button
             type="button"
