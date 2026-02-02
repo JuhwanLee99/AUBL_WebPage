@@ -229,6 +229,8 @@ interface DemoSnapshot {
   outs: number;
   pitchCount: number;
   bases: Bases; // [1B, 2B, 3B] occupant name
+  // 주자별 책임 투수 기록 (주자가 출루할 때의 투수, 득점 시 해당 투수에게 실점 부과)
+  runnerResponsiblePitcher: { 0: string | null; 1: string | null; 2: string | null };
   score: { home: number; away: number };
   lastPlay: string;
   feed: PlayLog[];
@@ -308,8 +310,8 @@ type Action =
   | { type: 'droppedThirdStrike'; variant?: 'strikeout' | 'reach' | 'tag_out'; strikeType?: 'swinging' | 'looking' }
   | { type: 'out'; battedBall?: BattedBallDetails | null }
   | { type: 'outWithMessage'; note: string; battedBall?: BattedBallDetails | null }
-  | { type: 'doublePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[]; route?: number[] }
-  | { type: 'triplePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[]; route?: number[] }
+  | { type: 'doublePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[]; route?: number[]; runnerAdvancements?: Record<number, number> }
+  | { type: 'triplePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[]; route?: number[]; runnerAdvancements?: Record<number, number> }
   | { type: 'hit'; bases: 1 | 2 | 3 | 4; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null }
   | { type: 'fielderChoice'; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null; context?: string }
   | { type: 'walk' }
@@ -485,6 +487,7 @@ const initialState: DemoState = {
   outs: 0,
   pitchCount: 0,
   bases: [null, null, null],
+  runnerResponsiblePitcher: { 0: null, 1: null, 2: null },
   score: { home: 0, away: 0 },
   lastPlay: '경기 대기 중',
   feed: [],
@@ -985,14 +988,14 @@ function calculateGameStats(record: GameRecord) {
   const stats = new Map<string, {
     pa: number; ab: number; h: number; singles: number; doubles: number;
     triples: number; hr: number; bb: number; hbp: number; so: number;
-    sac: number; fc: number; ci: number;
+    sac: number; fc: number; ci: number; rbi: number; r: number;
   }>();
 
   const ensureStat = (name: string) => {
     if (!stats.has(name)) {
       stats.set(name, {
         pa: 0, ab: 0, h: 0, singles: 0, doubles: 0, triples: 0,
-        hr: 0, bb: 0, hbp: 0, so: 0, sac: 0, fc: 0, ci: 0
+        hr: 0, bb: 0, hbp: 0, so: 0, sac: 0, fc: 0, ci: 0, rbi: 0, r: 0
       });
     }
     return stats.get(name)!;
@@ -1042,7 +1045,17 @@ function calculateGameStats(record: GameRecord) {
       case 'sac':    s.pa++; s.sac++; break;
     }
   });
-  
+
+  // events에서 RBI 집계
+  if (record.events) {
+    record.events.forEach((event) => {
+      if (event.rbi && event.rbi > 0 && event.batter) {
+        const s = ensureStat(event.batter.trim());
+        s.rbi += event.rbi;
+      }
+    });
+  }
+
   return stats;
 }
 
@@ -1393,10 +1406,10 @@ function reducer(state: DemoState, action: Action): DemoState {
       nextState = applyOut(state, action.note, { pitchNumber: state.pitchCount + 1, battedBall: action.battedBall });
       break;
     case 'doublePlay':
-      nextState = applyDoublePlay(state, 2, '병살타', action.battedBall, action.selectedRunners);
+      nextState = applyDoublePlay(state, 2, '병살타', action.battedBall, action.selectedRunners, action.route, action.runnerAdvancements);
       break;
     case 'triplePlay':
-      nextState = applyDoublePlay(state, 3, '삼중살', action.battedBall, action.selectedRunners);
+      nextState = applyDoublePlay(state, 3, '삼중살', action.battedBall, action.selectedRunners, action.route, action.runnerAdvancements);
       break;
     case 'hit':
       nextState = applyHitWithAdvances(state, action.bases, state.pitchCount + 1, action.advances, action.battedBall);
@@ -1985,6 +1998,7 @@ function applyOut(
     error?: string | null;
     notes?: string;
     strikeType?: 'swinging' | 'looking';
+    rbi?: number;
   },
 ): DemoState {
   const outs = state.outs + 1;
@@ -2003,6 +2017,7 @@ function applyOut(
       error: options?.error ?? null,
       notes: options?.notes ?? message,
       strikeType: options?.strikeType,
+      rbi: options?.rbi,
     },
     advanceBatter ? pitchNumber : 0,
   );
@@ -2107,6 +2122,8 @@ function applyHitWithAdvances(
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
+  // 안타의 경우 득점 수가 곧 타점(RBI)
+  const rbi = runs;
   const eventEntry = createPlayEvent(
     state,
     {
@@ -2114,6 +2131,7 @@ function applyHitWithAdvances(
       runners: runnerMoves.map((move) => move.runnerSummary),
       battedBall: battedBall ?? null,
       notes: message,
+      rbi,
     },
     pitchNumber,
   );
@@ -2336,10 +2354,11 @@ function applySacrifice(
       side === 'home'
         ? { ...state.score, home: state.score.home + runs }
         : { ...state.score, away: state.score.away + runs };
+    // 희생번트로 인한 득점은 타점(RBI)
     return applyOut(
       { ...state, bases, score },
       runs ? `희생번트 · ${runs}득점` : '희생번트',
-      { pitchNumber, eventType: 'sac', runners: getRunnerNames(bases), notes: '희생번트', battedBall },
+      { pitchNumber, eventType: 'sac', runners: getRunnerNames(bases), notes: '희생번트', battedBall, rbi: runs },
     );
   }
 
@@ -2354,10 +2373,11 @@ function applySacrifice(
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
+  // 희생플라이로 인한 득점은 타점(RBI)
   return applyOut(
     { ...state, bases, score },
     runs ? `희생플라이 · ${runs}득점` : '희생플라이',
-    { pitchNumber, eventType: 'sac', runners: getRunnerNames(bases), notes: '희생플라이', battedBall },
+    { pitchNumber, eventType: 'sac', runners: getRunnerNames(bases), notes: '희생플라이', battedBall, rbi: runs },
   );
 }
 
@@ -2697,6 +2717,8 @@ function applyDoublePlay(
   label: string,
   battedBall?: BattedBallDetails | null,
   selectedRunners?: number[],
+  route?: number[],
+  runnerAdvancements?: Record<number, number>,
 ): DemoState {
   const bases = [...state.bases] as Bases;
   const current = currentBatterInfo(state);
@@ -2704,6 +2726,8 @@ function applyDoublePlay(
   const batterIndex = nextBatter(state).batterIndex;
   const runnersOut: { name: string; base: number }[] = [];
   const outs = Math.min(3, state.outs + outsToAdd);
+  let runsScored = 0;
+  const runnersAdvanced: { name: string; from: number; to: number | 'home' }[] = [];
 
   // Batter out
   runnersOut.push({ name: batterName, base: -1 });
@@ -2727,17 +2751,59 @@ function applyDoublePlay(
     }
   }
 
+  // 아웃되지 않은 주자들의 진루 처리
+  if (runnerAdvancements && Object.keys(runnerAdvancements).length > 0) {
+    // 3루->홈 순으로 처리 (역순으로 정렬)
+    const sortedAdvancements = Object.entries(runnerAdvancements)
+      .map(([from, to]) => ({ from: Number(from), to }))
+      .sort((a, b) => b.from - a.from);
+
+    for (const { from, to } of sortedAdvancements) {
+      const runnerName = bases[from];
+      if (runnerName && !selectedRunners?.includes(from)) {
+        bases[from] = null;
+        if (to === 3) {
+          // 홈으로 진루 (득점)
+          runsScored += 1;
+          runnersAdvanced.push({ name: runnerName, from, to: 'home' });
+        } else if (to >= 0 && to < 3) {
+          // 다른 베이스로 진루
+          bases[to] = runnerName;
+          runnersAdvanced.push({ name: runnerName, from, to });
+        }
+      }
+    }
+  }
+
   const runnerDesc = runnersOut
     .filter((r) => r.base >= 0)
     .map((r) => `${r.name} ${baseLabel(r.base)}`)
     .join(', ');
-  const feedText = runnerDesc ? `${label} · ${batterName} 아웃 / ${runnerDesc} 아웃` : `${label} · ${batterName} 아웃`;
+  const advanceDesc = runnersAdvanced
+    .map((r) => r.to === 'home' ? `${r.name} 득점` : `${r.name} ${baseLabel(r.from)}→${baseLabel(r.to as number)}`)
+    .join(', ');
+  const routeLabel = route && route.length > 0 ? `(${route.join('-')})` : '';
+  const labelWithRoute = `${label}${routeLabel}`;
+  let feedText = runnerDesc ? `${labelWithRoute} · ${batterName} 아웃 / ${runnerDesc} 아웃` : `${labelWithRoute} · ${batterName} 아웃`;
+  if (advanceDesc) {
+    feedText += ` / ${advanceDesc}`;
+  }
   const lastPlay = feedText;
   const eventEntry = createPlayEvent(
     state,
-    { type: 'out', runners: getRunnerNames(state.bases), notes: feedText, battedBall: battedBall ?? null },
+    { type: 'out', runners: getRunnerNames(state.bases), notes: feedText, battedBall: battedBall ?? null, dpRoute: route },
     Math.max(1, state.pitchCount + 1),
   );
+
+  // 득점 반영
+  const updatedScore = { ...state.score };
+  if (runsScored > 0) {
+    if (state.half === 'top') {
+      updatedScore.away = (updatedScore.away || 0) + runsScored;
+    } else {
+      updatedScore.home = (updatedScore.home || 0) + runsScored;
+    }
+  }
 
   const nextState = {
     ...state,
@@ -2748,6 +2814,7 @@ function applyDoublePlay(
     pitchCount: 0,
     batterIndex,
     lastPlay,
+    score: updatedScore,
     feed: pushPlayFeed(state, createLogEntry(state, feedText, Math.max(1, state.pitchCount + 1))),
     events: pushEvent(state.events, eventEntry),
   };
@@ -2799,6 +2866,7 @@ function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
     outs: 0,
     pitchCount: 0,
     bases: [null, null, null],
+    runnerResponsiblePitcher: { 0: null, 1: null, 2: null },
     score: { home: 0, away: 0 },
     lastPlay: '경기 대기 중',
     feed: [],
@@ -2806,11 +2874,11 @@ function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
     homeTeamId: match.homeTeamId ?? state.homeTeamId,
     awayTeamId: match.awayTeamId ?? state.awayTeamId,
     batterIndex: { home: 0, away: 0 },
-  lineups: cloneLineups(lineups),
-  benches: cloneBenches(benches),
-  teamNames: { home: match.homeTeamName, away: match.awayTeamName },
-  gameStarted: false,
-  gameOver: false,
+    lineups: cloneLineups(lineups),
+    benches: cloneBenches(benches),
+    teamNames: { home: match.homeTeamName, away: match.awayTeamName },
+    gameStarted: false,
+    gameOver: false,
     endedAt: null,
     liveVideoUrl: state.liveVideoUrl,
     liveDelaySeconds: state.liveDelaySeconds,
@@ -2842,6 +2910,7 @@ function createNewGame(state: DemoState): DemoState {
     outs: 0,
     pitchCount: 0,
     bases: [null, null, null],
+    runnerResponsiblePitcher: { 0: null, 1: null, 2: null },
     score: { home: 0, away: 0 },
     lastPlay: '경기 대기 중',
     feed: [],
@@ -2849,11 +2918,11 @@ function createNewGame(state: DemoState): DemoState {
     homeTeamId: state.homeTeamId,
     awayTeamId: state.awayTeamId,
     batterIndex: { home: 0, away: 0 },
-  lineups: cloneLineups(preparedLineups),
-  benches: {
-    home: state.benches.home.map((p) => ({ ...p })),
-    away: state.benches.away.map((p) => ({ ...p })),
-  },
+    lineups: cloneLineups(preparedLineups),
+    benches: {
+      home: state.benches.home.map((p) => ({ ...p })),
+      away: state.benches.away.map((p) => ({ ...p })),
+    },
     teamNames: { ...state.teamNames },
     gameStarted: false,
     gameOver: false,
@@ -2898,6 +2967,7 @@ function changeHalf(state: DemoState, message: string, pitchNumber = 0, logState
     strikes: 0,
     pitchCount: 0,
     bases: [null, null, null],
+    runnerResponsiblePitcher: { 0: null, 1: null, 2: null },
     lastPlay: message,
     feed,
   };
@@ -3165,8 +3235,8 @@ interface DemoStoreValue {
     resetGame: () => void;
     undo: () => void;
     addOutWithMessage: (note: string, battedBall?: BattedBallDetails | null) => void;
-    doublePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[]) => void;
-    triplePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[]) => void;
+    doublePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[], route?: number[], runnerAdvancements?: Record<number, number>) => void;
+    triplePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[], route?: number[], runnerAdvancements?: Record<number, number>) => void;
     addMatch: (match: MatchSchedule) => void;
     updateMatch: (matchId: string, updates: Partial<MatchSchedule>) => void;
     deleteMatch: (matchId: string) => void;
@@ -3841,10 +3911,10 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       },
       addOutWithMessage: (note: string, battedBall?: BattedBallDetails | null) =>
         dispatch({ type: 'outWithMessage', note, battedBall }),
-      doublePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[]) =>
-        dispatch({ type: 'doublePlay', battedBall, selectedRunners }),
-      triplePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[]) =>
-        dispatch({ type: 'triplePlay', battedBall, selectedRunners }),
+      doublePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[], route?: number[], runnerAdvancements?: Record<number, number>) =>
+        dispatch({ type: 'doublePlay', battedBall, selectedRunners, route, runnerAdvancements }),
+      triplePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[], route?: number[], runnerAdvancements?: Record<number, number>) =>
+        dispatch({ type: 'triplePlay', battedBall, selectedRunners, route, runnerAdvancements }),
       setTeamName: (side: Side, name: string) => dispatch({ type: 'setTeamName', side, name }),
       setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) =>
         dispatch({ type: 'setLineup', side, index, updates }),
