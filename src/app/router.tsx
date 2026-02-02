@@ -28,11 +28,16 @@ import AccessDeniedPage from './pages/AccessDeniedPage';
 import AdminPage from './pages/AdminPage';
 import AccountPage from './pages/AccountPage';
 import { RequireAdmin } from '../shared/auth/RequireAdmin';
+import { MaintenanceGuard } from '../shared/auth/MaintenanceGuard';
 
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <Layout />,
+    element: (
+      <MaintenanceGuard>
+        <Layout />
+      </MaintenanceGuard>
+    ),
     children: [
       {
         index: true,
