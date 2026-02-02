@@ -2811,8 +2811,9 @@ const handleConfirmHitWizard = () => {
         <PositionSwapModal
           side={positionSwapModal.side}
           lineup={state.lineups[positionSwapModal.side]}
+          bench={state.benches[positionSwapModal.side]}
           onClose={() => setPositionSwapModal(null)}
-          onSwap={(swaps) => actions.swapPositions(positionSwapModal.side, swaps)}
+          onSwap={(swaps, benchSwaps) => actions.swapPositions(positionSwapModal.side, swaps, benchSwaps)}
         />
       )}
       {hitAdvanceModal && (
@@ -5474,72 +5475,22 @@ function ActionModal({
                             등번호 {player.number || '-'} · 투 {player.throws || '-'} · 타 {player.bats || '-'}
                           </span>
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleSubstitute(idx, '대타')}
-                            style={{
-                              padding: '8px 10px',
-                              borderRadius: '8px',
-                              border: '1px solid rgba(34,197,94,0.4)',
-                              background: 'rgba(34,197,94,0.12)',
-                              color: '#22c55e',
-                              fontWeight: 900,
-                              fontSize: '11px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            대타
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSubstitute(idx, '대주자')}
-                            style={{
-                              padding: '8px 10px',
-                              borderRadius: '8px',
-                              border: '1px solid rgba(251,146,60,0.4)',
-                              background: 'rgba(251,146,60,0.12)',
-                              color: '#fb923c',
-                              fontWeight: 900,
-                              fontSize: '11px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            대주자
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSubstitute(idx, '대수비')}
-                            style={{
-                              padding: '8px 10px',
-                              borderRadius: '8px',
-                              border: '1px solid rgba(59,130,246,0.4)',
-                              background: 'rgba(59,130,246,0.12)',
-                              color: '#3b82f6',
-                              fontWeight: 900,
-                              fontSize: '11px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            대수비
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSubstitute(idx)}
-                            style={{
-                              padding: '8px 10px',
-                              borderRadius: '8px',
-                              border: '1px solid rgba(148,163,184,0.4)',
-                              background: 'rgba(148,163,184,0.12)',
-                              color: '#cbd5e1',
-                              fontWeight: 900,
-                              fontSize: '11px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            일반 교체
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleSubstitute(idx, '대타')}
+                          style={{
+                            padding: '8px 10px',
+                            borderRadius: '8px',
+                            border: '1px solid rgba(34,197,94,0.4)',
+                            background: 'rgba(34,197,94,0.12)',
+                            color: '#22c55e',
+                            fontWeight: 900,
+                            fontSize: '11px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          대타 투입
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -5641,40 +5592,22 @@ function ActionModal({
                             등번호 {player.number || '-'} · 투 {player.throws || '-'} · 타 {player.bats || '-'}
                           </span>
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleSubstitute(idx, '대주자')}
-                            style={{
-                              padding: '8px 10px',
-                              borderRadius: '8px',
-                              border: '1px solid rgba(251,146,60,0.4)',
-                              background: 'rgba(251,146,60,0.12)',
-                              color: '#fb923c',
-                              fontWeight: 900,
-                              fontSize: '11px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            대주자
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSubstitute(idx)}
-                            style={{
-                              padding: '8px 10px',
-                              borderRadius: '8px',
-                              border: '1px solid rgba(148,163,184,0.4)',
-                              background: 'rgba(148,163,184,0.12)',
-                              color: '#cbd5e1',
-                              fontWeight: 900,
-                              fontSize: '11px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            일반 교체
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleSubstitute(idx, '대주자')}
+                          style={{
+                            padding: '8px 10px',
+                            borderRadius: '8px',
+                            border: '1px solid rgba(251,146,60,0.4)',
+                            background: 'rgba(251,146,60,0.12)',
+                            color: '#fb923c',
+                            fontWeight: 900,
+                            fontSize: '11px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          대주자 투입
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -6027,23 +5960,29 @@ function RunnerActionButton({ label, color, onClick }: { label: string; color: s
 function PositionSwapModal({
   side,
   lineup,
+  bench,
   onClose,
   onSwap,
 }: {
   side: Side;
   lineup: { name: string; pos: string; number: string; throws: string; bats: string }[];
+  bench: { name: string; pos: string; number: string; throws: string; bats: string }[];
   onClose: () => void;
-  onSwap: (swaps: { index: number; newPos: string }[]) => void;
+  onSwap: (swaps: { index: number; newPos: string }[], benchSwaps?: { index: number; newPos: string }[]) => void;
 }) {
   const [pendingSwaps, setPendingSwaps] = useState<Record<number, string>>({});
-  const [selectedPlayer, setSelectedPlayer] = useState<number | null>(null);
+  const [pendingBenchSwaps, setPendingBenchSwaps] = useState<Record<number, string>>({});
+  const [selectedPlayer, setSelectedPlayer] = useState<{ type: 'lineup' | 'bench'; index: number } | null>(null);
 
   const positionOptions = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'P'];
 
-  const handlePositionSelect = (index: number, newPos: string) => {
-    setPendingSwaps((prev) => {
+  const handlePositionSelect = (type: 'lineup' | 'bench', index: number, newPos: string) => {
+    const sourceList = type === 'lineup' ? lineup : bench;
+    const setSwaps = type === 'lineup' ? setPendingSwaps : setPendingBenchSwaps;
+
+    setSwaps((prev) => {
       const updated = { ...prev };
-      if (newPos.toUpperCase() === lineup[index].pos.toUpperCase()) {
+      if (newPos.toUpperCase() === sourceList[index].pos.toUpperCase()) {
         delete updated[index];
       } else {
         updated[index] = newPos;
@@ -6058,13 +5997,18 @@ function PositionSwapModal({
       index: Number(index),
       newPos,
     }));
-    if (swaps.length > 0) {
-      onSwap(swaps);
+    const benchSwaps = Object.entries(pendingBenchSwaps).map(([index, newPos]) => ({
+      index: Number(index),
+      newPos,
+    }));
+    if (swaps.length > 0 || benchSwaps.length > 0) {
+      onSwap(swaps, benchSwaps.length > 0 ? benchSwaps : undefined);
     }
     onClose();
   };
 
-  const hasChanges = Object.keys(pendingSwaps).length > 0;
+  const hasChanges = Object.keys(pendingSwaps).length > 0 || Object.keys(pendingBenchSwaps).length > 0;
+  const totalChanges = Object.keys(pendingSwaps).length + Object.keys(pendingBenchSwaps).length;
 
   return (
     <div
@@ -6136,11 +6080,11 @@ function PositionSwapModal({
             const pendingPos = pendingSwaps[idx];
             const displayPos = pendingPos || player.pos;
             const isChanged = Boolean(pendingPos);
-            const isSelected = selectedPlayer === idx;
+            const isSelected = selectedPlayer?.type === 'lineup' && selectedPlayer?.index === idx;
 
             return (
               <div
-                key={`${player.name}-${idx}`}
+                key={`lineup-${player.name}-${idx}`}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -6159,7 +6103,7 @@ function PositionSwapModal({
                       : 'rgba(255,255,255,0.03)',
                   cursor: 'pointer',
                 }}
-                onClick={() => setSelectedPlayer(isSelected ? null : idx)}
+                onClick={() => setSelectedPlayer(isSelected ? null : { type: 'lineup', index: idx })}
               >
                 <span style={{ color: '#94a3b8', fontWeight: 800, width: '24px' }}>
                   {isPitcher ? 'P' : `${idx + 1}.`}
@@ -6187,6 +6131,73 @@ function PositionSwapModal({
           })}
         </div>
 
+        {/* 후보 선수 (벤치) */}
+        {bench.length > 0 && (
+          <div
+            style={{
+              padding: '10px 12px',
+              borderRadius: '12px',
+              border: '1px solid rgba(251,146,60,0.3)',
+              background: 'rgba(251,146,60,0.05)',
+              display: 'grid',
+              gap: '8px',
+            }}
+          >
+            <span style={{ fontWeight: 800, color: '#fb923c', fontSize: '13px' }}>후보 선수</span>
+            {bench.map((player, idx) => {
+              const pendingPos = pendingBenchSwaps[idx];
+              const displayPos = pendingPos || player.pos;
+              const isChanged = Boolean(pendingPos);
+              const isSelected = selectedPlayer?.type === 'bench' && selectedPlayer?.index === idx;
+
+              return (
+                <div
+                  key={`bench-${player.name}-${idx}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '8px 10px',
+                    borderRadius: '10px',
+                    border: isSelected
+                      ? '1px solid rgba(59,130,246,0.6)'
+                      : isChanged
+                        ? '1px solid rgba(34,197,94,0.5)'
+                        : '1px solid rgba(251,146,60,0.2)',
+                    background: isSelected
+                      ? 'rgba(59,130,246,0.12)'
+                      : isChanged
+                        ? 'rgba(34,197,94,0.08)'
+                        : 'rgba(255,255,255,0.03)',
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => setSelectedPlayer(isSelected ? null : { type: 'bench', index: idx })}
+                >
+                  <span style={{ color: '#fb923c', fontWeight: 800, width: '24px', fontSize: '11px' }}>후보</span>
+                  <div style={{ flex: 1, display: 'grid', gap: '2px' }}>
+                    <span style={{ fontWeight: 800, color: '#e2e8f0' }}>{player.name || '(미정)'}</span>
+                    <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
+                      #{player.number || '--'}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      background: isChanged ? 'rgba(34,197,94,0.2)' : 'rgba(251,146,60,0.15)',
+                      color: isChanged ? '#22c55e' : '#fdba74',
+                      fontWeight: 800,
+                      fontSize: '12px',
+                    }}
+                  >
+                    {isChanged ? `${player.pos} → ${displayPos}` : displayPos || '-'}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* 포지션 선택 패널 */}
         {selectedPlayer !== null && (
           <div
@@ -6200,7 +6211,10 @@ function PositionSwapModal({
             }}
           >
             <span style={{ fontWeight: 800, color: '#60a5fa', fontSize: '13px' }}>
-              {lineup[selectedPlayer]?.name || '선수'} - 새 포지션 선택
+              {selectedPlayer.type === 'lineup'
+                ? lineup[selectedPlayer.index]?.name || '선수'
+                : bench[selectedPlayer.index]?.name || '선수'}{' '}
+              - 새 포지션 선택
             </span>
             <div
               style={{
@@ -6210,13 +6224,15 @@ function PositionSwapModal({
               }}
             >
               {positionOptions.map((pos) => {
-                const currentPos = pendingSwaps[selectedPlayer] || lineup[selectedPlayer]?.pos;
+                const sourceList = selectedPlayer.type === 'lineup' ? lineup : bench;
+                const swapsMap = selectedPlayer.type === 'lineup' ? pendingSwaps : pendingBenchSwaps;
+                const currentPos = swapsMap[selectedPlayer.index] || sourceList[selectedPlayer.index]?.pos;
                 const isCurrentPos = pos.toUpperCase() === currentPos?.toUpperCase();
                 return (
                   <button
                     key={pos}
                     type="button"
-                    onClick={() => handlePositionSelect(selectedPlayer, pos)}
+                    onClick={() => handlePositionSelect(selectedPlayer.type, selectedPlayer.index, pos)}
                     style={{
                       padding: '8px',
                       borderRadius: '8px',
@@ -6251,15 +6267,19 @@ function PositionSwapModal({
             }}
           >
             <span style={{ color: '#22c55e', fontWeight: 800, fontSize: '12px' }}>
-              변경 예정 ({Object.keys(pendingSwaps).length}명)
+              변경 예정 ({totalChanges}명)
             </span>
             <span style={{ color: '#86efac', fontSize: '12px', fontWeight: 700 }}>
-              {Object.entries(pendingSwaps)
-                .map(([idx, newPos]) => {
+              {[
+                ...Object.entries(pendingSwaps).map(([idx, newPos]) => {
                   const player = lineup[Number(idx)];
                   return `${player?.name || '선수'}: ${player?.pos} → ${newPos}`;
-                })
-                .join(', ')}
+                }),
+                ...Object.entries(pendingBenchSwaps).map(([idx, newPos]) => {
+                  const player = bench[Number(idx)];
+                  return `${player?.name || '선수'}: ${player?.pos} → ${newPos}`;
+                }),
+              ].join(', ')}
             </span>
           </div>
         )}
