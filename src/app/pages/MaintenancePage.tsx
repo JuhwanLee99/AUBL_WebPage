@@ -17,7 +17,12 @@ export default function MaintenancePage({
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)',
+        // 배경 설정 수정
+        background: `linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 41, 59, 0.9) 50%, rgba(15, 23, 42, 0.9) 100%), url('/assets/aubl_clean.png')`,
+        backgroundSize: 'contain', // 이미지가 잘리지 않고 전체가 다 보이도록 설정 ('cover' -> 'contain')
+        backgroundPosition: 'center', // 항상 중앙에 위치
+        backgroundRepeat: 'no-repeat', // 이미지 반복 방지
+        backgroundAttachment: 'fixed', // (선택사항) 스크롤 발생 시에도 배경이 뷰포트 기준으로 고정되도록 함
         padding: '24px',
         textAlign: 'center',
       }}
@@ -162,7 +167,7 @@ export default function MaintenancePage({
           color: '#475569',
         }}
       >
-        문의: aubl.official@gmail.com
+        문의: aublcau@gmail.com
       </div>
 
       {/* 펄스 애니메이션 */}
