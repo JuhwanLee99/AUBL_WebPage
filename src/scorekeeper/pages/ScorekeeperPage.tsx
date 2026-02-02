@@ -42,7 +42,7 @@ const secondaryButtons = [
   { label: '고의4구', color: '#22c55e', action: 'intentional_walk' },
   { label: '사구', color: '#22c55e', action: 'hbp' },
   { label: '타격 방해', color: '#f97316', action: 'catcher_interference' },
-  { label: '더블아웃', color: '#ef4444', action: 'multipleOut' },
+  { label: '파울', color: '#facc15', action: 'foul' },
   { label: '카운트 리셋', color: '#94a3b8', action: 'resetCount' },
   { label: '주자 클리어', color: '#94a3b8', action: 'clearBases' },
   { label: '이닝 전환', color: '#94a3b8', action: 'nextHalf' },
@@ -1424,6 +1424,7 @@ export default function ScorekeeperPage() {
   const [showStrikeOutTypeModal, setShowStrikeOutTypeModal] = useState(false);
   const [pendingStrikeType, setPendingStrikeType] = useState<'swinging' | 'looking' | null>(null);
   const [showFoulTypeModal, setShowFoulTypeModal] = useState(false);
+  const [shortcutsEnabled, setShortcutsEnabled] = useState(false);
   const [battedBallType, setBattedBallType] = useState(baseBattedBallType);
   const [battedBallZone, setBattedBallZone] = useState(defaultZoneOptions[0]);
   const [gameLimitInput, setGameLimitInput] = useState('');
@@ -1896,6 +1897,81 @@ const handleConfirmHitWizard = () => {
 
     setHitWizard(null);
   };
+
+  // 키보드 단축키 이벤트 리스너
+  useEffect(() => {
+    if (!shortcutsEnabled) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 모달이 열려있거나 입력 필드에 포커스가 있으면 단축키 무시
+      if (
+        hitWizard ||
+        hitAdvanceModal ||
+        actionModal ||
+        showStrikeOutTypeModal ||
+        showFoulTypeModal ||
+        showDroppedThirdStrike ||
+        errorOnPlayModal ||
+        doublePlayModal ||
+        positionSwapModal
+      ) {
+        return;
+      }
+
+      // 입력 필드에 포커스가 있으면 무시
+      const activeElement = document.activeElement;
+      if (
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement ||
+        activeElement instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+
+      // 컨트롤이 비활성화되어 있으면 무시
+      if (controlsDisabled) return;
+
+      const key = e.key;
+
+      switch (key) {
+        case '1':
+          e.preventDefault();
+          handleAction('ball');
+          break;
+        case '2':
+          e.preventDefault();
+          handleAction('strike');
+          break;
+        case '3':
+          e.preventDefault();
+          handleAction('hitMenu');
+          break;
+        case '4':
+          e.preventDefault();
+          handleAction('undo');
+          break;
+        case '5':
+          e.preventDefault();
+          handleAction('foul');
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    shortcutsEnabled,
+    controlsDisabled,
+    hitWizard,
+    hitAdvanceModal,
+    actionModal,
+    showStrikeOutTypeModal,
+    showFoulTypeModal,
+    showDroppedThirdStrike,
+    errorOnPlayModal,
+    doublePlayModal,
+    positionSwapModal,
+  ]);
 
   const handleConfirmHitAdvance = () => {
     if (!hitAdvanceModal) return;
@@ -2391,6 +2467,19 @@ const handleConfirmHitWizard = () => {
                     onClick={() => !isDisabled && handleAction(btn.action)}
                   >
                     {btn.label}
+                    {shortcutsEnabled && (
+                      <span style={{
+                        marginLeft: '4px',
+                        fontSize: '11px',
+                        opacity: 0.7,
+                        fontWeight: 700,
+                      }}>
+                        {btn.action === 'ball' && '(1)'}
+                        {btn.action === 'strike' && '(2)'}
+                        {btn.action === 'hitMenu' && '(3)'}
+                        {btn.action === 'undo' && '(4)'}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -2418,8 +2507,31 @@ const handleConfirmHitWizard = () => {
                   onClick={() => handleAction(btn.action)}
                 >
                   {btn.label}
+                  {shortcutsEnabled && btn.action === 'foul' && (
+                    <span style={{ marginLeft: '4px', fontSize: '10px', opacity: 0.7 }}>(5)</span>
+                  )}
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={() => setShortcutsEnabled(!shortcutsEnabled)}
+                style={{
+                  padding: '10px 10px',
+                  borderRadius: '10px',
+                  border: shortcutsEnabled ? '1px solid rgba(59,130,246,0.5)' : '1px solid rgba(15,23,42,0.4)',
+                  background: shortcutsEnabled ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.06)',
+                  color: shortcutsEnabled ? '#93c5fd' : '#94a3b8',
+                  fontWeight: 800,
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '4px',
+                }}
+              >
+                단축키 {shortcutsEnabled ? 'ON' : 'OFF'}
+              </button>
             </div>
             <div
               style={{
