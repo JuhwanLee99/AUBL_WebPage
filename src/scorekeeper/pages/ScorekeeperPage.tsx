@@ -1392,6 +1392,7 @@ export default function ScorekeeperPage() {
     : '';
 
   const [actionModal, setActionModal] = useState<ActionModalData | null>(null);
+  const [positionSwapModal, setPositionSwapModal] = useState<{ side: Side } | null>(null);
   const [benchInput, setBenchInput] = useState<{ [K in Side]: { name: string; pos: string; number: string; throws: string; bats: string } }>({
     home: { name: '', pos: '', number: '', throws: 'R', bats: 'R' },
     away: { name: '', pos: '', number: '', throws: 'R', bats: 'R' },
@@ -2718,6 +2719,8 @@ const handleConfirmHitWizard = () => {
               onSubstitute={actions.substitute}
               highlightBatterName={hittingSide === 'away' ? currentBatter : undefined}
               highlightPitcherName={defenseSide === 'away' ? currentPitcher : undefined}
+              gameStarted={isGameStarted}
+              onOpenPositionSwap={() => setPositionSwapModal({ side: 'away' })}
             />
             <div
               aria-hidden
@@ -2744,6 +2747,8 @@ const handleConfirmHitWizard = () => {
               onSubstitute={actions.substitute}
               highlightBatterName={hittingSide === 'home' ? currentBatter : undefined}
               highlightPitcherName={defenseSide === 'home' ? currentPitcher : undefined}
+              gameStarted={isGameStarted}
+              onOpenPositionSwap={() => setPositionSwapModal({ side: 'home' })}
             />
           </div>
         </div>
@@ -2800,6 +2805,14 @@ const handleConfirmHitWizard = () => {
           bases={state.bases}
           bench={actionModal.role === 'fielder' ? state.benches[defenseSide] : state.benches[hittingSide]}
           lineup={actionModal.role === 'fielder' ? state.lineups[defenseSide] : state.lineups[hittingSide]}
+        />
+      )}
+      {positionSwapModal && (
+        <PositionSwapModal
+          side={positionSwapModal.side}
+          lineup={state.lineups[positionSwapModal.side]}
+          onClose={() => setPositionSwapModal(null)}
+          onSwap={(swaps) => actions.swapPositions(positionSwapModal.side, swaps)}
         />
       )}
       {hitAdvanceModal && (
@@ -6011,6 +6024,286 @@ function RunnerActionButton({ label, color, onClick }: { label: string; color: s
   );
 }
 
+function PositionSwapModal({
+  side,
+  lineup,
+  onClose,
+  onSwap,
+}: {
+  side: Side;
+  lineup: { name: string; pos: string; number: string; throws: string; bats: string }[];
+  onClose: () => void;
+  onSwap: (swaps: { index: number; newPos: string }[]) => void;
+}) {
+  const [pendingSwaps, setPendingSwaps] = useState<Record<number, string>>({});
+  const [selectedPlayer, setSelectedPlayer] = useState<number | null>(null);
+
+  const positionOptions = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'P'];
+
+  const handlePositionSelect = (index: number, newPos: string) => {
+    setPendingSwaps((prev) => {
+      const updated = { ...prev };
+      if (newPos.toUpperCase() === lineup[index].pos.toUpperCase()) {
+        delete updated[index];
+      } else {
+        updated[index] = newPos;
+      }
+      return updated;
+    });
+    setSelectedPlayer(null);
+  };
+
+  const handleSave = () => {
+    const swaps = Object.entries(pendingSwaps).map(([index, newPos]) => ({
+      index: Number(index),
+      newPos,
+    }));
+    if (swaps.length > 0) {
+      onSwap(swaps);
+    }
+    onClose();
+  };
+
+  const hasChanges = Object.keys(pendingSwaps).length > 0;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'grid',
+        placeItems: 'center',
+        zIndex: 1000,
+        padding: '20px',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 'min(520px, 100%)',
+          maxHeight: '80vh',
+          overflow: 'auto',
+          background: '#0f172a',
+          borderRadius: '16px',
+          border: '1px solid rgba(148, 163, 184, 0.25)',
+          padding: '18px',
+          display: 'grid',
+          gap: '12px',
+          color: '#e2e8f0',
+          boxShadow: '0 24px 60px rgba(0,0,0,0.4)',
+        }}
+      >
+        {/* 헤더 */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'grid', gap: '4px' }}>
+            <span style={{ fontWeight: 900 }}>포지션 교체</span>
+            <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>
+              {side === 'home' ? 'HOME' : 'AWAY'} 라인업 내 포지션 변경
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#94a3b8',
+              fontSize: '18px',
+              cursor: 'pointer',
+              fontWeight: 800,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* 현재 라인업 */}
+        <div
+          style={{
+            padding: '10px 12px',
+            borderRadius: '12px',
+            border: '1px solid rgba(148, 163, 184, 0.25)',
+            background: 'rgba(15,23,42,0.55)',
+            display: 'grid',
+            gap: '8px',
+          }}
+        >
+          <span style={{ fontWeight: 800, color: '#cbd5e1', fontSize: '13px' }}>현재 라인업</span>
+          {lineup.slice(0, 10).map((player, idx) => {
+            const isPitcher = player.pos.toUpperCase() === 'P';
+            const pendingPos = pendingSwaps[idx];
+            const displayPos = pendingPos || player.pos;
+            const isChanged = Boolean(pendingPos);
+            const isSelected = selectedPlayer === idx;
+
+            return (
+              <div
+                key={`${player.name}-${idx}`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '8px 10px',
+                  borderRadius: '10px',
+                  border: isSelected
+                    ? '1px solid rgba(59,130,246,0.6)'
+                    : isChanged
+                      ? '1px solid rgba(34,197,94,0.5)'
+                      : '1px solid rgba(148,163,184,0.2)',
+                  background: isSelected
+                    ? 'rgba(59,130,246,0.12)'
+                    : isChanged
+                      ? 'rgba(34,197,94,0.08)'
+                      : 'rgba(255,255,255,0.03)',
+                  cursor: 'pointer',
+                }}
+                onClick={() => setSelectedPlayer(isSelected ? null : idx)}
+              >
+                <span style={{ color: '#94a3b8', fontWeight: 800, width: '24px' }}>
+                  {isPitcher ? 'P' : `${idx + 1}.`}
+                </span>
+                <div style={{ flex: 1, display: 'grid', gap: '2px' }}>
+                  <span style={{ fontWeight: 800, color: '#e2e8f0' }}>{player.name || '(미정)'}</span>
+                  <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
+                    #{player.number || '--'}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    background: isChanged ? 'rgba(34,197,94,0.2)' : 'rgba(148,163,184,0.15)',
+                    color: isChanged ? '#22c55e' : '#cbd5e1',
+                    fontWeight: 800,
+                    fontSize: '12px',
+                  }}
+                >
+                  {isChanged ? `${player.pos} → ${displayPos}` : displayPos || '-'}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 포지션 선택 패널 */}
+        {selectedPlayer !== null && (
+          <div
+            style={{
+              padding: '12px',
+              borderRadius: '12px',
+              border: '1px solid rgba(59,130,246,0.4)',
+              background: 'rgba(59,130,246,0.08)',
+              display: 'grid',
+              gap: '10px',
+            }}
+          >
+            <span style={{ fontWeight: 800, color: '#60a5fa', fontSize: '13px' }}>
+              {lineup[selectedPlayer]?.name || '선수'} - 새 포지션 선택
+            </span>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(5, 1fr)',
+                gap: '8px',
+              }}
+            >
+              {positionOptions.map((pos) => {
+                const currentPos = pendingSwaps[selectedPlayer] || lineup[selectedPlayer]?.pos;
+                const isCurrentPos = pos.toUpperCase() === currentPos?.toUpperCase();
+                return (
+                  <button
+                    key={pos}
+                    type="button"
+                    onClick={() => handlePositionSelect(selectedPlayer, pos)}
+                    style={{
+                      padding: '8px',
+                      borderRadius: '8px',
+                      border: isCurrentPos
+                        ? '1px solid rgba(34,197,94,0.6)'
+                        : '1px solid rgba(148,163,184,0.3)',
+                      background: isCurrentPos ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.04)',
+                      color: isCurrentPos ? '#22c55e' : '#cbd5e1',
+                      fontWeight: 800,
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {pos}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* 변경 사항 요약 */}
+        {hasChanges && (
+          <div
+            style={{
+              padding: '10px 12px',
+              borderRadius: '10px',
+              border: '1px solid rgba(34,197,94,0.4)',
+              background: 'rgba(34,197,94,0.08)',
+              display: 'grid',
+              gap: '4px',
+            }}
+          >
+            <span style={{ color: '#22c55e', fontWeight: 800, fontSize: '12px' }}>
+              변경 예정 ({Object.keys(pendingSwaps).length}명)
+            </span>
+            <span style={{ color: '#86efac', fontSize: '12px', fontWeight: 700 }}>
+              {Object.entries(pendingSwaps)
+                .map(([idx, newPos]) => {
+                  const player = lineup[Number(idx)];
+                  return `${player?.name || '선수'}: ${player?.pos} → ${newPos}`;
+                })
+                .join(', ')}
+            </span>
+          </div>
+        )}
+
+        {/* 버튼 영역 */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '10px',
+              border: '1px solid rgba(148,163,184,0.35)',
+              background: 'transparent',
+              color: '#cbd5e1',
+              fontWeight: 900,
+              cursor: 'pointer',
+            }}
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!hasChanges}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '10px',
+              border: '1px solid rgba(34,197,94,0.4)',
+              background: hasChanges ? 'linear-gradient(90deg, #22c55e, #16a34a)' : 'rgba(148,163,184,0.16)',
+              color: hasChanges ? '#0b0f1a' : '#94a3b8',
+              fontWeight: 900,
+              cursor: hasChanges ? 'pointer' : 'not-allowed',
+              boxShadow: hasChanges ? '0 10px 20px rgba(34,197,94,0.2)' : 'none',
+            }}
+          >
+            저장
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TeamEditor({
   label,
   defaultName,
@@ -6027,6 +6320,8 @@ function TeamEditor({
   onSubstitute,
   highlightBatterName,
   highlightPitcherName,
+  gameStarted,
+  onOpenPositionSwap,
 }: {
   label: string;
   defaultName: string;
@@ -6052,6 +6347,8 @@ function TeamEditor({
   onSubstitute: (side: Side, benchIndex: number, lineupIndex: number) => void;
   highlightBatterName?: string;
   highlightPitcherName?: string;
+  gameStarted?: boolean;
+  onOpenPositionSwap?: () => void;
 }) {
   // [수정] 빈 라인업을 받아도 UI 입력칸을 유지하기 위해 동적으로 빈 슬롯 생성
   const filledLineup = useMemo(() => {
@@ -6116,6 +6413,27 @@ function TeamEditor({
           gap: '8px',
         }}
       >
+        {/* 경기 시작 후 포지션 교체 버튼 */}
+        {gameStarted && onOpenPositionSwap && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '4px' }}>
+            <button
+              type="button"
+              onClick={onOpenPositionSwap}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '8px',
+                border: '1px solid rgba(251,146,60,0.4)',
+                background: 'rgba(251,146,60,0.12)',
+                color: '#fb923c',
+                fontWeight: 800,
+                fontSize: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              포지션 교체
+            </button>
+          </div>
+        )}
         {/* 타자 목록 (1~9번) */}
         {battingEntries.map((entry, orderIdx) => (
           <div
