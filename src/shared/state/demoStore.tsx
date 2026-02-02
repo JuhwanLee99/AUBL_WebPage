@@ -336,6 +336,7 @@ type Action =
   | { type: 'manualLog'; message: string }
   | { type: 'setTeamName'; side: Side; name: string }
   | { type: 'setLineup'; side: Side; index: number; updates: Partial<PlayerSlot> }
+  | { type: 'swapPositions'; side: Side; swaps: { index: number; newPos: string }[] }
   | { type: 'addBench'; side: Side; player: PlayerSlot }
   | { type: 'removeBench'; side: Side; benchIndex: number }
   | { type: 'substitute'; side: Side; benchIndex: number; lineupIndex: number; substitutionType?: '대수비' | '대타' | '대주자' }
@@ -1551,6 +1552,9 @@ function reducer(state: DemoState, action: Action): DemoState {
       break;
     case 'setLineup':
       nextState = updateLineup(state, action.side, action.index, action.updates);
+      break;
+    case 'swapPositions':
+      nextState = swapPositions(state, action.side, action.swaps);
       break;
     case 'addBench':
       nextState = {
@@ -3066,6 +3070,45 @@ function updateLineup(state: DemoState, side: Side, index: number, updates: Part
   return { ...state, lineups: { ...state.lineups, [side]: lineup }, feed, lastPlay };
 }
 
+function swapPositions(
+  state: DemoState,
+  side: Side,
+  swaps: { index: number; newPos: string }[]
+): DemoState {
+  if (swaps.length === 0) return state;
+
+  const lineup = [...state.lineups[side]];
+  const changes: string[] = [];
+
+  for (const { index, newPos } of swaps) {
+    if (index >= 0 && index < lineup.length) {
+      const original = lineup[index];
+      const normalizedNewPos = newPos.toUpperCase();
+      if (original && original.pos.toUpperCase() !== normalizedNewPos) {
+        const playerName = original.name || '선수';
+        const playerNum = original.number ? `(${original.number})` : '';
+        changes.push(`${playerName}${playerNum}: ${original.pos} → ${normalizedNewPos}`);
+        lineup[index] = { ...original, pos: normalizedNewPos };
+      }
+    }
+  }
+
+  // 변경사항이 없으면 그대로 반환
+  if (changes.length === 0) return state;
+
+  // 피드에 한 번만 기록
+  let feed = state.feed;
+  let lastPlay = state.lastPlay;
+
+  if (state.gameStarted) {
+    const changeText = `포지션 교체 · ${changes.join(', ')}`;
+    feed = pushFeed(state.feed, createLogEntryForBaserunning(state, changeText, 0));
+    lastPlay = changeText;
+  }
+
+  return { ...state, lineups: { ...state.lineups, [side]: lineup }, feed, lastPlay };
+}
+
 // 투수 등판 순서를 계산하는 헬퍼 함수
 function calculatePitcherAppearanceCount(feed: PlayLog[], side: Side): number {
   let count = 0;
@@ -3226,6 +3269,7 @@ interface DemoStoreValue {
     setLiveDelaySeconds: (seconds: number) => void;
     setTeamName: (side: Side, name: string) => void;
     setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) => void;
+    swapPositions: (side: Side, swaps: { index: number; newPos: string }[]) => void;
     addBench: (side: Side, player: PlayerSlot) => void;
     removeBench: (side: Side, benchIndex: number) => void;
     substitute: (side: Side, benchIndex: number, lineupIndex: number, substitutionType?: '대수비' | '대타' | '대주자') => void;
@@ -3918,6 +3962,8 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       setTeamName: (side: Side, name: string) => dispatch({ type: 'setTeamName', side, name }),
       setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) =>
         dispatch({ type: 'setLineup', side, index, updates }),
+      swapPositions: (side: Side, swaps: { index: number; newPos: string }[]) =>
+        dispatch({ type: 'swapPositions', side, swaps }),
       addBench: (side: Side, player: PlayerSlot) => dispatch({ type: 'addBench', side, player }),
       removeBench: (side: Side, benchIndex: number) => dispatch({ type: 'removeBench', side, benchIndex }),
       substitute: (side: Side, benchIndex: number, lineupIndex: number, substitutionType?: '대수비' | '대타' | '대주자') =>
