@@ -5973,8 +5973,16 @@ function PositionSwapModal({
   const [pendingSwaps, setPendingSwaps] = useState<Record<number, string>>({});
   const [pendingBenchSwaps, setPendingBenchSwaps] = useState<Record<number, string>>({});
   const [selectedPlayer, setSelectedPlayer] = useState<{ type: 'lineup' | 'bench'; index: number } | null>(null);
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
 
   const positionOptions = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'P'];
+  // 중복 허용하지 않는 필드 포지션
+  const fieldPositions = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'P'];
+
+  // 투수가 1-9번 타순에 있는지 확인 (DH 없는 경우)
+  const pitcherInBattingOrder = lineup.slice(0, 9).some((p) => p.pos.toUpperCase() === 'P');
+  // DH 없으면 9명, DH 있으면 최대 10명까지 표시
+  const lineupDisplayCount = pitcherInBattingOrder ? 9 : Math.min(lineup.length, 10);
 
   const handlePositionSelect = (type: 'lineup' | 'bench', index: number, newPos: string) => {
     const sourceList = type === 'lineup' ? lineup : bench;
@@ -5990,9 +5998,36 @@ function PositionSwapModal({
       return updated;
     });
     setSelectedPlayer(null);
+    setDuplicateWarning(null); // 선택 시 경고 초기화
+  };
+
+  // 라인업 내 중복 포지션 체크
+  const checkDuplicatePositions = (): string[] => {
+    // 변경 적용 후 라인업의 포지션 목록 생성
+    const resultPositions: { pos: string; name: string }[] = lineup.slice(0, lineupDisplayCount).map((player, idx) => ({
+      pos: (pendingSwaps[idx] || player.pos).toUpperCase(),
+      name: player.name || `선수 ${idx + 1}`,
+    }));
+
+    // 필드 포지션 중복 체크
+    const duplicates: string[] = [];
+    for (const fieldPos of fieldPositions) {
+      const players = resultPositions.filter((p) => p.pos === fieldPos);
+      if (players.length > 1) {
+        duplicates.push(`${fieldPos}: ${players.map((p) => p.name).join(', ')}`);
+      }
+    }
+    return duplicates;
   };
 
   const handleSave = () => {
+    // 중복 포지션 체크
+    const duplicates = checkDuplicatePositions();
+    if (duplicates.length > 0) {
+      setDuplicateWarning(`중복 포지션이 있습니다: ${duplicates.join(' / ')}`);
+      return;
+    }
+
     const swaps = Object.entries(pendingSwaps).map(([index, newPos]) => ({
       index: Number(index),
       newPos,
@@ -6075,12 +6110,14 @@ function PositionSwapModal({
           }}
         >
           <span style={{ fontWeight: 800, color: '#cbd5e1', fontSize: '13px' }}>현재 라인업</span>
-          {lineup.slice(0, 10).map((player, idx) => {
+          {lineup.slice(0, lineupDisplayCount).map((player, idx) => {
             const isPitcher = player.pos.toUpperCase() === 'P';
             const pendingPos = pendingSwaps[idx];
             const displayPos = pendingPos || player.pos;
             const isChanged = Boolean(pendingPos);
             const isSelected = selectedPlayer?.type === 'lineup' && selectedPlayer?.index === idx;
+            // 투수가 1-9번 타순(idx 0-8)에 있으면 타순 번호 표시, 10번 슬롯(idx 9) 이상이면 "P" 표시
+            const showAsPitcherSlot = isPitcher && idx >= 9;
 
             return (
               <div
@@ -6106,7 +6143,7 @@ function PositionSwapModal({
                 onClick={() => setSelectedPlayer(isSelected ? null : { type: 'lineup', index: idx })}
               >
                 <span style={{ color: '#94a3b8', fontWeight: 800, width: '24px' }}>
-                  {isPitcher ? 'P' : `${idx + 1}.`}
+                  {showAsPitcherSlot ? 'P' : `${idx + 1}.`}
                 </span>
                 <div style={{ flex: 1, display: 'grid', gap: '2px' }}>
                   <span style={{ fontWeight: 800, color: '#e2e8f0' }}>{player.name || '(미정)'}</span>
@@ -6284,6 +6321,23 @@ function PositionSwapModal({
           </div>
         )}
 
+        {/* 중복 포지션 경고 */}
+        {duplicateWarning && (
+          <div
+            style={{
+              padding: '10px 12px',
+              borderRadius: '10px',
+              border: '1px solid rgba(239,68,68,0.5)',
+              background: 'rgba(239,68,68,0.12)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <span style={{ color: '#ef4444', fontWeight: 800, fontSize: '12px' }}>⚠️ {duplicateWarning}</span>
+          </div>
+        )}
+
         {/* 버튼 영역 */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
           <button
@@ -6375,14 +6429,23 @@ function TeamEditor({
     const result = [...lineup];
     const emptySlot = { name: '', pos: '', number: '', throws: 'R' as const, bats: 'R' as const };
 
-    // 타자 9명 채우기 (투수가 아닌 슬롯)
-    while (result.filter(s => s.pos.toUpperCase() !== 'P').length < 9) {
-      result.push({ ...emptySlot });
-    }
+    // 투수가 1-9번 타순에 있는지 확인 (DH 없는 경우)
+    const pitcherInBattingOrder = result.slice(0, 9).some(s => s.pos.toUpperCase() === 'P');
 
-    // 투수 채우기
-    if (!result.some(s => s.pos.toUpperCase() === 'P')) {
-      result.push({ ...emptySlot, pos: 'P' });
+    if (pitcherInBattingOrder) {
+      // DH 없음: 총 9명이 될 때까지 빈 슬롯 추가 (투수 포함해서 9명)
+      while (result.length < 9) {
+        result.push({ ...emptySlot });
+      }
+    } else {
+      // DH 있음 또는 투수 미지정: 비투수 9명 채우기
+      while (result.filter(s => s.pos.toUpperCase() !== 'P').length < 9) {
+        result.push({ ...emptySlot });
+      }
+      // 투수가 없으면 10번째 슬롯에 투수 추가
+      if (!result.some(s => s.pos.toUpperCase() === 'P')) {
+        result.push({ ...emptySlot, pos: 'P' });
+      }
     }
 
     return result;
@@ -6394,8 +6457,14 @@ function TeamEditor({
   // 이렇게 하면 투수가 타석에 들어서도 입력칸이 유지됩니다.
   const battingEntries = lineupEntries.slice(0, 9);
 
-  // 투수는 전체 라인업에서 포지션이 'P'인 선수를 찾아서 하단에 별도 표시합니다.
-  const pitcherEntry = lineupEntries.find((entry) => entry.slot.pos.toUpperCase() === 'P');
+  // 투수가 1-9번 타순에 있으면 별도 투수 섹션 불필요, 10번째 이후에 있으면 별도 표시
+  const pitcherInBattingOrder = battingEntries.some((entry) => entry.slot.pos.toUpperCase() === 'P');
+  const pitcherInBattingOrderEntry = pitcherInBattingOrder
+    ? battingEntries.find((entry) => entry.slot.pos.toUpperCase() === 'P')
+    : null;
+  const pitcherEntry = pitcherInBattingOrder
+    ? null
+    : lineupEntries.find((entry) => entry.slot.pos.toUpperCase() === 'P');
   
   const positionOptions = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'OF', 'IF', 'PH', 'PR'];
   const filterPositionOptions = (value: string) => {
@@ -6569,32 +6638,35 @@ function TeamEditor({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontWeight: 800, color: '#cbd5e1' }}>투수</span>
-            
-            {/* [추가] 오타니룰 토글 버튼 */}
-            {pitcherEntry && (
+
+            {/* [추가] 오타니룰 토글 버튼 - 별도 투수 슬롯 또는 타순 내 투수 모두 지원 */}
+            {(pitcherEntry || pitcherInBattingOrderEntry) && (
               <button
                 type="button"
-                onClick={() =>
-                  onSetLineup(side, pitcherEntry.idx, {
-                    isOhtaniRule: !pitcherEntry.slot.isOhtaniRule,
-                  })
-                }
+                onClick={() => {
+                  const entry = pitcherEntry || pitcherInBattingOrderEntry;
+                  if (entry) {
+                    onSetLineup(side, entry.idx, {
+                      isOhtaniRule: !entry.slot.isOhtaniRule,
+                    });
+                  }
+                }}
                 style={{
                   padding: '4px 8px',
                   borderRadius: '6px',
-                  border: pitcherEntry.slot.isOhtaniRule
+                  border: (pitcherEntry?.slot.isOhtaniRule || pitcherInBattingOrderEntry?.slot.isOhtaniRule)
                     ? '1px solid rgba(16, 185, 129, 0.5)'
                     : '1px solid rgba(148, 163, 184, 0.3)',
-                  background: pitcherEntry.slot.isOhtaniRule
+                  background: (pitcherEntry?.slot.isOhtaniRule || pitcherInBattingOrderEntry?.slot.isOhtaniRule)
                     ? 'rgba(16, 185, 129, 0.15)'
                     : 'transparent',
-                  color: pitcherEntry.slot.isOhtaniRule ? '#34d399' : '#94a3b8',
+                  color: (pitcherEntry?.slot.isOhtaniRule || pitcherInBattingOrderEntry?.slot.isOhtaniRule) ? '#34d399' : '#94a3b8',
                   fontSize: '11px',
                   fontWeight: 800,
                   cursor: 'pointer',
                 }}
               >
-                {pitcherEntry.slot.isOhtaniRule ? '오타니룰 ON' : '오타니룰 OFF'}
+                {(pitcherEntry?.slot.isOhtaniRule || pitcherInBattingOrderEntry?.slot.isOhtaniRule) ? '오타니룰 ON' : '오타니룰 OFF'}
               </button>
             )}
           </div>
@@ -6690,6 +6762,28 @@ function TeamEditor({
                   textAlign: 'center',
                 }}
               />
+            </div>
+          ) : pitcherInBattingOrderEntry ? (
+            <div
+              style={{
+                padding: '8px 10px',
+                borderRadius: '10px',
+                border: '1px solid rgba(244,114,182,0.3)',
+                background: 'rgba(244,114,182,0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              <span style={{ color: '#f472b6', fontWeight: 800, fontSize: '12px' }}>
+                {pitcherInBattingOrderEntry.idx + 1}번 타순에 포함
+              </span>
+              <span style={{ color: '#e2e8f0', fontWeight: 900 }}>
+                {pitcherInBattingOrderEntry.slot.name || '(이름 미입력)'}
+              </span>
+              <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
+                #{pitcherInBattingOrderEntry.slot.number || '--'}
+              </span>
             </div>
           ) : (
             <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>
