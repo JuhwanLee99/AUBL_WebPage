@@ -305,7 +305,7 @@ type SharedGameState = Pick<
 type Action =
   | { type: 'ball' }
   | { type: 'strike' }
-  | { type: 'foul' }
+  | { type: 'foul'; isBunt?: boolean }
   | { type: 'strikeOut'; strikeType?: 'swinging' | 'looking' }
   | { type: 'droppedThirdStrike'; variant?: 'strikeout' | 'reach' | 'tag_out'; strikeType?: 'swinging' | 'looking' }
   | { type: 'out'; battedBall?: BattedBallDetails | null }
@@ -1363,26 +1363,35 @@ function reducer(state: DemoState, action: Action): DemoState {
         };
       }
       break;
-    case 'foul':
-      if (state.strikes >= 2) {
+    case 'foul': {
+      const isBuntFoul = action.isBunt === true;
+      const foulLabel = isBuntFoul ? '번트 파울' : '파울';
+
+      // 2스트라이크 + 번트 파울 = 쓰리번트 아웃
+      if (state.strikes >= 2 && isBuntFoul) {
+        nextState = applyOut(state, '쓰리번트 아웃', { pitchNumber: state.pitchCount + 1 });
+      } else if (state.strikes >= 2) {
+        // 2스트라이크에서 일반 파울: 스트라이크 카운트 유지
         const pitchCount = state.pitchCount + 1;
         nextState = {
           ...state,
           pitchCount,
-          lastPlay: '파울',
-          feed: pushPlayFeed(state, createLogEntry(state, '파울', pitchCount)),
+          lastPlay: foulLabel,
+          feed: pushPlayFeed(state, createLogEntry(state, foulLabel, pitchCount)),
         };
       } else {
+        // 2스트라이크 미만: 스트라이크 카운트 +1
         const pitchCount = state.pitchCount + 1;
         nextState = {
           ...state,
           strikes: state.strikes + 1,
           pitchCount,
-          lastPlay: '파울',
-          feed: pushPlayFeed(state, createLogEntry(state, '파울', pitchCount)),
+          lastPlay: foulLabel,
+          feed: pushPlayFeed(state, createLogEntry(state, foulLabel, pitchCount)),
         };
       }
       break;
+    }
     case 'strikeOut': {
       const strikeLabel = action.strikeType === 'looking' ? '삼진(루킹)' : '삼진';
       nextState = applyOut(state, strikeLabel, { pitchNumber: state.pitchCount + 1, strikeType: action.strikeType });
@@ -3261,7 +3270,7 @@ interface DemoStoreValue {
   actions: {
     addBall: () => void;
     addStrike: () => void;
-    addFoul: () => void;
+    addFoul: (isBunt?: boolean) => void;
     strikeOut: (strikeType?: 'swinging' | 'looking') => void;
     droppedThirdStrike: (variant?: 'strikeout' | 'reach' | 'tag_out', strikeType?: 'swinging' | 'looking') => void;
     addOut: (battedBall?: BattedBallDetails | null) => void;
@@ -3921,7 +3930,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     () => ({
       addBall: () => dispatch({ type: 'ball' }),
       addStrike: () => dispatch({ type: 'strike' }),
-      addFoul: () => dispatch({ type: 'foul' }),
+      addFoul: (isBunt?: boolean) => dispatch({ type: 'foul', isBunt }),
       strikeOut: (strikeType?: 'swinging' | 'looking') => dispatch({ type: 'strikeOut', strikeType }),
       droppedThirdStrike: (variant?: 'strikeout' | 'reach' | 'tag_out', strikeType?: 'swinging' | 'looking') => dispatch({ type: 'droppedThirdStrike', variant, strikeType }),
       addOut: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'out', battedBall }),
