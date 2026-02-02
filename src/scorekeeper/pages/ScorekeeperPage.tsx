@@ -2860,11 +2860,11 @@ const handleConfirmHitWizard = () => {
           outsCount={doublePlayModal.outsCount}
           basesState={state.bases}
           onClose={() => setDoublePlayModal(null)}
-          onConfirm={(selectedRunners) => {
+          onConfirm={(selectedRunners, route, runnerAdvancements) => {
             if (doublePlayModal.outsCount === 2) {
-              actions.doublePlay(doublePlayModal.battedBall, selectedRunners);
+              actions.doublePlay(doublePlayModal.battedBall, selectedRunners, route, runnerAdvancements);
             } else {
-              actions.triplePlay(doublePlayModal.battedBall, selectedRunners);
+              actions.triplePlay(doublePlayModal.battedBall, selectedRunners, route, runnerAdvancements);
             }
             setDoublePlayModal(null);
           }}
@@ -3388,6 +3388,21 @@ function baseLabelForIndex(baseIndex: number) {
   return `${baseIndex + 1}루`;
 }
 
+const POSITION_LABEL_MAP: Record<number, string> = {
+  1: 'P', 2: 'C', 3: '1B', 4: '2B', 5: '3B', 6: 'SS', 7: 'LF', 8: 'CF', 9: 'RF'
+};
+const COMMON_DP_ROUTES = [
+  { numbers: [4, 6, 3], label: '2B → SS → 1B' },
+  { numbers: [6, 4, 3], label: 'SS → 2B → 1B' },
+  { numbers: [5, 4, 3], label: '3B → 2B → 1B' },
+  { numbers: [1, 6, 3], label: 'P → SS → 1B' },
+  { numbers: [1, 4, 3], label: 'P → 2B → 1B' },
+  { numbers: [3, 6, 3], label: '1B → SS → 1B' },
+  { numbers: [5, 6, 3], label: '3B → SS → 1B' },
+  { numbers: [6, 3], label: 'SS → 1B' },
+  { numbers: [4, 3], label: '2B → 1B' },
+];
+
 function DoublePlayModal({
   outsCount,
   basesState,
@@ -3397,7 +3412,7 @@ function DoublePlayModal({
   outsCount: 2 | 3;
   basesState: (string | null)[];
   onClose: () => void;
-  onConfirm: (selectedRunners: number[]) => void;
+  onConfirm: (selectedRunners: number[], route?: number[], runnerAdvancements?: Record<number, number>) => void;
 }) {
   const modalTitle = outsCount === 2 ? '병살타 주자 선택' : '삼중살 주자 선택';
   const runners = basesState
@@ -3405,6 +3420,14 @@ function DoublePlayModal({
     .filter(Boolean) as { runner: string; baseIndex: 0 | 1 | 2 }[];
 
   const [selectedRunners, setSelectedRunners] = useState<number[]>([]);
+  const [routeMode, setRouteMode] = useState<'preset' | 'custom'>('preset');
+  const [selectedRoute, setSelectedRoute] = useState<number[] | null>(null);
+  const [customRoute, setCustomRoute] = useState<number[]>([]);
+  // 아웃되지 않은 주자들의 진루 상태: { baseIndex: targetBase } (3 = 홈)
+  const [runnerAdvancements, setRunnerAdvancements] = useState<Record<number, number>>({});
+
+  // 아웃되지 않은 주자들 계산
+  const nonOutRunners = runners.filter((r) => !selectedRunners.includes(r.baseIndex));
 
   const toggleRunner = (baseIndex: number) => {
     if (selectedRunners.includes(baseIndex)) {
@@ -3414,15 +3437,34 @@ function DoublePlayModal({
         setSelectedRunners([...selectedRunners, baseIndex]);
       }
     }
+    // 아웃 선택이 변경되면 진루 상태 초기화
+    setRunnerAdvancements({});
+  };
+
+  const handleAdvancementChange = (baseIndex: number, targetBase: number) => {
+    setRunnerAdvancements((prev) => {
+      if (targetBase === baseIndex) {
+        // 현재 베이스에 그대로 있음 = 진루 없음
+        const next = { ...prev };
+        delete next[baseIndex];
+        return next;
+      }
+      return { ...prev, [baseIndex]: targetBase };
+    });
   };
 
   const handleConfirm = () => {
     if (selectedRunners.length === outsCount - 1) {
-      onConfirm(selectedRunners);
+      const route = routeMode === 'preset' ? selectedRoute : (customRoute.length > 0 ? customRoute : undefined);
+      const advancements = Object.keys(runnerAdvancements).length > 0 ? runnerAdvancements : undefined;
+      onConfirm(selectedRunners, route ?? undefined, advancements);
     }
   };
 
   const canConfirm = selectedRunners.length === outsCount - 1;
+  const currentRouteLabel = routeMode === 'preset'
+    ? (selectedRoute ? selectedRoute.map(n => POSITION_LABEL_MAP[n]).join(' → ') : '선택 안 함')
+    : (customRoute.length > 0 ? customRoute.map(n => POSITION_LABEL_MAP[n]).join(' → ') : '선택 안 함');
 
   return (
     <div
@@ -3443,7 +3485,7 @@ function DoublePlayModal({
           background: '#1e293b',
           borderRadius: '20px',
           border: '1px solid rgba(148,163,184,0.25)',
-          maxWidth: '500px',
+          maxWidth: '540px',
           width: '100%',
           maxHeight: '90vh',
           overflow: 'auto',
@@ -3531,6 +3573,209 @@ function DoublePlayModal({
               );
             })}
           </div>
+
+          {/* 병살 경로 선택 섹션 */}
+          <div style={{ marginTop: '20px', borderTop: '1px solid rgba(148,163,184,0.2)', paddingTop: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <span style={{ color: '#f8fafc', fontWeight: 800, fontSize: '14px' }}>병살 경로 (선택)</span>
+              <span style={{ color: '#94a3b8', fontSize: '12px' }}>{currentRouteLabel}</span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+              <button
+                type="button"
+                onClick={() => setRouteMode('preset')}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  border: routeMode === 'preset' ? '1px solid #3b82f6' : '1px solid rgba(148,163,184,0.3)',
+                  background: routeMode === 'preset' ? 'rgba(59,130,246,0.2)' : 'transparent',
+                  color: routeMode === 'preset' ? '#93c5fd' : '#94a3b8',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                일반 경로
+              </button>
+              <button
+                type="button"
+                onClick={() => setRouteMode('custom')}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  border: routeMode === 'custom' ? '1px solid #3b82f6' : '1px solid rgba(148,163,184,0.3)',
+                  background: routeMode === 'custom' ? 'rgba(59,130,246,0.2)' : 'transparent',
+                  color: routeMode === 'custom' ? '#93c5fd' : '#94a3b8',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                직접 입력
+              </button>
+            </div>
+
+            {routeMode === 'preset' && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {COMMON_DP_ROUTES.map((route) => {
+                  const isSelected = selectedRoute?.join('-') === route.numbers.join('-');
+                  return (
+                    <button
+                      key={route.numbers.join('-')}
+                      type="button"
+                      onClick={() => setSelectedRoute(isSelected ? null : route.numbers)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        border: isSelected ? '1px solid #3b82f6' : '1px solid rgba(148,163,184,0.25)',
+                        background: isSelected ? 'rgba(59,130,246,0.15)' : 'rgba(15,23,42,0.4)',
+                        color: isSelected ? '#93c5fd' : '#cbd5e1',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {route.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {routeMode === 'custom' && (
+              <div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setCustomRoute([...customRoute, num])}
+                      style={{
+                        width: '44px',
+                        height: '36px',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(148,163,184,0.3)',
+                        background: 'rgba(15,23,42,0.6)',
+                        color: '#e2e8f0',
+                        fontSize: '13px',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {POSITION_LABEL_MAP[num]}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ color: '#94a3b8', fontSize: '12px' }}>
+                    경로: {customRoute.length > 0 ? customRoute.join('-') : '없음'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCustomRoute([])}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(148,163,184,0.3)',
+                      background: 'transparent',
+                      color: '#94a3b8',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    초기화
+                  </button>
+                  {customRoute.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomRoute(customRoute.slice(0, -1))}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(148,163,184,0.3)',
+                        background: 'transparent',
+                        color: '#94a3b8',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      되돌리기
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 아웃되지 않은 주자 진루 선택 섹션 */}
+          {canConfirm && nonOutRunners.length > 0 && (
+            <div style={{ marginTop: '20px', borderTop: '1px solid rgba(148,163,184,0.2)', paddingTop: '16px' }}>
+              <span style={{ color: '#f8fafc', fontWeight: 800, fontSize: '14px', display: 'block', marginBottom: '12px' }}>
+                나머지 주자 진루 (선택)
+              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {nonOutRunners.map((entry) => {
+                  const currentAdvancement = runnerAdvancements[entry.baseIndex] ?? entry.baseIndex;
+                  // 진루 가능한 베이스 옵션 생성 (현재 베이스 ~ 홈)
+                  const advanceOptions: { value: number; label: string }[] = [];
+                  for (let i: number = entry.baseIndex; i <= 3; i++) {
+                    if (i === entry.baseIndex) {
+                      advanceOptions.push({ value: i, label: `${baseLabelForIndex(entry.baseIndex)} (유지)` });
+                    } else if (i === 3) {
+                      advanceOptions.push({ value: 3, label: '홈 (득점)' });
+                    } else {
+                      advanceOptions.push({ value: i, label: `${baseLabelForIndex(i as 0 | 1 | 2)}` });
+                    }
+                  }
+
+                  return (
+                    <div
+                      key={entry.baseIndex}
+                      style={{
+                        padding: '12px 16px',
+                        borderRadius: '12px',
+                        border: '1px solid rgba(148,163,184,0.25)',
+                        background: 'rgba(15,23,42,0.6)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <span style={{ color: '#94a3b8', fontSize: '13px' }}>
+                          {baseLabelForIndex(entry.baseIndex)} 주자: <span style={{ color: '#e2e8f0', fontWeight: 700 }}>{entry.runner}</span>
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                        {advanceOptions.map((opt) => {
+                          const isSelected = currentAdvancement === opt.value;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => handleAdvancementChange(entry.baseIndex, opt.value)}
+                              style={{
+                                padding: '6px 12px',
+                                borderRadius: '8px',
+                                border: isSelected ? '1px solid #22c55e' : '1px solid rgba(148,163,184,0.3)',
+                                background: isSelected ? 'rgba(34,197,94,0.15)' : 'transparent',
+                                color: isSelected ? '#86efac' : '#94a3b8',
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={handleConfirm}
