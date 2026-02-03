@@ -42,6 +42,22 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Live ticker content (real-time)
+    match /settings/liveInfo {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Static content + version metadata
+    match /settings/staticContent {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /settings/contentMeta {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Deny anything else by default.
     match /{document=**} {
       allow read, write: if false;

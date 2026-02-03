@@ -62,6 +62,22 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // LIVE INFO (실시간)
+    match /settings/liveInfo {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 정적 콘텐츠 + 버전 메타
+    match /settings/staticContent {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /settings/contentMeta {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // 그 외 모든 접근 거부
     match /{document=**} {
       allow read, write: if false;

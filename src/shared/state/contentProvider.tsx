@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, increment, onSnapshot, setDoc } from 'firebase/firestore';
 import { firestore } from '../firebase/client';
 
 type HistoryHighlight = { title: string; desc: string; accent: string };
@@ -109,8 +109,14 @@ type ContentContextValue = {
   resetContent: () => void;
 };
 
-const STORAGE_KEY = 'aubl:content:v1';
-const FIRESTORE_DOC = 'settings/content';
+const LEGACY_STORAGE_KEY = 'aubl:content:v1';
+const LIVE_STORAGE_KEY = 'aubl:content:live:v1';
+const STATIC_STORAGE_KEY = 'aubl:content:static:v2';
+
+const LEGACY_DOC = 'settings/content';
+const LIVE_DOC = 'settings/liveInfo';
+const STATIC_DOC = 'settings/staticContent';
+const META_DOC = 'settings/contentMeta';
 
 const ContentContext = createContext<ContentContextValue>({
   content: defaultContent,
@@ -126,138 +132,251 @@ const deepMerge = (base: ContentState, patch: Partial<ContentState>): ContentSta
   return merged;
 };
 
+function normalizeTicker(value: unknown, fallback: string[]): string[] {
+  if (!Array.isArray(value)) return fallback;
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function readLocalCache<T>(key: string): T | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalCache(key: string, value: unknown) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // ignore quota errors
+  }
+}
+
+function hasField<T extends object>(obj: T, key: PropertyKey): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function areSameStrings(a: string[], b: string[]) {
+  if (a.length !== b.length) return false;
+  return a.every((item, idx) => item === b[idx]);
+}
+
 export function ContentProvider({ children }: { children: ReactNode }) {
   const [content, setContent] = useState<ContentState>(defaultContent);
-  const loadedRef = useRef(false);
+  const contentRef = useRef<ContentState>(defaultContent);
   const savingRef = useRef(false);
+  const staticVersionRef = useRef<number | null>(null);
 
-  // localStorage → Firestore 마이그레이션 (한 번만 실행)
+  const applyPatch = useCallback((patch: Partial<ContentState>) => {
+    const next = deepMerge(contentRef.current, patch);
+    contentRef.current = next;
+    setContent(next);
+    writeLocalCache(LEGACY_STORAGE_KEY, next);
+    return next;
+  }, []);
+
   useEffect(() => {
-    const migrate = async () => {
-      if (typeof window === 'undefined') return;
+    contentRef.current = content;
+  }, [content]);
 
-      try {
-        const contentDocRef = doc(firestore, FIRESTORE_DOC);
-        const snapshot = await getDoc(contentDocRef);
+  // 캐시 우선 하이드레이션: 초기 렌더 지연 최소화
+  useEffect(() => {
+    const cachedLegacy = readLocalCache<Partial<ContentState>>(LEGACY_STORAGE_KEY);
+    const cachedStatic = readLocalCache<Partial<ContentState>>(STATIC_STORAGE_KEY);
+    const cachedLive = readLocalCache<{ tickerItems?: unknown }>(LIVE_STORAGE_KEY);
 
-        // Firestore에 문서가 없고 localStorage에 데이터가 있으면 마이그레이션
-        if (!snapshot.exists()) {
-          const raw = window.localStorage.getItem(STORAGE_KEY);
-          if (raw) {
-            const parsed = JSON.parse(raw) as Partial<ContentState>;
-            const migratedContent = deepMerge(defaultContent, parsed);
-            await setDoc(contentDocRef, migratedContent);
-            console.info('[ContentProvider] Migrated localStorage data to Firestore');
-          }
+    const patch: Partial<ContentState> = {};
+    if (cachedStatic?.intro || cachedLegacy?.intro) {
+      patch.intro = (cachedStatic?.intro ?? cachedLegacy?.intro) as ContentState['intro'];
+    }
+    if ((cachedLive && hasField(cachedLive, 'tickerItems')) || (cachedLegacy && hasField(cachedLegacy, 'tickerItems'))) {
+      patch.tickerItems = normalizeTicker(cachedLive?.tickerItems ?? cachedLegacy?.tickerItems, defaultContent.tickerItems);
+    }
+
+    if (Object.keys(patch).length) {
+      applyPatch(patch);
+    }
+  }, [applyPatch]);
+
+  const fetchStaticContent = useCallback(async () => {
+    try {
+      const staticSnapshot = await getDoc(doc(firestore, STATIC_DOC));
+      if (staticSnapshot.exists()) {
+        const data = staticSnapshot.data() as Partial<ContentState>;
+        if (data.intro) {
+          applyPatch({ intro: data.intro });
+          writeLocalCache(STATIC_STORAGE_KEY, { intro: data.intro });
         }
-      } catch (error) {
-        console.error('[ContentProvider] Migration failed:', error);
+        return;
+      }
+
+      // 호환성: 새 문서가 없으면 기존 settings/content에서 읽기
+      const legacySnapshot = await getDoc(doc(firestore, LEGACY_DOC));
+      if (!legacySnapshot.exists()) return;
+      const legacy = legacySnapshot.data() as Partial<ContentState>;
+      if (legacy.intro) {
+        applyPatch({ intro: legacy.intro });
+        writeLocalCache(STATIC_STORAGE_KEY, { intro: legacy.intro });
+      }
+      if (hasField(legacy, 'tickerItems')) {
+        const tickerItems = normalizeTicker(legacy.tickerItems, defaultContent.tickerItems);
+        applyPatch({ tickerItems });
+        writeLocalCache(LIVE_STORAGE_KEY, { tickerItems });
+      }
+    } catch (error) {
+      console.error('[ContentProvider] Failed to fetch static content:', error);
+    }
+  }, [applyPatch]);
+
+  // LIVE INFO만 실시간 구독
+  useEffect(() => {
+    const liveRef = doc(firestore, LIVE_DOC);
+    const legacyRef = doc(firestore, LEGACY_DOC);
+
+    const loadLegacyTicker = async () => {
+      try {
+        const legacySnapshot = await getDoc(legacyRef);
+        if (!legacySnapshot.exists()) return;
+        const legacy = legacySnapshot.data() as Partial<ContentState>;
+        const tickerItems = normalizeTicker(legacy.tickerItems, defaultContent.tickerItems);
+        if (areSameStrings(contentRef.current.tickerItems, tickerItems)) return;
+        applyPatch({ tickerItems });
+        writeLocalCache(LIVE_STORAGE_KEY, { tickerItems });
+      } catch {
+        // ignore legacy fallback errors
       }
     };
 
-    void migrate();
-  }, []);
-
-  // Firestore 구독 및 초기 로드
-  useEffect(() => {
-    const contentDocRef = doc(firestore, FIRESTORE_DOC);
-
-    // Firestore 실시간 구독
     const unsubscribe = onSnapshot(
-      contentDocRef,
+      liveRef,
       (snapshot) => {
         if (snapshot.exists()) {
-          const data = snapshot.data() as Partial<ContentState>;
-          setContent((prev) => deepMerge(defaultContent, data));
-
-          // localStorage에도 캐시
-          if (typeof window !== 'undefined') {
-            try {
-              window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-            } catch {
-              // ignore quota errors
-            }
+          const data = snapshot.data() as { tickerItems?: unknown };
+          const tickerItems = normalizeTicker(data.tickerItems, defaultContent.tickerItems);
+          if (!areSameStrings(contentRef.current.tickerItems, tickerItems)) {
+            applyPatch({ tickerItems });
+            writeLocalCache(LIVE_STORAGE_KEY, { tickerItems });
           }
-        } else {
-          // Firestore에 문서가 없으면 기본값 사용
-          setContent(defaultContent);
+          return;
         }
-        loadedRef.current = true;
+        void loadLegacyTicker();
       },
       (error) => {
-        console.error('[ContentProvider] Firestore subscription error:', error);
-        // Firestore 에러 시 localStorage 폴백
-        if (typeof window !== 'undefined') {
-          try {
-            const raw = window.localStorage.getItem(STORAGE_KEY);
-            if (raw) {
-              const parsed = JSON.parse(raw) as Partial<ContentState>;
-              setContent((prev) => deepMerge(prev, parsed));
-            }
-          } catch {
-            // ignore malformed cache
-          }
-        }
-        loadedRef.current = true;
-      }
+        console.error('[ContentProvider] LIVE INFO subscription error:', error);
+      },
     );
 
     return () => unsubscribe();
-  }, []);
+  }, [applyPatch]);
+
+  // 정적 콘텐츠는 메타 버전만 구독하고, 변경될 때만 문서 1회 fetch
+  useEffect(() => {
+    const metaRef = doc(firestore, META_DOC);
+    const unsubscribe = onSnapshot(
+      metaRef,
+      (snapshot) => {
+        const rawVersion = snapshot.data()?.staticVersion;
+        const nextVersion = typeof rawVersion === 'number' ? rawVersion : 0;
+        if (staticVersionRef.current === nextVersion) return;
+        staticVersionRef.current = nextVersion;
+        void fetchStaticContent();
+      },
+      (error) => {
+        console.error('[ContentProvider] static version subscription error:', error);
+        if (staticVersionRef.current === null) {
+          staticVersionRef.current = 0;
+          void fetchStaticContent();
+        }
+      },
+    );
+    return () => unsubscribe();
+  }, [fetchStaticContent]);
 
   const updateContent = useCallback(async (next: Partial<ContentState>) => {
     if (savingRef.current) return;
+    const hasTickerPatch = Object.prototype.hasOwnProperty.call(next, 'tickerItems');
+    const hasIntroPatch = Object.prototype.hasOwnProperty.call(next, 'intro');
+    if (!hasTickerPatch && !hasIntroPatch) return;
+
     savingRef.current = true;
-
     try {
-      const contentDocRef = doc(firestore, FIRESTORE_DOC);
-
-      // 현재 상태를 가져와서 병합
-      let newContent: ContentState;
-      setContent((prev) => {
-        newContent = deepMerge(prev, next);
-        return newContent;
-      });
-
-      // Firestore에 저장
-      await setDoc(contentDocRef, newContent!, { merge: true });
-
-      // localStorage에도 저장
-      if (typeof window !== 'undefined') {
-        try {
-          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(newContent));
-        } catch {
-          // ignore quota errors
-        }
+      const patch: Partial<ContentState> = {};
+      let tickerItems: string[] | null = null;
+      if (hasTickerPatch) {
+        tickerItems = normalizeTicker((next as { tickerItems?: unknown }).tickerItems, contentRef.current.tickerItems);
+        patch.tickerItems = tickerItems;
       }
+      if (hasIntroPatch && next.intro) {
+        patch.intro = next.intro;
+      }
+
+      if (Object.keys(patch).length) {
+        const merged = applyPatch(patch);
+        writeLocalCache(LIVE_STORAGE_KEY, { tickerItems: merged.tickerItems });
+        writeLocalCache(STATIC_STORAGE_KEY, { intro: merged.intro });
+      }
+
+      const writes: Promise<unknown>[] = [];
+      if (tickerItems) {
+        writes.push(
+          setDoc(
+            doc(firestore, LIVE_DOC),
+            { tickerItems, updatedAt: Date.now() },
+            { merge: true },
+          ),
+        );
+      }
+      if (hasIntroPatch && next.intro) {
+        writes.push(
+          setDoc(
+            doc(firestore, STATIC_DOC),
+            { intro: next.intro, updatedAt: Date.now() },
+            { merge: true },
+          ),
+        );
+        writes.push(
+          setDoc(
+            doc(firestore, META_DOC),
+            { staticVersion: increment(1), updatedAt: Date.now() },
+            { merge: true },
+          ),
+        );
+      }
+      await Promise.all(writes);
     } catch (error) {
       console.error('[ContentProvider] Failed to save content:', error);
-      // 에러 시에도 로컬 상태는 업데이트 (localStorage 폴백)
-      setContent((prev) => deepMerge(prev, next));
     } finally {
       savingRef.current = false;
     }
-  }, []);
+  }, [applyPatch]);
 
   const resetContent = useCallback(async () => {
-    try {
-      const contentDocRef = doc(firestore, FIRESTORE_DOC);
-      await setDoc(contentDocRef, defaultContent);
-      setContent(defaultContent);
+    applyPatch(defaultContent);
+    writeLocalCache(LIVE_STORAGE_KEY, { tickerItems: defaultContent.tickerItems });
+    writeLocalCache(STATIC_STORAGE_KEY, { intro: defaultContent.intro });
 
-      // localStorage도 초기화
-      if (typeof window !== 'undefined') {
-        try {
-          window.localStorage.removeItem(STORAGE_KEY);
-        } catch {
-          // ignore
-        }
-      }
+    try {
+      await Promise.all([
+        setDoc(doc(firestore, LIVE_DOC), { tickerItems: defaultContent.tickerItems, updatedAt: Date.now() }),
+        setDoc(doc(firestore, STATIC_DOC), { intro: defaultContent.intro, updatedAt: Date.now() }),
+        setDoc(
+          doc(firestore, META_DOC),
+          { staticVersion: increment(1), updatedAt: Date.now() },
+          { merge: true },
+        ),
+      ]);
     } catch (error) {
       console.error('[ContentProvider] Failed to reset content:', error);
-      setContent(defaultContent);
     }
-  }, []);
+  }, [applyPatch]);
 
   const value = useMemo(() => ({ content, updateContent, resetContent }), [content, updateContent, resetContent]);
 
