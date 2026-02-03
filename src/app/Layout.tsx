@@ -238,6 +238,7 @@ export default function Layout() {
         children: [
           { path: '/schedule/results', label: '경기 결과' },
           { path: '/schedule/groups', label: '조별 일정' },
+          { path: '/schedule/practice', label: '연습경기' },
           { path: '/schedule/manage', label: '일정 관리', requiresAdmin: true },
         ],
       },

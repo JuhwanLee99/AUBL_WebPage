@@ -24,6 +24,7 @@ import ScheduleResultsPage from './pages/ScheduleResultsPage';
 import ScheduleGroupsPage from './pages/ScheduleGroupsPage';
 import ScheduleManagePage from './pages/ScheduleManagePage';
 import ScheduleLivePage from './pages/ScheduleLivePage';
+import SchedulePracticePage from './pages/SchedulePracticePage';
 import PowerRankingPage from './pages/PowerRankingPage';
 import LoginPage from './pages/LoginPage';
 import AccessDeniedPage from './pages/AccessDeniedPage';
@@ -101,6 +102,10 @@ export const router = createBrowserRouter([
       {
         path: 'schedule/groups',
         element: <ScheduleGroupsPage />,
+      },
+      {
+        path: 'schedule/practice',
+        element: <SchedulePracticePage />,
       },
       {
         path: 'schedule/manage',

@@ -899,7 +899,8 @@ function classifyPitch(result: string) {
   return { pitch: hasPitch, ball: isBall, strike: isStrike };
 }
 
-function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
+function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: { practiceMode?: boolean }) {
+  const practiceMode = options?.practiceMode === true;
   // Roster Map의 Key를 uniqueName으로 변경
   const rosterHome = new Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자'; isElite?: boolean }>();
   const rosterAway = new Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자'; isElite?: boolean }>();
@@ -920,10 +921,18 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   const battingOrders: Record<'home' | 'away', Map<number, string[]>> = { home: new Map(), away: new Map() };
 
   const seedBattingOrders = (side: 'home' | 'away') => {
-    // [수정됨] .filter((slot) => slot.pos.toUpperCase() !== 'P') 제거
-    // 이유: 투수가 타석에 들어서면 P 포지션이어도 타자 기록에 포함되어야 함.
-    // 대신 라인업의 상위 9명을 타자로 간주 (오타니 룰 등 고려, 기본 타순은 9명)
-    const batting = record.lineups[side].slice(0, 9);
+    let batting = record.lineups[side].slice(0, 9);
+    if (practiceMode) {
+      const lineup = record.lineups[side];
+      let pitcherIndex = -1;
+      for (let idx = lineup.length - 1; idx >= 0; idx -= 1) {
+        if (lineup[idx].pos.toUpperCase() === 'P') {
+          pitcherIndex = idx;
+          break;
+        }
+      }
+      batting = lineup.filter((_, idx) => idx !== pitcherIndex);
+    }
     // Batting order map에도 uniqueName 저장
     batting.forEach((slot, idx) => battingOrders[side].set(idx + 1, [getUniqueName(slot.name, slot.number)]));
   };
@@ -1363,14 +1372,26 @@ export default function ScorekeeperPage() {
     () => state.matches.find((match) => match.id === state.activeMatchId) ?? null,
     [state.matches, state.activeMatchId],
   );
+  const isPracticeMode = (activeMatch?.recordMode ?? 'official') === 'practice';
   const [selectedMatchId, setSelectedMatchId] = useState(state.activeMatchId ?? '');
   const homeTeam = useMemo(() => TEAMS.find((t) => t.id === state.homeTeamId), [state.homeTeamId]);
   const awayTeam = useMemo(() => TEAMS.find((t) => t.id === state.awayTeamId), [state.awayTeamId]);
   const hittingSide: Side = state.half === 'top' ? 'away' : 'home';
   const defenseSide: Side = hittingSide === 'home' ? 'away' : 'home';
   const offenseLineupEntries = state.lineups[hittingSide].map((slot, idx) => ({ slot, idx }));
+  const practicePitcherIndex = isPracticeMode
+    ? (() => {
+        const lineup = state.lineups[hittingSide];
+        if (!lineup.length) return -1;
+        const lastIndex = lineup.length - 1;
+        return lineup[lastIndex].pos.toUpperCase() === 'P' ? lastIndex : -1;
+      })()
+    : -1;
   // 타석에 들어갈 수 있는 선수만 필터링 (오타니룰 고려)
   const offenseBattingEntries = offenseLineupEntries.filter((entry) => {
+    if (isPracticeMode) {
+      return entry.idx !== practicePitcherIndex;
+    }
     // 1. 타순 1~9번(인덱스 0~8)은 무조건 포함
     if (entry.idx < 9) return true;
     
@@ -1452,7 +1473,7 @@ export default function ScorekeeperPage() {
   const controlsDisabled = isGameOver || !isGameStarted || !hasActiveMatch || lockedByOther || state.scorerPaused;
   const isExporting = Boolean(pendingExportId);
   const canUndo = state.history.length > 0;
-  const playerStats = useMemo(() => buildPlayerStats(recordPayload), [recordPayload]);
+  const playerStats = useMemo(() => buildPlayerStats(recordPayload, { practiceMode: isPracticeMode }), [recordPayload, isPracticeMode]);
   const boxScore = useMemo(() => {
     const { lineScore: liveLine, hits: liveHits, errors: liveErrors } = recordPayload.liveStats;
     const maxInning = Math.max(state.inning, liveLine.home.length, liveLine.away.length);
@@ -2101,6 +2122,22 @@ const handleConfirmHitWizard = () => {
             <p style={{ color: '#94a3b8', fontSize: '13px', margin: '4px 0 0' }}>경기 일정에서 선택한 경기를 불러와 기록을 시작합니다.</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {isPracticeMode ? (
+              <span
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '999px',
+                  border: '1px solid rgba(251,191,36,0.55)',
+                  background: 'rgba(251,191,36,0.16)',
+                  color: '#fcd34d',
+                  fontWeight: 900,
+                  fontSize: '12px',
+                  letterSpacing: '-0.01em',
+                }}
+              >
+                연습경기
+              </span>
+            ) : null}
             <select
               value={selectedMatchId}
               onChange={(event) => setSelectedMatchId(event.target.value)}
@@ -2141,9 +2178,7 @@ const handleConfirmHitWizard = () => {
         </div>
         {activeMatch ? (
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', color: '#cbd5e1', fontSize: '13px' }}>
-            <span>
-              선택된 경기: {activeMatch.awayTeamName} vs {activeMatch.homeTeamName}
-            </span>
+            <span>선택된 경기: {activeMatch.awayTeamName} vs {activeMatch.homeTeamName}</span>
             <span>일시: {formatDateTimeLabel(activeMatch.startTime)}</span>
             <span>라인업: {activeMatch.lineups ? '사전 저장됨' : '미저장'}</span>
           </div>
@@ -2857,11 +2892,13 @@ const handleConfirmHitWizard = () => {
               onChangeBenchInput={(val) => setBenchInput((p) => ({ ...p, away: val }))}
               onSetTeamName={actions.setTeamName}
               onSetLineup={actions.setLineup}
+              onRemoveLineupSlot={actions.removeLineupSlot}
               onAddBench={actions.addBench}
               onRemoveBench={actions.removeBench}
               onSubstitute={actions.substitute}
-              highlightBatterName={hittingSide === 'away' ? currentBatterEntry?.slot.name : undefined}
+              highlightBatterIndex={hittingSide === 'away' ? currentBatterEntry?.idx : undefined}
               highlightPitcherName={defenseSide === 'away' ? currentPitcherSlot?.name : undefined}
+              practiceMode={isPracticeMode}
               gameStarted={isGameStarted}
               onOpenPositionSwap={() => setPositionSwapModal({ side: 'away' })}
             />
@@ -2885,11 +2922,13 @@ const handleConfirmHitWizard = () => {
               onChangeBenchInput={(val) => setBenchInput((p) => ({ ...p, home: val }))}
               onSetTeamName={actions.setTeamName}
               onSetLineup={actions.setLineup}
+              onRemoveLineupSlot={actions.removeLineupSlot}
               onAddBench={actions.addBench}
               onRemoveBench={actions.removeBench}
               onSubstitute={actions.substitute}
-              highlightBatterName={hittingSide === 'home' ? currentBatterEntry?.slot.name : undefined}
+              highlightBatterIndex={hittingSide === 'home' ? currentBatterEntry?.idx : undefined}
               highlightPitcherName={defenseSide === 'home' ? currentPitcherSlot?.name : undefined}
+              practiceMode={isPracticeMode}
               gameStarted={isGameStarted}
               onOpenPositionSwap={() => setPositionSwapModal({ side: 'home' })}
             />
@@ -2955,6 +2994,7 @@ const handleConfirmHitWizard = () => {
           side={positionSwapModal.side}
           lineup={state.lineups[positionSwapModal.side]}
           bench={state.benches[positionSwapModal.side]}
+          practiceMode={isPracticeMode}
           onClose={() => setPositionSwapModal(null)}
           onSwap={(swaps, benchSwaps) => actions.swapPositions(positionSwapModal.side, swaps, benchSwaps)}
         />
@@ -6270,12 +6310,14 @@ function PositionSwapModal({
   side,
   lineup,
   bench,
+  practiceMode,
   onClose,
   onSwap,
 }: {
   side: Side;
   lineup: { name: string; pos: string; number: string; throws: string; bats: string }[];
   bench: { name: string; pos: string; number: string; throws: string; bats: string }[];
+  practiceMode: boolean;
   onClose: () => void;
   onSwap: (swaps: { index: number; newPos: string }[], benchSwaps?: { index: number; newPos: string }[]) => void;
 }) {
@@ -6291,7 +6333,7 @@ function PositionSwapModal({
   // 투수가 1-9번 타순에 있는지 확인 (DH 없는 경우)
   const pitcherInBattingOrder = lineup.slice(0, 9).some((p) => p.pos.toUpperCase() === 'P');
   // DH 없으면 9명, DH 있으면 최대 10명까지 표시
-  const lineupDisplayCount = pitcherInBattingOrder ? 9 : Math.min(lineup.length, 10);
+  const lineupDisplayCount = practiceMode ? lineup.length : pitcherInBattingOrder ? 9 : Math.min(lineup.length, 10);
 
   const handlePositionSelect = (type: 'lineup' | 'bench', index: number, newPos: string) => {
     const sourceList = type === 'lineup' ? lineup : bench;
@@ -6698,11 +6740,13 @@ function TeamEditor({
   onChangeBenchInput,
   onSetTeamName,
   onSetLineup,
+  onRemoveLineupSlot,
   onAddBench,
   onRemoveBench,
   onSubstitute,
-  highlightBatterName,
+  highlightBatterIndex,
   highlightPitcherName,
+  practiceMode,
   gameStarted,
   onOpenPositionSwap,
 }: {
@@ -6722,21 +6766,56 @@ function TeamEditor({
     index: number,
     updates: { name?: string; pos?: string; number?: string; throws?: string; bats?: string; isOhtaniRule?: boolean; isElite?: boolean },
   ) => void;
+  onRemoveLineupSlot: (side: Side, index: number) => void;
   onAddBench: (
     side: Side,
     player: { name: string; pos: string; number: string; throws: string; bats: string; isOhtaniRule?: boolean; isElite?: boolean },
   ) => void;
   onRemoveBench: (side: Side, benchIndex: number) => void;
   onSubstitute: (side: Side, benchIndex: number, lineupIndex: number) => void;
-  highlightBatterName?: string;
+  highlightBatterIndex?: number;
   highlightPitcherName?: string;
+  practiceMode: boolean;
   gameStarted?: boolean;
   onOpenPositionSwap?: () => void;
 }) {
+  type TeamEditorSlot = {
+    name: string;
+    pos: string;
+    number: string;
+    throws: string;
+    bats: string;
+    isOhtaniRule?: boolean;
+    isElite?: boolean;
+  };
+  const makeEmptySlot = (): TeamEditorSlot => ({
+    name: '',
+    pos: '',
+    number: '',
+    throws: 'R',
+    bats: 'R',
+    isOhtaniRule: false,
+    isElite: false,
+  });
+
   // [수정] 빈 라인업을 받아도 UI 입력칸을 유지하기 위해 동적으로 빈 슬롯 생성
-  const filledLineup = useMemo(() => {
-    const result = [...lineup];
-    const emptySlot = { name: '', pos: '', number: '', throws: 'R' as const, bats: 'R' as const };
+  const filledLineup = useMemo<TeamEditorSlot[]>(() => {
+    if (practiceMode) {
+      const base: TeamEditorSlot[] = lineup.length ? [...lineup] : [];
+      if (!base.length) {
+        return [
+          ...Array.from({ length: 9 }, () => makeEmptySlot()),
+          { ...makeEmptySlot(), pos: 'P' },
+        ];
+      }
+      const hasDedicatedPitcher = base[base.length - 1]?.pos?.toUpperCase() === 'P';
+      if (!hasDedicatedPitcher) {
+        base.push({ ...makeEmptySlot(), pos: 'P' });
+      }
+      return base;
+    }
+    const result: TeamEditorSlot[] = [...lineup];
+    const emptySlot = makeEmptySlot();
 
     // 투수가 1-9번 타순에 있는지 확인 (DH 없는 경우)
     const pitcherInBattingOrder = result.slice(0, 9).some(s => s.pos.toUpperCase() === 'P');
@@ -6758,7 +6837,7 @@ function TeamEditor({
     }
 
     return result;
-  }, [lineup]);
+  }, [lineup, practiceMode]);
 
   // 선출(선수 출신) 유효성 검사
   const eliteWarnings = useMemo(() => {
@@ -6785,19 +6864,26 @@ function TeamEditor({
   }, [lineup, bench]);
 
   const lineupEntries = filledLineup.map((slot, idx) => ({ slot, idx }));
+  const practicePitcherEntry = practiceMode
+    ? lineupEntries[lineupEntries.length - 1] ?? null
+    : null;
 
   // [핵심 수정] 투수(P) 여부와 상관없이 항상 라인업의 앞 9명을 타자로 표시합니다.
   // 이렇게 하면 투수가 타석에 들어서도 입력칸이 유지됩니다.
-  const battingEntries = lineupEntries.slice(0, 9);
+  const battingEntries = practiceMode
+    ? lineupEntries.slice(0, Math.max(0, lineupEntries.length - 1))
+    : lineupEntries.slice(0, 9);
 
   // 투수가 1-9번 타순에 있으면 별도 투수 섹션 불필요, 10번째 이후에 있으면 별도 표시
-  const pitcherInBattingOrder = battingEntries.some((entry) => entry.slot.pos.toUpperCase() === 'P');
+  const pitcherInBattingOrder = !practiceMode && battingEntries.some((entry) => entry.slot.pos.toUpperCase() === 'P');
   const pitcherInBattingOrderEntry = pitcherInBattingOrder
     ? battingEntries.find((entry) => entry.slot.pos.toUpperCase() === 'P')
     : null;
   const pitcherEntry = pitcherInBattingOrder
     ? null
-    : lineupEntries.find((entry) => entry.slot.pos.toUpperCase() === 'P');
+    : practiceMode
+      ? practicePitcherEntry
+      : lineupEntries.find((entry) => entry.slot.pos.toUpperCase() === 'P');
   
   const positionOptions = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'OF', 'IF', 'PH', 'PR'];
   const filterPositionOptions = (value: string) => {
@@ -6862,18 +6948,18 @@ function TeamEditor({
             key={entry.idx}
             style={{
               display: 'grid',
-              gridTemplateColumns: '24px 85px 55px 50px 68px 68px 34px',
+              gridTemplateColumns: practiceMode ? '24px 1fr 58px 56px 68px 68px 32px' : '24px 1fr 58px 56px 68px 68px 32px',
               gap: '6px',
               alignItems: 'center',
               padding: '4px',
               borderRadius: '10px',
               border: `1px solid ${
-                highlightBatterName && entry.slot.name === highlightBatterName
+                typeof highlightBatterIndex === 'number' && entry.idx === highlightBatterIndex
                   ? 'rgba(56,189,248,0.6)'
                   : 'transparent'
               }`,
               background:
-                highlightBatterName && entry.slot.name === highlightBatterName
+                typeof highlightBatterIndex === 'number' && entry.idx === highlightBatterIndex
                   ? 'rgba(56,189,248,0.12)'
                   : 'transparent',
               boxSizing: 'border-box',
@@ -6954,30 +7040,121 @@ function TeamEditor({
               <option value="R">타 R</option>
               <option value="L">타 L</option>
             </select>
-            <button
-              type="button"
-              onClick={() => onSetLineup(side, entry.idx, { isElite: !entry.slot.isElite })}
-              style={{
-                padding: '6px 2px',
-                borderRadius: '8px',
-                border: entry.slot.isElite
-                  ? '1px solid rgba(249, 115, 22, 0.6)'
-                  : '1px solid rgba(148, 163, 184, 0.25)',
-                background: entry.slot.isElite
-                  ? 'rgba(249, 115, 22, 0.15)'
-                  : 'rgba(255,255,255,0.04)',
-                color: entry.slot.isElite ? '#fb923c' : '#94a3b8',
-                fontWeight: 700,
-                fontSize: '11px',
-                cursor: 'pointer',
-                width: '100%',
-              }}
-              title="선출(선수 출신) 여부"
-            >
-              {entry.slot.isElite ? '선' : '일'}
-            </button>
+            {!practiceMode && (
+              <button
+                type="button"
+                onClick={() => onSetLineup(side, entry.idx, { isElite: !entry.slot.isElite })}
+                style={{
+                  padding: '6px 2px',
+                  borderRadius: '8px',
+                  border: entry.slot.isElite
+                    ? '1px solid rgba(249, 115, 22, 0.6)'
+                    : '1px solid rgba(148, 163, 184, 0.25)',
+                  background: entry.slot.isElite
+                    ? 'rgba(249, 115, 22, 0.15)'
+                    : 'rgba(255,255,255,0.04)',
+                  color: entry.slot.isElite ? '#fb923c' : '#94a3b8',
+                  fontWeight: 700,
+                  fontSize: '11px',
+                  cursor: 'pointer',
+                  width: '100%',
+                }}
+                title="선출(선수 출신) 여부"
+              >
+                {entry.slot.isElite ? '선' : '일'}
+              </button>
+            )}
+            {practiceMode && (
+              <button
+                type="button"
+                onClick={() => {
+                  onRemoveLineupSlot(side, entry.idx);
+                }}
+                disabled={orderIdx < 9 || battingEntries.length <= 9}
+                style={{
+                  padding: '6px 0',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(239,68,68,0.45)',
+                  background: 'rgba(248,113,113,0.08)',
+                  color: '#fca5a5',
+                  fontWeight: 900,
+                  fontSize: '16px',
+                  cursor: orderIdx < 9 || battingEntries.length <= 9 ? 'not-allowed' : 'pointer',
+                  opacity: orderIdx < 9 || battingEntries.length <= 9 ? 0.45 : 1,
+                  width: '100%',
+                }}
+                title={
+                  orderIdx < 9
+                    ? '기본 1~9번 타자는 삭제할 수 없습니다'
+                    : battingEntries.length <= 9
+                      ? '타자는 최소 9명이어야 합니다'
+                      : '추가 타자 라인업 삭제'
+                }
+              >
+                ✕
+              </button>
+            )}
           </div>
         ))}
+        {practiceMode && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              onClick={() => {
+                if (pitcherEntry) {
+                  const isVirtualPitcherSlot = pitcherEntry.idx >= lineup.length;
+                  if (isVirtualPitcherSlot) {
+                    onSetLineup(side, lineup.length, {
+                      name: '',
+                      pos: '',
+                      number: '',
+                      throws: 'R',
+                      bats: 'R',
+                    });
+                    return;
+                  }
+                  onSetLineup(side, lineup.length, {
+                    name: pitcherEntry.slot.name,
+                    pos: 'P',
+                    number: pitcherEntry.slot.number,
+                    throws: pitcherEntry.slot.throws,
+                    bats: pitcherEntry.slot.bats,
+                    isOhtaniRule: pitcherEntry.slot.isOhtaniRule,
+                    isElite: pitcherEntry.slot.isElite,
+                  });
+                  onSetLineup(side, pitcherEntry.idx, {
+                    name: '',
+                    pos: '',
+                    number: '',
+                    throws: 'R',
+                    bats: 'R',
+                    isOhtaniRule: false,
+                  });
+                  return;
+                }
+                onSetLineup(side, lineup.length, {
+                  name: '',
+                  pos: '',
+                  number: '',
+                  throws: 'R',
+                  bats: 'R',
+                });
+              }}
+              style={{
+                padding: '7px 10px',
+                borderRadius: '10px',
+                border: '1px solid rgba(59,130,246,0.4)',
+                background: 'rgba(59,130,246,0.1)',
+                color: '#93c5fd',
+                fontWeight: 800,
+                fontSize: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              타자 추가
+            </button>
+          </div>
+        )}
 
         {/* 투수 정보 및 오타니룰 토글 */}
         <div
@@ -7239,27 +7416,29 @@ function TeamEditor({
                 <option value="R">타 R</option>
                 <option value="L">타 L</option>
               </select>
-          <button
-            type="button"
-            onClick={() => onChangeBenchInput({ ...benchInput, isElite: !benchInput.isElite })}
-            style={{
-              padding: '8px 6px',
-              borderRadius: '10px',
-              border: benchInput.isElite
-                ? '1px solid rgba(249, 115, 22, 0.6)'
-                : '1px solid rgba(148, 163, 184, 0.3)',
-              background: benchInput.isElite
-                ? 'rgba(249, 115, 22, 0.15)'
-                : '#0b0f1a',
-              color: benchInput.isElite ? '#fb923c' : '#94a3b8',
-              fontWeight: 700,
-              fontSize: '12px',
-              cursor: 'pointer',
-            }}
-            title="선출(선수 출신) 여부"
-          >
-            {benchInput.isElite ? '선' : '일'}
-          </button>
+          {!practiceMode && (
+            <button
+              type="button"
+              onClick={() => onChangeBenchInput({ ...benchInput, isElite: !benchInput.isElite })}
+              style={{
+                padding: '8px 6px',
+                borderRadius: '10px',
+                border: benchInput.isElite
+                  ? '1px solid rgba(249, 115, 22, 0.6)'
+                  : '1px solid rgba(148, 163, 184, 0.3)',
+                background: benchInput.isElite
+                  ? 'rgba(249, 115, 22, 0.15)'
+                  : '#0b0f1a',
+                color: benchInput.isElite ? '#fb923c' : '#94a3b8',
+                fontWeight: 700,
+                fontSize: '12px',
+                cursor: 'pointer',
+              }}
+              title="선출(선수 출신) 여부"
+            >
+              {benchInput.isElite ? '선' : '일'}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {
@@ -7305,7 +7484,7 @@ function TeamEditor({
               <div style={{ display: 'grid', gap: '2px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ fontWeight: 800 }}>{player.name}</span>
-                  {player.isElite && (
+                  {!practiceMode && player.isElite && (
                     <span
                       style={{
                         padding: '2px 6px',
@@ -7396,7 +7575,7 @@ function TeamEditor({
         </div>
 
         {/* 선출 경고 표시 */}
-        {eliteWarnings.length > 0 && (
+        {!practiceMode && eliteWarnings.length > 0 && (
           <div
             style={{
               marginTop: '12px',

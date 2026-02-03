@@ -29,6 +29,7 @@ const safeMatchTime = (value: string) => {
 };
 
 const scoreOrDash = (score?: number | null) => (typeof score === 'number' && Number.isFinite(score) ? score : '-');
+const isPracticeMatch = (match: MatchSchedule) => (match.recordMode ?? 'official') === 'practice';
 
 const countDots = (filled: number, total: number, color: string) =>
   Array.from({ length: total }, (_, idx) => ({
@@ -635,6 +636,22 @@ export default function LandingPage() {
                     <span style={{ color: '#cbd5e1', fontWeight: 700, fontSize: '13px' }}>
                       {formatLiveTime(match.startTime)} · {match.venue || '장소 미정'}
                     </span>
+                    {isPracticeMatch(match) && (
+                      <span
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: '999px',
+                          background: 'rgba(16,185,129,0.16)',
+                          color: '#34d399',
+                          fontWeight: 900,
+                          fontSize: '11px',
+                          letterSpacing: '0.05em',
+                          border: '1px solid rgba(16,185,129,0.35)',
+                        }}
+                      >
+                        연습경기
+                      </span>
+                    )}
                   </div>
                   {match.notes && (
                     <span
@@ -865,7 +882,24 @@ export default function LandingPage() {
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 900, fontSize: '13px', color: '#ede9fe' }}>{formatTimeShort(match.startTime)}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 900, fontSize: '13px', color: '#ede9fe' }}>{formatTimeShort(match.startTime)}</span>
+                    {isPracticeMatch(match) && (
+                      <span
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: '999px',
+                          background: 'rgba(16,185,129,0.18)',
+                          color: '#34d399',
+                          fontWeight: 900,
+                          fontSize: '11px',
+                          border: '1px solid rgba(16,185,129,0.35)',
+                        }}
+                      >
+                        연습경기
+                      </span>
+                    )}
+                  </div>
                   <span style={{ fontSize: '12px', color: '#c4b5fd', whiteSpace: 'nowrap' }}>{match.venue || '장소 미정'}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800, fontSize: '14px' }}>
@@ -926,7 +960,24 @@ export default function LandingPage() {
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 900, fontSize: '13px', color: '#e0f2fe' }}>{formatTimeShort(match.startTime)}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 900, fontSize: '13px', color: '#e0f2fe' }}>{formatTimeShort(match.startTime)}</span>
+                    {isPracticeMatch(match) && (
+                      <span
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: '999px',
+                          background: 'rgba(16,185,129,0.18)',
+                          color: '#34d399',
+                          fontWeight: 900,
+                          fontSize: '11px',
+                          border: '1px solid rgba(16,185,129,0.35)',
+                        }}
+                      >
+                        연습경기
+                      </span>
+                    )}
+                  </div>
                   <span style={{ fontSize: '12px', color: '#bae6fd', whiteSpace: 'nowrap' }}>{match.venue || '장소 미정'}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800, fontSize: '14px' }}>
