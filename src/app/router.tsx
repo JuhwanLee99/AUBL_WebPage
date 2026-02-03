@@ -3,6 +3,7 @@ import Layout from './Layout';
 import LandingPage from '../front/pages/LandingPage';
 import IntroPage from '../front/pages/IntroPage';
 import RulePage from '../front/pages/RulePage';
+import TeamsPage from '../front/pages/TeamsPage';
 import StandingsPage from './pages/StandingPage';
 import PredictionPage from './pages/PredictionPage';
 import RecordPage from './pages/RecordPage';
@@ -46,6 +47,10 @@ export const router = createBrowserRouter([
       {
         path: 'rules',
         element: <RulePage />,
+      },
+      {
+        path: 'intro/teams',
+        element: <TeamsPage />,
       },
       {
         path: 'standings',
