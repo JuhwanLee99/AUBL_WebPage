@@ -390,7 +390,7 @@ export default function IntroPage() {
           ))}
         </div>
         <Link
-          to="/intro"
+          to="/rules"
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -400,7 +400,7 @@ export default function IntroPage() {
             marginTop: '4px',
           }}
         >
-          자세한 규정 보기 (Rule 페이지 준비 중) →
+          자세한 규정 보기 →
         </Link>
       </section>
 
