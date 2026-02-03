@@ -195,6 +195,23 @@ export default function StatsTable({ title, stats, variant, density = 'regular' 
                             </span>
                           ) : null}
                         </span>
+                        {/* 선출 뱃지 */}
+                        {(row as BatterStatLine | PitcherStatLine).isElite && (
+                          <span
+                            style={{
+                              padding: '2px 6px',
+                              borderRadius: '999px',
+                              border: '1px solid rgba(249, 115, 22, 0.5)',
+                              background: 'rgba(249, 115, 22, 0.15)',
+                              color: '#fb923c',
+                              fontWeight: 900,
+                              fontSize: '10px',
+                              lineHeight: 1.2,
+                            }}
+                          >
+                            선출
+                          </span>
+                        )}
                         {(() => {
                           const status = (row as BatterStatLine | PitcherStatLine).status;
                           // if (status) {

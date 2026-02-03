@@ -10,28 +10,29 @@ export function useAdmin() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (FORCE_ADMIN) {
+    const run = async () => {
+      if (FORCE_ADMIN) {
         setIsAdmin(true);
         setLoading(false);
         return;
-    }
-
-    if (!user) {
-      setIsAdmin(false);
-      setLoading(false);
-      return;
-    }
-
-    // true를 전달하여 강제로 최신 권한 정보를 가져옵니다.
-    user.getIdTokenResult(true)
-      .then((idTokenResult) => {
+      }
+      if (!user) {
+        setIsAdmin(false);
+        setLoading(false);
+        return;
+      }
+      try {
+        // true를 전달하여 강제로 최신 권한 정보를 가져옵니다.
+        const idTokenResult = await user.getIdTokenResult(true);
         setIsAdmin(!!idTokenResult.claims.admin);
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error("권한 확인 실패:", err);
         setIsAdmin(false);
-      })
-      .finally(() => setLoading(false));
+      } finally {
+        setLoading(false);
+      }
+    };
+    void run();
   }, [user]);
 
   // ✅ [복구됨] UI에서 사용하는 텍스트 라벨 추가
