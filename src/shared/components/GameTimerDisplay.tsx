@@ -18,12 +18,10 @@ export function GameTimerDisplay({
   style,
 }: GameTimerDisplayProps) {
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
+  const shouldTrackTimer = gameStarted && gameLimitMinutes !== null && gameStartTimestamp !== null;
 
   useEffect(() => {
-    if (!gameStarted || gameLimitMinutes === null || gameStartTimestamp === null) {
-      setRemainingMs(null);
-      return;
-    }
+    if (!shouldTrackTimer) return;
 
     const updateTimer = () => {
       const now = Date.now();
@@ -40,12 +38,15 @@ export function GameTimerDisplay({
       setRemainingMs(Math.max(0, remaining));
     };
 
-    updateTimer();
+    const firstTick = setTimeout(updateTimer, 0);
     const interval = setInterval(updateTimer, 1000);
-    return () => clearInterval(interval);
-  }, [gameLimitMinutes, gameStartTimestamp, gamePausedAt, gamePausedDuration, gameStarted]);
+    return () => {
+      clearTimeout(firstTick);
+      clearInterval(interval);
+    };
+  }, [gameLimitMinutes, gamePausedAt, gamePausedDuration, gameStartTimestamp, shouldTrackTimer]);
 
-  if (remainingMs === null) return null;
+  if (!shouldTrackTimer || remainingMs === null) return null;
 
   const totalSeconds = Math.floor(remainingMs / 1000);
   const hours = Math.floor(totalSeconds / 3600);

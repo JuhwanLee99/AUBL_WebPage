@@ -1,7 +1,9 @@
-import { createBrowserRouter } from 'react-router-dom';
+import { Navigate, createBrowserRouter } from 'react-router-dom';
 import Layout from './Layout';
 import LandingPage from '../front/pages/LandingPage';
 import IntroPage from '../front/pages/IntroPage';
+import RulePage from '../front/pages/RulePage';
+import TeamsPage from '../front/pages/TeamsPage';
 import StandingsPage from './pages/StandingPage';
 import PredictionPage from './pages/PredictionPage';
 import RecordPage from './pages/RecordPage';
@@ -21,12 +23,18 @@ import MatchSchedulePage from './pages/MatchSchedulePage';
 import ScheduleResultsPage from './pages/ScheduleResultsPage';
 import ScheduleGroupsPage from './pages/ScheduleGroupsPage';
 import ScheduleManagePage from './pages/ScheduleManagePage';
+import ScheduleLivePage from './pages/ScheduleLivePage';
+import SchedulePracticePage from './pages/SchedulePracticePage';
 import PowerRankingPage from './pages/PowerRankingPage';
 import LoginPage from './pages/LoginPage';
 import AccessDeniedPage from './pages/AccessDeniedPage';
-import AdminPage from './pages/AdminPage';
 import AccountPage from './pages/AccountPage';
 import { RequireAdmin } from '../shared/auth/RequireAdmin';
+import AdminLayoutPage from './pages/admin/AdminLayoutPage';
+import AdminLandingPage from './pages/admin/AdminLandingPage';
+import AdminIntroPage from './pages/admin/AdminIntroPage';
+import AdminRulesPage from './pages/admin/AdminRulesPage';
+import AdminTeamsPage from './pages/admin/AdminTeamsPage';
 
 export const router = createBrowserRouter([
   {
@@ -40,6 +48,14 @@ export const router = createBrowserRouter([
       {
         path: 'intro',
         element: <IntroPage />,
+      },
+      {
+        path: 'rules',
+        element: <RulePage />,
+      },
+      {
+        path: 'intro/teams',
+        element: <TeamsPage />,
       },
       {
         path: 'standings',
@@ -76,12 +92,20 @@ export const router = createBrowserRouter([
         element: <MatchSchedulePage />,
       },
       {
+        path: 'schedule/live',
+        element: <ScheduleLivePage />,
+      },
+      {
         path: 'schedule/results',
         element: <ScheduleResultsPage />,
       },
       {
         path: 'schedule/groups',
         element: <ScheduleGroupsPage />,
+      },
+      {
+        path: 'schedule/practice',
+        element: <SchedulePracticePage />,
       },
       {
         path: 'schedule/manage',
@@ -131,9 +155,16 @@ export const router = createBrowserRouter([
         path: 'admin',
         element: (
           <RequireAdmin>
-            <AdminPage />
+            <AdminLayoutPage />
           </RequireAdmin>
         ),
+        children: [
+          { index: true, element: <Navigate to="landing" replace /> },
+          { path: 'landing', element: <AdminLandingPage /> },
+          { path: 'intro', element: <AdminIntroPage /> },
+          { path: 'rules', element: <AdminRulesPage /> },
+          { path: 'teams', element: <AdminTeamsPage /> },
+        ],
       },
       {
         path: 'player/:name',

@@ -3,6 +3,7 @@ import { getIdTokenResult, onIdTokenChanged } from 'firebase/auth';
 import {
   collection,
   doc,
+  getCountFromServer,
   onSnapshot,
   orderBy,
   where,
@@ -42,10 +43,12 @@ const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
   .filter(Boolean);
 const FEED_LIMIT = 50; // 관중 뷰 기본 구독 크기
 const SCORER_FEED_LIMIT = 200; // 기록원 재접속 시 충분한 버퍼
-const FEED_DOC_LIMIT = 120; // matchStates 문서에 함께 싣는 최대 feed/event 개수 (관중권한 fallback)
-const WRITE_DEBOUNCE_MS = 300; // 기록원 상태 동기화 디바운스 (투구 간 평균 간격을 고려해 write 수 최소화)
+const WRITE_DEBOUNCE_MS = 1_000; // 기록원 상태 동기화 디바운스 (쓰기 폭주 방지)
 const SCORER_LOCK_TTL_MS = 300_000; // 5분 후 락 만료 (이닝 교대 대비 여유)
 const SCORER_LOCK_HEARTBEAT_MS = 60_000; // 60초마다 하트비트 갱신
+const PRESENCE_TTL_MS = 300_000; // 5분 후 동접자 만료
+const PRESENCE_HEARTBEAT_MS = 120_000; // 120초마다 동접자 하트비트 갱신
+const PRESENCE_POLL_INTERVAL_MS = 12_000; // 접속자 집계 폴링 주기
 
 // Firestore는 undefined를 허용하지 않으므로 중첩 객체/배열에서 undefined를 제거한다.
 function pruneUndefined<T>(value: T): T {
@@ -80,6 +83,9 @@ interface PlayerSlot {
   isOhtaniRule?: boolean;
   // 교체 유형: 대수비, 대타, 대주자
   substitutionType?: '대수비' | '대타' | '대주자';
+  // 선출(선수 출신): 고등학교 이상 대한야구소프트볼협회/스포츠지원포털 등록자
+  // 한 경기 최대 2명, 투수/포수 불가
+  isElite?: boolean;
 }
 
 export type PostGameLineScore = { innings: number[]; home: number[]; away: number[] };
@@ -148,6 +154,7 @@ export type PostGameRecord = {
 };
 
 export type MatchStatus = 'scheduled' | 'inProgress' | 'completed' | 'canceled';
+export type MatchRecordMode = 'official' | 'practice';
 
 export interface MatchSchedule {
   id: string;
@@ -158,6 +165,7 @@ export interface MatchSchedule {
   startTime: string;
   venue: string;
   status: MatchStatus;
+  recordMode?: MatchRecordMode;
   liveVideoUrl?: string;
   liveDelaySeconds?: number;
   division?: LeagueDivision; // 으뜸/버금 구분 (관리자 지정)
@@ -202,6 +210,7 @@ export interface PlayLog {
   result: string;
   // [수정] 정렬을 위해 생성 시간 필드 추가
   createdAt?: number;
+  eventId?: string;
 }
 
 export interface PlayEvent {
@@ -215,6 +224,12 @@ export interface PlayEvent {
   battedBall?: BattedBallDetails | null;
   error?: ErrorDetails | string | null;
   notes?: string;
+  strikeType?: 'swinging' | 'looking';
+  rbi?: number;
+  dpRoute?: number[];
+  earnedRunsBy?: Record<string, number>;
+  createdAt?: number;
+  eventId?: string;
 }
 
 interface DemoSnapshot {
@@ -225,6 +240,8 @@ interface DemoSnapshot {
   outs: number;
   pitchCount: number;
   bases: Bases; // [1B, 2B, 3B] occupant name
+  // 주자별 책임 투수 기록 (주자가 출루할 때의 투수, 득점 시 해당 투수에게 실점 부과)
+  runnerResponsiblePitcher: { 0: string | null; 1: string | null; 2: string | null };
   score: { home: number; away: number };
   lastPlay: string;
   feed: PlayLog[];
@@ -254,6 +271,7 @@ interface DemoSnapshot {
   gameStartTimestamp: number | null;
   gamePausedAt: number | null;
   gamePausedDuration: number;
+  onlineViewerCount: number;
 }
 
 interface DemoState extends DemoSnapshot {
@@ -299,13 +317,13 @@ type SharedGameState = Pick<
 type Action =
   | { type: 'ball' }
   | { type: 'strike' }
-  | { type: 'foul' }
-  | { type: 'strikeOut' }
-  | { type: 'droppedThirdStrike' }
+  | { type: 'foul'; isBunt?: boolean }
+  | { type: 'strikeOut'; strikeType?: 'swinging' | 'looking' }
+  | { type: 'droppedThirdStrike'; variant?: 'strikeout' | 'reach' | 'tag_out'; strikeType?: 'swinging' | 'looking' }
   | { type: 'out'; battedBall?: BattedBallDetails | null }
   | { type: 'outWithMessage'; note: string; battedBall?: BattedBallDetails | null }
-  | { type: 'doublePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[] }
-  | { type: 'triplePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[] }
+  | { type: 'doublePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[]; route?: number[]; runnerAdvancements?: Record<number, number> }
+  | { type: 'triplePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[]; route?: number[]; runnerAdvancements?: Record<number, number> }
   | { type: 'hit'; bases: 1 | 2 | 3 | 4; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null }
   | { type: 'fielderChoice'; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null; context?: string }
   | { type: 'walk' }
@@ -330,6 +348,9 @@ type Action =
   | { type: 'manualLog'; message: string }
   | { type: 'setTeamName'; side: Side; name: string }
   | { type: 'setLineup'; side: Side; index: number; updates: Partial<PlayerSlot> }
+  | { type: 'removeLineupSlot'; side: Side; index: number }
+  | { type: 'removePracticeBatter'; side: Side; battingOrderIndex: number }
+  | { type: 'swapPositions'; side: Side; swaps: { index: number; newPos: string }[]; benchSwaps?: { index: number; newPos: string }[] }
   | { type: 'addBench'; side: Side; player: PlayerSlot }
   | { type: 'removeBench'; side: Side; benchIndex: number }
   | { type: 'substitute'; side: Side; benchIndex: number; lineupIndex: number; substitutionType?: '대수비' | '대타' | '대주자' }
@@ -361,7 +382,8 @@ type Action =
   | { type: 'resumeLock'; payload: { scorerUid: string; scorerName: string | null; scorerEmail: string | null; scorerRole: string | null; lockedAt: number } }
   | { type: 'setGameLimit'; minutes: number | null }
   | { type: 'pauseGameTimer' }
-  | { type: 'resumeGameTimer' };
+  | { type: 'resumeGameTimer' }
+  | { type: 'setOnlineViewerCount'; count: number };
 
 const demoLineups: { home: PlayerSlot[]; away: PlayerSlot[] } = {
   home: [
@@ -414,6 +436,8 @@ const normalizePlayerSlotForGame = (player: PlayerSlot): PlayerSlot => ({
   isOhtaniRule: !!player.isOhtaniRule,
   // [수정] 교체 유형 보존 (추가됨: 이 부분이 없으면 게임 로직 진행 중 정보가 사라질 수 있음)
   substitutionType: player.substitutionType,
+  // [수정] 선출 플래그 보존
+  isElite: !!player.isElite,
 });
 
 // 라인업 채움 로직 (UI 9칸 유지 보장 수정)
@@ -473,6 +497,37 @@ const deriveMatchDivision = (
   return undefined;
 };
 
+function isPracticeMatch(match?: MatchSchedule | null) {
+  return match?.recordMode === 'practice';
+}
+
+function isPracticeActiveMatch(state: DemoState) {
+  if (!state.activeMatchId) return false;
+  const activeMatch = state.matches.find((m) => m.id === state.activeMatchId);
+  return isPracticeMatch(activeMatch);
+}
+
+function getPracticePitcherIndex(lineup: PlayerSlot[]) {
+  if (!lineup.length) return -1;
+  const lastIndex = lineup.length - 1;
+  return lineup[lastIndex].pos.toUpperCase() === 'P' ? lastIndex : -1;
+}
+
+function getBattingEntriesForLineup(
+  lineup: PlayerSlot[],
+  allowExtendedBattingOrder: boolean,
+) {
+  if (allowExtendedBattingOrder) {
+    const pitcherIndex = getPracticePitcherIndex(lineup);
+    return lineup.filter((_, idx) => idx !== pitcherIndex);
+  }
+  return lineup.filter((slot, idx) => {
+    if (idx < 9) return true;
+    if (slot.pos.toUpperCase() !== 'P') return true;
+    return canPitcherBat(slot, lineup);
+  });
+}
+
 const initialState: DemoState = {
   inning: 1,
   half: 'top',
@@ -481,6 +536,7 @@ const initialState: DemoState = {
   outs: 0,
   pitchCount: 0,
   bases: [null, null, null],
+  runnerResponsiblePitcher: { 0: null, 1: null, 2: null },
   score: { home: 0, away: 0 },
   lastPlay: '경기 대기 중',
   feed: [],
@@ -520,6 +576,7 @@ const initialState: DemoState = {
   gameStartTimestamp: null,
   gamePausedAt: null,
   gamePausedDuration: 0,
+  onlineViewerCount: 0,
 };
 
 function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }): PlayLog[] {
@@ -547,6 +604,7 @@ function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }):
         result: typeof e.result === 'string' ? e.result : '',
         // [수정] createdAt 보존
         createdAt: typeof e.createdAt === 'number' ? e.createdAt : undefined,
+        eventId: typeof e.eventId === 'string' ? e.eventId : undefined,
       };
     }
     return {
@@ -613,6 +671,8 @@ function normalizeEvents(events: unknown, fallback: { inning: number; half: Half
         battedBall,
         error: e.error ?? null,
         notes: typeof e.notes === 'string' ? e.notes : undefined,
+        createdAt: typeof e.createdAt === 'number' ? e.createdAt : undefined,
+        eventId: typeof e.eventId === 'string' ? e.eventId : undefined,
       };
     }
     return {
@@ -647,6 +707,8 @@ function normalizePlayerSlot(slot: unknown): PlayerSlot | null {
       ['대수비', '대타', '대주자'].includes(s.substitutionType)
         ? (s.substitutionType as '대수비' | '대타' | '대주자')
         : undefined,
+    // [수정] 선출(선수 출신) 플래그 보존
+    isElite: typeof s.isElite === 'boolean' ? s.isElite : undefined,
   };
 }
 
@@ -832,6 +894,7 @@ function normalizeMatches(matches: unknown): MatchSchedule[] {
       startTime: typeof match.startTime === 'string' ? match.startTime : new Date().toISOString(),
       venue: typeof match.venue === 'string' ? match.venue : '미정',
       status: match.status === 'completed' || match.status === 'inProgress' ? match.status : 'scheduled',
+      recordMode: match.recordMode === 'practice' ? 'practice' : 'official',
       liveVideoUrl: typeof match.liveVideoUrl === 'string' ? match.liveVideoUrl : undefined,
       liveDelaySeconds: typeof match.liveDelaySeconds === 'number' ? match.liveDelaySeconds : undefined,
       division: deriveMatchDivision(match.division, match.homeTeamId, match.awayTeamId),
@@ -859,6 +922,7 @@ function projectSpectatorMatch(match: MatchSchedule): MatchSchedule {
     startTime: match.startTime,
     venue: match.venue,
     status: match.status,
+    recordMode: match.recordMode ?? 'official',
     liveVideoUrl: match.liveVideoUrl,
     liveDelaySeconds: match.liveDelaySeconds,
     division: match.division,
@@ -886,7 +950,14 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
   const feed = normalizeFeed(merged.feed, { inning: merged.inning, half: merged.half });
   const events = normalizeEvents(merged.events, { inning: merged.inning, half: merged.half });
   const matches = normalizeMatches(merged.matches ?? base.matches);
-  const safeLineups = ensureCompleteLineups(merged.lineups ?? base.lineups);
+  // [수정] 라인업이 완전히 비어있는 경우 자동 채움을 하지 않음
+  // 실제 선수가 있는지 확인 (name이 비어있지 않은 슬롯)
+  const hasActualPlayers = (lineup: PlayerSlot[]) =>
+    lineup.some(slot => slot.name && slot.name.trim() !== '');
+
+  const rawLineups = merged.lineups ?? base.lineups;
+  const hasLineups = hasActualPlayers(rawLineups.home) || hasActualPlayers(rawLineups.away);
+  const safeLineups = hasLineups ? ensureCompleteLineups(rawLineups) : rawLineups;
   const history = Array.isArray(merged.history)
     ? merged.history.map((snap) => {
         const normalizedHistoryFeed = normalizeFeed((snap as DemoSnapshot).feed, { inning: snap.inning, half: snap.half });
@@ -974,22 +1045,21 @@ function calculateGameStats(record: GameRecord) {
   const stats = new Map<string, {
     pa: number; ab: number; h: number; singles: number; doubles: number;
     triples: number; hr: number; bb: number; hbp: number; so: number;
-    sac: number; fc: number; ci: number;
+    sac: number; fc: number; ci: number; rbi: number; r: number;
   }>();
 
   const ensureStat = (name: string) => {
     if (!stats.has(name)) {
       stats.set(name, {
         pa: 0, ab: 0, h: 0, singles: 0, doubles: 0, triples: 0,
-        hr: 0, bb: 0, hbp: 0, so: 0, sac: 0, fc: 0, ci: 0
+        hr: 0, bb: 0, hbp: 0, so: 0, sac: 0, fc: 0, ci: 0, rbi: 0, r: 0
       });
     }
     return stats.get(name)!;
   };
 
-  // 기록된 이벤트를 역순(오래된 순)으로 순회하며 집계
-  // (record.feed는 최신순이므로 reverse() 사용)
-  const chronological = [...record.feed].reverse();
+  // record.feed는 이미 오래된 순(oldest → newest)으로 정렬되어 있음
+  const chronological = record.feed;
   
   chronological.forEach((entry) => {
     const name = entry.batter?.trim();
@@ -1032,7 +1102,17 @@ function calculateGameStats(record: GameRecord) {
       case 'sac':    s.pa++; s.sac++; break;
     }
   });
-  
+
+  // events에서 RBI 집계
+  if (record.events) {
+    record.events.forEach((event) => {
+      if (event.rbi && event.rbi > 0 && event.batter) {
+        const s = ensureStat(event.batter.trim());
+        s.rbi += event.rbi;
+      }
+    });
+  }
+
   return stats;
 }
 
@@ -1044,7 +1124,8 @@ export function buildGameRecord(state: DemoState): GameRecord {
   });
 
   // [추가] 실시간 라인스코어 및 집계 로직
-  const chronologicalFeed = [...state.feed].reverse();
+  // state.feed는 이미 오래된 순(oldest → newest)으로 정렬되어 있음
+  const chronologicalFeed = state.feed;
 
   const liveHits = chronologicalFeed.reduce(
     (acc, entry) => {
@@ -1167,7 +1248,23 @@ export function buildGameRecord(state: DemoState): GameRecord {
 
 function snapshotState(state: DemoState): DemoSnapshot {
   const { history: _history, ...snapshot } = state;
-  return snapshot;
+  const activeMatch = state.activeMatchId
+    ? state.matches.find((m) => m.id === state.activeMatchId)
+    : null;
+  const preserveEmptySlots = isPracticeMatch(activeMatch);
+  // [수정] 기본적으로는 빈 슬롯을 제외하여 깜빡임을 줄이되, 연습경기는 추가 타자 슬롯 유지를 위해 보존
+  const filterEmptySlots = (lineup: PlayerSlot[]) =>
+    lineup.filter(slot => slot.name && slot.name.trim() !== '');
+
+  return {
+    ...snapshot,
+    lineups: preserveEmptySlots
+      ? snapshot.lineups
+      : {
+          home: filterEmptySlots(snapshot.lineups.home),
+          away: filterEmptySlots(snapshot.lineups.away),
+        },
+  };
 }
 
 function shouldTrackHistory(actionType: Action['type']) {
@@ -1238,6 +1335,8 @@ function reducer(state: DemoState, action: Action): DemoState {
   const setupActions: Action['type'][] = [
     'setTeamName',
     'setLineup',
+    'removeLineupSlot',
+    'removePracticeBatter',
     'addBench',
     'removeBench',
     'substitute',
@@ -1328,32 +1427,52 @@ function reducer(state: DemoState, action: Action): DemoState {
         };
       }
       break;
-    case 'foul':
-      if (state.strikes >= 2) {
+    case 'foul': {
+      const isBuntFoul = action.isBunt === true;
+      const foulLabel = isBuntFoul ? '번트 파울' : '파울';
+
+      // 2스트라이크 + 번트 파울 = 쓰리번트 아웃
+      if (state.strikes >= 2 && isBuntFoul) {
+        nextState = applyOut(state, '쓰리번트 아웃', { pitchNumber: state.pitchCount + 1 });
+      } else if (state.strikes >= 2) {
+        // 2스트라이크에서 일반 파울: 스트라이크 카운트 유지
         const pitchCount = state.pitchCount + 1;
         nextState = {
           ...state,
           pitchCount,
-          lastPlay: '파울',
-          feed: pushPlayFeed(state, createLogEntry(state, '파울', pitchCount)),
+          lastPlay: foulLabel,
+          feed: pushPlayFeed(state, createLogEntry(state, foulLabel, pitchCount)),
         };
       } else {
+        // 2스트라이크 미만: 스트라이크 카운트 +1
         const pitchCount = state.pitchCount + 1;
         nextState = {
           ...state,
           strikes: state.strikes + 1,
           pitchCount,
-          lastPlay: '파울',
-          feed: pushPlayFeed(state, createLogEntry(state, '파울', pitchCount)),
+          lastPlay: foulLabel,
+          feed: pushPlayFeed(state, createLogEntry(state, foulLabel, pitchCount)),
         };
       }
       break;
-    case 'strikeOut':
-      nextState = applyOut(state, '삼진', { pitchNumber: state.pitchCount + 1 });
+    }
+    case 'strikeOut': {
+      const strikeLabel = action.strikeType === 'looking' ? '삼진(루킹)' : '삼진';
+      nextState = applyOut(state, strikeLabel, { pitchNumber: state.pitchCount + 1, strikeType: action.strikeType });
       break;
-    case 'droppedThirdStrike':
-      nextState = applyDroppedThirdStrike(state);
+    }
+    case 'droppedThirdStrike': {
+      if (action.variant === 'strikeout') {
+        const strikeLabel = action.strikeType === 'looking' ? '삼진(루킹)' : '삼진';
+        nextState = applyOut(state, strikeLabel, { pitchNumber: state.pitchCount + 1, strikeType: action.strikeType });
+      } else if (action.variant === 'tag_out') {
+        const tagLabel = action.strikeType === 'looking' ? '삼진 낫아웃 실패(포수 태그/루킹)' : '삼진 낫아웃 실패(포수 태그)';
+        nextState = applyOut(state, tagLabel, { pitchNumber: state.pitchCount + 1, strikeType: action.strikeType });
+      } else {
+        nextState = applyDroppedThirdStrike(state, action.strikeType);
+      }
       break;
+    }
     case 'out':
       nextState = applyOut(state, '아웃', { pitchNumber: state.pitchCount + 1, battedBall: action.battedBall });
       break;
@@ -1361,10 +1480,10 @@ function reducer(state: DemoState, action: Action): DemoState {
       nextState = applyOut(state, action.note, { pitchNumber: state.pitchCount + 1, battedBall: action.battedBall });
       break;
     case 'doublePlay':
-      nextState = applyDoublePlay(state, 2, '병살타', action.battedBall, action.selectedRunners);
+      nextState = applyDoublePlay(state, 2, '병살타', action.battedBall, action.selectedRunners, action.route, action.runnerAdvancements);
       break;
     case 'triplePlay':
-      nextState = applyDoublePlay(state, 3, '삼중살', action.battedBall, action.selectedRunners);
+      nextState = applyDoublePlay(state, 3, '삼중살', action.battedBall, action.selectedRunners, action.route, action.runnerAdvancements);
       break;
     case 'hit':
       nextState = applyHitWithAdvances(state, action.bases, state.pitchCount + 1, action.advances, action.battedBall);
@@ -1472,19 +1591,19 @@ function reducer(state: DemoState, action: Action): DemoState {
       nextState = changeHalf(state, '이닝 전환');
       break;
     case 'setPlay':
-      nextState = {
-        ...state,
-        lastPlay: action.message,
-        feed: pushPlayFeed(state, createLogEntry(state, action.message, 0)),
-        events: pushEvent(
-          state.events,
-          createPlayEventForBaserunning(
-            state,
-            { type: 'setPlay', runners: getRunnerNames(state.bases), notes: action.message },
-            0,
-          ),
-        ),
-      };
+      {
+        const playEvent = createPlayEventForBaserunning(
+          state,
+          { type: 'setPlay', runners: getRunnerNames(state.bases), notes: action.message },
+          0,
+        );
+        nextState = {
+          ...state,
+          lastPlay: action.message,
+          feed: pushPlayFeed(state, createLogEntry(state, action.message, 0, playEvent.eventId)),
+          events: pushEvent(state.events, playEvent),
+        };
+      }
       break;
     case 'runnerStealSuccess':
       nextState = applyRunnerAdvance(state, action.base, 1, '도루 성공');
@@ -1506,6 +1625,15 @@ function reducer(state: DemoState, action: Action): DemoState {
       break;
     case 'setLineup':
       nextState = updateLineup(state, action.side, action.index, action.updates);
+      break;
+    case 'removeLineupSlot':
+      nextState = removeLineupSlot(state, action.side, action.index);
+      break;
+    case 'removePracticeBatter':
+      nextState = removePracticeBatter(state, action.side, action.battingOrderIndex);
+      break;
+    case 'swapPositions':
+      nextState = swapPositions(state, action.side, action.swaps, action.benchSwaps);
       break;
     case 'addBench':
       nextState = {
@@ -1595,6 +1723,8 @@ function reducer(state: DemoState, action: Action): DemoState {
       };
       break;
     }
+    case 'setOnlineViewerCount':
+      return { ...state, onlineViewerCount: action.count };
     case 'addMatch':
       nextState = {
         ...state,
@@ -1722,8 +1852,12 @@ function pushEvent(events: PlayEvent[], entry: PlayEvent) {
 }
 
 function ensureHalfPitcherLogged(state: DemoState, feed: PlayLog[]) {
+  // 투수 로그 형식: "이름(번호) 투수 (선발)" 또는 "이름(번호) 투수 (N차 계투)"
   const exists = feed.some(
-    (entry) => entry.inning === state.inning && entry.half === state.half && entry.result.endsWith('투수'),
+    (entry) =>
+      entry.inning === state.inning &&
+      entry.half === state.half &&
+      (entry.result.includes('투수 (선발)') || entry.result.includes('차 계투)')),
   );
   if (exists) return feed;
   const defenseSide: Side = state.half === 'top' ? 'home' : 'away';
@@ -1792,13 +1926,7 @@ function formatRunnerMove({
 function currentBatterInfo(state: DemoState) {
   const side = hittingSide(state);
   const lineup = state.lineups[side];
-
-  // [수정] 1~9번 타자는 포지션 불문하고 타자로 인정
-  const battingLineup = lineup.filter((slot, idx) => {
-    if (idx < 9) return true; // 타순 1~9번 강제 포함
-    if (slot.pos.toUpperCase() !== 'P') return true;
-    return canPitcherBat(slot, lineup);
-  });
+  const battingLineup = getBattingEntriesForLineup(lineup, isPracticeActiveMatch(state));
 
   const activeLineup = battingLineup.length ? battingLineup : lineup;
   const safeLength = activeLineup.length || 1;
@@ -1814,7 +1942,7 @@ function getRunnerNames(bases: Bases) {
   return bases.filter((runner): runner is string => typeof runner === 'string');
 }
 
-function createLogEntry(state: DemoState, result: string, pitch: number): PlayLog {
+function createLogEntry(state: DemoState, result: string, pitch: number, eventId?: string): PlayLog {
   const info = currentBatterInfo(state);
   return {
     inning: state.inning,
@@ -1824,10 +1952,18 @@ function createLogEntry(state: DemoState, result: string, pitch: number): PlayLo
     pitch,
     result,
     createdAt: Date.now(),
+    eventId,
   };
 }
 
-function createLogEntryWithBatter(state: DemoState, batter: string, order: number | null, result: string, pitch: number): PlayLog {
+function createLogEntryWithBatter(
+  state: DemoState,
+  batter: string,
+  order: number | null,
+  result: string,
+  pitch: number,
+  eventId?: string,
+): PlayLog {
   return {
     inning: state.inning,
     half: state.half,
@@ -1836,10 +1972,11 @@ function createLogEntryWithBatter(state: DemoState, batter: string, order: numbe
     pitch,
     result,
     createdAt: Date.now(),
+    eventId,
   };
 }
 
-function createLogEntryForBaserunning(state: DemoState, result: string, pitch: number): PlayLog {
+function createLogEntryForBaserunning(state: DemoState, result: string, pitch: number, eventId?: string): PlayLog {
   return {
     inning: state.inning,
     half: state.half,
@@ -1848,7 +1985,12 @@ function createLogEntryForBaserunning(state: DemoState, result: string, pitch: n
     pitch,
     result,
     createdAt: Date.now(),
+    eventId,
   };
+}
+
+function generateEventId(state: DemoState, pitch: number) {
+  return `${state.inning}-${state.half}-${pitch}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function createPlayEvent(
@@ -1859,10 +2001,16 @@ function createPlayEvent(
     battedBall?: BattedBallDetails | null;
     error?: ErrorDetails | string | null;
     notes?: string;
+    strikeType?: 'swinging' | 'looking';
+    rbi?: number;
+    dpRoute?: number[];
+    earnedRunsBy?: Record<string, number>;
   },
   pitch: number,
 ): PlayEvent {
   const info = currentBatterInfo(state);
+  const createdAt = Date.now();
+  const eventId = generateEventId(state, pitch);
   return {
     inning: state.inning,
     half: state.half,
@@ -1874,6 +2022,12 @@ function createPlayEvent(
     battedBall: details.battedBall ?? null,
     error: details.error ?? null,
     notes: details.notes,
+    strikeType: details.strikeType,
+    rbi: details.rbi,
+    dpRoute: details.dpRoute,
+    earnedRunsBy: details.earnedRunsBy,
+    createdAt,
+    eventId,
   };
 }
 
@@ -1890,6 +2044,8 @@ function createPlayEventWithBatter(
   batter: string,
   order: number | null,
 ): PlayEvent {
+  const createdAt = Date.now();
+  const eventId = generateEventId(state, pitch);
   return {
     inning: state.inning,
     half: state.half,
@@ -1901,6 +2057,8 @@ function createPlayEventWithBatter(
     battedBall: details.battedBall ?? null,
     error: details.error ?? null,
     notes: details.notes,
+    createdAt,
+    eventId,
   };
 }
 
@@ -1915,6 +2073,8 @@ function createPlayEventForBaserunning(
   },
   pitch: number,
 ): PlayEvent {
+  const createdAt = Date.now();
+  const eventId = generateEventId(state, pitch);
   return {
     inning: state.inning,
     half: state.half,
@@ -1926,6 +2086,8 @@ function createPlayEventForBaserunning(
     battedBall: details.battedBall ?? null,
     error: details.error ?? null,
     notes: details.notes,
+    createdAt,
+    eventId,
   };
 }
 
@@ -1944,6 +2106,8 @@ function applyOut(
     battedBall?: BattedBallDetails | null;
     error?: string | null;
     notes?: string;
+    strikeType?: 'swinging' | 'looking';
+    rbi?: number;
   },
 ): DemoState {
   const outs = state.outs + 1;
@@ -1961,12 +2125,17 @@ function applyOut(
       battedBall: options?.battedBall ?? null,
       error: options?.error ?? null,
       notes: options?.notes ?? message,
+      strikeType: options?.strikeType,
+      rbi: options?.rbi,
     },
     advanceBatter ? pitchNumber : 0,
   );
   if (outs >= 3) {
     const finalMessage = `${message} · 3아웃 · 이닝 종료`;
-    const feedWithPlay = pushPlayFeed(state, createLogEntry(state, logResult, advanceBatter ? pitchNumber : 0));
+    const feedWithPlay = pushPlayFeed(
+      state,
+      createLogEntry(state, logResult, advanceBatter ? pitchNumber : 0, eventEntry.eventId),
+    );
     const eventsWithPlay = pushEvent(state.events, eventEntry);
     return changeHalf(
       { ...state, batterIndex, pitchCount, feed: feedWithPlay, events: eventsWithPlay },
@@ -1982,7 +2151,7 @@ function applyOut(
     batterIndex,
     pitchCount,
     lastPlay: message,
-    feed: pushPlayFeed(state, createLogEntry(state, logResult, advanceBatter ? pitchNumber : 0)),
+    feed: pushPlayFeed(state, createLogEntry(state, logResult, advanceBatter ? pitchNumber : 0, eventEntry.eventId)),
     events: pushEvent(state.events, eventEntry),
   };
 }
@@ -2065,6 +2234,8 @@ function applyHitWithAdvances(
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
+  // 안타의 경우 득점 수가 곧 타점(RBI)
+  const rbi = runs;
   const eventEntry = createPlayEvent(
     state,
     {
@@ -2072,16 +2243,19 @@ function applyHitWithAdvances(
       runners: runnerMoves.map((move) => move.runnerSummary),
       battedBall: battedBall ?? null,
       notes: message,
+      rbi,
     },
     pitchNumber,
   );
   
   let feed = state.feed;
   runnerMoves.forEach((move) => {
-    feed = pushFeed(feed, createLogEntryForBaserunning(state, move.feedText, pitchNumber));
+    feed = pushFeed(feed, createLogEntryForBaserunning(state, move.feedText, pitchNumber, eventEntry.eventId));
   });
-  const resultLog = runs ? `${result} · ${runs}득점` : result;
-  feed = pushPlayFeed(state, createLogEntry(state, resultLog, pitchNumber), feed);
+  // 타구 방향 정보 추가
+  const zoneNote = battedBall?.zone && battedBall.zone !== '선택 안 함' ? ` · ${battedBall.zone}` : '';
+  const resultLog = runs ? `${result}${zoneNote} · ${runs}득점` : `${result}${zoneNote}`;
+  feed = pushPlayFeed(state, createLogEntry(state, resultLog, pitchNumber, eventEntry.eventId), feed);
 
   const nextState = {
     ...state,
@@ -2165,12 +2339,8 @@ function applyFielderChoice(
       : { ...state.score, away: state.score.away + runs };
 
   const contextNote = context?.trim() ? ` (${context.trim()})` : '';
-  const resultLog = runs ? `야수선택${contextNote} · ${runs}득점` : `야수선택${contextNote}`;
-  feed = pushPlayFeed(state, createLogEntryWithBatter(state, batterName, batterOrder, resultLog, pitchNumber), feed);
-  runnerMoves.forEach((move) => {
-    feed = pushFeed(feed, createLogEntryForBaserunning(state, move.feedText, pitchNumber));
-  });
-
+  const fcZoneNote = battedBall?.zone && battedBall.zone !== '선택 안 함' ? ` · ${battedBall.zone}` : '';
+  const resultLog = runs ? `야수선택${fcZoneNote}${contextNote} · ${runs}득점` : `야수선택${fcZoneNote}${contextNote}`;
   const eventEntry = createPlayEventWithBatter(
     state,
     {
@@ -2183,6 +2353,14 @@ function applyFielderChoice(
     batterName,
     batterOrder,
   );
+  feed = pushPlayFeed(
+    state,
+    createLogEntryWithBatter(state, batterName, batterOrder, resultLog, pitchNumber, eventEntry.eventId),
+    feed,
+  );
+  runnerMoves.forEach((move) => {
+    feed = pushFeed(feed, createLogEntryForBaserunning(state, move.feedText, pitchNumber, eventEntry.eventId));
+  });
 
   const nextState: DemoState = {
     ...state,
@@ -2231,12 +2409,15 @@ function applyWalk(state: DemoState, message: string, pitchNumber: number): Demo
     pitchCount: 0,
     batterIndex,
     lastPlay: `${message} · ${batterName}`,
-    feed: pushPlayFeed(state, createLogEntry(state, runs ? `${message} · ${runs}득점` : message, pitchNumber)),
+    feed: pushPlayFeed(
+      state,
+      createLogEntry(state, runs ? `${message} · ${runs}득점` : message, pitchNumber, eventEntry.eventId),
+    ),
     events: pushEvent(state.events, eventEntry),
   };
 }
 
-function applyDroppedThirdStrike(state: DemoState): DemoState {
+function applyDroppedThirdStrike(state: DemoState, strikeType?: 'swinging' | 'looking'): DemoState {
   const pitchNumber = Math.max(1, state.pitchCount + 1);
   const { batterName, batterIndex } = nextBatter(state);
   const { bases, runs } = advanceBasesOnWalk(state.bases, batterName);
@@ -2245,13 +2426,14 @@ function applyDroppedThirdStrike(state: DemoState): DemoState {
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
-  const message = '삼진 낫아웃';
+  const message = strikeType === 'looking' ? '삼진 낫아웃(루킹)' : '삼진 낫아웃';
   const eventEntry = createPlayEvent(
     state,
     {
       type: 'dropped_third_strike',
       runners: getRunnerNames(state.bases),
       notes: `${message} · ${batterName}`,
+      strikeType,
     },
     pitchNumber,
   );
@@ -2264,7 +2446,10 @@ function applyDroppedThirdStrike(state: DemoState): DemoState {
     pitchCount: 0,
     batterIndex,
     lastPlay: `${message} · ${batterName}`,
-    feed: pushPlayFeed(state, createLogEntry(state, runs ? `${message} · ${runs}득점` : message, pitchNumber)),
+    feed: pushPlayFeed(
+      state,
+      createLogEntry(state, runs ? `${message} · ${runs}득점` : message, pitchNumber, eventEntry.eventId),
+    ),
     events: pushEvent(state.events, eventEntry),
   };
 }
@@ -2293,10 +2478,12 @@ function applySacrifice(
       side === 'home'
         ? { ...state.score, home: state.score.home + runs }
         : { ...state.score, away: state.score.away + runs };
+    // 희생번트로 인한 득점은 타점(RBI)
+    const buntZoneNote = battedBall?.zone && battedBall.zone !== '선택 안 함' ? ` · ${battedBall.zone}` : '';
     return applyOut(
       { ...state, bases, score },
-      runs ? `희생번트 · ${runs}득점` : '희생번트',
-      { pitchNumber, eventType: 'sac', runners: getRunnerNames(bases), notes: '희생번트', battedBall },
+      runs ? `희생번트${buntZoneNote} · ${runs}득점` : `희생번트${buntZoneNote}`,
+      { pitchNumber, eventType: 'sac', runners: getRunnerNames(bases), notes: '희생번트', battedBall, rbi: runs },
     );
   }
 
@@ -2311,10 +2498,12 @@ function applySacrifice(
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
+  // 희생플라이로 인한 득점은 타점(RBI)
+  const flyZoneNote = battedBall?.zone && battedBall.zone !== '선택 안 함' ? ` · ${battedBall.zone}` : '';
   return applyOut(
     { ...state, bases, score },
-    runs ? `희생플라이 · ${runs}득점` : '희생플라이',
-    { pitchNumber, eventType: 'sac', runners: getRunnerNames(bases), notes: '희생플라이', battedBall },
+    runs ? `희생플라이${flyZoneNote} · ${runs}득점` : `희생플라이${flyZoneNote}`,
+    { pitchNumber, eventType: 'sac', runners: getRunnerNames(bases), notes: '희생플라이', battedBall, rbi: runs },
   );
 }
 
@@ -2322,8 +2511,9 @@ function applyError(state: DemoState, details: ErrorDetails): DemoState {
   const pitchNumber = Math.max(1, state.pitchCount + 1);
   const isBatterHold = details.advanceResults.batter === 'hold';
   const { batter } = currentBatterInfo(state);
-  const batterName = isBatterHold ? batter : nextBatter(state).batterName;
-  const batterIndex = isBatterHold ? state.batterIndex[hittingSide(state)] : nextBatter(state).batterIndex;
+  const nextBatterResult = nextBatter(state);
+  const batterName = isBatterHold ? batter : nextBatterResult.batterName;
+  const newBatterIndex = isBatterHold ? state.batterIndex : nextBatterResult.batterIndex;
   const bases = [null, null, null] as Bases;
   const runnerMoves: { feedText: string; lastPlay: string; runnerSummary: string }[] = [];
   let runs = 0;
@@ -2392,12 +2582,6 @@ function applyError(state: DemoState, details: ErrorDetails): DemoState {
   }
   const resultText = resultTags.join(' · ');
 
-  let feed = state.feed;
-  runnerMoves.forEach((move) => {
-    feed = pushFeed(feed, createLogEntryForBaserunning(state, move.feedText, pitchNumber));
-  });
-  feed = pushPlayFeed(state, createLogEntry(state, resultText, pitchNumber), feed);
-
   const eventEntry = createPlayEvent(
     state,
     {
@@ -2409,6 +2593,12 @@ function applyError(state: DemoState, details: ErrorDetails): DemoState {
     pitchNumber,
   );
 
+  let feed = state.feed;
+  runnerMoves.forEach((move) => {
+    feed = pushFeed(feed, createLogEntryForBaserunning(state, move.feedText, pitchNumber, eventEntry.eventId));
+  });
+  feed = pushPlayFeed(state, createLogEntry(state, resultText, pitchNumber, eventEntry.eventId), feed);
+
   const nextState = {
     ...state,
     bases,
@@ -2416,9 +2606,7 @@ function applyError(state: DemoState, details: ErrorDetails): DemoState {
     balls: 0,
     strikes: 0,
     pitchCount: isBatterHold ? state.pitchCount : 0,
-    batterIndex: isBatterHold
-      ? state.batterIndex
-      : { ...state.batterIndex, [hittingSide(state)]: batterIndex },
+    batterIndex: newBatterIndex,
     outs,
     lastPlay: summary,
     feed,
@@ -2495,8 +2683,7 @@ function applySteal(state: DemoState, success: boolean): DemoState {
         outcome: moved.scored ? 'score' : 'advance',
         message: '도루 성공',
       })
-    : null;    
-  const feedEntry = detail ? createLogEntryForBaserunning(state, detail.feedText, state.pitchCount + 1) : null;
+    : null;
   const eventEntry = createPlayEventForBaserunning(
     state,
     {
@@ -2506,6 +2693,9 @@ function applySteal(state: DemoState, success: boolean): DemoState {
     },
     state.pitchCount + 1,
   );
+  const feedEntry = detail
+    ? createLogEntryForBaserunning(state, detail.feedText, state.pitchCount + 1, eventEntry.eventId)
+    : null;
   return {
     ...state,
     bases,
@@ -2516,7 +2706,13 @@ function applySteal(state: DemoState, success: boolean): DemoState {
     lastPlay: detail?.lastPlay ?? (runs ? `도루 성공 · ${runs}득점` : '도루 성공'),
     feed: pushFeed(
       state.feed,
-      feedEntry ?? createLogEntry(state, detail?.feedText ?? (runs ? `도루 성공 · ${runs}득점` : '도루 성공'), 0),
+      feedEntry ??
+        createLogEntry(
+          state,
+          detail?.feedText ?? (runs ? `도루 성공 · ${runs}득점` : '도루 성공'),
+          0,
+          eventEntry.eventId,
+        ),
     ),
     events: pushEvent(state.events, eventEntry),
   };
@@ -2556,7 +2752,7 @@ function applyRunnerAdvance(state: DemoState, baseIndex: 0 | 1 | 2, steps: numbe
     bases,
     score,
     lastPlay: detail.lastPlay,
-    feed: pushFeed(state.feed, createLogEntry(state, detail.feedText, 0)),
+    feed: pushFeed(state.feed, createLogEntry(state, detail.feedText, 0, eventEntry.eventId)),
     events: pushEvent(state.events, eventEntry),
   };
 }
@@ -2575,12 +2771,12 @@ function applyRunnerOut(state: DemoState, baseIndex: 0 | 1 | 2, message: string)
     message,
     outsCount: outs,
   });
-  const feedEntry = createLogEntryForBaserunning(state, detail.feedText, state.pitchCount);
   const eventEntry = createPlayEventForBaserunning(
     state,
     { type: 'runner_out', runners: [detail.runnerSummary], notes: detail.feedText },
     state.pitchCount,
   );
+  const feedEntry = createLogEntryForBaserunning(state, detail.feedText, state.pitchCount, eventEntry.eventId);
   if (outs >= 3) {
     const finalMessage = `${detail.lastPlay} · 이닝 종료`;
     const afterHalf = changeHalf(
@@ -2630,7 +2826,7 @@ function applyMultipleRunnersOut(state: DemoState, bases: number[], label?: stri
     state.pitchCount,
   );
 
-  const feedEntry = createLogEntryForBaserunning(state, feedText, state.pitchCount);
+  const feedEntry = createLogEntryForBaserunning(state, feedText, state.pitchCount, eventEntry.eventId);
 
   const nextState = {
     ...state,
@@ -2654,6 +2850,8 @@ function applyDoublePlay(
   label: string,
   battedBall?: BattedBallDetails | null,
   selectedRunners?: number[],
+  route?: number[],
+  runnerAdvancements?: Record<number, number>,
 ): DemoState {
   const bases = [...state.bases] as Bases;
   const current = currentBatterInfo(state);
@@ -2661,6 +2859,8 @@ function applyDoublePlay(
   const batterIndex = nextBatter(state).batterIndex;
   const runnersOut: { name: string; base: number }[] = [];
   const outs = Math.min(3, state.outs + outsToAdd);
+  let runsScored = 0;
+  const runnersAdvanced: { name: string; from: number; to: number | 'home' }[] = [];
 
   // Batter out
   runnersOut.push({ name: batterName, base: -1 });
@@ -2684,17 +2884,59 @@ function applyDoublePlay(
     }
   }
 
+  // 아웃되지 않은 주자들의 진루 처리
+  if (runnerAdvancements && Object.keys(runnerAdvancements).length > 0) {
+    // 3루->홈 순으로 처리 (역순으로 정렬)
+    const sortedAdvancements = Object.entries(runnerAdvancements)
+      .map(([from, to]) => ({ from: Number(from), to }))
+      .sort((a, b) => b.from - a.from);
+
+    for (const { from, to } of sortedAdvancements) {
+      const runnerName = bases[from];
+      if (runnerName && !selectedRunners?.includes(from)) {
+        bases[from] = null;
+        if (to === 3) {
+          // 홈으로 진루 (득점)
+          runsScored += 1;
+          runnersAdvanced.push({ name: runnerName, from, to: 'home' });
+        } else if (to >= 0 && to < 3) {
+          // 다른 베이스로 진루
+          bases[to] = runnerName;
+          runnersAdvanced.push({ name: runnerName, from, to });
+        }
+      }
+    }
+  }
+
   const runnerDesc = runnersOut
     .filter((r) => r.base >= 0)
     .map((r) => `${r.name} ${baseLabel(r.base)}`)
     .join(', ');
-  const feedText = runnerDesc ? `${label} · ${batterName} 아웃 / ${runnerDesc} 아웃` : `${label} · ${batterName} 아웃`;
+  const advanceDesc = runnersAdvanced
+    .map((r) => r.to === 'home' ? `${r.name} 득점` : `${r.name} ${baseLabel(r.from)}→${baseLabel(r.to as number)}`)
+    .join(', ');
+  const routeLabel = route && route.length > 0 ? `(${route.join('-')})` : '';
+  const labelWithRoute = `${label}${routeLabel}`;
+  let feedText = runnerDesc ? `${labelWithRoute} · ${batterName} 아웃 / ${runnerDesc} 아웃` : `${labelWithRoute} · ${batterName} 아웃`;
+  if (advanceDesc) {
+    feedText += ` / ${advanceDesc}`;
+  }
   const lastPlay = feedText;
   const eventEntry = createPlayEvent(
     state,
-    { type: 'out', runners: getRunnerNames(state.bases), notes: feedText, battedBall: battedBall ?? null },
+    { type: 'out', runners: getRunnerNames(state.bases), notes: feedText, battedBall: battedBall ?? null, dpRoute: route },
     Math.max(1, state.pitchCount + 1),
   );
+
+  // 득점 반영
+  const updatedScore = { ...state.score };
+  if (runsScored > 0) {
+    if (state.half === 'top') {
+      updatedScore.away = (updatedScore.away || 0) + runsScored;
+    } else {
+      updatedScore.home = (updatedScore.home || 0) + runsScored;
+    }
+  }
 
   const nextState = {
     ...state,
@@ -2705,7 +2947,11 @@ function applyDoublePlay(
     pitchCount: 0,
     batterIndex,
     lastPlay,
-    feed: pushPlayFeed(state, createLogEntry(state, feedText, Math.max(1, state.pitchCount + 1))),
+    score: updatedScore,
+    feed: pushPlayFeed(
+      state,
+      createLogEntry(state, feedText, Math.max(1, state.pitchCount + 1), eventEntry.eventId),
+    ),
     events: pushEvent(state.events, eventEntry),
   };
 
@@ -2739,7 +2985,19 @@ function updateMatchSchedule(matches: MatchSchedule[], matchId: string, updates:
 
 function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
   // [수정] 경기에 저장된 라인업이 없으면(null/undefined) state.lineups(이전 경기 또는 mock)를 쓰는 대신 빈 라인업으로 초기화
-  const lineups = ensureCompleteLineups(match.lineups ?? { home: [], away: [] });
+  // [수정] 라인업이 완전히 비어있는 경우(공유 링크 등) 자동 채움을 하지 않음
+  // 실제 선수가 있는지 확인 (name이 비어있지 않은 슬롯)
+  const hasActualPlayers = (lineup: PlayerSlot[]) =>
+    lineup.some(slot => slot.name && slot.name.trim() !== '');
+
+  const rawLineups = match.lineups ?? { home: [], away: [] };
+  const hasLineups = hasActualPlayers(rawLineups.home) || hasActualPlayers(rawLineups.away);
+  const lineups =
+    hasLineups
+      ? isPracticeMatch(match)
+        ? cloneLineups(rawLineups)
+        : ensureCompleteLineups(rawLineups)
+      : rawLineups;
   const benches = match.benches ?? { home: [], away: [] };
   return {
     inning: 1,
@@ -2749,6 +3007,7 @@ function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
     outs: 0,
     pitchCount: 0,
     bases: [null, null, null],
+    runnerResponsiblePitcher: { 0: null, 1: null, 2: null },
     score: { home: 0, away: 0 },
     lastPlay: '경기 대기 중',
     feed: [],
@@ -2756,11 +3015,11 @@ function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
     homeTeamId: match.homeTeamId ?? state.homeTeamId,
     awayTeamId: match.awayTeamId ?? state.awayTeamId,
     batterIndex: { home: 0, away: 0 },
-  lineups: cloneLineups(lineups),
-  benches: cloneBenches(benches),
-  teamNames: { home: match.homeTeamName, away: match.awayTeamName },
-  gameStarted: false,
-  gameOver: false,
+    lineups: cloneLineups(lineups),
+    benches: cloneBenches(benches),
+    teamNames: { home: match.homeTeamName, away: match.awayTeamName },
+    gameStarted: false,
+    gameOver: false,
     endedAt: null,
     liveVideoUrl: state.liveVideoUrl,
     liveDelaySeconds: state.liveDelaySeconds,
@@ -2779,11 +3038,14 @@ function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
   gameStartTimestamp: null,
   gamePausedAt: null,
   gamePausedDuration: 0,
+  onlineViewerCount: state.onlineViewerCount,
   };
 }
 
 function createNewGame(state: DemoState): DemoState {
-  const preparedLineups = ensureCompleteLineups(state.lineups);
+  const preparedLineups = isPracticeActiveMatch(state)
+    ? cloneLineups(state.lineups)
+    : ensureCompleteLineups(state.lineups);
   return {
     inning: 1,
     half: 'top',
@@ -2792,6 +3054,7 @@ function createNewGame(state: DemoState): DemoState {
     outs: 0,
     pitchCount: 0,
     bases: [null, null, null],
+    runnerResponsiblePitcher: { 0: null, 1: null, 2: null },
     score: { home: 0, away: 0 },
     lastPlay: '경기 대기 중',
     feed: [],
@@ -2799,11 +3062,11 @@ function createNewGame(state: DemoState): DemoState {
     homeTeamId: state.homeTeamId,
     awayTeamId: state.awayTeamId,
     batterIndex: { home: 0, away: 0 },
-  lineups: cloneLineups(preparedLineups),
-  benches: {
-    home: state.benches.home.map((p) => ({ ...p })),
-    away: state.benches.away.map((p) => ({ ...p })),
-  },
+    lineups: cloneLineups(preparedLineups),
+    benches: {
+      home: state.benches.home.map((p) => ({ ...p })),
+      away: state.benches.away.map((p) => ({ ...p })),
+    },
     teamNames: { ...state.teamNames },
     gameStarted: false,
     gameOver: false,
@@ -2825,6 +3088,7 @@ function createNewGame(state: DemoState): DemoState {
     gameStartTimestamp: null,
     gamePausedAt: null,
     gamePausedDuration: 0,
+    onlineViewerCount: state.onlineViewerCount,
   };
 }
 
@@ -2848,6 +3112,7 @@ function changeHalf(state: DemoState, message: string, pitchNumber = 0, logState
     strikes: 0,
     pitchCount: 0,
     bases: [null, null, null],
+    runnerResponsiblePitcher: { 0: null, 1: null, 2: null },
     lastPlay: message,
     feed,
   };
@@ -2901,13 +3166,7 @@ function advanceBasesOnWalk(currentBases: Bases, batterName: string) {
 function nextBatter(state: DemoState) {
   const side = hittingSide(state);
   const lineup = state.lineups[side];
-
-  // [수정] 타석에 들어갈 수 있는 선수 필터링 (1~9번 무조건 포함)
-  const battingLineup = lineup.filter((slot, idx) => {
-    if (idx < 9) return true; // 타순 1~9번 강제 포함
-    if (slot.pos.toUpperCase() !== 'P') return true;
-    return canPitcherBat(slot, lineup);
-  }); // <--- 주의: 여기서 함수를 닫는 '}'가 있으면 안 됩니다! '; '로 끝나야 합니다.
+  const battingLineup = getBattingEntriesForLineup(lineup, isPracticeActiveMatch(state));
 
   const activeLineup = battingLineup.length ? battingLineup : lineup;
   const safeLength = activeLineup.length || 1;
@@ -2919,13 +3178,21 @@ function nextBatter(state: DemoState) {
 }
 
 function updateLineup(state: DemoState, side: Side, index: number, updates: Partial<PlayerSlot>): DemoState {
-  const original = state.lineups[side][index];
-  const updated = state.lineups[side].map((slot, idx) => (idx === index ? { ...slot, ...updates } : slot));
+  const lineup = [...state.lineups[side]];
+
+  // [수정] 배열 경계를 넘어가는 경우 빈 슬롯 추가 (빈 라인업에서 편집 시)
+  const emptySlot: PlayerSlot = { name: '', pos: '', number: '', throws: 'R', bats: 'R', order: null };
+  while (lineup.length <= index) {
+    lineup.push({ ...emptySlot });
+  }
+
+  const original = lineup[index];
+  lineup[index] = { ...lineup[index], ...updates };
 
   // 포지션 변경 시 feed에 기록
   let feed = state.feed;
   let lastPlay = state.lastPlay;
-  
+
   // [수정] 경기가 시작된 상태(state.gameStarted)일 때만 포지션 변경 로그를 남기도록 조건 추가
   if (state.gameStarted && updates.pos && original?.pos && updates.pos !== original.pos) {
     const playerName = original.name || '선수';
@@ -2935,13 +3202,139 @@ function updateLineup(state: DemoState, side: Side, index: number, updates: Part
     lastPlay = changeText;
   }
 
-  return { ...state, lineups: { ...state.lineups, [side]: updated }, feed, lastPlay };
+  return { ...state, lineups: { ...state.lineups, [side]: lineup }, feed, lastPlay };
+}
+
+function removeLineupSlot(state: DemoState, side: Side, index: number): DemoState {
+  const lineup = [...state.lineups[side]];
+  if (index < 0 || index >= lineup.length) return state;
+
+  // 기록원 연습모드 UI에서만 호출되므로, 삭제 판단은 "마지막 투수 전용 슬롯" 기준으로 단순화한다.
+  // 타자가 P 포지션을 가져도 삭제 대상에서 제외되지 않도록, 마지막 슬롯이 P일 때만 투수 전용으로 본다.
+  const dedicatedPitcherIndex =
+    lineup.length > 0 && lineup[lineup.length - 1].pos.toUpperCase() === 'P'
+      ? lineup.length - 1
+      : -1;
+
+  const battingIndices = lineup
+    .map((_, idx) => idx)
+    .filter((idx) => idx !== dedicatedPitcherIndex);
+
+  if (battingIndices.length <= 9) return state;
+  const battingOrder = battingIndices.indexOf(index);
+  if (battingOrder < 0) return state;
+  if (battingOrder < 9) return state; // 최소 9명 보장 (기본 1~9번 보호)
+  lineup.splice(index, 1);
+  return { ...state, lineups: { ...state.lineups, [side]: lineup } };
+}
+
+function removePracticeBatter(state: DemoState, side: Side, battingOrderIndex: number): DemoState {
+  const lineup = [...state.lineups[side]];
+  const dedicatedPitcherIndex =
+    lineup.length > 0 && lineup[lineup.length - 1].pos.toUpperCase() === 'P'
+      ? lineup.length - 1
+      : -1;
+
+  const battingCount = dedicatedPitcherIndex >= 0 ? lineup.length - 1 : lineup.length;
+  if (battingCount <= 9) return state;
+  if (battingOrderIndex < 9) return state;
+  if (battingOrderIndex >= battingCount) return state;
+
+  // 연습경기 UI에서 battingOrderIndex는 타자행 인덱스(0-based)와 동일하다.
+  const targetIndex = battingOrderIndex;
+  if (targetIndex < 0 || targetIndex >= lineup.length) return state;
+  if (targetIndex === dedicatedPitcherIndex) return state;
+
+  lineup.splice(targetIndex, 1);
+  return { ...state, lineups: { ...state.lineups, [side]: lineup } };
+}
+
+function swapPositions(
+  state: DemoState,
+  side: Side,
+  swaps: { index: number; newPos: string }[],
+  benchSwaps?: { index: number; newPos: string }[]
+): DemoState {
+  if (swaps.length === 0 && (!benchSwaps || benchSwaps.length === 0)) return state;
+
+  const lineup = [...state.lineups[side]];
+  const bench = [...state.benches[side]];
+  const changes: string[] = [];
+
+  // 라인업 포지션 변경
+  for (const { index, newPos } of swaps) {
+    if (index >= 0 && index < lineup.length) {
+      const original = lineup[index];
+      const normalizedNewPos = newPos.toUpperCase();
+      if (original && original.pos.toUpperCase() !== normalizedNewPos) {
+        const playerName = original.name || '선수';
+        const playerNum = original.number ? `(${original.number})` : '';
+        changes.push(`${playerName}${playerNum}: ${original.pos} → ${normalizedNewPos}`);
+        lineup[index] = { ...original, pos: normalizedNewPos };
+      }
+    }
+  }
+
+  // 벤치 포지션 변경
+  if (benchSwaps) {
+    for (const { index, newPos } of benchSwaps) {
+      if (index >= 0 && index < bench.length) {
+        const original = bench[index];
+        const normalizedNewPos = newPos.toUpperCase();
+        if (original && original.pos.toUpperCase() !== normalizedNewPos) {
+          const playerName = original.name || '선수';
+          const playerNum = original.number ? `(${original.number})` : '';
+          changes.push(`${playerName}${playerNum}: ${original.pos} → ${normalizedNewPos}`);
+          bench[index] = { ...original, pos: normalizedNewPos };
+        }
+      }
+    }
+  }
+
+  // 변경사항이 없으면 그대로 반환
+  if (changes.length === 0) return state;
+
+  // 피드에 한 번만 기록
+  let feed = state.feed;
+  let lastPlay = state.lastPlay;
+
+  if (state.gameStarted) {
+    const changeText = `포지션 교체 · ${changes.join(', ')}`;
+    feed = pushFeed(state.feed, createLogEntryForBaserunning(state, changeText, 0));
+    lastPlay = changeText;
+
+    // 야수 → 투수 포지션 변경 시 투수 등판 로그 추가 (투구수 누적을 위해)
+    for (const { index, newPos } of swaps) {
+      if (index >= 0 && index < lineup.length) {
+        const player = lineup[index];
+        const normalizedNewPos = newPos.toUpperCase();
+        const originalPos = state.lineups[side][index]?.pos?.toUpperCase();
+        // 기존 포지션이 투수가 아니고 새 포지션이 투수인 경우
+        if (player && originalPos !== 'P' && normalizedNewPos === 'P') {
+          const pitcherAppearanceCount = calculatePitcherAppearanceCount(feed, side);
+          const appearanceLabel = pitcherAppearanceCount === 0 ? '선발' : `${pitcherAppearanceCount}차 계투`;
+          const playerNum = player.number ? `(${player.number})` : '';
+          const newPitcherLog = `${player.name}${playerNum} 투수 (${appearanceLabel})`;
+          feed = pushFeed(feed, createLogEntryForBaserunning(state, newPitcherLog, 0));
+        }
+      }
+    }
+  }
+
+  return {
+    ...state,
+    lineups: { ...state.lineups, [side]: lineup },
+    benches: { ...state.benches, [side]: bench },
+    feed,
+    lastPlay,
+  };
 }
 
 // 투수 등판 순서를 계산하는 헬퍼 함수
 function calculatePitcherAppearanceCount(feed: PlayLog[], side: Side): number {
   let count = 0;
-  const chronological = [...feed].reverse();
+  // Feed is already in chronological order (oldest → newest), no need to reverse
+  const chronological = feed;
 
   for (const entry of chronological) {
     const result = entry.result.trim();
@@ -2972,7 +3365,7 @@ function substitutePlayer(
   const benchPlayer = bench[benchIndex];
   if (!benchPlayer) return state;
   const outgoing = lineup[lineupIndex];
-  const battingOrder = getBattingOrder(state.lineups[side], lineupIndex);
+  const battingOrder = getBattingOrder(state.lineups[side], lineupIndex, isPracticeActiveMatch(state));
 
   // 교체로 들어온 선수에 교체 유형 저장
   const incomingPlayer = { ...benchPlayer, substitutionType };
@@ -3034,12 +3427,15 @@ function substitutePlayer(
   };
 }
 
-function getBattingOrder(lineup: PlayerSlot[], lineupIndex: number) {
+function getBattingOrder(lineup: PlayerSlot[], lineupIndex: number, allowExtendedBattingOrder = false) {
   const slot = lineup[lineupIndex];
   if (!slot) return null;
-
-  // [수정] 1~9번 타순이거나, 투수가 아니거나, 타격 가능한 투수인 경우
-  const isBatter = lineupIndex < 9 || slot.pos.toUpperCase() !== 'P' || canPitcherBat(slot, lineup);
+  const practicePitcherIndex = allowExtendedBattingOrder ? getPracticePitcherIndex(lineup) : -1;
+  if (allowExtendedBattingOrder && lineupIndex === practicePitcherIndex) return null;
+  const isBatter =
+    (allowExtendedBattingOrder ? true : lineupIndex < 9) ||
+    slot.pos.toUpperCase() !== 'P' ||
+    canPitcherBat(slot, lineup);
 
   if (!isBatter) {
     return null;
@@ -3048,8 +3444,14 @@ function getBattingOrder(lineup: PlayerSlot[], lineupIndex: number) {
   let order = 0;
   for (let i = 0; i < lineup.length; i += 1) {
     const player = lineup[i];
-    // [수정] 카운트 할 때도 동일한 조건 적용
-    const isCountable = i < 9 || player.pos.toUpperCase() !== 'P' || canPitcherBat(player, lineup);
+    if (allowExtendedBattingOrder && i === practicePitcherIndex) {
+      if (i === lineupIndex) return null;
+      continue;
+    }
+    const isCountable =
+      (allowExtendedBattingOrder ? true : i < 9) ||
+      player.pos.toUpperCase() !== 'P' ||
+      canPitcherBat(player, lineup);
     
     if (isCountable) {
       order += 1;
@@ -3064,9 +3466,9 @@ interface DemoStoreValue {
   actions: {
     addBall: () => void;
     addStrike: () => void;
-    addFoul: () => void;
-    strikeOut: () => void;
-    droppedThirdStrike: () => void;
+    addFoul: (isBunt?: boolean) => void;
+    strikeOut: (strikeType?: 'swinging' | 'looking') => void;
+    droppedThirdStrike: (variant?: 'strikeout' | 'reach' | 'tag_out', strikeType?: 'swinging' | 'looking') => void;
     addOut: (battedBall?: BattedBallDetails | null) => void;
     hitSingle: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) => void;
     hitDouble: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) => void;
@@ -3097,6 +3499,9 @@ interface DemoStoreValue {
     setLiveDelaySeconds: (seconds: number) => void;
     setTeamName: (side: Side, name: string) => void;
     setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) => void;
+    removeLineupSlot: (side: Side, index: number) => void;
+    removePracticeBatter: (side: Side, battingOrderIndex: number) => void;
+    swapPositions: (side: Side, swaps: { index: number; newPos: string }[], benchSwaps?: { index: number; newPos: string }[]) => void;
     addBench: (side: Side, player: PlayerSlot) => void;
     removeBench: (side: Side, benchIndex: number) => void;
     substitute: (side: Side, benchIndex: number, lineupIndex: number, substitutionType?: '대수비' | '대타' | '대주자') => void;
@@ -3106,8 +3511,8 @@ interface DemoStoreValue {
     resetGame: () => void;
     undo: () => void;
     addOutWithMessage: (note: string, battedBall?: BattedBallDetails | null) => void;
-    doublePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[]) => void;
-    triplePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[]) => void;
+    doublePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[], route?: number[], runnerAdvancements?: Record<number, number>) => void;
+    triplePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[], route?: number[], runnerAdvancements?: Record<number, number>) => void;
     addMatch: (match: MatchSchedule) => void;
     updateMatch: (matchId: string, updates: Partial<MatchSchedule>) => void;
     deleteMatch: (matchId: string) => void;
@@ -3138,6 +3543,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   const skipMatchesWriteRef = useRef(false);
   const lastStateKeyRef = useRef('');
   const lastMatchesKeyRef = useRef('');
+  const lastLiveScoreSyncKeyRef = useRef('');
   const lastFeedLengthRef = useRef(0);
   const lastEventsLengthRef = useRef(0);
   const writeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -3145,6 +3551,8 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   const matchesReadyRef = useRef(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const presenceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const visitorIdRef = useRef<string | null>(null);
   const STORAGE_KEY = 'aubl-demo-state';
 
   useEffect(() => {
@@ -3175,8 +3583,50 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     const current = stateRef.current.matches.find((m) => m.id === matchId);
     if (!current) return Promise.resolve();
     matchesReadyRef.current = true;
-    const payload = pruneUndefined({ ...current, ...overrides });
+
+    // [수정] 기본적으로는 빈 슬롯 필터링, 연습경기는 추가 타자 슬롯 유지를 위해 보존
+    const filterEmptySlots = (lineup: PlayerSlot[]) =>
+      lineup.filter(slot => slot.name && slot.name.trim() !== '');
+
+    const merged = { ...current, ...overrides };
+    const preserveEmptySlots = (merged.recordMode ?? 'official') === 'practice';
+    const cleanedMatch = {
+      ...merged,
+      lineups: merged.lineups
+        ? preserveEmptySlots
+          ? merged.lineups
+          : {
+              home: filterEmptySlots(merged.lineups.home),
+              away: filterEmptySlots(merged.lineups.away),
+            }
+        : undefined,
+    };
+
+    const payload = pruneUndefined(cleanedMatch);
     return setDoc(doc(firestore, 'matches', matchId), payload, { merge: true });
+  }, []);
+
+  const purgeMatchFromFirestore = useCallback(async (matchId: string) => {
+    const [feedSnap, eventsSnap, presenceSnap] = await Promise.all([
+      getDocs(collection(firestore, 'matchStates', matchId, 'feed')),
+      getDocs(collection(firestore, 'matchStates', matchId, 'events')),
+      getDocs(collection(firestore, 'matchStates', matchId, 'presence')),
+    ]);
+
+    const refs = [
+      doc(firestore, 'matches', matchId),
+      doc(firestore, 'matchStates', matchId),
+      ...feedSnap.docs.map((d) => d.ref),
+      ...eventsSnap.docs.map((d) => d.ref),
+      ...presenceSnap.docs.map((d) => d.ref),
+    ];
+
+    const CHUNK_SIZE = 450;
+    for (let i = 0; i < refs.length; i += CHUNK_SIZE) {
+      const batch = writeBatch(firestore);
+      refs.slice(i, i + CHUNK_SIZE).forEach((ref) => batch.delete(ref));
+      await batch.commit();
+    }
   }, []);
 
   // [수정 2] 로컬 스토리지에서 불러오던 로직을 삭제하고, 오히려 "초기화(삭제)"하도록 변경
@@ -3212,12 +3662,12 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   // Determine admin (for schedule write privileges & full subscription)
   useEffect(() => {
     let cancelled = false;
-    const user = auth.currentUser;
-    if (!user) {
-      setIsAdmin(false);
-      return;
-    }
     const run = async () => {
+      const user = auth.currentUser;
+      if (!user) {
+        setIsAdmin(false);
+        return;
+      }
       try {
         const token = await getIdTokenResult(user, true);
         if (cancelled) return;
@@ -3303,7 +3753,6 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         }
       },
       (error) => {
-        // eslint-disable-next-line no-console
         console.error('[firestore] matches snapshot error', error);
       },
     );
@@ -3548,6 +3997,125 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     };
   }, [state.activeMatchId, state.scorerUid, state.scorerLockedAt]);
 
+  // 동접자 집계: onSnapshot fan-out 대신 count 쿼리 폴링 사용
+  useEffect(() => {
+    const matchId = state.activeMatchId;
+    if (!matchId) {
+      dispatch({ type: 'setOnlineViewerCount', count: 0 });
+      return;
+    }
+
+    const presenceCol = collection(firestore, 'matchStates', matchId, 'presence');
+    let cancelled = false;
+
+    const pollViewerCount = async () => {
+      try {
+        const now = Date.now();
+        const countQuery = query(presenceCol, where('expiresAt', '>=', now));
+        const aggregate = await getCountFromServer(countQuery);
+        if (cancelled) return;
+        dispatch({ type: 'setOnlineViewerCount', count: aggregate.data().count });
+      } catch {
+        // ignore count errors
+      }
+    };
+
+    void pollViewerCount();
+    const timer = setInterval(() => {
+      void pollViewerCount();
+    }, PRESENCE_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [state.activeMatchId]);
+
+  // 동접자 Heartbeat: 익명/로그인 모두 포함, hidden 상태에서는 heartbeat 중지
+  useEffect(() => {
+    const matchId = state.activeMatchId;
+    if (!matchId) return;
+
+    const getVisitorId = (): string => {
+      if (visitorIdRef.current) return visitorIdRef.current;
+      const user = auth.currentUser;
+      if (user) {
+        visitorIdRef.current = user.uid;
+        return user.uid;
+      }
+      const storageKey = 'aubl-visitor-id';
+      let vid = sessionStorage.getItem(storageKey);
+      if (!vid) {
+        vid = `anon_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+        sessionStorage.setItem(storageKey, vid);
+      }
+      visitorIdRef.current = vid;
+      return vid;
+    };
+
+    const visitorId = getVisitorId();
+    const presenceDocRef = doc(firestore, 'matchStates', matchId, 'presence', visitorId);
+
+    const updatePresence = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      const now = Date.now();
+      void setDoc(
+        presenceDocRef,
+        {
+          visitorId,
+          isAnonymous: auth.currentUser == null,
+          lastHeartbeat: now,
+          expiresAt: now + PRESENCE_TTL_MS,
+        },
+        { merge: true },
+      ).catch(() => {});
+    };
+
+    const stopHeartbeat = () => {
+      if (!presenceTimerRef.current) return;
+      clearInterval(presenceTimerRef.current);
+      presenceTimerRef.current = null;
+    };
+
+    const startHeartbeat = () => {
+      stopHeartbeat();
+      presenceTimerRef.current = setInterval(() => {
+        updatePresence();
+      }, PRESENCE_HEARTBEAT_MS);
+    };
+
+    const handleVisibilityChange = () => {
+      if (typeof document === 'undefined') return;
+      if (document.visibilityState === 'hidden') {
+        stopHeartbeat();
+        return;
+      }
+      updatePresence();
+      startHeartbeat();
+    };
+
+    updatePresence();
+    startHeartbeat();
+
+    const handleBeforeUnload = () => {
+      void deleteDoc(presenceDocRef).catch(() => {});
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      stopHeartbeat();
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+      void deleteDoc(presenceDocRef).catch(() => {});
+    };
+  }, [state.activeMatchId]);
+
   // Push game state to Firestore when admin updates locally.
   useEffect(() => {
     const matchId = state.activeMatchId;
@@ -3566,28 +4134,14 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
 
     writeTimerRef.current = setTimeout(() => {
             const snapshot = snapshotState(stateRef.current);
-            const trimmedFeed = snapshot.feed.slice(0, FEED_DOC_LIMIT);
-            const trimmedEvents = snapshot.events.slice(0, FEED_DOC_LIMIT);
-            const { matches: _matches, ...core } = snapshot;
-            const key = JSON.stringify({ matchId, core, trimmedFeed, trimmedEvents });
+            const { matches: _matches, feed: _feed, events: _events, onlineViewerCount: _onlineViewerCount, ...core } = snapshot;
+            const key = JSON.stringify({ matchId, core });
 
             if (key !== lastStateKeyRef.current) {
               lastStateKeyRef.current = key;
 
-              // [수정 전]
-              /*
-              void setDoc(
-                doc(firestore, 'matchStates', matchId),
-                { ...core, feed: trimmedFeed, events: trimmedEvents, updatedAt: Date.now() },
-                {  merge: true },
-                ).catch(() => {});
-              */
-
-              // [수정 후] pruneUndefined로 감싸서 undefined 값을 제거합니다.
               const payload = pruneUndefined({
                 ...core,
-                feed: trimmedFeed,
-                events: trimmedEvents,
                 updatedAt: Date.now()
               });
 
@@ -3616,9 +4170,13 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         // 배열 끝에서부터 새로운 항목 가져오기
         const newEntries = stateRef.current.feed.slice(-newFeedCount);
         newEntries.forEach((entry, idx) => {
+          const createdAt =
+            typeof entry.createdAt === 'number' && Number.isFinite(entry.createdAt)
+              ? entry.createdAt
+              : now + idx;
           batch.set(
             doc(collection(firestore, 'matchStates', matchId, 'feed')),
-            pruneUndefined({ ...entry, createdAt: now + idx }),
+            pruneUndefined({ ...entry, createdAt }),
           );
         });
       }
@@ -3627,9 +4185,13 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         // 배열 끝에서부터 새로운 항목 가져오기
         const newEntries = stateRef.current.events.slice(-newEventCount);
         newEntries.forEach((entry, idx) => {
+          const createdAt =
+            typeof entry.createdAt === 'number' && Number.isFinite(entry.createdAt)
+              ? entry.createdAt
+              : now + idx;
           batch.set(
             doc(collection(firestore, 'matchStates', matchId, 'events')),
-            pruneUndefined({ ...entry, createdAt: now + idx }),
+            pruneUndefined({ ...entry, createdAt }),
           );
         });
       }
@@ -3662,19 +4224,68 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     const key = JSON.stringify(
-      state.matches.map((m) => [m.id, m.status, m.startTime, m.homeScore, m.awayScore, m.notes, m.division]),
+      state.matches.map((m) => ({
+        id: m.id,
+        status: m.status,
+        startTime: m.startTime,
+        notes: m.notes ?? null,
+        division: m.division ?? null,
+        venue: m.venue,
+        recordMode: m.recordMode ?? 'official',
+        homeTeamName: m.homeTeamName,
+        awayTeamName: m.awayTeamName,
+        liveVideoUrl: m.liveVideoUrl ?? null,
+        liveDelaySeconds: m.liveDelaySeconds ?? null,
+        deleted: m.deleted ?? false,
+        deletedAt: m.deletedAt ?? null,
+        purgeAt: m.purgeAt ?? null,
+        lineups: m.lineups ?? null,
+        benches: m.benches ?? null,
+        postGame: m.postGame ?? null,
+      })),
     );
     if (key === lastMatchesKeyRef.current) return;
     lastMatchesKeyRef.current = key;
     const syncMatches = async () => {
       const batch = writeBatch(firestore);
+      const filterEmptySlots = (lineup: PlayerSlot[]) =>
+        lineup.filter(slot => slot.name && slot.name.trim() !== '');
+
       state.matches.forEach((match) => {
-        batch.set(doc(firestore, 'matches', match.id), pruneUndefined(match), { merge: true });
+        const preserveEmptySlots = (match.recordMode ?? 'official') === 'practice';
+        // [수정] 기본적으로는 빈 슬롯 필터링, 연습경기는 추가 타자 슬롯 유지를 위해 보존
+        const cleanedMatch = {
+          ...match,
+          lineups: match.lineups
+            ? preserveEmptySlots
+              ? match.lineups
+              : {
+                  home: filterEmptySlots(match.lineups.home),
+                  away: filterEmptySlots(match.lineups.away),
+                }
+            : undefined,
+        };
+        batch.set(doc(firestore, 'matches', match.id), pruneUndefined(cleanedMatch), { merge: true });
       });
       await batch.commit();
     };
     void syncMatches().catch(() => {});
   }, [state.matches, isAdmin]);
+
+  // 진행 중인 경기 점수는 active match 1건만 patch 저장
+  useEffect(() => {
+    if (!isAdmin) return;
+    const matchId = state.activeMatchId;
+    if (!matchId) return;
+    const activeMatch = state.matches.find((m) => m.id === matchId);
+    if (!activeMatch || activeMatch.status !== 'inProgress') return;
+    const homeScore = state.score.home;
+    const awayScore = state.score.away;
+    const scoreKey = `${matchId}:${homeScore}:${awayScore}`;
+    if (scoreKey === lastLiveScoreSyncKeyRef.current) return;
+    lastLiveScoreSyncKeyRef.current = scoreKey;
+    void pushMatchUpdate(matchId, { homeScore, awayScore }).catch(() => {});
+  }, [isAdmin, state.activeMatchId, state.matches, state.score.home, state.score.away, pushMatchUpdate]);
 
   // Auto purge expired trashed matches (deleted flag) from matches collection.
   useEffect(() => {
@@ -3682,9 +4293,9 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     const expired = state.matches.filter((m) => m.deleted && m.purgeAt && m.purgeAt <= now);
     if (!expired.length) return;
     expired.forEach((entry) => {
-      void deleteDoc(doc(firestore, 'matches', entry.id)).catch(() => {});
+      void purgeMatchFromFirestore(entry.id).catch(() => {});
     });
-  }, [state.matches]);
+  }, [state.matches, purgeMatchFromFirestore]);
 
   const updateCurrentMatchPointer = (matchId: string | null) => {
     void setDoc(
@@ -3698,9 +4309,9 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     () => ({
       addBall: () => dispatch({ type: 'ball' }),
       addStrike: () => dispatch({ type: 'strike' }),
-      addFoul: () => dispatch({ type: 'foul' }),
-      strikeOut: () => dispatch({ type: 'strikeOut' }),
-      droppedThirdStrike: () => dispatch({ type: 'droppedThirdStrike' }),
+      addFoul: (isBunt?: boolean) => dispatch({ type: 'foul', isBunt }),
+      strikeOut: (strikeType?: 'swinging' | 'looking') => dispatch({ type: 'strikeOut', strikeType }),
+      droppedThirdStrike: (variant?: 'strikeout' | 'reach' | 'tag_out', strikeType?: 'swinging' | 'looking') => dispatch({ type: 'droppedThirdStrike', variant, strikeType }),
       addOut: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'out', battedBall }),
       hitSingle: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) =>
         dispatch({ type: 'hit', bases: 1, advances, battedBall }),
@@ -3757,13 +4368,19 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       },
       addOutWithMessage: (note: string, battedBall?: BattedBallDetails | null) =>
         dispatch({ type: 'outWithMessage', note, battedBall }),
-      doublePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[]) =>
-        dispatch({ type: 'doublePlay', battedBall, selectedRunners }),
-      triplePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[]) =>
-        dispatch({ type: 'triplePlay', battedBall, selectedRunners }),
+      doublePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[], route?: number[], runnerAdvancements?: Record<number, number>) =>
+        dispatch({ type: 'doublePlay', battedBall, selectedRunners, route, runnerAdvancements }),
+      triplePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[], route?: number[], runnerAdvancements?: Record<number, number>) =>
+        dispatch({ type: 'triplePlay', battedBall, selectedRunners, route, runnerAdvancements }),
       setTeamName: (side: Side, name: string) => dispatch({ type: 'setTeamName', side, name }),
       setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) =>
         dispatch({ type: 'setLineup', side, index, updates }),
+      removeLineupSlot: (side: Side, index: number) =>
+        dispatch({ type: 'removeLineupSlot', side, index }),
+      removePracticeBatter: (side: Side, battingOrderIndex: number) =>
+        dispatch({ type: 'removePracticeBatter', side, battingOrderIndex }),
+      swapPositions: (side: Side, swaps: { index: number; newPos: string }[], benchSwaps?: { index: number; newPos: string }[]) =>
+        dispatch({ type: 'swapPositions', side, swaps, benchSwaps }),
       addBench: (side: Side, player: PlayerSlot) => dispatch({ type: 'addBench', side, player }),
       removeBench: (side: Side, benchIndex: number) => dispatch({ type: 'removeBench', side, benchIndex }),
       substitute: (side: Side, benchIndex: number, lineupIndex: number, substitutionType?: '대수비' | '대타' | '대주자') =>
@@ -3782,6 +4399,18 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         const matchId = stateRef.current.activeMatchId;
         if (matchId) {
           const snapshot = stateRef.current;
+          const activeMatch = snapshot.matches.find((m) => m.id === matchId);
+          const isPractice = isPracticeMatch(activeMatch);
+
+          if (isPractice) {
+            void pushMatchUpdate(matchId, {
+              status: 'completed',
+              homeScore: snapshot.score.home,
+              awayScore: snapshot.score.away,
+              postGame: undefined,
+            }).catch(() => {});
+            return;
+          }
           
           // 상세 기록 산출
           const gameRecord = buildGameRecord(snapshot);
@@ -3893,7 +4522,6 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         void setDoc(doc(firestore, 'matches', matchId), pruneUndefined(payload), { merge: true }).catch(() => {
           // rollback locally if write fails
           dispatch({ type: 'restoreMatch', matchId });
-          // eslint-disable-next-line no-alert
           if (typeof window !== 'undefined') window.alert('삭제 권한을 확인해주세요. (휴지통 이동 실패)');
         });
         if (stateRef.current.activeMatchId === matchId) {
@@ -3913,38 +4541,22 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         void setDoc(doc(firestore, 'matches', matchId), pruneUndefined(restored), { merge: true }).catch(() => {
           // rollback locally if write fails
           dispatch({ type: 'moveMatchToTrash', matchId, entry });
-          // eslint-disable-next-line no-alert
           if (typeof window !== 'undefined') window.alert('복원 권한을 확인해주세요. (복원 실패)');
         });
       },
       purgeTrash: (matchId: string) => {
+        matchesReadyRef.current = true;
         dispatch({ type: 'purgeTrash', matchId });
+        if (stateRef.current.activeMatchId === matchId) {
+          updateCurrentMatchPointer(null);
+        }
 
-        // [수정] matches 문서뿐만 아니라 matchStates와 하위 컬렉션(feed, events)까지 모두 삭제
+        // matches + matchStates + 하위 컬렉션(feed/events/presence)까지 완전 삭제
         void (async () => {
           try {
-            const batch = writeBatch(firestore);
-
-            // 1. matches 컬렉션에서 일정 삭제
-            batch.delete(doc(firestore, 'matches', matchId));
-
-            // 2. matchStates 컬렉션에서 상태 문서 삭제
-            batch.delete(doc(firestore, 'matchStates', matchId));
-
-            // 3. matchStates 하위의 feed, events 컬렉션 데이터 삭제
-            // (클라이언트 사이드 삭제이므로 문서가 많을 경우 배치 처리가 필요할 수 있으나, 현재 규모에서는 일괄 처리 가능)
-            const [feedSnap, eventsSnap] = await Promise.all([
-              getDocs(collection(firestore, 'matchStates', matchId, 'feed')),
-              getDocs(collection(firestore, 'matchStates', matchId, 'events')),
-            ]);
-
-            feedSnap.forEach((d) => batch.delete(d.ref));
-            eventsSnap.forEach((d) => batch.delete(d.ref));
-
-            await batch.commit();
+            await purgeMatchFromFirestore(matchId);
           } catch (error) {
             console.error('Purge error:', error);
-            // eslint-disable-next-line no-alert
             if (typeof window !== 'undefined') window.alert('영구 삭제 권한을 확인해주세요. (삭제 실패)');
           }
         })();
@@ -4102,7 +4714,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       pauseGameTimer: () => dispatch({ type: 'pauseGameTimer' }),
       resumeGameTimer: () => dispatch({ type: 'resumeGameTimer' }),
     }),
-    [isAdmin],
+    [isAdmin, pushMatchUpdate],
   );
 
   // Preload 전체 일정(예정/종료) once per actions ref to avoid 빈 목록 when 첫 진입.

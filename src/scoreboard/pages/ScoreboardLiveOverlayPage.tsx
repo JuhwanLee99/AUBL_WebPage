@@ -11,7 +11,7 @@ export default function ScoreboardLiveOverlayPage() {
 
   // 모바일 감지 함수
   const isMobileDevice = () => {
-    const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+    const userAgent = navigator.userAgent || navigator.vendor || (window as Window & { opera?: string }).opera || '';
     const isMobileUA = /android|ipad|iphone|ipod/i.test(userAgent);
     const isPortrait = window.innerHeight > window.innerWidth;
     const isSmallScreen = Math.min(window.innerWidth, window.innerHeight) < 768;
@@ -33,6 +33,15 @@ export default function ScoreboardLiveOverlayPage() {
 
   // 음소거 버튼 카운트다운 (초)
   const [unmuteCountdown, setUnmuteCountdown] = useState(10);
+
+  // 전체 화면 상태 (iOS용 가상 전체 화면)
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // iOS 감지
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+  // Fullscreen API 지원 여부
+  const supportsFullscreen = !isIOS && 'requestFullscreen' in document.documentElement;
 
   // 카운트다운 타이머
   useEffect(() => {
@@ -72,6 +81,19 @@ export default function ScoreboardLiveOverlayPage() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Fullscreen 상태 변경 감지 (안드로이드/데스크톱용)
+  useEffect(() => {
+    if (!supportsFullscreen) return;
+
+    const handleFullscreenChange = () => {
+      const isCurrentlyFullscreen = Boolean(document.fullscreenElement);
+      setIsFullscreen(isCurrentlyFullscreen);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, [supportsFullscreen]);
 
   // 유튜브 라이브 지연시간을 고려한 상태 업데이트
   useEffect(() => {
@@ -141,7 +163,7 @@ export default function ScoreboardLiveOverlayPage() {
     let strikeouts = 0;
 
     if (delayedState.events && Array.isArray(delayedState.events)) {
-      delayedState.events.forEach((event: any) => {
+      delayedState.events.forEach((event: { batterName?: string; batterSide?: string; result?: string }) => {
         if (event.batterName === batter.name && event.batterSide === battingSide) {
           // 타수 계산
           if (event.result === 'single' || event.result === 'double' ||
@@ -178,11 +200,17 @@ export default function ScoreboardLiveOverlayPage() {
   }, [delayedState.lineups, delayedState.batterIndex, delayedState.events, battingSide]);
 
   const toggleFullscreen = () => {
-    const root = document.documentElement;
-    if (!document.fullscreenElement) {
-      void root.requestFullscreen?.();
+    if (isIOS || !supportsFullscreen) {
+      // iOS 또는 Fullscreen API 미지원: CSS 가상 전체 화면 토글
+      setIsFullscreen((prev) => !prev);
     } else {
-      void document.exitFullscreen?.();
+      // 안드로이드/데스크톱: 실제 Fullscreen API 사용
+      const root = document.documentElement;
+      if (!document.fullscreenElement) {
+        void root.requestFullscreen?.();
+      } else {
+        void document.exitFullscreen?.();
+      }
     }
   };
 
@@ -209,12 +237,15 @@ export default function ScoreboardLiveOverlayPage() {
       style={{
         width: '100vw',
         height: '100vh',
-        backgroundColor: '#020617',
+        backgroundColor: isFullscreen ? '#000000' : '#020617',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         overflow: 'hidden',
-        position: 'relative',
+        position: isFullscreen ? 'fixed' : 'relative',
+        top: isFullscreen ? 0 : undefined,
+        left: isFullscreen ? 0 : undefined,
+        zIndex: isFullscreen ? 9999 : undefined,
       }}
     >
       <div style={containerStyle}>
@@ -284,6 +315,23 @@ export default function ScoreboardLiveOverlayPage() {
                 </option>
               ))}
             </select>
+            {/* 동접자 수 표시 */}
+            <span
+              style={{
+                padding: `${5 * uiScale}px ${10 * uiScale}px`,
+                borderRadius: '8px',
+                background: 'rgba(34, 197, 94, 0.15)',
+                color: '#22c55e',
+                fontSize: `${11 * uiScale}px`,
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: `${5 * uiScale}px`,
+              }}
+            >
+              <span style={{ fontSize: `${13 * uiScale}px` }}>👥</span>
+              {state.onlineViewerCount}명
+            </span>
             <button
               type="button"
               onClick={() => navigate('/scoreboard-text')}
@@ -294,9 +342,11 @@ export default function ScoreboardLiveOverlayPage() {
             <button
               type="button"
               onClick={toggleFullscreen}
-              style={{ ...controlButtonStyle, padding: `${6 * uiScale}px ${10 * uiScale}px`, fontSize: `${11 * uiScale}px`, color: '#f97316' }}
+              style={{ ...controlButtonStyle, padding: `${6 * uiScale}px ${10 * uiScale}px`, fontSize: `${11 * uiScale}px`, color: isFullscreen ? '#22c55e' : '#f97316' }}
+              title={isIOS ? 'iOS 가상 전체 화면' : supportsFullscreen ? '전체 화면' : '전체 화면 API 미지원'}
             >
-              전체화면
+              {isFullscreen ? '전체화면 해제' : '전체화면'}
+              {isIOS && ' (iOS)'}
             </button>
             <button
               type="button"
