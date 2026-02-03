@@ -234,6 +234,24 @@ export default function ScoreboardTextPage() {
     <div className="scoreboard-text-page">
       <div className="main-content-grid">
         <div className={`scoreboard-section ${isMobile ? 'mobile-layout' : ''}`}>
+          {/* 동접자 수 표시 */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginBottom: '12px',
+              padding: '8px 12px',
+              background: 'rgba(34, 197, 94, 0.08)',
+              borderRadius: '10px',
+              width: 'fit-content',
+            }}
+          >
+            <span style={{ fontSize: '15px' }}>👥</span>
+            <span style={{ fontSize: '13px', color: '#22c55e', fontWeight: 600 }}>
+              현재 {state.onlineViewerCount}명 시청 중
+            </span>
+          </div>
           <ScoreboardFrame
             variant="text"
             showFootnote={false}

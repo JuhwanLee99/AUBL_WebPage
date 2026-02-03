@@ -46,6 +46,8 @@ const FEED_DOC_LIMIT = 120; // matchStates 문서에 함께 싣는 최대 feed/e
 const WRITE_DEBOUNCE_MS = 300; // 기록원 상태 동기화 디바운스 (투구 간 평균 간격을 고려해 write 수 최소화)
 const SCORER_LOCK_TTL_MS = 300_000; // 5분 후 락 만료 (이닝 교대 대비 여유)
 const SCORER_LOCK_HEARTBEAT_MS = 60_000; // 60초마다 하트비트 갱신
+const PRESENCE_TTL_MS = 180_000; // 3분 후 동접자 만료
+const PRESENCE_HEARTBEAT_MS = 30_000; // 30초마다 동접자 하트비트 갱신
 
 // Firestore는 undefined를 허용하지 않으므로 중첩 객체/배열에서 undefined를 제거한다.
 function pruneUndefined<T>(value: T): T {
@@ -260,6 +262,7 @@ interface DemoSnapshot {
   gameStartTimestamp: number | null;
   gamePausedAt: number | null;
   gamePausedDuration: number;
+  onlineViewerCount: number;
 }
 
 interface DemoState extends DemoSnapshot {
@@ -368,7 +371,8 @@ type Action =
   | { type: 'resumeLock'; payload: { scorerUid: string; scorerName: string | null; scorerEmail: string | null; scorerRole: string | null; lockedAt: number } }
   | { type: 'setGameLimit'; minutes: number | null }
   | { type: 'pauseGameTimer' }
-  | { type: 'resumeGameTimer' };
+  | { type: 'resumeGameTimer' }
+  | { type: 'setOnlineViewerCount'; count: number };
 
 const demoLineups: { home: PlayerSlot[]; away: PlayerSlot[] } = {
   home: [
@@ -528,6 +532,7 @@ const initialState: DemoState = {
   gameStartTimestamp: null,
   gamePausedAt: null,
   gamePausedDuration: 0,
+  onlineViewerCount: 0,
 };
 
 function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }): PlayLog[] {
@@ -1653,6 +1658,8 @@ function reducer(state: DemoState, action: Action): DemoState {
       };
       break;
     }
+    case 'setOnlineViewerCount':
+      return { ...state, onlineViewerCount: action.count };
     case 'addMatch':
       nextState = {
         ...state,
@@ -2918,6 +2925,7 @@ function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
   gameStartTimestamp: null,
   gamePausedAt: null,
   gamePausedDuration: 0,
+  onlineViewerCount: state.onlineViewerCount,
   };
 }
 
@@ -2965,6 +2973,7 @@ function createNewGame(state: DemoState): DemoState {
     gameStartTimestamp: null,
     gamePausedAt: null,
     gamePausedDuration: 0,
+    onlineViewerCount: state.onlineViewerCount,
   };
 }
 
@@ -3377,6 +3386,8 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   const matchesReadyRef = useRef(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const presenceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const visitorIdRef = useRef<string | null>(null);
   const STORAGE_KEY = 'aubl-demo-state';
 
   useEffect(() => {
@@ -3793,6 +3804,96 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       heartbeatTimerRef.current = null;
     };
   }, [state.activeMatchId, state.scorerUid, state.scorerLockedAt]);
+
+  // 동접자(Presence) 구독: matchStates/{matchId}/presence 컬렉션 감시
+  useEffect(() => {
+    const matchId = state.activeMatchId;
+    if (!matchId) {
+      dispatch({ type: 'setOnlineViewerCount', count: 0 });
+      return;
+    }
+
+    const presenceCol = collection(firestore, 'matchStates', matchId, 'presence');
+    const unsubPresence = onSnapshot(
+      presenceCol,
+      (snap) => {
+        const now = Date.now();
+        // 만료되지 않은 활성 사용자만 카운트
+        const activeCount = snap.docs.filter((d) => {
+          const lastHeartbeat = d.data().lastHeartbeat ?? 0;
+          return now - lastHeartbeat < PRESENCE_TTL_MS;
+        }).length;
+        dispatch({ type: 'setOnlineViewerCount', count: activeCount });
+      },
+      () => {
+        // ignore errors
+      },
+    );
+
+    return () => unsubPresence();
+  }, [state.activeMatchId]);
+
+  // 동접자 Heartbeat: 30초마다 presence 갱신, 페이지 언마운트 시 정리
+  useEffect(() => {
+    const matchId = state.activeMatchId;
+    if (!matchId) return;
+
+    // visitorId 생성 또는 가져오기 (익명 사용자 지원)
+    const getVisitorId = (): string => {
+      if (visitorIdRef.current) return visitorIdRef.current;
+      const user = auth.currentUser;
+      if (user) {
+        visitorIdRef.current = user.uid;
+        return user.uid;
+      }
+      // 익명 사용자: sessionStorage에서 가져오거나 새로 생성
+      const storageKey = 'aubl-visitor-id';
+      let vid = sessionStorage.getItem(storageKey);
+      if (!vid) {
+        vid = `anon_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+        sessionStorage.setItem(storageKey, vid);
+      }
+      visitorIdRef.current = vid;
+      return vid;
+    };
+
+    const visitorId = getVisitorId();
+    const presenceDocRef = doc(firestore, 'matchStates', matchId, 'presence', visitorId);
+
+    // 즉시 presence 업데이트
+    const updatePresence = () => {
+      const user = auth.currentUser;
+      void setDoc(
+        presenceDocRef,
+        {
+          visitorId,
+          email: user?.email || null,
+          name: user?.displayName || null,
+          lastHeartbeat: Date.now(),
+        },
+        { merge: true },
+      ).catch(() => {});
+    };
+
+    updatePresence();
+
+    // 30초마다 heartbeat
+    presenceTimerRef.current = setInterval(updatePresence, PRESENCE_HEARTBEAT_MS);
+
+    // 페이지 이탈 시 presence 문서 삭제
+    const handleBeforeUnload = () => {
+      void deleteDoc(presenceDocRef).catch(() => {});
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      if (presenceTimerRef.current) clearInterval(presenceTimerRef.current);
+      presenceTimerRef.current = null;
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // cleanup 시 presence 문서 삭제
+      void deleteDoc(presenceDocRef).catch(() => {});
+    };
+  }, [state.activeMatchId]);
 
   // Push game state to Firestore when admin updates locally.
   useEffect(() => {
