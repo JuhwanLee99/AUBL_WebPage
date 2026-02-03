@@ -589,12 +589,13 @@ export default function Layout() {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '10px',
+                  gap: isMobileHeader ? '6px' : '10px',
                   marginLeft: isMobileHeader ? 'auto' : isScoreboardText ? '8px' : '12px',
                   order: isMobileHeader ? 2 : undefined,
-                  flexWrap: 'wrap',
+                  flexWrap: 'nowrap',
                   justifyContent: isMobileHeader ? 'flex-end' : 'flex-start',
                   width: 'auto',
+                  flexShrink: isMobileHeader ? 0 : undefined,
                 }}
               >
                 {initializing ? (
@@ -645,13 +646,13 @@ export default function Layout() {
                       to="/account"
                       className="badge-hoverable"
                       style={{
-                        padding: '8px 12px',
+                        padding: isMobileHeader ? '6px 10px' : '8px 12px',
                         borderRadius: '999px',
                         background: 'rgba(148,163,184,0.16)',
                         color: '#e2e8f0',
                         fontWeight: 700,
-                        fontSize: '13px',
-                        maxWidth: '180px',
+                        fontSize: isMobileHeader ? '12px' : '13px',
+                        maxWidth: isMobileHeader ? '120px' : '180px',
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
@@ -669,10 +670,11 @@ export default function Layout() {
                       style={{
                         background: 'rgba(148,163,184,0.25)',
                         color: '#e2e8f0',
-                        padding: '8px 12px',
+                        padding: isMobileHeader ? '6px 10px' : '8px 12px',
                         borderRadius: '12px',
-                        fontSize: '13px',
+                        fontSize: isMobileHeader ? '12px' : '13px',
                         fontWeight: 800,
+                        flexShrink: 0,
                       }}
                     >
                       로그아웃
