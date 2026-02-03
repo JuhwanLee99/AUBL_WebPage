@@ -2157,7 +2157,9 @@ function applyHitWithAdvances(
   runnerMoves.forEach((move) => {
     feed = pushFeed(feed, createLogEntryForBaserunning(state, move.feedText, pitchNumber));
   });
-  const resultLog = runs ? `${result} · ${runs}득점` : result;
+  // 타구 방향 정보 추가
+  const zoneNote = battedBall?.zone && battedBall.zone !== '선택 안 함' ? ` · ${battedBall.zone}` : '';
+  const resultLog = runs ? `${result}${zoneNote} · ${runs}득점` : `${result}${zoneNote}`;
   feed = pushPlayFeed(state, createLogEntry(state, resultLog, pitchNumber), feed);
 
   const nextState = {
@@ -2242,7 +2244,8 @@ function applyFielderChoice(
       : { ...state.score, away: state.score.away + runs };
 
   const contextNote = context?.trim() ? ` (${context.trim()})` : '';
-  const resultLog = runs ? `야수선택${contextNote} · ${runs}득점` : `야수선택${contextNote}`;
+  const fcZoneNote = battedBall?.zone && battedBall.zone !== '선택 안 함' ? ` · ${battedBall.zone}` : '';
+  const resultLog = runs ? `야수선택${fcZoneNote}${contextNote} · ${runs}득점` : `야수선택${fcZoneNote}${contextNote}`;
   feed = pushPlayFeed(state, createLogEntryWithBatter(state, batterName, batterOrder, resultLog, pitchNumber), feed);
   runnerMoves.forEach((move) => {
     feed = pushFeed(feed, createLogEntryForBaserunning(state, move.feedText, pitchNumber));
@@ -2372,9 +2375,10 @@ function applySacrifice(
         ? { ...state.score, home: state.score.home + runs }
         : { ...state.score, away: state.score.away + runs };
     // 희생번트로 인한 득점은 타점(RBI)
+    const buntZoneNote = battedBall?.zone && battedBall.zone !== '선택 안 함' ? ` · ${battedBall.zone}` : '';
     return applyOut(
       { ...state, bases, score },
-      runs ? `희생번트 · ${runs}득점` : '희생번트',
+      runs ? `희생번트${buntZoneNote} · ${runs}득점` : `희생번트${buntZoneNote}`,
       { pitchNumber, eventType: 'sac', runners: getRunnerNames(bases), notes: '희생번트', battedBall, rbi: runs },
     );
   }
@@ -2391,9 +2395,10 @@ function applySacrifice(
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
   // 희생플라이로 인한 득점은 타점(RBI)
+  const flyZoneNote = battedBall?.zone && battedBall.zone !== '선택 안 함' ? ` · ${battedBall.zone}` : '';
   return applyOut(
     { ...state, bases, score },
-    runs ? `희생플라이 · ${runs}득점` : '희생플라이',
+    runs ? `희생플라이${flyZoneNote} · ${runs}득점` : `희생플라이${flyZoneNote}`,
     { pitchNumber, eventType: 'sac', runners: getRunnerNames(bases), notes: '희생플라이', battedBall, rbi: runs },
   );
 }

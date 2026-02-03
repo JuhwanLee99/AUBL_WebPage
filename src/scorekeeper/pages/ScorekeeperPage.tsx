@@ -1680,6 +1680,8 @@ const handleConfirmHitWizard = () => {
     const fielderOptions = getFielderOptionsForResult(hitWizard.result);
     const fielderNote =
       fielderOptions && hitWizard.fielder && hitWizard.fielder !== fielderOptions[0] ? ` · 포구:${hitWizard.fielder}` : '';
+    // 타구 방향(존) 정보
+    const zoneNote = hitWizard.zone && hitWizard.zone !== '선택 안 함' ? ` · ${hitWizard.zone}` : '';
   setBattedBallType(hitWizard.type);
   setBattedBallZone(hitWizard.zone);
   setLastHitWizard(hitWizard);
@@ -1719,7 +1721,7 @@ const handleConfirmHitWizard = () => {
         break;
       }
       case 'out_three_bunt':
-        actions.addOutWithMessage(`쓰리번트 파울 아웃${fielderNote}`, details);
+        actions.addOutWithMessage(`쓰리번트 파울 아웃${zoneNote}${fielderNote}`, details);
         break;
       case 'catcher_interference':
         actions.catcherInterference();
@@ -1731,13 +1733,13 @@ const handleConfirmHitWizard = () => {
         actions.sacBunt(details);
         break;
       case 'out_ground':
-        actions.addOutWithMessage(`땅볼 아웃${fielderNote}`, details);
+        actions.addOutWithMessage(`땅볼 아웃${zoneNote}${fielderNote}`, details);
         break;
       case 'out_fly':
-        actions.addOutWithMessage(`뜬공 아웃${fielderNote}`, details);
+        actions.addOutWithMessage(`뜬공 아웃${zoneNote}${fielderNote}`, details);
         break;
       case 'out_line':
-        actions.addOutWithMessage(`라인드라이브 아웃${fielderNote}`, details);
+        actions.addOutWithMessage(`라인드라이브 아웃${zoneNote}${fielderNote}`, details);
         break;
       case 'out_dp2': {
         const runnersOnBase = state.bases.filter((r) => r !== null).length;
@@ -1762,21 +1764,21 @@ const handleConfirmHitWizard = () => {
         if (runnersOnBase >= 1) {
           setMultipleRunnersOutModal(true);
         } else {
-          actions.addOutWithMessage('기타 더블아웃', details);
+          actions.addOutWithMessage(`기타 더블아웃${zoneNote}${fielderNote}`, details);
         }
         break;
       }
       case 'out_infield_fly':
-        actions.addOutWithMessage(`내야 플라이 아웃${fielderNote}`, details);
+        actions.addOutWithMessage(`내야 플라이 아웃${zoneNote}${fielderNote}`, details);
         break;
       case 'out_infield_fly_rule':
-        actions.addOutWithMessage(`인필드 플라이 선언${fielderNote}`, details);
+        actions.addOutWithMessage(`인필드 플라이 선언${zoneNote}${fielderNote}`, details);
         break;
       case 'out_outfield_fly':
-        actions.addOutWithMessage(`외야 플라이 아웃${fielderNote}`, details);
+        actions.addOutWithMessage(`외야 플라이 아웃${zoneNote}${fielderNote}`, details);
         break;
       case 'out_other':
-        actions.addOutWithMessage(`기타 아웃${fielderNote}`, details);
+        actions.addOutWithMessage(`기타 아웃${zoneNote}${fielderNote}`, details);
         break;
       case 'foul':
         setShowFoulTypeModal(true);
