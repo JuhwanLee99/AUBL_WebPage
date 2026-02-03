@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import gsap from 'gsap';
 import { TEAM_GROUPS, GROUP_LETTERS, GROUP_COLORS } from '../../shared/lib/teamGroups';
 import type { GroupLetter } from '../../shared/lib/teamGroups';
+import { useContent } from '../../shared/state/contentProvider';
 
 /* ─── 로컬 타입 ─── */
 
@@ -18,8 +19,11 @@ const GROUP_TABS: { key: GroupKey; label: string; color: string }[] = [
 /* ─── 메인 페이지 ─── */
 
 export default function TeamsPage() {
+  const { content } = useContent();
+  const teamsContent = content.teams;
   const pageRef = useRef<HTMLDivElement>(null);
   const [activeGroup, setActiveGroup] = useState<GroupKey>('ALL');
+  const teams = teamsContent.entries.length ? teamsContent.entries : TEAMS;
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -31,13 +35,13 @@ export default function TeamsPage() {
     return () => ctx.revert();
   }, []);
 
-  const filteredTeams = activeGroup === 'ALL' ? TEAMS : TEAMS.filter((t) => t.group === activeGroup);
+  const filteredTeams = activeGroup === 'ALL' ? teams : teams.filter((t) => t.group === activeGroup);
 
   // 조별 그룹핑 (전체 보기에서 사용)
   const groupedTeams = activeGroup === 'ALL'
     ? GROUP_TABS.filter((g) => g.key !== 'ALL').map((g) => ({
         ...g,
-        teams: TEAMS.filter((t) => t.group === g.key),
+        teams: teams.filter((t) => t.group === g.key),
       }))
     : null;
 
@@ -70,14 +74,14 @@ export default function TeamsPage() {
               fontSize: 'clamp(11px, 2.8vw, 12px)',
             }}
           >
-            AUBL · TEAMS
+            {teamsContent.pageBadge || 'AUBL · TEAMS'}
           </span>
         </div>
         <h2 style={{ margin: 0, fontSize: 'clamp(22px, 5.5vw, 32px)', lineHeight: 1.25, fontWeight: 900 }}>
-          2026 참가팀 · 조편성
+          {teamsContent.pageTitle || '2026 참가팀 · 조편성'}
         </h2>
         <p style={{ margin: 0, color: '#cbd5e1', lineHeight: 1.7, maxWidth: '800px', fontSize: 'clamp(14px, 3.6vw, 15px)' }}>
-          총 {TEAMS.length}개 대학이 A~H조 조별 리그에 참가합니다. 조별 상위 2팀은 으뜸 토너먼트 16강, 3·4등은 버금 토너먼트 16강으로 포스트시즌이 진행됩니다.
+          {teamsContent.pageDescription || `총 ${teams.length}개 대학이 A~H조 조별 리그에 참가합니다.`}
         </p>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <Link
@@ -142,7 +146,7 @@ export default function TeamsPage() {
                   {tab.label}
                   {tab.key !== 'ALL' && (
                     <span style={{ marginLeft: '6px', fontSize: '12px', opacity: 0.7 }}>
-                      {TEAMS.filter((t) => t.group === tab.key).length}
+                      {teams.filter((t) => t.group === tab.key).length}
                     </span>
                   )}
                 </button>
@@ -287,7 +291,7 @@ export default function TeamsPage() {
         }}
       >
         <p style={{ margin: 0 }}>
-          <strong style={{ color: '#cbd5e1' }}>참고</strong> — 조편성은 대표자회의 의결에 따라 확정되며, 변경될 수 있습니다. 최종 조편성은 시즌 개막 전 공지됩니다.
+          <strong style={{ color: '#cbd5e1' }}>참고</strong> — {teamsContent.pageNote || '조편성은 대표자회의 의결에 따라 확정되며, 변경될 수 있습니다. 최종 조편성은 시즌 개막 전 공지됩니다.'}
         </p>
       </section>
     </div>

@@ -84,48 +84,6 @@ const DEFAULT_POSTSEASON_MATCHES = [
   },
 ];
 
-const teamNames = [
-  '가천 WIND',
-  '가톨릭대학교 텀블러즈',
-  '강남대학교 타키온즈',
-  '건국대 팬서스',
-  '건국대(서울) 불소야구',
-  '경기대학교 KGB',
-  '경희대국제 LIONS',
-  '경희대학교(서울) BRAVES',
-  '고려대학교 백구회',
-  '광운대학교 페가수스',
-  '국민대학교 윈드밀스',
-  '단국대 PANDAS',
-  '단국대학교 하운드',
-  '동국대학교 LAE',
-  '명지대학교(서울) 나이너스',
-  '백석대학교 칼로스',
-  '상명대BUCKS',
-  '서강대학교 야구반 알바트로스',
-  '서경대학교 적시타',
-  '서울과학기술대 미르',
-  '서울시립대학교FALCONS',
-  '성균관대학교 킹고야구반',
-  '세종대학교 세종킹스',
-  '숭실대학교 oners',
-  '아주대학교 ABBA',
-  '연세대학교 EAGLES',
-  '외대(글로벌) 유니온',
-  '인천대학교 바이킹',
-  '인하대학교 비룡',
-  '중앙대학교 랑데뷰',
-  '한국공학대학교 WINNERS',
-  '한국교통대학교 스윙스',
-  '한국외대(서울) 야구부',
-  '한국체대 루나틱스',
-  '한국항공대 Astros',
-  '한성대학교 TURTLES',
-  '한신대학교 갱스터',
-  '한양대ERICA HIBA',
-  '한양대학교 불새',
-  '홍익대학교 위너스',
-];
 
 const DEFAULT_HERO_METRICS = [
   { label: '2026 HOST', value: '중앙대학교(서울)', note: '제46회 AUBL 운영' },
@@ -136,6 +94,7 @@ const DEFAULT_HERO_METRICS = [
 export default function IntroPage() {
   const { content } = useContent();
   const intro = content.intro;
+  const teamNames = content.teams.entries.map((entry) => entry.name);
   const pageRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

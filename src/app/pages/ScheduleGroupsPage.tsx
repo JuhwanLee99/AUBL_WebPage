@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
 import { useAdmin } from '../../shared/auth/useAdmin';
-import { TEAM_NAME_TO_GROUP, GROUP_LETTERS, GROUP_COLORS } from '../../shared/lib/teamGroups';
+import { TEAM_GROUPS, GROUP_LETTERS, GROUP_COLORS } from '../../shared/lib/teamGroups';
 import type { GroupLetter } from '../../shared/lib/teamGroups';
 import type { MatchSchedule } from '../../shared/state/demoStore';
+import { useContent } from '../../shared/state/contentProvider';
 
 /* ─── 탭 정의 ─── */
 
@@ -29,9 +30,9 @@ const postseasonTabs: Tab[] = [
 
 /* ─── 매치 → 조 판별 ─── */
 
-function deriveMatchGroup(match: MatchSchedule): GroupLetter | null {
-  const homeGroup = TEAM_NAME_TO_GROUP.get(match.homeTeamName);
-  const awayGroup = TEAM_NAME_TO_GROUP.get(match.awayTeamName);
+function deriveMatchGroup(match: MatchSchedule, teamNameToGroup: ReadonlyMap<string, GroupLetter>): GroupLetter | null {
+  const homeGroup = teamNameToGroup.get(match.homeTeamName);
+  const awayGroup = teamNameToGroup.get(match.awayTeamName);
   // 양팀이 같은 조면 → 조별 리그 경기
   if (homeGroup && awayGroup && homeGroup === awayGroup) return homeGroup;
   // 한쪽만 매핑되면 해당 조로 추정
@@ -40,11 +41,11 @@ function deriveMatchGroup(match: MatchSchedule): GroupLetter | null {
   return null;
 }
 
-function isPostseasonMatch(match: MatchSchedule): boolean {
+function isPostseasonMatch(match: MatchSchedule, teamNameToGroup: ReadonlyMap<string, GroupLetter>): boolean {
   // division이 명시적으로 지정된 경우 or 양팀이 다른 조
   if (match.division === 'EUTTEUM' || match.division === 'BEOGEUM') return true;
-  const homeGroup = TEAM_NAME_TO_GROUP.get(match.homeTeamName);
-  const awayGroup = TEAM_NAME_TO_GROUP.get(match.awayTeamName);
+  const homeGroup = teamNameToGroup.get(match.homeTeamName);
+  const awayGroup = teamNameToGroup.get(match.awayTeamName);
   if (homeGroup && awayGroup && homeGroup !== awayGroup) return true;
   return false;
 }
@@ -59,12 +60,17 @@ const cardBase: React.CSSProperties = {
 };
 
 export default function ScheduleGroupsPage() {
+  const { content } = useContent();
   const { state, actions } = useDemoStore();
   const navigate = useNavigate();
   const { isAdmin } = useAdmin();
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('ALL');
   const matches = state.matches;
+  const teamNameToGroup = useMemo(() => {
+    const source = content.teams.entries.length ? content.teams.entries : TEAM_GROUPS;
+    return new Map(source.map((entry) => [entry.name, entry.group])) as ReadonlyMap<string, GroupLetter>;
+  }, [content.teams.entries]);
 
   useEffect(() => {
     void actions.loadFullSchedule();
@@ -83,21 +89,21 @@ export default function ScheduleGroupsPage() {
     const byGroup: Record<GroupLetter, MatchSchedule[]> = {} as Record<GroupLetter, MatchSchedule[]>;
     GROUP_LETTERS.forEach((g) => { byGroup[g] = []; });
     alive.forEach((match) => {
-      if (isPostseasonMatch(match)) return;
-      const group = deriveMatchGroup(match);
+      if (isPostseasonMatch(match, teamNameToGroup)) return;
+      const group = deriveMatchGroup(match, teamNameToGroup);
       if (group) byGroup[group].push(match);
     });
     GROUP_LETTERS.forEach((g) => {
       byGroup[g].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
     });
     return byGroup;
-  }, [alive]);
+  }, [alive, teamNameToGroup]);
 
   // 포스트시즌 경기 분류
   const postseasonMatches = useMemo(() => {
     const byDiv: Record<'EUTTEUM' | 'BEOGEUM', MatchSchedule[]> = { EUTTEUM: [], BEOGEUM: [] };
     alive.forEach((match) => {
-      if (!isPostseasonMatch(match)) return;
+      if (!isPostseasonMatch(match, teamNameToGroup)) return;
       const div = match.division === 'EUTTEUM' || match.division === 'BEOGEUM' ? match.division : null;
       if (div) byDiv[div].push(match);
     });
@@ -105,7 +111,7 @@ export default function ScheduleGroupsPage() {
       byDiv[k].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
     });
     return byDiv;
-  }, [alive]);
+  }, [alive, teamNameToGroup]);
 
   const hasPostseason = postseasonMatches.EUTTEUM.length > 0 || postseasonMatches.BEOGEUM.length > 0;
 

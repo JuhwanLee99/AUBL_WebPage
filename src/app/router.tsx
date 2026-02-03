@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router-dom';
+import { Navigate, createBrowserRouter } from 'react-router-dom';
 import Layout from './Layout';
 import LandingPage from '../front/pages/LandingPage';
 import IntroPage from '../front/pages/IntroPage';
@@ -27,9 +27,13 @@ import ScheduleLivePage from './pages/ScheduleLivePage';
 import PowerRankingPage from './pages/PowerRankingPage';
 import LoginPage from './pages/LoginPage';
 import AccessDeniedPage from './pages/AccessDeniedPage';
-import AdminPage from './pages/AdminPage';
 import AccountPage from './pages/AccountPage';
 import { RequireAdmin } from '../shared/auth/RequireAdmin';
+import AdminLayoutPage from './pages/admin/AdminLayoutPage';
+import AdminLandingPage from './pages/admin/AdminLandingPage';
+import AdminIntroPage from './pages/admin/AdminIntroPage';
+import AdminRulesPage from './pages/admin/AdminRulesPage';
+import AdminTeamsPage from './pages/admin/AdminTeamsPage';
 
 export const router = createBrowserRouter([
   {
@@ -146,9 +150,16 @@ export const router = createBrowserRouter([
         path: 'admin',
         element: (
           <RequireAdmin>
-            <AdminPage />
+            <AdminLayoutPage />
           </RequireAdmin>
         ),
+        children: [
+          { index: true, element: <Navigate to="landing" replace /> },
+          { path: 'landing', element: <AdminLandingPage /> },
+          { path: 'intro', element: <AdminIntroPage /> },
+          { path: 'rules', element: <AdminRulesPage /> },
+          { path: 'teams', element: <AdminTeamsPage /> },
+        ],
       },
       {
         path: 'player/:name',
