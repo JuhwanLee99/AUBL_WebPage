@@ -1391,9 +1391,6 @@ export default function ScorekeeperPage() {
   const currentBatterLineupIndex = currentBatterEntry?.idx ?? 0;
   
   const currentPitcherSlot = defenseLineup.find((slot) => slot.pos.toUpperCase() === 'P');
-  const currentPitcher = currentPitcherSlot 
-    ? getUniqueName(currentPitcherSlot.name, currentPitcherSlot.number) 
-    : '';
 
   const [actionModal, setActionModal] = useState<ActionModalData | null>(null);
   const [positionSwapModal, setPositionSwapModal] = useState<{ side: Side } | null>(null);
