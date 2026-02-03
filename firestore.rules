@@ -7,6 +7,24 @@ service cloud.firestore {
   return request.auth != null && request.auth.token.admin == true;
   }
 
+  function isValidPresenceCreate(visitorId) {
+    return request.resource.data.keys().hasOnly(['visitorId', 'isAnonymous', 'lastHeartbeat', 'expiresAt'])
+      && request.resource.data.visitorId == visitorId
+      && request.resource.data.isAnonymous is bool
+      && request.resource.data.lastHeartbeat is int
+      && request.resource.data.expiresAt is int
+      && request.resource.data.expiresAt >= request.resource.data.lastHeartbeat;
+  }
+
+  function isValidPresenceUpdate(visitorId) {
+    return request.resource.data.visitorId == visitorId
+      && request.resource.data.isAnonymous is bool
+      && request.resource.data.lastHeartbeat is int
+      && request.resource.data.expiresAt is int
+      && request.resource.data.expiresAt >= request.resource.data.lastHeartbeat
+      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['visitorId', 'isAnonymous', 'lastHeartbeat', 'expiresAt']);
+  }
+
   match /databases/{database}/documents {
     // 앱 전반 설정 (현재 활성 경기 포인터)
     match /app/current {
@@ -54,6 +72,35 @@ service cloud.firestore {
         allow read: if true;
         allow write: if isAdmin();
       }
+
+      match /presence/{visitorId} {
+        allow read: if true;
+        allow create: if isValidPresenceCreate(visitorId);
+        allow update: if isValidPresenceUpdate(visitorId);
+        allow delete: if true;
+      }
+    }
+
+    // 랜딩/인트로 콘텐츠 (공개 읽기, 관리자 편집)
+    match /settings/content {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // LIVE INFO (실시간)
+    match /settings/liveInfo {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 정적 콘텐츠 + 버전 메타
+    match /settings/staticContent {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /settings/contentMeta {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     // 그 외 모든 접근 거부
