@@ -1780,8 +1780,12 @@ function pushEvent(events: PlayEvent[], entry: PlayEvent) {
 }
 
 function ensureHalfPitcherLogged(state: DemoState, feed: PlayLog[]) {
+  // 투수 로그 형식: "이름(번호) 투수 (선발)" 또는 "이름(번호) 투수 (N차 계투)"
   const exists = feed.some(
-    (entry) => entry.inning === state.inning && entry.half === state.half && entry.result.endsWith('투수'),
+    (entry) =>
+      entry.inning === state.inning &&
+      entry.half === state.half &&
+      (entry.result.includes('투수 (선발)') || entry.result.includes('차 계투)')),
   );
   if (exists) return feed;
   const defenseSide: Side = state.half === 'top' ? 'home' : 'away';
