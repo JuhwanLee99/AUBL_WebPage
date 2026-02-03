@@ -30,6 +30,7 @@ import LoginPage from './pages/LoginPage';
 import AccessDeniedPage from './pages/AccessDeniedPage';
 import AccountPage from './pages/AccountPage';
 import { RequireAdmin } from '../shared/auth/RequireAdmin';
+import { MaintenanceGuard } from '../shared/auth/MaintenanceGuard';
 import AdminLayoutPage from './pages/admin/AdminLayoutPage';
 import AdminLandingPage from './pages/admin/AdminLandingPage';
 import AdminIntroPage from './pages/admin/AdminIntroPage';
@@ -39,7 +40,11 @@ import AdminTeamsPage from './pages/admin/AdminTeamsPage';
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <Layout />,
+    element: (
+      <MaintenanceGuard>
+        <Layout />
+      </MaintenanceGuard>
+    ),
     children: [
       {
         index: true,
