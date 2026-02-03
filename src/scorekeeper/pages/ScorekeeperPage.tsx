@@ -1719,7 +1719,7 @@ const handleConfirmHitWizard = () => {
         break;
       }
       case 'out_three_bunt':
-        actions.addOutWithMessage('쓰리번트 파울 아웃', details);
+        actions.addOutWithMessage(`쓰리번트 파울 아웃${fielderNote}`, details);
         break;
       case 'catcher_interference':
         actions.catcherInterference();
@@ -1731,13 +1731,13 @@ const handleConfirmHitWizard = () => {
         actions.sacBunt(details);
         break;
       case 'out_ground':
-        actions.addOutWithMessage('땅볼 아웃', details);
+        actions.addOutWithMessage(`땅볼 아웃${fielderNote}`, details);
         break;
       case 'out_fly':
-        actions.addOutWithMessage('뜬공 아웃', details);
+        actions.addOutWithMessage(`뜬공 아웃${fielderNote}`, details);
         break;
       case 'out_line':
-        actions.addOutWithMessage('라인드라이브 아웃', details);
+        actions.addOutWithMessage(`라인드라이브 아웃${fielderNote}`, details);
         break;
       case 'out_dp2': {
         const runnersOnBase = state.bases.filter((r) => r !== null).length;
@@ -1776,7 +1776,7 @@ const handleConfirmHitWizard = () => {
         actions.addOutWithMessage(`외야 플라이 아웃${fielderNote}`, details);
         break;
       case 'out_other':
-        actions.addOutWithMessage('기타 아웃', details);
+        actions.addOutWithMessage(`기타 아웃${fielderNote}`, details);
         break;
       case 'foul':
         setShowFoulTypeModal(true);
