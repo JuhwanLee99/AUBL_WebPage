@@ -2850,8 +2850,8 @@ const handleConfirmHitWizard = () => {
               onAddBench={actions.addBench}
               onRemoveBench={actions.removeBench}
               onSubstitute={actions.substitute}
-              highlightBatterName={hittingSide === 'away' ? currentBatter : undefined}
-              highlightPitcherName={defenseSide === 'away' ? currentPitcher : undefined}
+              highlightBatterName={hittingSide === 'away' ? currentBatterEntry?.slot.name : undefined}
+              highlightPitcherName={defenseSide === 'away' ? currentPitcherSlot?.name : undefined}
               gameStarted={isGameStarted}
               onOpenPositionSwap={() => setPositionSwapModal({ side: 'away' })}
             />
@@ -2878,8 +2878,8 @@ const handleConfirmHitWizard = () => {
               onAddBench={actions.addBench}
               onRemoveBench={actions.removeBench}
               onSubstitute={actions.substitute}
-              highlightBatterName={hittingSide === 'home' ? currentBatter : undefined}
-              highlightPitcherName={defenseSide === 'home' ? currentPitcher : undefined}
+              highlightBatterName={hittingSide === 'home' ? currentBatterEntry?.slot.name : undefined}
+              highlightPitcherName={defenseSide === 'home' ? currentPitcherSlot?.name : undefined}
               gameStarted={isGameStarted}
               onOpenPositionSwap={() => setPositionSwapModal({ side: 'home' })}
             />
