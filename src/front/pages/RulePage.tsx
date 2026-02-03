@@ -501,7 +501,7 @@ export default function RulePage() {
       {/* ── 장별 아코디언 ── */}
       <section className="rule-chunk" style={{ display: 'grid', gap: '12px' }}>
         {CHAPTERS.map((ch) => (
-          <ChapterAccordion key={ch.id} chapter={ch} defaultOpen={ch.id === 'ch9'} />
+          <ChapterAccordion key={ch.id} chapter={ch} />
         ))}
       </section>
 
