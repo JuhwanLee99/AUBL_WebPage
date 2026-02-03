@@ -3533,12 +3533,12 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   // Determine admin (for schedule write privileges & full subscription)
   useEffect(() => {
     let cancelled = false;
-    const user = auth.currentUser;
-    if (!user) {
-      setIsAdmin(false);
-      return;
-    }
     const run = async () => {
+      const user = auth.currentUser;
+      if (!user) {
+        setIsAdmin(false);
+        return;
+      }
       try {
         const token = await getIdTokenResult(user, true);
         if (cancelled) return;
@@ -3624,7 +3624,6 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         }
       },
       (error) => {
-        // eslint-disable-next-line no-console
         console.error('[firestore] matches snapshot error', error);
       },
     );
@@ -4372,7 +4371,6 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         void setDoc(doc(firestore, 'matches', matchId), pruneUndefined(payload), { merge: true }).catch(() => {
           // rollback locally if write fails
           dispatch({ type: 'restoreMatch', matchId });
-          // eslint-disable-next-line no-alert
           if (typeof window !== 'undefined') window.alert('삭제 권한을 확인해주세요. (휴지통 이동 실패)');
         });
         if (stateRef.current.activeMatchId === matchId) {
@@ -4392,7 +4390,6 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         void setDoc(doc(firestore, 'matches', matchId), pruneUndefined(restored), { merge: true }).catch(() => {
           // rollback locally if write fails
           dispatch({ type: 'moveMatchToTrash', matchId, entry });
-          // eslint-disable-next-line no-alert
           if (typeof window !== 'undefined') window.alert('복원 권한을 확인해주세요. (복원 실패)');
         });
       },
@@ -4423,7 +4420,6 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
             await batch.commit();
           } catch (error) {
             console.error('Purge error:', error);
-            // eslint-disable-next-line no-alert
             if (typeof window !== 'undefined') window.alert('영구 삭제 권한을 확인해주세요. (삭제 실패)');
           }
         })();
@@ -4581,7 +4577,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       pauseGameTimer: () => dispatch({ type: 'pauseGameTimer' }),
       resumeGameTimer: () => dispatch({ type: 'resumeGameTimer' }),
     }),
-    [isAdmin],
+    [isAdmin, pushMatchUpdate],
   );
 
   // Preload 전체 일정(예정/종료) once per actions ref to avoid 빈 목록 when 첫 진입.

@@ -50,15 +50,18 @@ export default function AdminLandingPage() {
   const [seasonHighlightsDraft, setSeasonHighlightsDraft] = useState(serialize.seasonHighlights(landing.seasonHighlights));
 
   useEffect(() => {
-    setTickerDraft(content.tickerItems.join('\n'));
-    setHeroEyebrow(landing.heroEyebrow);
-    setHeroBadgeText(landing.heroBadgeText);
-    setHeroTitle(landing.heroTitle);
-    setHeroDescription(landing.heroDescription);
-    setHeroSubDescription(landing.heroSubDescription);
-    setValuePropsDraft(serialize.valueProps(landing.valueProps));
-    setSnapshotCardsDraft(serialize.snapshotCards(landing.snapshotCards));
-    setSeasonHighlightsDraft(serialize.seasonHighlights(landing.seasonHighlights));
+    const syncDraft = () => {
+      setTickerDraft(content.tickerItems.join('\n'));
+      setHeroEyebrow(landing.heroEyebrow);
+      setHeroBadgeText(landing.heroBadgeText);
+      setHeroTitle(landing.heroTitle);
+      setHeroDescription(landing.heroDescription);
+      setHeroSubDescription(landing.heroSubDescription);
+      setValuePropsDraft(serialize.valueProps(landing.valueProps));
+      setSnapshotCardsDraft(serialize.snapshotCards(landing.snapshotCards));
+      setSeasonHighlightsDraft(serialize.seasonHighlights(landing.seasonHighlights));
+    };
+    queueMicrotask(syncDraft);
   }, [content.tickerItems, landing]);
 
   const saveTicker = () => {

@@ -289,7 +289,7 @@ export default function Layout() {
 
     const matched = filteredNavItems.find((item) => {
       // External link check
-      if ((item as any).isExternal) return false;
+      if ((item as { isExternal?: boolean }).isExternal) return false;
 
       if (item.children?.some((child) => location.pathname === child.path || location.pathname.startsWith(child.path))) return true;
       if (item.children && location.pathname === item.path) return true; // 부모 경로 자체를 방문했을 때도 유지
@@ -408,7 +408,7 @@ export default function Layout() {
                     const isActive = location.pathname === item.path || activeParentPath === item.path;
                     const isHovering = hoveredMenu === item.path;
                     const blocked = item.requiresAdmin && !isAdmin;
-                    const isExternal = (item as any).isExternal;
+                    const isExternal = (item as { isExternal?: boolean }).isExternal;
 
                     const handleBlockedHover = (el: HTMLAnchorElement | null) => {
                       if (!blocked || !el) return;

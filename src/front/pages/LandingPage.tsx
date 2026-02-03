@@ -192,6 +192,7 @@ export default function LandingPage() {
   const snapshotRef = useRef<HTMLDivElement>(null);
   const [liveMatchesRealtime, setLiveMatchesRealtime] = useState<MatchSchedule[]>([]);
   const [liveScores, setLiveScores] = useState<Record<string, LiveSnapshot>>({});
+  const [nowTs, setNowTs] = useState<number>(() => Date.now());
 
   // 1. 오늘 경기 계산
   const todaysScheduled = useMemo(() => {
@@ -211,7 +212,7 @@ export default function LandingPage() {
   // 2. 내일 경기 계산
   const tomorrowsScheduled = useMemo(() => {
     // 현재 시간에서 정확히 24시간을 더해 KST 기준 '내일'의 키 생성
-    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const tomorrow = new Date(nowTs + 24 * 60 * 60 * 1000);
     const tomorrowKey = getKstDateKey(tomorrow);
     
     return state.matches
@@ -222,7 +223,7 @@ export default function LandingPage() {
           getKstDateKey(match.startTime) === tomorrowKey,
       )
       .sort((a, b) => safeMatchTime(a.startTime) - safeMatchTime(b.startTime));
-  }, [state.matches]);
+  }, [state.matches, nowTs]);
 
   // 3. 라이브 경기 계산
   const liveMatches = useMemo(() => {
@@ -237,10 +238,19 @@ export default function LandingPage() {
 
   // Ensure live widget always has full schedule data
   useEffect(() => {
-    setLiveMatchesRealtime([]);
-    setLiveScores({});
+    queueMicrotask(() => {
+      setLiveMatchesRealtime([]);
+      setLiveScores({});
+    });
     void actions.loadFullSchedule();
   }, [actions]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowTs(Date.now());
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Fetch latest score/inning
   useEffect(() => {
@@ -293,8 +303,11 @@ export default function LandingPage() {
       });
       setLiveScores(map);
     };
-    if (liveMatches.length) void fetchScores();
-    else setLiveScores({});
+    if (liveMatches.length) {
+      void fetchScores();
+    } else {
+      queueMicrotask(() => setLiveScores({}));
+    }
     return () => {
       cancelled = true;
     };

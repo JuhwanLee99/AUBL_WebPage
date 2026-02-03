@@ -359,7 +359,7 @@ export default function ScoreboardPanel({
       hour: '2-digit',
       minute: '2-digit',
     });
-  }, [activeMatch?.startTime]);
+  }, [activeMatch]);
   const summaryVenue = activeMatch?.venue || '경기장 미정';
 
   return (
