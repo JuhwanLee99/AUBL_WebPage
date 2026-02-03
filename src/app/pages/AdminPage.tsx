@@ -26,6 +26,26 @@ function lines(list: string[]) {
   return list.join('\n');
 }
 
+function serializeHistory(items: ContentState['intro']['historyHighlights']) {
+  return items.map((h) => `${h.title} | ${h.desc} | ${h.accent}`).join('\n');
+}
+
+function serializeGovernance(items: ContentState['intro']['governance']) {
+  return items.map((g) => `${g.label} | ${g.value} | ${g.detail}`).join('\n');
+}
+
+function serializeStructure(items: ContentState['intro']['structureCards']) {
+  return items.map((s) => `${s.title} | ${s.points.join('; ')}`).join('\n');
+}
+
+function serializePostseason(items: ContentState['intro']['postseasonMatches']) {
+  return items.map((p) => `${p.title} | ${p.matchups.join('; ')}`).join('\n');
+}
+
+function serializeMetrics(items: ContentState['intro']['heroMetrics']) {
+  return items.map((m) => `${m.label} | ${m.value} | ${m.note}`).join('\n');
+}
+
 export default function AdminPage() {
   const { content, updateContent, resetContent } = useContent();
   const intro = content.intro;
@@ -38,39 +58,41 @@ export default function AdminPage() {
   const [heroTitle, setHeroTitle] = useState(intro.heroTitle);
   const [heroDescription, setHeroDescription] = useState(intro.heroDescription);
 
-  const serializeHistory = (items = intro.historyHighlights) =>
-    items.map((h) => `${h.title} | ${h.desc} | ${h.accent}`).join('\n');
-  const serializeGovernance = (items = intro.governance) =>
-    items.map((g) => `${g.label} | ${g.value} | ${g.detail}`).join('\n');
-  const serializeStructure = (items = intro.structureCards) =>
-    items.map((s) => `${s.title} | ${s.points.join('; ')}`).join('\n');
-  const serializePostseason = (items = intro.postseasonMatches) =>
-    items.map((p) => `${p.title} | ${p.matchups.join('; ')}`).join('\n');
-  const serializeMetrics = (items = intro.heroMetrics) =>
-    items.map((m) => `${m.label} | ${m.value} | ${m.note}`).join('\n');
-
-  const [historyDraft, setHistoryDraft] = useState(serializeHistory());
-  const [governanceDraft, setGovernanceDraft] = useState(serializeGovernance());
-  const [structureDraft, setStructureDraft] = useState(serializeStructure());
-  const [postseasonDraft, setPostseasonDraft] = useState(serializePostseason());
-  const [metricsDraft, setMetricsDraft] = useState(serializeMetrics());
+  const [historyDraft, setHistoryDraft] = useState(serializeHistory(intro.historyHighlights));
+  const [governanceDraft, setGovernanceDraft] = useState(serializeGovernance(intro.governance));
+  const [structureDraft, setStructureDraft] = useState(serializeStructure(intro.structureCards));
+  const [postseasonDraft, setPostseasonDraft] = useState(serializePostseason(intro.postseasonMatches));
+  const [metricsDraft, setMetricsDraft] = useState(serializeMetrics(intro.heroMetrics));
 
   const [status, setStatus] = useState<string | null>(null);
   const [previewTicker, setPreviewTicker] = useState<string[] | null>(null);
   const [previewIntro, setPreviewIntro] = useState<ContentState['intro'] | null>(null);
 
   useEffect(() => {
-    setTickerDraft(lines(content.tickerItems));
-    setTagline(intro.tagline);
-    setHeroSubtitle(intro.heroSubtitle);
-    setHeroTitle(intro.heroTitle);
-    setHeroDescription(intro.heroDescription);
-    setHistoryDraft(serializeHistory(intro.historyHighlights));
-    setGovernanceDraft(serializeGovernance(intro.governance));
-    setStructureDraft(serializeStructure(intro.structureCards));
-    setPostseasonDraft(serializePostseason(intro.postseasonMatches));
-    setMetricsDraft(serializeMetrics(intro.heroMetrics));
-  }, [content]);
+    queueMicrotask(() => {
+      setTickerDraft(lines(content.tickerItems));
+      setTagline(intro.tagline);
+      setHeroSubtitle(intro.heroSubtitle);
+      setHeroTitle(intro.heroTitle);
+      setHeroDescription(intro.heroDescription);
+      setHistoryDraft(serializeHistory(intro.historyHighlights));
+      setGovernanceDraft(serializeGovernance(intro.governance));
+      setStructureDraft(serializeStructure(intro.structureCards));
+      setPostseasonDraft(serializePostseason(intro.postseasonMatches));
+      setMetricsDraft(serializeMetrics(intro.heroMetrics));
+    });
+  }, [
+    content.tickerItems,
+    intro.tagline,
+    intro.heroSubtitle,
+    intro.heroTitle,
+    intro.heroDescription,
+    intro.historyHighlights,
+    intro.governance,
+    intro.structureCards,
+    intro.postseasonMatches,
+    intro.heroMetrics,
+  ]);
 
   const parseTicker = () =>
     tickerDraft

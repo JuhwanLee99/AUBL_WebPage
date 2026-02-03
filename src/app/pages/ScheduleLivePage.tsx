@@ -27,7 +27,6 @@ export default function ScheduleLivePage() {
 
   // 전체 일정 로드
   useEffect(() => {
-    setLiveMatchesRealtime([]);
     void actions.loadFullSchedule();
   }, [actions]);
 

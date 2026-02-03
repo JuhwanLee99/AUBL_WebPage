@@ -8,63 +8,6 @@ import { collection, onSnapshot, query, where, doc, getDoc } from 'firebase/fire
 import { firestore } from '../../shared/firebase/client';
 import { useContent } from '../../shared/state/contentProvider';
 
-const valueProps = [
-  {
-    title: 'Pure Amateurism',
-    desc: '엘리트 선수 출신이 아닌 순수 일반 대학생만 참가. 승리보다 값진 땀방울을 지향합니다.',
-    icon: '🧢',
-  },
-  {
-    title: 'National Scale',
-    desc: '1981년 창설 이후 45년, 수도권을 중심으로 40여 개 대학이 함께하는 국내 최대 대학 야구 리그입니다.',
-    icon: '🗺️',
-  },
-  {
-    title: 'Student Governance',
-    desc: '기획·운영·심판·기록까지 학생이 주도하는 자치 리그. 실시간 기록과 중계로 모두가 같은 정보를 공유합니다.',
-    icon: '🎓',
-  },
-];
-
-const seasonHighlights = [
-  {
-    title: '리그 규정 (Rulebook)',
-    desc: '7이닝 경기, 5회 10점·6회 7점 콜드, 무단 불참 시 1년 출전 정지 등 최신 개정안을 반영했습니다.',
-    icon: '📘',
-    link: '/intro',
-  },
-  {
-    title: '기록실 (Stats)',
-    desc: '타율·방어율·홈런부터 TQB까지. 2026 시즌 최고의 팀과 선수를 데이터로 확인하세요.',
-    icon: '📊',
-    link: '/records',
-  },
-  {
-    title: '팀 소개 (Teams)',
-    desc: '중앙대, 연세대, 고려대, 한양대 등 40개 참가 팀의 프로필과 조 편성을 한눈에 모았습니다.',
-    icon: '🏅',
-    link: '/intro',
-  },
-];
-
-const snapshotCards = [
-  {
-    label: '2026 HOST',
-    value: '중앙대학교(서울)',
-    desc: '46주년 시즌 운영 전권을 맡은 호스트 대학',
-  },
-  {
-    label: 'FORMAT',
-    value: 'A~H조 8개 조 / 약 40팀',
-    desc: '조별 예선 후 으뜸·버금 이원화 토너먼트로 최강자를 가립니다.',
-  },
-  {
-    label: 'VISION',
-    value: '실시간 기록 · 중계 · 디지털화',
-    desc: '웹 플랫폼 기반 실시간 기록과 중계로 리그 소식을 즉시 전달하는 2026 시즌',
-  },
-];
-
 const formatLiveTime = (value: string) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '시간 미정';
@@ -86,6 +29,7 @@ const safeMatchTime = (value: string) => {
 };
 
 const scoreOrDash = (score?: number | null) => (typeof score === 'number' && Number.isFinite(score) ? score : '-');
+const isPracticeMatch = (match: MatchSchedule) => (match.recordMode ?? 'official') === 'practice';
 
 const countDots = (filled: number, total: number, color: string) =>
   Array.from({ length: total }, (_, idx) => ({
@@ -242,12 +186,14 @@ function MiniBases({ bases }: { bases?: (string | null | undefined)[] }) {
 export default function LandingPage() {
   const { state, actions } = useDemoStore();
   const { content } = useContent();
+  const landing = content.landing;
   const navigate = useNavigate();
   const heroRef = useRef<HTMLDivElement>(null);
   const highlightRefs = useRef<HTMLDivElement[]>([]);
   const snapshotRef = useRef<HTMLDivElement>(null);
   const [liveMatchesRealtime, setLiveMatchesRealtime] = useState<MatchSchedule[]>([]);
   const [liveScores, setLiveScores] = useState<Record<string, LiveSnapshot>>({});
+  const [nowTs, setNowTs] = useState<number>(() => Date.now());
 
   // 1. 오늘 경기 계산
   const todaysScheduled = useMemo(() => {
@@ -267,7 +213,7 @@ export default function LandingPage() {
   // 2. 내일 경기 계산
   const tomorrowsScheduled = useMemo(() => {
     // 현재 시간에서 정확히 24시간을 더해 KST 기준 '내일'의 키 생성
-    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const tomorrow = new Date(nowTs + 24 * 60 * 60 * 1000);
     const tomorrowKey = getKstDateKey(tomorrow);
     
     return state.matches
@@ -278,7 +224,7 @@ export default function LandingPage() {
           getKstDateKey(match.startTime) === tomorrowKey,
       )
       .sort((a, b) => safeMatchTime(a.startTime) - safeMatchTime(b.startTime));
-  }, [state.matches]);
+  }, [state.matches, nowTs]);
 
   // 3. 라이브 경기 계산
   const liveMatches = useMemo(() => {
@@ -293,10 +239,19 @@ export default function LandingPage() {
 
   // Ensure live widget always has full schedule data
   useEffect(() => {
-    setLiveMatchesRealtime([]);
-    setLiveScores({});
+    queueMicrotask(() => {
+      setLiveMatchesRealtime([]);
+      setLiveScores({});
+    });
     void actions.loadFullSchedule();
   }, [actions]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowTs(Date.now());
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Fetch latest score/inning
   useEffect(() => {
@@ -349,8 +304,11 @@ export default function LandingPage() {
       });
       setLiveScores(map);
     };
-    if (liveMatches.length) void fetchScores();
-    else setLiveScores({});
+    if (liveMatches.length) {
+      void fetchScores();
+    } else {
+      queueMicrotask(() => setLiveScores({}));
+    }
     return () => {
       cancelled = true;
     };
@@ -442,7 +400,7 @@ export default function LandingPage() {
               className="hero-animate"
               style={{ fontSize: 'clamp(11px, 2.8vw, 13px)', fontWeight: 800, letterSpacing: '0.08em', color: '#60a5fa' }}
             >
-              46TH AUBL · HOSTED BY CHUNG-ANG UNIVERSITY (SEOUL)
+              {landing.heroEyebrow}
             </span>
             <span
               className="hero-animate"
@@ -455,25 +413,21 @@ export default function LandingPage() {
                 border: '1px solid rgba(148, 163, 184, 0.28)',
               }}
             >
-              전국대학아마추어야구연합회 · SINCE 1981
+              {landing.heroBadgeText}
             </span>
           </div>
           <div className="hero-animate" style={{ display: 'grid', gap: '12px' }}>
-            <h1 className="hero-animate" style={{ fontSize: 'clamp(28px, 6vw, 46px)', lineHeight: 1.15, fontWeight: 900, margin: 0 }}>
-              그라운드 위의 지성,
-              <br />
-              멈추지 않는 열정.
+            <h1 className="hero-animate" style={{ fontSize: 'clamp(28px, 6vw, 46px)', lineHeight: 1.15, fontWeight: 900, margin: 0, whiteSpace: 'pre-line' }}>
+              {landing.heroTitle}
             </h1>
             <p
               className="hero-animate"
-              style={{ color: '#cbd5e1', fontSize: 'clamp(14px, 4vw, 17px)', margin: 0, maxWidth: '760px', lineHeight: 1.6 }}
+              style={{ color: '#cbd5e1', fontSize: 'clamp(14px, 4vw, 17px)', margin: 0, maxWidth: '760px', lineHeight: 1.6, whiteSpace: 'pre-line' }}
             >
-              2026 제46회 전국대학아마추어야구연합회(AUBL). 대한민국 유일의 순수 대학 아마추어 야구 리그에서
-              <br />
-              40개 대학 2,000여 명의 선수가 써 내려가는 각본 없는 드라마가 지금 시작됩니다.
+              {landing.heroDescription}
             </p>
             <p className="hero-animate" style={{ color: '#93c5fd', fontWeight: 700, margin: 0, fontSize: 'clamp(13px, 3.4vw, 16px)' }}>
-              중앙대학교(서울)가 주최하는 2026 시즌 — 실시간 기록과 중계, 디지털화를 핵심 가치로 리그의 새로운 도약을 준비했습니다.
+              {landing.heroSubDescription}
             </p>
           </div>
           <div className="hero-animate" style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginTop: '4px' }}>
@@ -682,6 +636,22 @@ export default function LandingPage() {
                     <span style={{ color: '#cbd5e1', fontWeight: 700, fontSize: '13px' }}>
                       {formatLiveTime(match.startTime)} · {match.venue || '장소 미정'}
                     </span>
+                    {isPracticeMatch(match) && (
+                      <span
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: '999px',
+                          background: 'rgba(16,185,129,0.16)',
+                          color: '#34d399',
+                          fontWeight: 900,
+                          fontSize: '11px',
+                          letterSpacing: '0.05em',
+                          border: '1px solid rgba(16,185,129,0.35)',
+                        }}
+                      >
+                        연습경기
+                      </span>
+                    )}
                   </div>
                   {match.notes && (
                     <span
@@ -912,7 +882,24 @@ export default function LandingPage() {
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 900, fontSize: '13px', color: '#ede9fe' }}>{formatTimeShort(match.startTime)}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 900, fontSize: '13px', color: '#ede9fe' }}>{formatTimeShort(match.startTime)}</span>
+                    {isPracticeMatch(match) && (
+                      <span
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: '999px',
+                          background: 'rgba(16,185,129,0.18)',
+                          color: '#34d399',
+                          fontWeight: 900,
+                          fontSize: '11px',
+                          border: '1px solid rgba(16,185,129,0.35)',
+                        }}
+                      >
+                        연습경기
+                      </span>
+                    )}
+                  </div>
                   <span style={{ fontSize: '12px', color: '#c4b5fd', whiteSpace: 'nowrap' }}>{match.venue || '장소 미정'}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800, fontSize: '14px' }}>
@@ -973,7 +960,24 @@ export default function LandingPage() {
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 900, fontSize: '13px', color: '#e0f2fe' }}>{formatTimeShort(match.startTime)}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 900, fontSize: '13px', color: '#e0f2fe' }}>{formatTimeShort(match.startTime)}</span>
+                    {isPracticeMatch(match) && (
+                      <span
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: '999px',
+                          background: 'rgba(16,185,129,0.18)',
+                          color: '#34d399',
+                          fontWeight: 900,
+                          fontSize: '11px',
+                          border: '1px solid rgba(16,185,129,0.35)',
+                        }}
+                      >
+                        연습경기
+                      </span>
+                    )}
+                  </div>
                   <span style={{ fontSize: '12px', color: '#bae6fd', whiteSpace: 'nowrap' }}>{match.venue || '장소 미정'}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800, fontSize: '14px' }}>
@@ -1020,7 +1024,7 @@ export default function LandingPage() {
             gap: '16px',
           }}
         >
-          {valueProps.map(({ title, desc, icon }) => (
+          {landing.valueProps.map(({ title, desc, icon }) => (
             <div
               key={title}
               className="snapshot-card"
@@ -1068,7 +1072,7 @@ export default function LandingPage() {
             gap: '16px',
           }}
         >
-          {snapshotCards.map(({ label, value, desc }) => (
+          {landing.snapshotCards.map(({ label, value, desc }) => (
             <div
               key={label}
               className="snapshot-card"
@@ -1110,7 +1114,7 @@ export default function LandingPage() {
             gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
           }}
         >
-          {seasonHighlights.map(({ title, desc, icon, link }, index) => (
+          {landing.seasonHighlights.map(({ title, desc, icon, link }, index) => (
             <div
               key={title}
               ref={(el) => {

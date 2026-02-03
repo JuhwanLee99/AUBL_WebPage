@@ -22,6 +22,11 @@ export default function MatchSelectorBar({ summaryTime, summaryVenue }: Props) {
   }, [state.matches, filterParam]);
 
   const hasActive = Boolean(state.activeMatchId);
+  const activeMatch = useMemo(
+    () => state.matches.find((match) => match.id === state.activeMatchId) ?? null,
+    [state.matches, state.activeMatchId],
+  );
+  const isPracticeMode = (activeMatch?.recordMode ?? 'official') === 'practice';
 
   return (
     <div
@@ -65,9 +70,27 @@ export default function MatchSelectorBar({ summaryTime, summaryVenue }: Props) {
           ))}
         </select>
       </div>
-      <span style={{ color: '#94a3b8', fontWeight: 700 }}>
-        {summaryTime} · {summaryVenue}
-      </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        {isPracticeMode ? (
+          <span
+            style={{
+              padding: '3px 9px',
+              borderRadius: '999px',
+              border: '1px solid rgba(251,191,36,0.55)',
+              background: 'rgba(251,191,36,0.16)',
+              color: '#fcd34d',
+              fontWeight: 900,
+              fontSize: '11px',
+              letterSpacing: '-0.01em',
+            }}
+          >
+            연습경기
+          </span>
+        ) : null}
+        <span style={{ color: '#94a3b8', fontWeight: 700 }}>
+          {summaryTime} · {summaryVenue}
+        </span>
+      </div>
     </div>
   );
 }

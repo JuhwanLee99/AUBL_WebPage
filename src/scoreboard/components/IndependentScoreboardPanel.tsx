@@ -1,8 +1,7 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { doc, onSnapshot, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { firestore } from '../../shared/firebase/client';
-import { TEAMS } from '../../shared/lib/mockData';
 import type { PlayerSlot, Half, Bases, PlayLog, PlayEvent } from '../../shared/state/demoStore';
 
 interface GameState {
@@ -39,8 +38,6 @@ export default function IndependentScoreboardPanel({
 
   // Firestore에서 경기 데이터 구독
   useEffect(() => {
-    setLoading(true);
-
     const stateDoc = doc(firestore, 'matchStates', matchId);
 
     // 먼저 초기 데이터 로드
@@ -113,15 +110,6 @@ export default function IndependentScoreboardPanel({
 
     return () => unsubscribe();
   }, [matchId]);
-
-  const homeTeam = useMemo(
-    () => TEAMS.find((t) => t.id === gameState?.homeTeamId),
-    [gameState?.homeTeamId]
-  );
-  const awayTeam = useMemo(
-    () => TEAMS.find((t) => t.id === gameState?.awayTeamId),
-    [gameState?.awayTeamId]
-  );
 
   if (loading || !gameState) {
     return (

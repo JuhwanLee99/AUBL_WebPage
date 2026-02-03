@@ -3,6 +3,7 @@ export type BatterStatLine = {
   pos?: string;
   order?: number | null;
   status?: 'out' | '대수비' | '대타' | '대주자';
+  isElite?: boolean;
   pa: number;
   ab: number;
   h: number;
@@ -22,6 +23,7 @@ export type PitcherStatLine = {
   name: string;
   pos?: string;
   status?: 'out' | '대수비';
+  isElite?: boolean;
   bf: number;
   pitches: number;
   strikes: number;

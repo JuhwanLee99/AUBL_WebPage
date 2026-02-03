@@ -224,13 +224,21 @@ export default function Layout() {
 
   const navItems = useMemo(
     () => [
-      { path: '/intro', label: '리그 소개' },
+      {
+        path: '/intro',
+        label: '리그 소개',
+        children: [
+          { path: '/rules', label: '회칙' },
+          { path: '/intro/teams', label: '참가팀 · 조편성' },
+        ],
+      },
       {
         path: '/schedule',
         label: '경기 일정',
         children: [
           { path: '/schedule/results', label: '경기 결과' },
           { path: '/schedule/groups', label: '조별 일정' },
+          { path: '/schedule/practice', label: '연습경기' },
           { path: '/schedule/manage', label: '일정 관리', requiresAdmin: true },
         ],
       },
@@ -282,7 +290,7 @@ export default function Layout() {
 
     const matched = filteredNavItems.find((item) => {
       // External link check
-      if ((item as any).isExternal) return false;
+      if ((item as { isExternal?: boolean }).isExternal) return false;
 
       if (item.children?.some((child) => location.pathname === child.path || location.pathname.startsWith(child.path))) return true;
       if (item.children && location.pathname === item.path) return true; // 부모 경로 자체를 방문했을 때도 유지
@@ -401,7 +409,7 @@ export default function Layout() {
                     const isActive = location.pathname === item.path || activeParentPath === item.path;
                     const isHovering = hoveredMenu === item.path;
                     const blocked = item.requiresAdmin && !isAdmin;
-                    const isExternal = (item as any).isExternal;
+                    const isExternal = (item as { isExternal?: boolean }).isExternal;
 
                     const handleBlockedHover = (el: HTMLAnchorElement | null) => {
                       if (!blocked || !el) return;
@@ -589,12 +597,13 @@ export default function Layout() {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '10px',
+                  gap: isMobileHeader ? '6px' : '10px',
                   marginLeft: isMobileHeader ? 'auto' : isScoreboardText ? '8px' : '12px',
                   order: isMobileHeader ? 2 : undefined,
-                  flexWrap: 'wrap',
+                  flexWrap: 'nowrap',
                   justifyContent: isMobileHeader ? 'flex-end' : 'flex-start',
                   width: 'auto',
+                  flexShrink: isMobileHeader ? 0 : undefined,
                 }}
               >
                 {initializing ? (
@@ -645,13 +654,13 @@ export default function Layout() {
                       to="/account"
                       className="badge-hoverable"
                       style={{
-                        padding: '8px 12px',
+                        padding: isMobileHeader ? '6px 10px' : '8px 12px',
                         borderRadius: '999px',
                         background: 'rgba(148,163,184,0.16)',
                         color: '#e2e8f0',
                         fontWeight: 700,
-                        fontSize: '13px',
-                        maxWidth: '180px',
+                        fontSize: isMobileHeader ? '12px' : '13px',
+                        maxWidth: isMobileHeader ? '120px' : '180px',
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
@@ -669,10 +678,11 @@ export default function Layout() {
                       style={{
                         background: 'rgba(148,163,184,0.25)',
                         color: '#e2e8f0',
-                        padding: '8px 12px',
+                        padding: isMobileHeader ? '6px 10px' : '8px 12px',
                         borderRadius: '12px',
-                        fontSize: '13px',
+                        fontSize: isMobileHeader ? '12px' : '13px',
                         fontWeight: 800,
+                        flexShrink: 0,
                       }}
                     >
                       로그아웃

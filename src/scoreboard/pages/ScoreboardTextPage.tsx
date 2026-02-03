@@ -38,6 +38,8 @@ type PitcherLine = {
   balls: number;
 };
 
+type EventDetail = { label: string; value: string };
+
 type DisplayItem =
   | { type: 'marker'; text: string; color: string; key: string; inning: number; half: Half }
   | {
@@ -51,7 +53,7 @@ type DisplayItem =
       status?: 'out' | '대수비' | '대타' | '대주자';
       isSubstitute?: boolean;
     }
-  | { type: 'log'; text: string; key: string; chip: string; inning: number; half: Half };
+  | { type: 'log'; text: string; key: string; chip: string; inning: number; half: Half; details?: EventDetail[] };
 
 type JerseyMap = { home: Map<string, { number: string; pos: string }>; away: Map<string, { number: string; pos: string }> };
 
@@ -136,6 +138,7 @@ export default function ScoreboardTextPage() {
   const hasLiveOverlay = useMemo(() => Boolean((activeMatch?.liveVideoUrl || '').trim()), [activeMatch?.liveVideoUrl]);
   const noActiveMatch = !state.activeMatchId;
   const feed = useMemo(() => state.feed, [state.feed]);
+  const events = useMemo(() => state.events, [state.events]);
   const hittingSide = state.half === 'top' ? 'away' : 'home';
   const defenseSide = hittingSide === 'home' ? 'away' : 'home';
   
@@ -178,7 +181,7 @@ export default function ScoreboardTextPage() {
     [playerStats.hitters, playerStats.pitchers, state.score],
   );
   const postGameDetail = activeMatch?.postGame ?? null;
-  const displayItems = useMemo(() => buildDisplayItems(feed, jerseyMap), [feed, jerseyMap]);
+  const displayItems = useMemo(() => buildDisplayItems(feed, events, jerseyMap), [feed, events, jerseyMap]);
   const sections = useMemo(() => groupByInning(displayItems), [displayItems]);
   const collapsedMap = useMemo(() => {
     const map: Record<number, boolean> = {};
@@ -234,6 +237,24 @@ export default function ScoreboardTextPage() {
     <div className="scoreboard-text-page">
       <div className="main-content-grid">
         <div className={`scoreboard-section ${isMobile ? 'mobile-layout' : ''}`}>
+          {/* 동접자 수 표시 */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginBottom: '12px',
+              padding: '8px 12px',
+              background: 'rgba(34, 197, 94, 0.08)',
+              borderRadius: '10px',
+              width: 'fit-content',
+            }}
+          >
+            <span style={{ fontSize: '15px' }}>👥</span>
+            <span style={{ fontSize: '13px', color: '#22c55e', fontWeight: 600 }}>
+              현재 {state.onlineViewerCount}명 시청 중
+            </span>
+          </div>
           <ScoreboardFrame
             variant="text"
             showFootnote={false}
@@ -337,7 +358,7 @@ export default function ScoreboardTextPage() {
                       alignSelf: 'stretch',
                     }}
                   >
-                    <LiveFeed sections={sections} collapsedMap={collapsedMap} gameOverInfo={gameOverInfo} />
+                    <LiveFeed sections={sections} collapsedMap={collapsedMap} gameOverInfo={gameOverInfo} isMobile={isMobile} />
                   </div>
                 ) : null}
               </div>
@@ -430,7 +451,7 @@ export default function ScoreboardTextPage() {
               )}
             </div>
           </div>
-          <LiveFeed sections={sections} collapsedMap={collapsedMap} gameOverInfo={gameOverInfo} />
+          <LiveFeed sections={sections} collapsedMap={collapsedMap} gameOverInfo={gameOverInfo} isMobile={isMobile} />
           <div
             style={{
               borderRadius: '14px',
@@ -588,20 +609,24 @@ function LiveFeed({
   sections,
   collapsedMap,
   gameOverInfo,
+  isMobile,
 }: {
   sections: ReturnType<typeof groupByInning>;
   collapsedMap: Record<number, boolean>;
   gameOverInfo: { endText: string; resultText: string } | null;
+  isMobile: boolean;
 }) {
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>(collapsedMap);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
-  const heightMapRef = useRef<Map<string, number>>(new Map());
+  const [measuredHeights, setMeasuredHeights] = useState<Record<string, number>>({});
   const overscanPx = 200;
 
   useEffect(() => {
-    setCollapsed((prev) => ({ ...collapsedMap, ...prev }));
+    queueMicrotask(() => {
+      setCollapsed((prev) => ({ ...collapsedMap, ...prev }));
+    });
   }, [collapsedMap]);
 
   useEffect(() => {
@@ -649,7 +674,13 @@ function LiveFeed({
 
       section.items.forEach((item, idx) => {
         const estimatedHeight =
-          item.type === 'marker' ? 22 : item.type === 'batter' ? 22 : item.type === 'log' ? 52 : 48;
+          item.type === 'marker'
+            ? 22
+            : item.type === 'batter'
+              ? 22
+              : item.type === 'log'
+                ? (item.details?.length ? 120 : 52)
+                : 48;
         items.push({
           key: item.key,
           estimatedHeight,
@@ -761,21 +792,46 @@ function LiveFeed({
                   background: idx % 2 === 0 ? 'rgba(15, 23, 42, 0.65)' : 'rgba(15, 23, 42, 0.35)',
                   fontSize: '14px',
                   lineHeight: 1.5,
-                  display: 'inline-flex',
-                  alignItems: 'center',
+                  display: 'grid',
+                  gap: '8px',
                   width: 'max-content',
                   maxWidth: '100%',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'keep-all',
-                  overflowWrap: 'anywhere',
                   color: '#e2e8f0',
                 }}
               >
-                {colorizeText(item.text).map((part) => (
-                  <span key={part.key} style={{ color: part.color ?? '#e2e8f0', fontWeight: part.color ? 900 : 800 }}>
-                    {part.text}
-                  </span>
-                ))}
+                <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'keep-all', overflowWrap: 'anywhere' }}>
+                  {colorizeText(item.text).map((part) => (
+                    <span key={part.key} style={{ color: part.color ?? '#e2e8f0', fontWeight: part.color ? 900 : 800 }}>
+                      {part.text}
+                    </span>
+                  ))}
+                </div>
+                {item.details?.length ? (
+                  isMobile ? (
+                    <details style={{ borderTop: '1px solid rgba(148,163,184,0.2)', paddingTop: '6px' }}>
+                      <summary style={{ cursor: 'pointer', color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>
+                        상세 이벤트 ({item.details.length})
+                      </summary>
+                      <div style={{ display: 'grid', gap: '4px', marginTop: '6px' }}>
+                        {item.details.map((detail, detailIdx) => (
+                          <div key={`${item.key}-detail-${detailIdx}`} style={{ fontSize: '12px', color: '#cbd5e1', lineHeight: 1.45 }}>
+                            <span style={{ color: '#94a3b8', fontWeight: 800, marginRight: '6px' }}>{detail.label}</span>
+                            <span>{detail.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  ) : (
+                    <div style={{ display: 'grid', gap: '4px', borderTop: '1px solid rgba(148,163,184,0.2)', paddingTop: '6px' }}>
+                      {item.details.map((detail, detailIdx) => (
+                        <div key={`${item.key}-detail-${detailIdx}`} style={{ fontSize: '12px', color: '#cbd5e1', lineHeight: 1.45 }}>
+                          <span style={{ color: '#94a3b8', fontWeight: 800, marginRight: '6px' }}>{detail.label}</span>
+                          <span>{detail.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                ) : null}
               </div>
             );
           },
@@ -798,15 +854,15 @@ function LiveFeed({
     }
 
     return items;
-  }, [sections, collapsed, gameOverInfo]);
+  }, [sections, collapsed, gameOverInfo, isMobile]);
 
   const totalHeight = useMemo(() => {
     let h = 0;
     flatItems.forEach((item) => {
-      h += heightMapRef.current.get(item.key) ?? item.estimatedHeight;
+      h += measuredHeights[item.key] ?? item.estimatedHeight;
     });
     return h;
-  }, [flatItems]);
+  }, [flatItems, measuredHeights]);
 
   const { startIndex, endIndex, offsetTop } = useMemo(() => {
     let y = 0;
@@ -815,7 +871,7 @@ function LiveFeed({
     const viewportStart = Math.max(0, scrollTop - overscanPx);
 
     for (let i = 0; i < flatItems.length; i += 1) {
-      const h = heightMapRef.current.get(flatItems[i].key) ?? flatItems[i].estimatedHeight;
+      const h = measuredHeights[flatItems[i].key] ?? flatItems[i].estimatedHeight;
       const nextY = y + h;
       if (nextY >= viewportStart) {
         start = i;
@@ -826,24 +882,24 @@ function LiveFeed({
     let end = start;
     let currentY = y;
     for (let i = start; i < flatItems.length; i += 1) {
-      const h = heightMapRef.current.get(flatItems[i].key) ?? flatItems[i].estimatedHeight;
+      const h = measuredHeights[flatItems[i].key] ?? flatItems[i].estimatedHeight;
       currentY += h;
       end = i;
       if (currentY >= viewportEnd) break;
     }
     return { startIndex: start, endIndex: Math.min(end, flatItems.length - 1), offsetTop: y };
-  }, [flatItems, scrollTop, viewportHeight, overscanPx]);
+  }, [flatItems, scrollTop, viewportHeight, overscanPx, measuredHeights]);
 
   const visibleItems = flatItems.slice(startIndex, endIndex + 1);
 
   const measureRef = (key: string) => (el: HTMLDivElement | null) => {
     if (!el) return;
-    const prev = heightMapRef.current.get(key);
     const next = el.getBoundingClientRect().height;
-    if (prev !== next) {
-      heightMapRef.current.set(key, next);
-      setViewportHeight((v) => v); // trigger recalculation
-    }
+    setMeasuredHeights((prev) => {
+      if (prev[key] === next) return prev;
+      return { ...prev, [key]: next };
+    });
+    setViewportHeight((v) => v); // trigger recalculation
   };
 
   useEffect(() => {
@@ -1543,13 +1599,82 @@ function formatEntry(entry: ReturnType<typeof useDemoStore>['state']['feed'][num
   return parts ? `${parts} ${entry.result}` : entry.result;
 }
 
+function eventLookupKey(payload: { inning: number; half: Half; order: number; pitch: number }) {
+  return `${payload.inning}-${payload.half}-${payload.order}-${payload.pitch}`;
+}
+
+function formatErrorDetail(error: PlayEvent['error']) {
+  if (!error) return '';
+  if (typeof error === 'string') return error.trim();
+  const parts = [error.errorType, error.fielderPos, error.context]
+    .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+    .map((part) => part.trim());
+  return parts.join(' · ');
+}
+
+function formatEventDetails(event?: PlayEvent): EventDetail[] {
+  if (!event) return [];
+  const details: EventDetail[] = [];
+
+  const battedBallType = event.battedBall?.type?.trim();
+  const battedBallZone = event.battedBall?.zone?.trim();
+  const battedBallValue = [battedBallType, battedBallZone]
+    .filter((value): value is string => Boolean(value && value !== '선택 안 함'))
+    .join(' / ');
+  if (battedBallValue) {
+    details.push({ label: '타구', value: battedBallValue });
+  }
+
+  if (Array.isArray(event.runners) && event.runners.length) {
+    details.push({ label: '주자', value: event.runners.join(', ') });
+  }
+
+  const errorValue = formatErrorDetail(event.error);
+  if (errorValue) {
+    details.push({ label: '실책', value: errorValue });
+  }
+
+  if (typeof event.rbi === 'number' && event.rbi > 0) {
+    details.push({ label: '타점', value: `${event.rbi}` });
+  }
+
+  if (Array.isArray(event.dpRoute) && event.dpRoute.length) {
+    details.push({ label: '병살 루트', value: event.dpRoute.join('-') });
+  }
+
+  if (event.strikeType) {
+    details.push({ label: '삼진 판정', value: event.strikeType === 'looking' ? '루킹' : '스윙' });
+  }
+
+  if (event.notes?.trim()) {
+    details.push({ label: '비고', value: event.notes.trim() });
+  }
+
+  return details;
+}
+
 function buildDisplayItems(
   feed: ReturnType<typeof useDemoStore>['state']['feed'],
+  events: ReturnType<typeof useDemoStore>['state']['events'],
   jerseyMap: JerseyMap,
 ): DisplayItem[] {
   // [수정] demoStore가 이미 올바른 시간순(Oldest -> Newest)으로 정렬되어 있으므로 reverse() 제거
   // createdAt 기반 정렬 덕분에 선수 교체 로그도 정확한 시점에 위치함
-  const chronological = feed; 
+  const chronological = feed;
+  const eventsById = new Map<string, PlayEvent>();
+  const eventsByKey = new Map<string, PlayEvent[]>();
+  const eventsChronological = [...events].sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
+
+  eventsChronological.forEach((event) => {
+    if (event.eventId) {
+      eventsById.set(event.eventId, event);
+    }
+    const key = eventLookupKey(event);
+    const queue = eventsByKey.get(key) ?? [];
+    queue.push(event);
+    eventsByKey.set(key, queue);
+  });
+
   const items: DisplayItem[] = [];
 
   const markerText = (inning: number, half: Half, type: 'start' | 'end') => {
@@ -1658,6 +1783,27 @@ function buildDisplayItems(
       }
     }
 
+    const key = eventLookupKey(entry);
+    const queue = eventsByKey.get(key);
+    let matchedEvent = entry.eventId ? eventsById.get(entry.eventId) : undefined;
+    if (!matchedEvent && queue && queue.length) {
+      if (typeof entry.createdAt === 'number') {
+        let bestIdx = 0;
+        let bestDiff = Number.POSITIVE_INFINITY;
+        queue.forEach((candidate, candidateIdx) => {
+          const eventTime = typeof candidate.createdAt === 'number' ? candidate.createdAt : entry.createdAt!;
+          const diff = Math.abs(eventTime - entry.createdAt!);
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            bestIdx = candidateIdx;
+          }
+        });
+        matchedEvent = queue.splice(bestIdx, 1)[0];
+      } else {
+        matchedEvent = queue.shift();
+      }
+    }
+
     items.push({
       type: 'log',
       text: formatEntry(entry, batterName ? formatWithJersey(batterName, resolveJersey(jerseyMap, offenseSide, batterName)) : undefined),
@@ -1665,6 +1811,7 @@ function buildDisplayItems(
       chip: `${entry.inning}-${entry.half}-${entry.order}-${entry.pitch}`,
       inning: entry.inning,
       half: entry.half,
+      details: formatEventDetails(matchedEvent),
     });
 
     prevHalf = entry.half;
@@ -1817,19 +1964,19 @@ function ensurePitcherStat(name: string, pos?: string): PitcherStatExt {
 // 투수/타자 구분 로직, 고유 이름(uniqueName)을 Key로 사용하는 로직 적용
 function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   // 1. Roster Map의 Value 타입 확장 및 데이터 저장
-  // { pos?: string; order: number; substitutionType?: string } 형태로 저장
-  const rosterHome = new Map<string, { pos?: string; order: number; substitutionType?: string }>();
-  const rosterAway = new Map<string, { pos?: string; order: number; substitutionType?: string }>();
-  
-  // [수정] substitutionType 저장 추가
-  record.lineups.home.forEach((p, idx) => rosterHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType }));
-  record.lineups.away.forEach((p, idx) => rosterAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType }));
+  // { pos?: string; order: number; substitutionType?: string; isElite?: boolean } 형태로 저장
+  const rosterHome = new Map<string, { pos?: string; order: number; substitutionType?: string; isElite?: boolean }>();
+  const rosterAway = new Map<string, { pos?: string; order: number; substitutionType?: string; isElite?: boolean }>();
 
-  const benchMetaHome = new Map<string, { pos?: string; order: number; substitutionType?: string }>();
-  const benchMetaAway = new Map<string, { pos?: string; order: number; substitutionType?: string }>();
-  // [수정] substitutionType 저장 추가
-  record.benches.home.forEach((p, idx) => benchMetaHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, substitutionType: p.substitutionType }));
-  record.benches.away.forEach((p, idx) => benchMetaAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, substitutionType: p.substitutionType }));
+  // [수정] substitutionType, isElite 저장 추가
+  record.lineups.home.forEach((p, idx) => rosterHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType, isElite: p.isElite }));
+  record.lineups.away.forEach((p, idx) => rosterAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType, isElite: p.isElite }));
+
+  const benchMetaHome = new Map<string, { pos?: string; order: number; substitutionType?: string; isElite?: boolean }>();
+  const benchMetaAway = new Map<string, { pos?: string; order: number; substitutionType?: string; isElite?: boolean }>();
+  // [수정] substitutionType, isElite 저장 추가
+  record.benches.home.forEach((p, idx) => benchMetaHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, substitutionType: p.substitutionType, isElite: p.isElite }));
+  record.benches.away.forEach((p, idx) => benchMetaAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, substitutionType: p.substitutionType, isElite: p.isElite }));
 
   const extraOrder: Record<'home' | 'away', number> = { home: 100, away: 100 };
   const battingOrders: Record<'home' | 'away', Map<number, string[]>> = { home: new Map(), away: new Map() };
@@ -1870,8 +2017,8 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     if (roster.has(name)) return roster.get(name)!;
     const benchMeta = side === 'home' ? benchMetaHome : benchMetaAway;
     const meta = benchMeta.get(name);
-    // [수정] substitutionType 전달
-    const entry = { pos: meta?.pos, order: meta?.order ?? extraOrder[side], substitutionType: meta?.substitutionType };
+    // [수정] substitutionType, isElite 전달
+    const entry = { pos: meta?.pos, order: meta?.order ?? extraOrder[side], substitutionType: meta?.substitutionType, isElite: meta?.isElite };
     extraOrder[side] += 1;
     roster.set(name, entry);
     return entry;
