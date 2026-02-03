@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useMemo, useState } from 'react';
 import { useDemoStore } from '../../shared/state/demoStore';
-import type { MatchStatus, MatchSchedule } from '../../shared/state/demoStore';
+import type { MatchStatus, MatchSchedule, PlayerSlot } from '../../shared/state/demoStore';
 import type { LeagueDivision } from '../../shared/types';
 import { TEAMS } from '../../shared/lib/mockData';
 
@@ -45,6 +45,51 @@ const formatRemaining = (purgeAt: number) => {
   return `${hours}시간 ${minutes}분 후 삭제`;
 };
 
+// 더미 라인업 생성 (더미 일정 전용)
+const DUMMY_NAMES = [
+  '김민수', '이정훈', '박준호', '최승우', '정대현',
+  '강현우', '윤성민', '장우진', '임태양', '한지훈',
+  '오승환', '신동욱', '황재민', '배성훈', '조영준',
+  '서진우', '유현석', '문정호', '권도윤', '안재현',
+];
+
+const generateDummyLineup = (): PlayerSlot[] => {
+  const positions = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'];
+  const shuffledNames = [...DUMMY_NAMES].sort(() => Math.random() - 0.5);
+
+  const lineup: PlayerSlot[] = positions.map((pos, idx) => ({
+    name: shuffledNames[idx],
+    pos,
+    number: String(Math.floor(Math.random() * 99) + 1),
+    throws: Math.random() > 0.2 ? 'R' : 'L',
+    bats: Math.random() > 0.3 ? 'R' : 'L',
+  }));
+
+  // 투수 추가 (10번째)
+  lineup.push({
+    name: shuffledNames[9],
+    pos: 'P',
+    number: String(Math.floor(Math.random() * 99) + 1),
+    throws: Math.random() > 0.3 ? 'R' : 'L',
+    bats: 'R',
+  });
+
+  return lineup;
+};
+
+const generateDummyBench = (): PlayerSlot[] => {
+  const benchPositions = ['C', 'IF', 'OF', 'P', 'P'];
+  const shuffledNames = [...DUMMY_NAMES].sort(() => Math.random() - 0.5).slice(10, 15);
+
+  return benchPositions.map((pos, idx) => ({
+    name: shuffledNames[idx] || `후보${idx + 1}`,
+    pos,
+    number: String(Math.floor(Math.random() * 99) + 1),
+    throws: Math.random() > 0.3 ? 'R' : 'L',
+    bats: Math.random() > 0.3 ? 'R' : 'L',
+  }));
+};
+
 export default function ScheduleManagePage() {
   const { state, actions } = useDemoStore();
   const [showTrash, setShowTrash] = useState(false);
@@ -72,6 +117,15 @@ export default function ScheduleManagePage() {
       venue: 'AUBL 임시구장',
       status: 'scheduled',
       notes: '빠른 더미 등록',
+      // 더미 라인업 추가
+      lineups: {
+        home: generateDummyLineup(),
+        away: generateDummyLineup(),
+      },
+      benches: {
+        home: generateDummyBench(),
+        away: generateDummyBench(),
+      },
     };
     actions.addMatch(match);
   };
