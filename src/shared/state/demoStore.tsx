@@ -3606,6 +3606,29 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     return setDoc(doc(firestore, 'matches', matchId), payload, { merge: true });
   }, []);
 
+  const purgeMatchFromFirestore = useCallback(async (matchId: string) => {
+    const [feedSnap, eventsSnap, presenceSnap] = await Promise.all([
+      getDocs(collection(firestore, 'matchStates', matchId, 'feed')),
+      getDocs(collection(firestore, 'matchStates', matchId, 'events')),
+      getDocs(collection(firestore, 'matchStates', matchId, 'presence')),
+    ]);
+
+    const refs = [
+      doc(firestore, 'matches', matchId),
+      doc(firestore, 'matchStates', matchId),
+      ...feedSnap.docs.map((d) => d.ref),
+      ...eventsSnap.docs.map((d) => d.ref),
+      ...presenceSnap.docs.map((d) => d.ref),
+    ];
+
+    const CHUNK_SIZE = 450;
+    for (let i = 0; i < refs.length; i += CHUNK_SIZE) {
+      const batch = writeBatch(firestore);
+      refs.slice(i, i + CHUNK_SIZE).forEach((ref) => batch.delete(ref));
+      await batch.commit();
+    }
+  }, []);
+
   // [수정 2] 로컬 스토리지에서 불러오던 로직을 삭제하고, 오히려 "초기화(삭제)"하도록 변경
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -4270,9 +4293,9 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     const expired = state.matches.filter((m) => m.deleted && m.purgeAt && m.purgeAt <= now);
     if (!expired.length) return;
     expired.forEach((entry) => {
-      void deleteDoc(doc(firestore, 'matches', entry.id)).catch(() => {});
+      void purgeMatchFromFirestore(entry.id).catch(() => {});
     });
-  }, [state.matches]);
+  }, [state.matches, purgeMatchFromFirestore]);
 
   const updateCurrentMatchPointer = (matchId: string | null) => {
     void setDoc(
@@ -4522,30 +4545,16 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         });
       },
       purgeTrash: (matchId: string) => {
+        matchesReadyRef.current = true;
         dispatch({ type: 'purgeTrash', matchId });
+        if (stateRef.current.activeMatchId === matchId) {
+          updateCurrentMatchPointer(null);
+        }
 
-        // [수정] matches 문서뿐만 아니라 matchStates와 하위 컬렉션(feed, events)까지 모두 삭제
+        // matches + matchStates + 하위 컬렉션(feed/events/presence)까지 완전 삭제
         void (async () => {
           try {
-            const batch = writeBatch(firestore);
-
-            // 1. matches 컬렉션에서 일정 삭제
-            batch.delete(doc(firestore, 'matches', matchId));
-
-            // 2. matchStates 컬렉션에서 상태 문서 삭제
-            batch.delete(doc(firestore, 'matchStates', matchId));
-
-            // 3. matchStates 하위의 feed, events 컬렉션 데이터 삭제
-            // (클라이언트 사이드 삭제이므로 문서가 많을 경우 배치 처리가 필요할 수 있으나, 현재 규모에서는 일괄 처리 가능)
-            const [feedSnap, eventsSnap] = await Promise.all([
-              getDocs(collection(firestore, 'matchStates', matchId, 'feed')),
-              getDocs(collection(firestore, 'matchStates', matchId, 'events')),
-            ]);
-
-            feedSnap.forEach((d) => batch.delete(d.ref));
-            eventsSnap.forEach((d) => batch.delete(d.ref));
-
-            await batch.commit();
+            await purgeMatchFromFirestore(matchId);
           } catch (error) {
             console.error('Purge error:', error);
             if (typeof window !== 'undefined') window.alert('영구 삭제 권한을 확인해주세요. (삭제 실패)');
