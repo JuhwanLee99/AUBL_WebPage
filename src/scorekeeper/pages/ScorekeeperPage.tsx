@@ -901,20 +901,20 @@ function classifyPitch(result: string) {
 
 function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   // Roster Map의 Key를 uniqueName으로 변경
-  const rosterHome = new Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자' }>();
-  const rosterAway = new Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자' }>();
+  const rosterHome = new Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자'; isElite?: boolean }>();
+  const rosterAway = new Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자'; isElite?: boolean }>();
 
   record.lineups.home.forEach((p, idx) =>
-    rosterHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType })
+    rosterHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType, isElite: p.isElite })
   );
   record.lineups.away.forEach((p, idx) =>
-    rosterAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType })
+    rosterAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType, isElite: p.isElite })
   );
 
-  const benchMetaHome = new Map<string, { pos?: string; order: number }>();
-  const benchMetaAway = new Map<string, { pos?: string; order: number }>();
-  record.benches.home.forEach((p, idx) => benchMetaHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx }));
-  record.benches.away.forEach((p, idx) => benchMetaAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx }));
+  const benchMetaHome = new Map<string, { pos?: string; order: number; isElite?: boolean }>();
+  const benchMetaAway = new Map<string, { pos?: string; order: number; isElite?: boolean }>();
+  record.benches.home.forEach((p, idx) => benchMetaHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, isElite: p.isElite }));
+  record.benches.away.forEach((p, idx) => benchMetaAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, isElite: p.isElite }));
 
   const extraOrder: Record<'home' | 'away', number> = { home: 100, away: 100 };
   const battingOrders: Record<'home' | 'away', Map<number, string[]>> = { home: new Map(), away: new Map() };
@@ -959,7 +959,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     if (roster.has(name)) return roster.get(name)!;
     const benchMeta = side === 'home' ? benchMetaHome : benchMetaAway;
     const meta = benchMeta.get(name);
-    const entry = { pos: meta?.pos, order: meta?.order ?? extraOrder[side] };
+    const entry = { pos: meta?.pos, order: meta?.order ?? extraOrder[side], isElite: meta?.isElite };
     extraOrder[side] += 1;
     roster.set(name, entry);
     return entry;
@@ -1259,10 +1259,10 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
 
   const toArray = (
     side: 'home' | 'away',
-    roster: Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자' }>,
+    roster: Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자'; isElite?: boolean }>,
     store: Map<string, PlayerStat>
   ) => {
-    const rows: PlayerStat[] = [];
+    const rows: (PlayerStat & { isElite?: boolean })[] = [];
     const orderMap = battingOrders[side];
     const orderKeys = [...orderMap.keys()].sort((a, b) => a - b);
     orderKeys.forEach((order) => {
@@ -1290,7 +1290,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
           // console.log(`✓ ${playerName} - substitutionType: ${meta.substitutionType} -> status: ${status}`);
         }
 
-        rows.push({ ...row, order, status });
+        rows.push({ ...row, order, status, isElite: meta?.isElite });
       });
     });
     const remaining = [...store.values()].filter(
@@ -1298,12 +1298,15 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
         !rows.some((r) => r.name === s.name) &&
         ![...orderMap.values()].some((list) => list.includes(s.name))
     );
-    remaining.forEach((stat) => rows.push({ ...stat, order: null }));
+    remaining.forEach((stat) => {
+      const meta = roster.get(stat.name);
+      rows.push({ ...stat, order: null, isElite: meta?.isElite });
+    });
     return rows;
   };
 
   const toPitcherArray = (
-    roster: Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자' }>,
+    roster: Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자'; isElite?: boolean }>,
     store: Map<string, PitcherStat>,
     appearance: Map<string, number>
   ): PitcherStatLine[] => {
@@ -1332,6 +1335,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
               ? `계투(${appearanceOrder})`
               : undefined,
         status,
+        isElite: meta?.isElite,
       };
     });
 
@@ -1393,9 +1397,9 @@ export default function ScorekeeperPage() {
 
   const [actionModal, setActionModal] = useState<ActionModalData | null>(null);
   const [positionSwapModal, setPositionSwapModal] = useState<{ side: Side } | null>(null);
-  const [benchInput, setBenchInput] = useState<{ [K in Side]: { name: string; pos: string; number: string; throws: string; bats: string } }>({
-    home: { name: '', pos: '', number: '', throws: 'R', bats: 'R' },
-    away: { name: '', pos: '', number: '', throws: 'R', bats: 'R' },
+  const [benchInput, setBenchInput] = useState<{ [K in Side]: { name: string; pos: string; number: string; throws: string; bats: string; isElite: boolean } }>({
+    home: { name: '', pos: '', number: '', throws: 'R', bats: 'R', isElite: false },
+    away: { name: '', pos: '', number: '', throws: 'R', bats: 'R', isElite: false },
   });
   const [hitWizard, setHitWizard] = useState<HitWizardState | null>(null);
   const [manualBroadcast, setManualBroadcast] = useState('');
@@ -6697,21 +6701,21 @@ function TeamEditor({
   defaultName: string;
   side: Side;
   teamName: string;
-  // [수정] isOhtaniRule 타입 추가
-  lineup: { name: string; pos: string; number: string; throws: string; bats: string; isOhtaniRule?: boolean }[];
-  bench: { name: string; pos: string; number: string; throws: string; bats: string; isOhtaniRule?: boolean }[];
-  benchInput: { name: string; pos: string; number: string; throws: string; bats: string };
-  onChangeBenchInput: (val: { name: string; pos: string; number: string; throws: string; bats: string }) => void;
+  // [수정] isOhtaniRule, isElite 타입 추가
+  lineup: { name: string; pos: string; number: string; throws: string; bats: string; isOhtaniRule?: boolean; isElite?: boolean }[];
+  bench: { name: string; pos: string; number: string; throws: string; bats: string; isOhtaniRule?: boolean; isElite?: boolean }[];
+  benchInput: { name: string; pos: string; number: string; throws: string; bats: string; isElite: boolean };
+  onChangeBenchInput: (val: { name: string; pos: string; number: string; throws: string; bats: string; isElite: boolean }) => void;
   onSetTeamName: (side: Side, name: string) => void;
-  // [수정] updates 타입에 isOhtaniRule 추가
+  // [수정] updates 타입에 isOhtaniRule, isElite 추가
   onSetLineup: (
     side: Side,
     index: number,
-    updates: { name?: string; pos?: string; number?: string; throws?: string; bats?: string; isOhtaniRule?: boolean },
+    updates: { name?: string; pos?: string; number?: string; throws?: string; bats?: string; isOhtaniRule?: boolean; isElite?: boolean },
   ) => void;
   onAddBench: (
     side: Side,
-    player: { name: string; pos: string; number: string; throws: string; bats: string; isOhtaniRule?: boolean },
+    player: { name: string; pos: string; number: string; throws: string; bats: string; isOhtaniRule?: boolean; isElite?: boolean },
   ) => void;
   onRemoveBench: (side: Side, benchIndex: number) => void;
   onSubstitute: (side: Side, benchIndex: number, lineupIndex: number) => void;
@@ -6746,6 +6750,30 @@ function TeamEditor({
 
     return result;
   }, [lineup]);
+
+  // 선출(선수 출신) 유효성 검사
+  const eliteWarnings = useMemo(() => {
+    const warnings: string[] = [];
+    const allPlayers = [...lineup, ...bench].filter(p => p.name && p.name.trim());
+
+    // 선출 인원 카운트
+    const elitePlayers = allPlayers.filter(p => p.isElite);
+    const eliteCount = elitePlayers.length;
+
+    if (eliteCount > 2) {
+      warnings.push(`선출 선수 ${eliteCount}명 (최대 2명 초과)`);
+    }
+
+    // 선출 P/C 포지션 검사
+    const eliteInvalidPos = allPlayers.filter(
+      p => p.isElite && ['P', 'C'].includes(p.pos.toUpperCase())
+    );
+    if (eliteInvalidPos.length > 0) {
+      warnings.push(`선출 선수 투수/포수 불가: ${eliteInvalidPos.map(p => p.name).join(', ')}`);
+    }
+
+    return warnings;
+  }, [lineup, bench]);
 
   const lineupEntries = filledLineup.map((slot, idx) => ({ slot, idx }));
 
@@ -6825,8 +6853,8 @@ function TeamEditor({
             key={entry.idx}
             style={{
               display: 'grid',
-              gridTemplateColumns: '24px 85px 55px 50px 70px 70px',
-              gap: '8px',
+              gridTemplateColumns: '24px 85px 55px 50px 68px 68px 34px',
+              gap: '6px',
               alignItems: 'center',
               padding: '4px',
               borderRadius: '10px',
@@ -6917,6 +6945,28 @@ function TeamEditor({
               <option value="R">타 R</option>
               <option value="L">타 L</option>
             </select>
+            <button
+              type="button"
+              onClick={() => onSetLineup(side, entry.idx, { isElite: !entry.slot.isElite })}
+              style={{
+                padding: '6px 2px',
+                borderRadius: '8px',
+                border: entry.slot.isElite
+                  ? '1px solid rgba(249, 115, 22, 0.6)'
+                  : '1px solid rgba(148, 163, 184, 0.25)',
+                background: entry.slot.isElite
+                  ? 'rgba(249, 115, 22, 0.15)'
+                  : 'rgba(255,255,255,0.04)',
+                color: entry.slot.isElite ? '#fb923c' : '#94a3b8',
+                fontWeight: 700,
+                fontSize: '11px',
+                cursor: 'pointer',
+                width: '100%',
+              }}
+              title="선출(선수 출신) 여부"
+            >
+              {entry.slot.isElite ? '선' : '일'}
+            </button>
           </div>
         ))}
 
@@ -7182,6 +7232,27 @@ function TeamEditor({
               </select>
           <button
             type="button"
+            onClick={() => onChangeBenchInput({ ...benchInput, isElite: !benchInput.isElite })}
+            style={{
+              padding: '8px 6px',
+              borderRadius: '10px',
+              border: benchInput.isElite
+                ? '1px solid rgba(249, 115, 22, 0.6)'
+                : '1px solid rgba(148, 163, 184, 0.3)',
+              background: benchInput.isElite
+                ? 'rgba(249, 115, 22, 0.15)'
+                : '#0b0f1a',
+              color: benchInput.isElite ? '#fb923c' : '#94a3b8',
+              fontWeight: 700,
+              fontSize: '12px',
+              cursor: 'pointer',
+            }}
+            title="선출(선수 출신) 여부"
+          >
+            {benchInput.isElite ? '선' : '일'}
+          </button>
+          <button
+            type="button"
             onClick={() => {
               if (!benchInput.name.trim()) return;
               onAddBench(side, {
@@ -7190,8 +7261,9 @@ function TeamEditor({
                 number: benchInput.number,
                 throws: benchInput.throws,
                 bats: benchInput.bats,
+                isElite: benchInput.isElite,
               });
-              onChangeBenchInput({ name: '', pos: '', number: '', throws: 'R', bats: 'R' });
+              onChangeBenchInput({ name: '', pos: '', number: '', throws: 'R', bats: 'R', isElite: false });
             }}
             style={{
               padding: '10px 12px',
@@ -7222,7 +7294,23 @@ function TeamEditor({
               }}
             >
               <div style={{ display: 'grid', gap: '2px' }}>
-                <span style={{ fontWeight: 800 }}>{player.name}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontWeight: 800 }}>{player.name}</span>
+                  {player.isElite && (
+                    <span
+                      style={{
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        background: 'rgba(249, 115, 22, 0.15)',
+                        color: '#fb923c',
+                        fontSize: '10px',
+                        fontWeight: 700,
+                      }}
+                    >
+                      선출
+                    </span>
+                  )}
+                </div>
                 <span style={{ color: '#94a3b8', fontWeight: 700 }}>
                   #{player.number || '--'} · {player.pos} · 투 {player.throws} / 타 {player.bats}
                 </span>
@@ -7297,6 +7385,36 @@ function TeamEditor({
             </div>
           ))}
         </div>
+
+        {/* 선출 경고 표시 */}
+        {eliteWarnings.length > 0 && (
+          <div
+            style={{
+              marginTop: '12px',
+              padding: '10px 12px',
+              borderRadius: '10px',
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+            }}
+          >
+            {eliteWarnings.map((warning, idx) => (
+              <div
+                key={idx}
+                style={{
+                  color: '#fca5a5',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <span>⚠️</span>
+                <span>{warning}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

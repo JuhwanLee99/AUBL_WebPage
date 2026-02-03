@@ -1835,19 +1835,19 @@ function ensurePitcherStat(name: string, pos?: string): PitcherStatExt {
 // 투수/타자 구분 로직, 고유 이름(uniqueName)을 Key로 사용하는 로직 적용
 function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   // 1. Roster Map의 Value 타입 확장 및 데이터 저장
-  // { pos?: string; order: number; substitutionType?: string } 형태로 저장
-  const rosterHome = new Map<string, { pos?: string; order: number; substitutionType?: string }>();
-  const rosterAway = new Map<string, { pos?: string; order: number; substitutionType?: string }>();
-  
-  // [수정] substitutionType 저장 추가
-  record.lineups.home.forEach((p, idx) => rosterHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType }));
-  record.lineups.away.forEach((p, idx) => rosterAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType }));
+  // { pos?: string; order: number; substitutionType?: string; isElite?: boolean } 형태로 저장
+  const rosterHome = new Map<string, { pos?: string; order: number; substitutionType?: string; isElite?: boolean }>();
+  const rosterAway = new Map<string, { pos?: string; order: number; substitutionType?: string; isElite?: boolean }>();
 
-  const benchMetaHome = new Map<string, { pos?: string; order: number; substitutionType?: string }>();
-  const benchMetaAway = new Map<string, { pos?: string; order: number; substitutionType?: string }>();
-  // [수정] substitutionType 저장 추가
-  record.benches.home.forEach((p, idx) => benchMetaHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, substitutionType: p.substitutionType }));
-  record.benches.away.forEach((p, idx) => benchMetaAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, substitutionType: p.substitutionType }));
+  // [수정] substitutionType, isElite 저장 추가
+  record.lineups.home.forEach((p, idx) => rosterHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType, isElite: p.isElite }));
+  record.lineups.away.forEach((p, idx) => rosterAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType, isElite: p.isElite }));
+
+  const benchMetaHome = new Map<string, { pos?: string; order: number; substitutionType?: string; isElite?: boolean }>();
+  const benchMetaAway = new Map<string, { pos?: string; order: number; substitutionType?: string; isElite?: boolean }>();
+  // [수정] substitutionType, isElite 저장 추가
+  record.benches.home.forEach((p, idx) => benchMetaHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, substitutionType: p.substitutionType, isElite: p.isElite }));
+  record.benches.away.forEach((p, idx) => benchMetaAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, substitutionType: p.substitutionType, isElite: p.isElite }));
 
   const extraOrder: Record<'home' | 'away', number> = { home: 100, away: 100 };
   const battingOrders: Record<'home' | 'away', Map<number, string[]>> = { home: new Map(), away: new Map() };
@@ -1888,8 +1888,8 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     if (roster.has(name)) return roster.get(name)!;
     const benchMeta = side === 'home' ? benchMetaHome : benchMetaAway;
     const meta = benchMeta.get(name);
-    // [수정] substitutionType 전달
-    const entry = { pos: meta?.pos, order: meta?.order ?? extraOrder[side], substitutionType: meta?.substitutionType };
+    // [수정] substitutionType, isElite 전달
+    const entry = { pos: meta?.pos, order: meta?.order ?? extraOrder[side], substitutionType: meta?.substitutionType, isElite: meta?.isElite };
     extraOrder[side] += 1;
     roster.set(name, entry);
     return entry;
