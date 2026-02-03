@@ -25,6 +25,5 @@ if (useFsEmulator) {
   // connectFirestoreEmulator must be called before any Firestore use.
   connectFirestoreEmulator(firestore, host, port);
   // Optional: log once for debugging; safe in browser console.
-  // eslint-disable-next-line no-console
   console.info(`[firestore] using emulator at ${host}:${port}`);
 }

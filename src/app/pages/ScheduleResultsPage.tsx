@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
 import type { MatchSchedule } from '../../shared/state/demoStore';
@@ -21,10 +21,18 @@ const statusLabel = (match: MatchSchedule) => {
 export default function ScheduleResultsPage() {
   const { state, actions } = useDemoStore();
   const navigate = useNavigate();
+  const [nowTs, setNowTs] = useState<number>(() => Date.now());
 
   useEffect(() => {
     void actions.loadFullSchedule();
   }, [actions]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowTs(Date.now());
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   const results = useMemo(
     () =>
@@ -32,11 +40,11 @@ export default function ScheduleResultsPage() {
         .filter(
           (m) =>
             !m.deleted &&
-            (m.status === 'completed' || m.status === 'canceled' || new Date(m.startTime).getTime() < Date.now()),
+            (m.status === 'completed' || m.status === 'canceled' || new Date(m.startTime).getTime() < nowTs),
         )
         .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
         .slice(0, 8),
-    [state.matches],
+    [state.matches, nowTs],
   );
 
   const summary = useMemo(() => {

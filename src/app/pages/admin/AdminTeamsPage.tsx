@@ -38,11 +38,14 @@ export default function AdminTeamsPage() {
   const [entriesDraft, setEntriesDraft] = useState(teams.entries.map((entry) => `${entry.name} | ${entry.group}`).join('\n'));
 
   useEffect(() => {
-    setPageBadge(teams.pageBadge);
-    setPageTitle(teams.pageTitle);
-    setPageDescription(teams.pageDescription);
-    setPageNote(teams.pageNote);
-    setEntriesDraft(teams.entries.map((entry) => `${entry.name} | ${entry.group}`).join('\n'));
+    const syncDraft = () => {
+      setPageBadge(teams.pageBadge);
+      setPageTitle(teams.pageTitle);
+      setPageDescription(teams.pageDescription);
+      setPageNote(teams.pageNote);
+      setEntriesDraft(teams.entries.map((entry) => `${entry.name} | ${entry.group}`).join('\n'));
+    };
+    queueMicrotask(syncDraft);
   }, [teams]);
 
   const saveTeams = () => {

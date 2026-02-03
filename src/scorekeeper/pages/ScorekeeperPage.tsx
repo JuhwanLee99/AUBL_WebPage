@@ -1446,10 +1446,9 @@ export default function ScorekeeperPage() {
   }, []);
   const lockedByOther = useMemo(() => {
     if (!hasActiveMatch || !state.scorerUid) return false;
-    const expired = !state.scorerLockedAt || Date.now() - state.scorerLockedAt > LOCK_TTL_MS;
-    if (expired) return false;
+    if (lockRemainingMs <= 0) return false;
     return state.scorerUid !== (user?.uid ?? null);
-  }, [hasActiveMatch, state.scorerUid, state.scorerLockedAt, user?.uid]);
+  }, [hasActiveMatch, state.scorerUid, lockRemainingMs, user?.uid]);
   const controlsDisabled = isGameOver || !isGameStarted || !hasActiveMatch || lockedByOther || state.scorerPaused;
   const isExporting = Boolean(pendingExportId);
   const canUndo = state.history.length > 0;
@@ -1504,7 +1503,7 @@ export default function ScorekeeperPage() {
   // 모바일 환경 감지 Effect
   useEffect(() => {
     const checkMobileEnvironment = () => {
-      const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+      const userAgent = navigator.userAgent || navigator.vendor || (window as Window & { opera?: string }).opera || '';
       // 모바일 기기 정규식 체크 또는 화면 너비가 좁을 경우 (기록원 페이지는 넓은 화면 필요)
       const isMobileDevice = /android|ipad|iphone|ipod/i.test(userAgent);
       const isSmallScreen = window.innerWidth < 1024; // 태블릿/모바일 사이즈 기준
@@ -1530,35 +1529,37 @@ export default function ScorekeeperPage() {
     update();
     const timer = setInterval(update, 1000);
     return () => clearInterval(timer);
-  }, [state.scorerLockedAt, hasActiveMatch, LOCK_TTL_MS]);
+  }, [state.scorerLockedAt, hasActiveMatch]);
 
   // 경기 시간제한 입력값 동기화
   useEffect(() => {
-    if (state.gameLimitMinutes !== null) {
-      setGameLimitInput(state.gameLimitMinutes.toString());
-    } else {
-      setGameLimitInput('');
-    }
+    queueMicrotask(() => {
+      if (state.gameLimitMinutes !== null) {
+        setGameLimitInput(state.gameLimitMinutes.toString());
+      } else {
+        setGameLimitInput('');
+      }
+    });
   }, [state.gameLimitMinutes]);
 
   useEffect(() => {
     if (state.gameOver) {
-      setHitWizard(null);
+      queueMicrotask(() => setHitWizard(null));
     }
   }, [state.gameOver]);
 
   useEffect(() => {
-    setSelectedMatchId(state.activeMatchId ?? '');
+    queueMicrotask(() => setSelectedMatchId(state.activeMatchId ?? ''));
   }, [state.activeMatchId]);
 
   useEffect(() => {
     const incoming = state.liveVideoUrl.trim();
     const sanitized = incoming.includes('YOUR_CHANNEL_ID') ? '' : incoming;
-    setLiveVideoUrlInput(sanitized);
+    queueMicrotask(() => setLiveVideoUrlInput(sanitized));
   }, [state.liveVideoUrl]);
 
   useEffect(() => {
-    setLiveDelayInput(String(state.liveDelaySeconds));
+    queueMicrotask(() => setLiveDelayInput(String(state.liveDelaySeconds)));
   }, [state.liveDelaySeconds]);
 
   useEffect(() => {
@@ -1567,7 +1568,7 @@ export default function ScorekeeperPage() {
       const filename = buildDownloadName('scorecard', state.endedAt);
       const csv = buildCsvRecord(recordPayload);
       downloadCsv(csv, filename);
-      setPendingExportId(null);
+      queueMicrotask(() => setPendingExportId(null));
     }
   }, [pendingExportId, recordPayload, state.endedAt, state.gameOver]);
 
@@ -1595,7 +1596,7 @@ export default function ScorekeeperPage() {
     setHitWizard(null);
   };
 
-  const openHitWizardFlow = () => {
+  const openHitWizardFlow = useCallback(() => {
     if (controlsDisabled) return;
     setHitWizard((prev) =>
       prev
@@ -1608,7 +1609,7 @@ export default function ScorekeeperPage() {
             fielder: infieldFielderOptions[0],
           },
     );
-  };
+  }, [controlsDisabled]);
 
   const goToNextHitWizardStep = () =>
     setHitWizard((prev) => {
@@ -1939,23 +1940,28 @@ const handleConfirmHitWizard = () => {
       switch (key) {
         case '1':
           e.preventDefault();
-          handleAction('ball');
+          actions.addBall();
           break;
         case '2':
           e.preventDefault();
-          handleAction('strike');
+          if (state.strikes >= 2) {
+            setShowStrikeOutTypeModal(true);
+            setHitWizard(null);
+          } else {
+            actions.addStrike();
+          }
           break;
         case '3':
           e.preventDefault();
-          handleAction('hitMenu');
+          openHitWizardFlow();
           break;
         case '4':
           e.preventDefault();
-          handleAction('undo');
+          actions.undo();
           break;
         case '5':
           e.preventDefault();
-          handleAction('foul');
+          setShowFoulTypeModal(true);
           break;
       }
     };
@@ -1974,6 +1980,9 @@ const handleConfirmHitWizard = () => {
     errorOnPlayModal,
     doublePlayModal,
     positionSwapModal,
+    actions,
+    state.strikes,
+    openHitWizardFlow,
   ]);
 
   const handleConfirmHitAdvance = () => {
@@ -5584,20 +5593,17 @@ function ActionModal({
 
   useEffect(() => {
     if (data.role !== 'fielder') return;
-    setErrorType(errorTypeOptions[0].value);
-    setErrorContext('');
-    setErrorBatterResult('hold');
-    const initialSelections = bases.reduce<RunnerAdvanceSelections>((acc, runner, idx) => {
-      if (runner) acc[idx as 0 | 1 | 2] = 'hold';
-      return acc;
-    }, {});
-    setRunnerSelections(initialSelections);
+    queueMicrotask(() => {
+      setErrorType(errorTypeOptions[0].value);
+      setErrorContext('');
+      setErrorBatterResult('hold');
+      const initialSelections = bases.reduce<RunnerAdvanceSelections>((acc, runner, idx) => {
+        if (runner) acc[idx as 0 | 1 | 2] = 'hold';
+        return acc;
+      }, {});
+      setRunnerSelections(initialSelections);
+    });
   }, [bases, data.role]);
-
-  useEffect(() => {
-    const autoHold = errorType.startsWith('WP') || errorType.startsWith('PB') || errorType.startsWith('BK');
-    if (autoHold && errorBatterResult !== 'hold') setErrorBatterResult('hold');
-  }, [errorType, errorBatterResult]);
 
   const battingOrder =
     data.role === 'batter'
@@ -5967,7 +5973,13 @@ function ActionModal({
                 에러 유형
                 <select
                   value={errorType}
-                  onChange={(e) => setErrorType(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setErrorType(value);
+                    if (value.startsWith('WP') || value.startsWith('PB') || value.startsWith('BK')) {
+                      setErrorBatterResult('hold');
+                    }
+                  }}
                   style={{
                     borderRadius: '10px',
                     border: '1px solid rgba(148,163,184,0.35)',

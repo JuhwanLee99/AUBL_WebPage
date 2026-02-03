@@ -620,11 +620,13 @@ function LiveFeed({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
-  const heightMapRef = useRef<Map<string, number>>(new Map());
+  const [measuredHeights, setMeasuredHeights] = useState<Record<string, number>>({});
   const overscanPx = 200;
 
   useEffect(() => {
-    setCollapsed((prev) => ({ ...collapsedMap, ...prev }));
+    queueMicrotask(() => {
+      setCollapsed((prev) => ({ ...collapsedMap, ...prev }));
+    });
   }, [collapsedMap]);
 
   useEffect(() => {
@@ -857,10 +859,10 @@ function LiveFeed({
   const totalHeight = useMemo(() => {
     let h = 0;
     flatItems.forEach((item) => {
-      h += heightMapRef.current.get(item.key) ?? item.estimatedHeight;
+      h += measuredHeights[item.key] ?? item.estimatedHeight;
     });
     return h;
-  }, [flatItems]);
+  }, [flatItems, measuredHeights]);
 
   const { startIndex, endIndex, offsetTop } = useMemo(() => {
     let y = 0;
@@ -869,7 +871,7 @@ function LiveFeed({
     const viewportStart = Math.max(0, scrollTop - overscanPx);
 
     for (let i = 0; i < flatItems.length; i += 1) {
-      const h = heightMapRef.current.get(flatItems[i].key) ?? flatItems[i].estimatedHeight;
+      const h = measuredHeights[flatItems[i].key] ?? flatItems[i].estimatedHeight;
       const nextY = y + h;
       if (nextY >= viewportStart) {
         start = i;
@@ -880,24 +882,24 @@ function LiveFeed({
     let end = start;
     let currentY = y;
     for (let i = start; i < flatItems.length; i += 1) {
-      const h = heightMapRef.current.get(flatItems[i].key) ?? flatItems[i].estimatedHeight;
+      const h = measuredHeights[flatItems[i].key] ?? flatItems[i].estimatedHeight;
       currentY += h;
       end = i;
       if (currentY >= viewportEnd) break;
     }
     return { startIndex: start, endIndex: Math.min(end, flatItems.length - 1), offsetTop: y };
-  }, [flatItems, scrollTop, viewportHeight, overscanPx]);
+  }, [flatItems, scrollTop, viewportHeight, overscanPx, measuredHeights]);
 
   const visibleItems = flatItems.slice(startIndex, endIndex + 1);
 
   const measureRef = (key: string) => (el: HTMLDivElement | null) => {
     if (!el) return;
-    const prev = heightMapRef.current.get(key);
     const next = el.getBoundingClientRect().height;
-    if (prev !== next) {
-      heightMapRef.current.set(key, next);
-      setViewportHeight((v) => v); // trigger recalculation
-    }
+    setMeasuredHeights((prev) => {
+      if (prev[key] === next) return prev;
+      return { ...prev, [key]: next };
+    });
+    setViewportHeight((v) => v); // trigger recalculation
   };
 
   useEffect(() => {

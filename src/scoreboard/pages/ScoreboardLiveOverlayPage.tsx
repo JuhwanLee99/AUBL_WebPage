@@ -11,7 +11,7 @@ export default function ScoreboardLiveOverlayPage() {
 
   // 모바일 감지 함수
   const isMobileDevice = () => {
-    const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+    const userAgent = navigator.userAgent || navigator.vendor || (window as Window & { opera?: string }).opera || '';
     const isMobileUA = /android|ipad|iphone|ipod/i.test(userAgent);
     const isPortrait = window.innerHeight > window.innerWidth;
     const isSmallScreen = Math.min(window.innerWidth, window.innerHeight) < 768;
@@ -163,7 +163,7 @@ export default function ScoreboardLiveOverlayPage() {
     let strikeouts = 0;
 
     if (delayedState.events && Array.isArray(delayedState.events)) {
-      delayedState.events.forEach((event: any) => {
+      delayedState.events.forEach((event: { batterName?: string; batterSide?: string; result?: string }) => {
         if (event.batterName === batter.name && event.batterSide === battingSide) {
           // 타수 계산
           if (event.result === 'single' || event.result === 'double' ||

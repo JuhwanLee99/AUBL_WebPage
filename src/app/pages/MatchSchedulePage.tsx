@@ -229,6 +229,7 @@ export default function MatchSchedulePage() {
     away: createEmptyBenchInput(),
   }));
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [nowTs, setNowTs] = useState<number>(() => Date.now());
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
@@ -259,20 +260,26 @@ export default function MatchSchedulePage() {
   }, [aliveMatches]);
 
   const categorizedMatches = useMemo(() => {
-    const now = Date.now();
     const live = sortedMatches.filter((match) => match.status === 'inProgress');
     const upcoming = sortedMatches.filter(
-      (match) => match.status === 'scheduled' && getSafeTime(match.startTime) >= now,
+      (match) => match.status === 'scheduled' && getSafeTime(match.startTime) >= nowTs,
     );
     // [수정] match.status === 'scheduled' 이면 'inProgress'일 수 없으므로 redundant check 제거
     const past = sortedMatches.filter(
       (match) =>
         match.status === 'completed' ||
         match.status === 'canceled' ||
-        (match.status === 'scheduled' && getSafeTime(match.startTime) < now),
+        (match.status === 'scheduled' && getSafeTime(match.startTime) < nowTs),
     );
     return { live, upcoming, past };
-  }, [sortedMatches]);
+  }, [sortedMatches, nowTs]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowTs(Date.now());
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   const showBlockedTooltip = (el: HTMLElement | null) => {
     if (!el) return;
