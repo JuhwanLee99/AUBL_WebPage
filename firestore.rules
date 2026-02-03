@@ -56,6 +56,12 @@ service cloud.firestore {
       }
     }
 
+    // 랜딩/인트로 콘텐츠 (공개 읽기, 관리자 편집)
+    match /settings/content {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // 그 외 모든 접근 거부
     match /{document=**} {
       allow read, write: if false;
