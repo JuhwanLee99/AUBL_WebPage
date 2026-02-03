@@ -224,7 +224,14 @@ export default function Layout() {
 
   const navItems = useMemo(
     () => [
-      { path: '/intro', label: '리그 소개' },
+      {
+        path: '/intro',
+        label: '리그 소개',
+        children: [
+          { path: '/rules', label: '회칙' },
+          { path: '/intro/teams', label: '참가팀 · 조편성' },
+        ],
+      },
       {
         path: '/schedule',
         label: '경기 일정',
