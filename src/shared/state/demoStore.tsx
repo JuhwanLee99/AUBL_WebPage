@@ -3,6 +3,7 @@ import { getIdTokenResult, onIdTokenChanged } from 'firebase/auth';
 import {
   collection,
   doc,
+  getCountFromServer,
   onSnapshot,
   orderBy,
   where,
@@ -42,12 +43,12 @@ const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
   .filter(Boolean);
 const FEED_LIMIT = 50; // 관중 뷰 기본 구독 크기
 const SCORER_FEED_LIMIT = 200; // 기록원 재접속 시 충분한 버퍼
-const FEED_DOC_LIMIT = 120; // matchStates 문서에 함께 싣는 최대 feed/event 개수 (관중권한 fallback)
-const WRITE_DEBOUNCE_MS = 300; // 기록원 상태 동기화 디바운스 (투구 간 평균 간격을 고려해 write 수 최소화)
+const WRITE_DEBOUNCE_MS = 1_000; // 기록원 상태 동기화 디바운스 (쓰기 폭주 방지)
 const SCORER_LOCK_TTL_MS = 300_000; // 5분 후 락 만료 (이닝 교대 대비 여유)
 const SCORER_LOCK_HEARTBEAT_MS = 60_000; // 60초마다 하트비트 갱신
-const PRESENCE_TTL_MS = 180_000; // 3분 후 동접자 만료
-const PRESENCE_HEARTBEAT_MS = 30_000; // 30초마다 동접자 하트비트 갱신
+const PRESENCE_TTL_MS = 300_000; // 5분 후 동접자 만료
+const PRESENCE_HEARTBEAT_MS = 120_000; // 120초마다 동접자 하트비트 갱신
+const PRESENCE_POLL_INTERVAL_MS = 12_000; // 접속자 집계 폴링 주기
 
 // Firestore는 undefined를 허용하지 않으므로 중첩 객체/배열에서 undefined를 제거한다.
 function pruneUndefined<T>(value: T): T {
@@ -207,6 +208,7 @@ export interface PlayLog {
   result: string;
   // [수정] 정렬을 위해 생성 시간 필드 추가
   createdAt?: number;
+  eventId?: string;
 }
 
 export interface PlayEvent {
@@ -224,6 +226,8 @@ export interface PlayEvent {
   rbi?: number;
   dpRoute?: number[];
   earnedRunsBy?: Record<string, number>;
+  createdAt?: number;
+  eventId?: string;
 }
 
 interface DemoSnapshot {
@@ -565,6 +569,7 @@ function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }):
         result: typeof e.result === 'string' ? e.result : '',
         // [수정] createdAt 보존
         createdAt: typeof e.createdAt === 'number' ? e.createdAt : undefined,
+        eventId: typeof e.eventId === 'string' ? e.eventId : undefined,
       };
     }
     return {
@@ -631,6 +636,8 @@ function normalizeEvents(events: unknown, fallback: { inning: number; half: Half
         battedBall,
         error: e.error ?? null,
         notes: typeof e.notes === 'string' ? e.notes : undefined,
+        createdAt: typeof e.createdAt === 'number' ? e.createdAt : undefined,
+        eventId: typeof e.eventId === 'string' ? e.eventId : undefined,
       };
     }
     return {
@@ -1539,19 +1546,19 @@ function reducer(state: DemoState, action: Action): DemoState {
       nextState = changeHalf(state, '이닝 전환');
       break;
     case 'setPlay':
-      nextState = {
-        ...state,
-        lastPlay: action.message,
-        feed: pushPlayFeed(state, createLogEntry(state, action.message, 0)),
-        events: pushEvent(
-          state.events,
-          createPlayEventForBaserunning(
-            state,
-            { type: 'setPlay', runners: getRunnerNames(state.bases), notes: action.message },
-            0,
-          ),
-        ),
-      };
+      {
+        const playEvent = createPlayEventForBaserunning(
+          state,
+          { type: 'setPlay', runners: getRunnerNames(state.bases), notes: action.message },
+          0,
+        );
+        nextState = {
+          ...state,
+          lastPlay: action.message,
+          feed: pushPlayFeed(state, createLogEntry(state, action.message, 0, playEvent.eventId)),
+          events: pushEvent(state.events, playEvent),
+        };
+      }
       break;
     case 'runnerStealSuccess':
       nextState = applyRunnerAdvance(state, action.base, 1, '도루 성공');
@@ -1890,7 +1897,7 @@ function getRunnerNames(bases: Bases) {
   return bases.filter((runner): runner is string => typeof runner === 'string');
 }
 
-function createLogEntry(state: DemoState, result: string, pitch: number): PlayLog {
+function createLogEntry(state: DemoState, result: string, pitch: number, eventId?: string): PlayLog {
   const info = currentBatterInfo(state);
   return {
     inning: state.inning,
@@ -1900,10 +1907,18 @@ function createLogEntry(state: DemoState, result: string, pitch: number): PlayLo
     pitch,
     result,
     createdAt: Date.now(),
+    eventId,
   };
 }
 
-function createLogEntryWithBatter(state: DemoState, batter: string, order: number | null, result: string, pitch: number): PlayLog {
+function createLogEntryWithBatter(
+  state: DemoState,
+  batter: string,
+  order: number | null,
+  result: string,
+  pitch: number,
+  eventId?: string,
+): PlayLog {
   return {
     inning: state.inning,
     half: state.half,
@@ -1912,10 +1927,11 @@ function createLogEntryWithBatter(state: DemoState, batter: string, order: numbe
     pitch,
     result,
     createdAt: Date.now(),
+    eventId,
   };
 }
 
-function createLogEntryForBaserunning(state: DemoState, result: string, pitch: number): PlayLog {
+function createLogEntryForBaserunning(state: DemoState, result: string, pitch: number, eventId?: string): PlayLog {
   return {
     inning: state.inning,
     half: state.half,
@@ -1924,7 +1940,12 @@ function createLogEntryForBaserunning(state: DemoState, result: string, pitch: n
     pitch,
     result,
     createdAt: Date.now(),
+    eventId,
   };
+}
+
+function generateEventId(state: DemoState, pitch: number) {
+  return `${state.inning}-${state.half}-${pitch}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function createPlayEvent(
@@ -1943,6 +1964,8 @@ function createPlayEvent(
   pitch: number,
 ): PlayEvent {
   const info = currentBatterInfo(state);
+  const createdAt = Date.now();
+  const eventId = generateEventId(state, pitch);
   return {
     inning: state.inning,
     half: state.half,
@@ -1958,6 +1981,8 @@ function createPlayEvent(
     rbi: details.rbi,
     dpRoute: details.dpRoute,
     earnedRunsBy: details.earnedRunsBy,
+    createdAt,
+    eventId,
   };
 }
 
@@ -1974,6 +1999,8 @@ function createPlayEventWithBatter(
   batter: string,
   order: number | null,
 ): PlayEvent {
+  const createdAt = Date.now();
+  const eventId = generateEventId(state, pitch);
   return {
     inning: state.inning,
     half: state.half,
@@ -1985,6 +2012,8 @@ function createPlayEventWithBatter(
     battedBall: details.battedBall ?? null,
     error: details.error ?? null,
     notes: details.notes,
+    createdAt,
+    eventId,
   };
 }
 
@@ -1999,6 +2028,8 @@ function createPlayEventForBaserunning(
   },
   pitch: number,
 ): PlayEvent {
+  const createdAt = Date.now();
+  const eventId = generateEventId(state, pitch);
   return {
     inning: state.inning,
     half: state.half,
@@ -2010,6 +2041,8 @@ function createPlayEventForBaserunning(
     battedBall: details.battedBall ?? null,
     error: details.error ?? null,
     notes: details.notes,
+    createdAt,
+    eventId,
   };
 }
 
@@ -2054,7 +2087,10 @@ function applyOut(
   );
   if (outs >= 3) {
     const finalMessage = `${message} · 3아웃 · 이닝 종료`;
-    const feedWithPlay = pushPlayFeed(state, createLogEntry(state, logResult, advanceBatter ? pitchNumber : 0));
+    const feedWithPlay = pushPlayFeed(
+      state,
+      createLogEntry(state, logResult, advanceBatter ? pitchNumber : 0, eventEntry.eventId),
+    );
     const eventsWithPlay = pushEvent(state.events, eventEntry);
     return changeHalf(
       { ...state, batterIndex, pitchCount, feed: feedWithPlay, events: eventsWithPlay },
@@ -2070,7 +2106,7 @@ function applyOut(
     batterIndex,
     pitchCount,
     lastPlay: message,
-    feed: pushPlayFeed(state, createLogEntry(state, logResult, advanceBatter ? pitchNumber : 0)),
+    feed: pushPlayFeed(state, createLogEntry(state, logResult, advanceBatter ? pitchNumber : 0, eventEntry.eventId)),
     events: pushEvent(state.events, eventEntry),
   };
 }
@@ -2169,12 +2205,12 @@ function applyHitWithAdvances(
   
   let feed = state.feed;
   runnerMoves.forEach((move) => {
-    feed = pushFeed(feed, createLogEntryForBaserunning(state, move.feedText, pitchNumber));
+    feed = pushFeed(feed, createLogEntryForBaserunning(state, move.feedText, pitchNumber, eventEntry.eventId));
   });
   // 타구 방향 정보 추가
   const zoneNote = battedBall?.zone && battedBall.zone !== '선택 안 함' ? ` · ${battedBall.zone}` : '';
   const resultLog = runs ? `${result}${zoneNote} · ${runs}득점` : `${result}${zoneNote}`;
-  feed = pushPlayFeed(state, createLogEntry(state, resultLog, pitchNumber), feed);
+  feed = pushPlayFeed(state, createLogEntry(state, resultLog, pitchNumber, eventEntry.eventId), feed);
 
   const nextState = {
     ...state,
@@ -2260,11 +2296,6 @@ function applyFielderChoice(
   const contextNote = context?.trim() ? ` (${context.trim()})` : '';
   const fcZoneNote = battedBall?.zone && battedBall.zone !== '선택 안 함' ? ` · ${battedBall.zone}` : '';
   const resultLog = runs ? `야수선택${fcZoneNote}${contextNote} · ${runs}득점` : `야수선택${fcZoneNote}${contextNote}`;
-  feed = pushPlayFeed(state, createLogEntryWithBatter(state, batterName, batterOrder, resultLog, pitchNumber), feed);
-  runnerMoves.forEach((move) => {
-    feed = pushFeed(feed, createLogEntryForBaserunning(state, move.feedText, pitchNumber));
-  });
-
   const eventEntry = createPlayEventWithBatter(
     state,
     {
@@ -2277,6 +2308,14 @@ function applyFielderChoice(
     batterName,
     batterOrder,
   );
+  feed = pushPlayFeed(
+    state,
+    createLogEntryWithBatter(state, batterName, batterOrder, resultLog, pitchNumber, eventEntry.eventId),
+    feed,
+  );
+  runnerMoves.forEach((move) => {
+    feed = pushFeed(feed, createLogEntryForBaserunning(state, move.feedText, pitchNumber, eventEntry.eventId));
+  });
 
   const nextState: DemoState = {
     ...state,
@@ -2325,7 +2364,10 @@ function applyWalk(state: DemoState, message: string, pitchNumber: number): Demo
     pitchCount: 0,
     batterIndex,
     lastPlay: `${message} · ${batterName}`,
-    feed: pushPlayFeed(state, createLogEntry(state, runs ? `${message} · ${runs}득점` : message, pitchNumber)),
+    feed: pushPlayFeed(
+      state,
+      createLogEntry(state, runs ? `${message} · ${runs}득점` : message, pitchNumber, eventEntry.eventId),
+    ),
     events: pushEvent(state.events, eventEntry),
   };
 }
@@ -2359,7 +2401,10 @@ function applyDroppedThirdStrike(state: DemoState, strikeType?: 'swinging' | 'lo
     pitchCount: 0,
     batterIndex,
     lastPlay: `${message} · ${batterName}`,
-    feed: pushPlayFeed(state, createLogEntry(state, runs ? `${message} · ${runs}득점` : message, pitchNumber)),
+    feed: pushPlayFeed(
+      state,
+      createLogEntry(state, runs ? `${message} · ${runs}득점` : message, pitchNumber, eventEntry.eventId),
+    ),
     events: pushEvent(state.events, eventEntry),
   };
 }
@@ -2492,12 +2537,6 @@ function applyError(state: DemoState, details: ErrorDetails): DemoState {
   }
   const resultText = resultTags.join(' · ');
 
-  let feed = state.feed;
-  runnerMoves.forEach((move) => {
-    feed = pushFeed(feed, createLogEntryForBaserunning(state, move.feedText, pitchNumber));
-  });
-  feed = pushPlayFeed(state, createLogEntry(state, resultText, pitchNumber), feed);
-
   const eventEntry = createPlayEvent(
     state,
     {
@@ -2508,6 +2547,12 @@ function applyError(state: DemoState, details: ErrorDetails): DemoState {
     },
     pitchNumber,
   );
+
+  let feed = state.feed;
+  runnerMoves.forEach((move) => {
+    feed = pushFeed(feed, createLogEntryForBaserunning(state, move.feedText, pitchNumber, eventEntry.eventId));
+  });
+  feed = pushPlayFeed(state, createLogEntry(state, resultText, pitchNumber, eventEntry.eventId), feed);
 
   const nextState = {
     ...state,
@@ -2593,8 +2638,7 @@ function applySteal(state: DemoState, success: boolean): DemoState {
         outcome: moved.scored ? 'score' : 'advance',
         message: '도루 성공',
       })
-    : null;    
-  const feedEntry = detail ? createLogEntryForBaserunning(state, detail.feedText, state.pitchCount + 1) : null;
+    : null;
   const eventEntry = createPlayEventForBaserunning(
     state,
     {
@@ -2604,6 +2648,9 @@ function applySteal(state: DemoState, success: boolean): DemoState {
     },
     state.pitchCount + 1,
   );
+  const feedEntry = detail
+    ? createLogEntryForBaserunning(state, detail.feedText, state.pitchCount + 1, eventEntry.eventId)
+    : null;
   return {
     ...state,
     bases,
@@ -2614,7 +2661,13 @@ function applySteal(state: DemoState, success: boolean): DemoState {
     lastPlay: detail?.lastPlay ?? (runs ? `도루 성공 · ${runs}득점` : '도루 성공'),
     feed: pushFeed(
       state.feed,
-      feedEntry ?? createLogEntry(state, detail?.feedText ?? (runs ? `도루 성공 · ${runs}득점` : '도루 성공'), 0),
+      feedEntry ??
+        createLogEntry(
+          state,
+          detail?.feedText ?? (runs ? `도루 성공 · ${runs}득점` : '도루 성공'),
+          0,
+          eventEntry.eventId,
+        ),
     ),
     events: pushEvent(state.events, eventEntry),
   };
@@ -2654,7 +2707,7 @@ function applyRunnerAdvance(state: DemoState, baseIndex: 0 | 1 | 2, steps: numbe
     bases,
     score,
     lastPlay: detail.lastPlay,
-    feed: pushFeed(state.feed, createLogEntry(state, detail.feedText, 0)),
+    feed: pushFeed(state.feed, createLogEntry(state, detail.feedText, 0, eventEntry.eventId)),
     events: pushEvent(state.events, eventEntry),
   };
 }
@@ -2673,12 +2726,12 @@ function applyRunnerOut(state: DemoState, baseIndex: 0 | 1 | 2, message: string)
     message,
     outsCount: outs,
   });
-  const feedEntry = createLogEntryForBaserunning(state, detail.feedText, state.pitchCount);
   const eventEntry = createPlayEventForBaserunning(
     state,
     { type: 'runner_out', runners: [detail.runnerSummary], notes: detail.feedText },
     state.pitchCount,
   );
+  const feedEntry = createLogEntryForBaserunning(state, detail.feedText, state.pitchCount, eventEntry.eventId);
   if (outs >= 3) {
     const finalMessage = `${detail.lastPlay} · 이닝 종료`;
     const afterHalf = changeHalf(
@@ -2728,7 +2781,7 @@ function applyMultipleRunnersOut(state: DemoState, bases: number[], label?: stri
     state.pitchCount,
   );
 
-  const feedEntry = createLogEntryForBaserunning(state, feedText, state.pitchCount);
+  const feedEntry = createLogEntryForBaserunning(state, feedText, state.pitchCount, eventEntry.eventId);
 
   const nextState = {
     ...state,
@@ -2850,7 +2903,10 @@ function applyDoublePlay(
     batterIndex,
     lastPlay,
     score: updatedScore,
-    feed: pushPlayFeed(state, createLogEntry(state, feedText, Math.max(1, state.pitchCount + 1))),
+    feed: pushPlayFeed(
+      state,
+      createLogEntry(state, feedText, Math.max(1, state.pitchCount + 1), eventEntry.eventId),
+    ),
     events: pushEvent(state.events, eventEntry),
   };
 
@@ -3386,6 +3442,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   const skipMatchesWriteRef = useRef(false);
   const lastStateKeyRef = useRef('');
   const lastMatchesKeyRef = useRef('');
+  const lastLiveScoreSyncKeyRef = useRef('');
   const lastFeedLengthRef = useRef(0);
   const lastEventsLengthRef = useRef(0);
   const writeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -3812,7 +3869,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     };
   }, [state.activeMatchId, state.scorerUid, state.scorerLockedAt]);
 
-  // 동접자(Presence) 구독: matchStates/{matchId}/presence 컬렉션 감시
+  // 동접자 집계: onSnapshot fan-out 대신 count 쿼리 폴링 사용
   useEffect(() => {
     const matchId = state.activeMatchId;
     if (!matchId) {
@@ -3821,31 +3878,36 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     }
 
     const presenceCol = collection(firestore, 'matchStates', matchId, 'presence');
-    const unsubPresence = onSnapshot(
-      presenceCol,
-      (snap) => {
-        const now = Date.now();
-        // 만료되지 않은 활성 사용자만 카운트
-        const activeCount = snap.docs.filter((d) => {
-          const lastHeartbeat = d.data().lastHeartbeat ?? 0;
-          return now - lastHeartbeat < PRESENCE_TTL_MS;
-        }).length;
-        dispatch({ type: 'setOnlineViewerCount', count: activeCount });
-      },
-      () => {
-        // ignore errors
-      },
-    );
+    let cancelled = false;
 
-    return () => unsubPresence();
+    const pollViewerCount = async () => {
+      try {
+        const now = Date.now();
+        const countQuery = query(presenceCol, where('expiresAt', '>=', now));
+        const aggregate = await getCountFromServer(countQuery);
+        if (cancelled) return;
+        dispatch({ type: 'setOnlineViewerCount', count: aggregate.data().count });
+      } catch {
+        // ignore count errors
+      }
+    };
+
+    void pollViewerCount();
+    const timer = setInterval(() => {
+      void pollViewerCount();
+    }, PRESENCE_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, [state.activeMatchId]);
 
-  // 동접자 Heartbeat: 30초마다 presence 갱신, 페이지 언마운트 시 정리
+  // 동접자 Heartbeat: 익명/로그인 모두 포함, hidden 상태에서는 heartbeat 중지
   useEffect(() => {
     const matchId = state.activeMatchId;
     if (!matchId) return;
 
-    // visitorId 생성 또는 가져오기 (익명 사용자 지원)
     const getVisitorId = (): string => {
       if (visitorIdRef.current) return visitorIdRef.current;
       const user = auth.currentUser;
@@ -3853,7 +3915,6 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         visitorIdRef.current = user.uid;
         return user.uid;
       }
-      // 익명 사용자: sessionStorage에서 가져오거나 새로 생성
       const storageKey = 'aubl-visitor-id';
       let vid = sessionStorage.getItem(storageKey);
       if (!vid) {
@@ -3867,37 +3928,62 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     const visitorId = getVisitorId();
     const presenceDocRef = doc(firestore, 'matchStates', matchId, 'presence', visitorId);
 
-    // 즉시 presence 업데이트
     const updatePresence = () => {
-      const user = auth.currentUser;
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      const now = Date.now();
       void setDoc(
         presenceDocRef,
         {
           visitorId,
-          email: user?.email || null,
-          name: user?.displayName || null,
-          lastHeartbeat: Date.now(),
+          isAnonymous: auth.currentUser == null,
+          lastHeartbeat: now,
+          expiresAt: now + PRESENCE_TTL_MS,
         },
         { merge: true },
       ).catch(() => {});
     };
 
+    const stopHeartbeat = () => {
+      if (!presenceTimerRef.current) return;
+      clearInterval(presenceTimerRef.current);
+      presenceTimerRef.current = null;
+    };
+
+    const startHeartbeat = () => {
+      stopHeartbeat();
+      presenceTimerRef.current = setInterval(() => {
+        updatePresence();
+      }, PRESENCE_HEARTBEAT_MS);
+    };
+
+    const handleVisibilityChange = () => {
+      if (typeof document === 'undefined') return;
+      if (document.visibilityState === 'hidden') {
+        stopHeartbeat();
+        return;
+      }
+      updatePresence();
+      startHeartbeat();
+    };
+
     updatePresence();
+    startHeartbeat();
 
-    // 30초마다 heartbeat
-    presenceTimerRef.current = setInterval(updatePresence, PRESENCE_HEARTBEAT_MS);
-
-    // 페이지 이탈 시 presence 문서 삭제
     const handleBeforeUnload = () => {
       void deleteDoc(presenceDocRef).catch(() => {});
     };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
     window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
-      if (presenceTimerRef.current) clearInterval(presenceTimerRef.current);
-      presenceTimerRef.current = null;
+      stopHeartbeat();
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      // cleanup 시 presence 문서 삭제
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
       void deleteDoc(presenceDocRef).catch(() => {});
     };
   }, [state.activeMatchId]);
@@ -3920,28 +4006,14 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
 
     writeTimerRef.current = setTimeout(() => {
             const snapshot = snapshotState(stateRef.current);
-            const trimmedFeed = snapshot.feed.slice(0, FEED_DOC_LIMIT);
-            const trimmedEvents = snapshot.events.slice(0, FEED_DOC_LIMIT);
-            const { matches: _matches, ...core } = snapshot;
-            const key = JSON.stringify({ matchId, core, trimmedFeed, trimmedEvents });
+            const { matches: _matches, feed: _feed, events: _events, onlineViewerCount: _onlineViewerCount, ...core } = snapshot;
+            const key = JSON.stringify({ matchId, core });
 
             if (key !== lastStateKeyRef.current) {
               lastStateKeyRef.current = key;
 
-              // [수정 전]
-              /*
-              void setDoc(
-                doc(firestore, 'matchStates', matchId),
-                { ...core, feed: trimmedFeed, events: trimmedEvents, updatedAt: Date.now() },
-                {  merge: true },
-                ).catch(() => {});
-              */
-
-              // [수정 후] pruneUndefined로 감싸서 undefined 값을 제거합니다.
               const payload = pruneUndefined({
                 ...core,
-                feed: trimmedFeed,
-                events: trimmedEvents,
                 updatedAt: Date.now()
               });
 
@@ -3970,9 +4042,13 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         // 배열 끝에서부터 새로운 항목 가져오기
         const newEntries = stateRef.current.feed.slice(-newFeedCount);
         newEntries.forEach((entry, idx) => {
+          const createdAt =
+            typeof entry.createdAt === 'number' && Number.isFinite(entry.createdAt)
+              ? entry.createdAt
+              : now + idx;
           batch.set(
             doc(collection(firestore, 'matchStates', matchId, 'feed')),
-            pruneUndefined({ ...entry, createdAt: now + idx }),
+            pruneUndefined({ ...entry, createdAt }),
           );
         });
       }
@@ -3981,9 +4057,13 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         // 배열 끝에서부터 새로운 항목 가져오기
         const newEntries = stateRef.current.events.slice(-newEventCount);
         newEntries.forEach((entry, idx) => {
+          const createdAt =
+            typeof entry.createdAt === 'number' && Number.isFinite(entry.createdAt)
+              ? entry.createdAt
+              : now + idx;
           batch.set(
             doc(collection(firestore, 'matchStates', matchId, 'events')),
-            pruneUndefined({ ...entry, createdAt: now + idx }),
+            pruneUndefined({ ...entry, createdAt }),
           );
         });
       }
@@ -4016,7 +4096,24 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     const key = JSON.stringify(
-      state.matches.map((m) => [m.id, m.status, m.startTime, m.homeScore, m.awayScore, m.notes, m.division]),
+      state.matches.map((m) => ({
+        id: m.id,
+        status: m.status,
+        startTime: m.startTime,
+        notes: m.notes ?? null,
+        division: m.division ?? null,
+        venue: m.venue,
+        homeTeamName: m.homeTeamName,
+        awayTeamName: m.awayTeamName,
+        liveVideoUrl: m.liveVideoUrl ?? null,
+        liveDelaySeconds: m.liveDelaySeconds ?? null,
+        deleted: m.deleted ?? false,
+        deletedAt: m.deletedAt ?? null,
+        purgeAt: m.purgeAt ?? null,
+        lineups: m.lineups ?? null,
+        benches: m.benches ?? null,
+        postGame: m.postGame ?? null,
+      })),
     );
     if (key === lastMatchesKeyRef.current) return;
     lastMatchesKeyRef.current = key;
@@ -4040,6 +4137,21 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     };
     void syncMatches().catch(() => {});
   }, [state.matches, isAdmin]);
+
+  // 진행 중인 경기 점수는 active match 1건만 patch 저장
+  useEffect(() => {
+    if (!isAdmin) return;
+    const matchId = state.activeMatchId;
+    if (!matchId) return;
+    const activeMatch = state.matches.find((m) => m.id === matchId);
+    if (!activeMatch || activeMatch.status !== 'inProgress') return;
+    const homeScore = state.score.home;
+    const awayScore = state.score.away;
+    const scoreKey = `${matchId}:${homeScore}:${awayScore}`;
+    if (scoreKey === lastLiveScoreSyncKeyRef.current) return;
+    lastLiveScoreSyncKeyRef.current = scoreKey;
+    void pushMatchUpdate(matchId, { homeScore, awayScore }).catch(() => {});
+  }, [isAdmin, state.activeMatchId, state.matches, state.score.home, state.score.away, pushMatchUpdate]);
 
   // Auto purge expired trashed matches (deleted flag) from matches collection.
   useEffect(() => {

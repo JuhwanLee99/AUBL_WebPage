@@ -7,6 +7,24 @@ service cloud.firestore {
   return request.auth != null && request.auth.token.admin == true;
   }
 
+  function isValidPresenceCreate(visitorId) {
+    return request.resource.data.keys().hasOnly(['visitorId', 'isAnonymous', 'lastHeartbeat', 'expiresAt'])
+      && request.resource.data.visitorId == visitorId
+      && request.resource.data.isAnonymous is bool
+      && request.resource.data.lastHeartbeat is int
+      && request.resource.data.expiresAt is int
+      && request.resource.data.expiresAt >= request.resource.data.lastHeartbeat;
+  }
+
+  function isValidPresenceUpdate(visitorId) {
+    return request.resource.data.visitorId == visitorId
+      && request.resource.data.isAnonymous is bool
+      && request.resource.data.lastHeartbeat is int
+      && request.resource.data.expiresAt is int
+      && request.resource.data.expiresAt >= request.resource.data.lastHeartbeat
+      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['visitorId', 'isAnonymous', 'lastHeartbeat', 'expiresAt']);
+  }
+
   match /databases/{database}/documents {
     // 앱 전반 설정 (현재 활성 경기 포인터)
     match /app/current {
@@ -53,6 +71,13 @@ service cloud.firestore {
       match /events/{entryId} {
         allow read: if true;
         allow write: if isAdmin();
+      }
+
+      match /presence/{visitorId} {
+        allow read: if true;
+        allow create: if isValidPresenceCreate(visitorId);
+        allow update: if isValidPresenceUpdate(visitorId);
+        allow delete: if true;
       }
     }
 
