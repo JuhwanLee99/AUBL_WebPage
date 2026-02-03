@@ -154,6 +154,7 @@ export type PostGameRecord = {
 };
 
 export type MatchStatus = 'scheduled' | 'inProgress' | 'completed' | 'canceled';
+export type MatchRecordMode = 'official' | 'practice';
 
 export interface MatchSchedule {
   id: string;
@@ -164,6 +165,7 @@ export interface MatchSchedule {
   startTime: string;
   venue: string;
   status: MatchStatus;
+  recordMode?: MatchRecordMode;
   liveVideoUrl?: string;
   liveDelaySeconds?: number;
   division?: LeagueDivision; // 으뜸/버금 구분 (관리자 지정)
@@ -346,6 +348,8 @@ type Action =
   | { type: 'manualLog'; message: string }
   | { type: 'setTeamName'; side: Side; name: string }
   | { type: 'setLineup'; side: Side; index: number; updates: Partial<PlayerSlot> }
+  | { type: 'removeLineupSlot'; side: Side; index: number }
+  | { type: 'removePracticeBatter'; side: Side; battingOrderIndex: number }
   | { type: 'swapPositions'; side: Side; swaps: { index: number; newPos: string }[]; benchSwaps?: { index: number; newPos: string }[] }
   | { type: 'addBench'; side: Side; player: PlayerSlot }
   | { type: 'removeBench'; side: Side; benchIndex: number }
@@ -492,6 +496,37 @@ const deriveMatchDivision = (
   if (awayDiv && !homeDiv) return awayDiv;
   return undefined;
 };
+
+function isPracticeMatch(match?: MatchSchedule | null) {
+  return match?.recordMode === 'practice';
+}
+
+function isPracticeActiveMatch(state: DemoState) {
+  if (!state.activeMatchId) return false;
+  const activeMatch = state.matches.find((m) => m.id === state.activeMatchId);
+  return isPracticeMatch(activeMatch);
+}
+
+function getPracticePitcherIndex(lineup: PlayerSlot[]) {
+  if (!lineup.length) return -1;
+  const lastIndex = lineup.length - 1;
+  return lineup[lastIndex].pos.toUpperCase() === 'P' ? lastIndex : -1;
+}
+
+function getBattingEntriesForLineup(
+  lineup: PlayerSlot[],
+  allowExtendedBattingOrder: boolean,
+) {
+  if (allowExtendedBattingOrder) {
+    const pitcherIndex = getPracticePitcherIndex(lineup);
+    return lineup.filter((_, idx) => idx !== pitcherIndex);
+  }
+  return lineup.filter((slot, idx) => {
+    if (idx < 9) return true;
+    if (slot.pos.toUpperCase() !== 'P') return true;
+    return canPitcherBat(slot, lineup);
+  });
+}
 
 const initialState: DemoState = {
   inning: 1,
@@ -859,6 +894,7 @@ function normalizeMatches(matches: unknown): MatchSchedule[] {
       startTime: typeof match.startTime === 'string' ? match.startTime : new Date().toISOString(),
       venue: typeof match.venue === 'string' ? match.venue : '미정',
       status: match.status === 'completed' || match.status === 'inProgress' ? match.status : 'scheduled',
+      recordMode: match.recordMode === 'practice' ? 'practice' : 'official',
       liveVideoUrl: typeof match.liveVideoUrl === 'string' ? match.liveVideoUrl : undefined,
       liveDelaySeconds: typeof match.liveDelaySeconds === 'number' ? match.liveDelaySeconds : undefined,
       division: deriveMatchDivision(match.division, match.homeTeamId, match.awayTeamId),
@@ -886,6 +922,7 @@ function projectSpectatorMatch(match: MatchSchedule): MatchSchedule {
     startTime: match.startTime,
     venue: match.venue,
     status: match.status,
+    recordMode: match.recordMode ?? 'official',
     liveVideoUrl: match.liveVideoUrl,
     liveDelaySeconds: match.liveDelaySeconds,
     division: match.division,
@@ -1211,16 +1248,22 @@ export function buildGameRecord(state: DemoState): GameRecord {
 
 function snapshotState(state: DemoState): DemoSnapshot {
   const { history: _history, ...snapshot } = state;
-  // [수정] Firestore에 저장 시 빈 슬롯 필터링하여 깜빡임 방지
+  const activeMatch = state.activeMatchId
+    ? state.matches.find((m) => m.id === state.activeMatchId)
+    : null;
+  const preserveEmptySlots = isPracticeMatch(activeMatch);
+  // [수정] 기본적으로는 빈 슬롯을 제외하여 깜빡임을 줄이되, 연습경기는 추가 타자 슬롯 유지를 위해 보존
   const filterEmptySlots = (lineup: PlayerSlot[]) =>
     lineup.filter(slot => slot.name && slot.name.trim() !== '');
 
   return {
     ...snapshot,
-    lineups: {
-      home: filterEmptySlots(snapshot.lineups.home),
-      away: filterEmptySlots(snapshot.lineups.away),
-    },
+    lineups: preserveEmptySlots
+      ? snapshot.lineups
+      : {
+          home: filterEmptySlots(snapshot.lineups.home),
+          away: filterEmptySlots(snapshot.lineups.away),
+        },
   };
 }
 
@@ -1292,6 +1335,8 @@ function reducer(state: DemoState, action: Action): DemoState {
   const setupActions: Action['type'][] = [
     'setTeamName',
     'setLineup',
+    'removeLineupSlot',
+    'removePracticeBatter',
     'addBench',
     'removeBench',
     'substitute',
@@ -1580,6 +1625,12 @@ function reducer(state: DemoState, action: Action): DemoState {
       break;
     case 'setLineup':
       nextState = updateLineup(state, action.side, action.index, action.updates);
+      break;
+    case 'removeLineupSlot':
+      nextState = removeLineupSlot(state, action.side, action.index);
+      break;
+    case 'removePracticeBatter':
+      nextState = removePracticeBatter(state, action.side, action.battingOrderIndex);
       break;
     case 'swapPositions':
       nextState = swapPositions(state, action.side, action.swaps, action.benchSwaps);
@@ -1875,13 +1926,7 @@ function formatRunnerMove({
 function currentBatterInfo(state: DemoState) {
   const side = hittingSide(state);
   const lineup = state.lineups[side];
-
-  // [수정] 1~9번 타자는 포지션 불문하고 타자로 인정
-  const battingLineup = lineup.filter((slot, idx) => {
-    if (idx < 9) return true; // 타순 1~9번 강제 포함
-    if (slot.pos.toUpperCase() !== 'P') return true;
-    return canPitcherBat(slot, lineup);
-  });
+  const battingLineup = getBattingEntriesForLineup(lineup, isPracticeActiveMatch(state));
 
   const activeLineup = battingLineup.length ? battingLineup : lineup;
   const safeLength = activeLineup.length || 1;
@@ -2947,7 +2992,12 @@ function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
 
   const rawLineups = match.lineups ?? { home: [], away: [] };
   const hasLineups = hasActualPlayers(rawLineups.home) || hasActualPlayers(rawLineups.away);
-  const lineups = hasLineups ? ensureCompleteLineups(rawLineups) : rawLineups;
+  const lineups =
+    hasLineups
+      ? isPracticeMatch(match)
+        ? cloneLineups(rawLineups)
+        : ensureCompleteLineups(rawLineups)
+      : rawLineups;
   const benches = match.benches ?? { home: [], away: [] };
   return {
     inning: 1,
@@ -2993,7 +3043,9 @@ function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
 }
 
 function createNewGame(state: DemoState): DemoState {
-  const preparedLineups = ensureCompleteLineups(state.lineups);
+  const preparedLineups = isPracticeActiveMatch(state)
+    ? cloneLineups(state.lineups)
+    : ensureCompleteLineups(state.lineups);
   return {
     inning: 1,
     half: 'top',
@@ -3114,13 +3166,7 @@ function advanceBasesOnWalk(currentBases: Bases, batterName: string) {
 function nextBatter(state: DemoState) {
   const side = hittingSide(state);
   const lineup = state.lineups[side];
-
-  // [수정] 타석에 들어갈 수 있는 선수 필터링 (1~9번 무조건 포함)
-  const battingLineup = lineup.filter((slot, idx) => {
-    if (idx < 9) return true; // 타순 1~9번 강제 포함
-    if (slot.pos.toUpperCase() !== 'P') return true;
-    return canPitcherBat(slot, lineup);
-  }); // <--- 주의: 여기서 함수를 닫는 '}'가 있으면 안 됩니다! '; '로 끝나야 합니다.
+  const battingLineup = getBattingEntriesForLineup(lineup, isPracticeActiveMatch(state));
 
   const activeLineup = battingLineup.length ? battingLineup : lineup;
   const safeLength = activeLineup.length || 1;
@@ -3157,6 +3203,50 @@ function updateLineup(state: DemoState, side: Side, index: number, updates: Part
   }
 
   return { ...state, lineups: { ...state.lineups, [side]: lineup }, feed, lastPlay };
+}
+
+function removeLineupSlot(state: DemoState, side: Side, index: number): DemoState {
+  const lineup = [...state.lineups[side]];
+  if (index < 0 || index >= lineup.length) return state;
+
+  // 기록원 연습모드 UI에서만 호출되므로, 삭제 판단은 "마지막 투수 전용 슬롯" 기준으로 단순화한다.
+  // 타자가 P 포지션을 가져도 삭제 대상에서 제외되지 않도록, 마지막 슬롯이 P일 때만 투수 전용으로 본다.
+  const dedicatedPitcherIndex =
+    lineup.length > 0 && lineup[lineup.length - 1].pos.toUpperCase() === 'P'
+      ? lineup.length - 1
+      : -1;
+
+  const battingIndices = lineup
+    .map((_, idx) => idx)
+    .filter((idx) => idx !== dedicatedPitcherIndex);
+
+  if (battingIndices.length <= 9) return state;
+  const battingOrder = battingIndices.indexOf(index);
+  if (battingOrder < 0) return state;
+  if (battingOrder < 9) return state; // 최소 9명 보장 (기본 1~9번 보호)
+  lineup.splice(index, 1);
+  return { ...state, lineups: { ...state.lineups, [side]: lineup } };
+}
+
+function removePracticeBatter(state: DemoState, side: Side, battingOrderIndex: number): DemoState {
+  const lineup = [...state.lineups[side]];
+  const dedicatedPitcherIndex =
+    lineup.length > 0 && lineup[lineup.length - 1].pos.toUpperCase() === 'P'
+      ? lineup.length - 1
+      : -1;
+
+  const battingCount = dedicatedPitcherIndex >= 0 ? lineup.length - 1 : lineup.length;
+  if (battingCount <= 9) return state;
+  if (battingOrderIndex < 9) return state;
+  if (battingOrderIndex >= battingCount) return state;
+
+  // 연습경기 UI에서 battingOrderIndex는 타자행 인덱스(0-based)와 동일하다.
+  const targetIndex = battingOrderIndex;
+  if (targetIndex < 0 || targetIndex >= lineup.length) return state;
+  if (targetIndex === dedicatedPitcherIndex) return state;
+
+  lineup.splice(targetIndex, 1);
+  return { ...state, lineups: { ...state.lineups, [side]: lineup } };
 }
 
 function swapPositions(
@@ -3275,7 +3365,7 @@ function substitutePlayer(
   const benchPlayer = bench[benchIndex];
   if (!benchPlayer) return state;
   const outgoing = lineup[lineupIndex];
-  const battingOrder = getBattingOrder(state.lineups[side], lineupIndex);
+  const battingOrder = getBattingOrder(state.lineups[side], lineupIndex, isPracticeActiveMatch(state));
 
   // 교체로 들어온 선수에 교체 유형 저장
   const incomingPlayer = { ...benchPlayer, substitutionType };
@@ -3337,12 +3427,15 @@ function substitutePlayer(
   };
 }
 
-function getBattingOrder(lineup: PlayerSlot[], lineupIndex: number) {
+function getBattingOrder(lineup: PlayerSlot[], lineupIndex: number, allowExtendedBattingOrder = false) {
   const slot = lineup[lineupIndex];
   if (!slot) return null;
-
-  // [수정] 1~9번 타순이거나, 투수가 아니거나, 타격 가능한 투수인 경우
-  const isBatter = lineupIndex < 9 || slot.pos.toUpperCase() !== 'P' || canPitcherBat(slot, lineup);
+  const practicePitcherIndex = allowExtendedBattingOrder ? getPracticePitcherIndex(lineup) : -1;
+  if (allowExtendedBattingOrder && lineupIndex === practicePitcherIndex) return null;
+  const isBatter =
+    (allowExtendedBattingOrder ? true : lineupIndex < 9) ||
+    slot.pos.toUpperCase() !== 'P' ||
+    canPitcherBat(slot, lineup);
 
   if (!isBatter) {
     return null;
@@ -3351,8 +3444,14 @@ function getBattingOrder(lineup: PlayerSlot[], lineupIndex: number) {
   let order = 0;
   for (let i = 0; i < lineup.length; i += 1) {
     const player = lineup[i];
-    // [수정] 카운트 할 때도 동일한 조건 적용
-    const isCountable = i < 9 || player.pos.toUpperCase() !== 'P' || canPitcherBat(player, lineup);
+    if (allowExtendedBattingOrder && i === practicePitcherIndex) {
+      if (i === lineupIndex) return null;
+      continue;
+    }
+    const isCountable =
+      (allowExtendedBattingOrder ? true : i < 9) ||
+      player.pos.toUpperCase() !== 'P' ||
+      canPitcherBat(player, lineup);
     
     if (isCountable) {
       order += 1;
@@ -3400,6 +3499,8 @@ interface DemoStoreValue {
     setLiveDelaySeconds: (seconds: number) => void;
     setTeamName: (side: Side, name: string) => void;
     setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) => void;
+    removeLineupSlot: (side: Side, index: number) => void;
+    removePracticeBatter: (side: Side, battingOrderIndex: number) => void;
     swapPositions: (side: Side, swaps: { index: number; newPos: string }[], benchSwaps?: { index: number; newPos: string }[]) => void;
     addBench: (side: Side, player: PlayerSlot) => void;
     removeBench: (side: Side, benchIndex: number) => void;
@@ -3483,17 +3584,22 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     if (!current) return Promise.resolve();
     matchesReadyRef.current = true;
 
-    // [수정] Firestore에 저장 시 빈 슬롯 필터링하여 깜빡임 방지
+    // [수정] 기본적으로는 빈 슬롯 필터링, 연습경기는 추가 타자 슬롯 유지를 위해 보존
     const filterEmptySlots = (lineup: PlayerSlot[]) =>
       lineup.filter(slot => slot.name && slot.name.trim() !== '');
 
     const merged = { ...current, ...overrides };
+    const preserveEmptySlots = (merged.recordMode ?? 'official') === 'practice';
     const cleanedMatch = {
       ...merged,
-      lineups: merged.lineups ? {
-        home: filterEmptySlots(merged.lineups.home),
-        away: filterEmptySlots(merged.lineups.away),
-      } : undefined,
+      lineups: merged.lineups
+        ? preserveEmptySlots
+          ? merged.lineups
+          : {
+              home: filterEmptySlots(merged.lineups.home),
+              away: filterEmptySlots(merged.lineups.away),
+            }
+        : undefined,
     };
 
     const payload = pruneUndefined(cleanedMatch);
@@ -4102,6 +4208,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         notes: m.notes ?? null,
         division: m.division ?? null,
         venue: m.venue,
+        recordMode: m.recordMode ?? 'official',
         homeTeamName: m.homeTeamName,
         awayTeamName: m.awayTeamName,
         liveVideoUrl: m.liveVideoUrl ?? null,
@@ -4122,13 +4229,18 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         lineup.filter(slot => slot.name && slot.name.trim() !== '');
 
       state.matches.forEach((match) => {
-        // [수정] Firestore에 저장 시 빈 슬롯 필터링하여 깜빡임 방지
+        const preserveEmptySlots = (match.recordMode ?? 'official') === 'practice';
+        // [수정] 기본적으로는 빈 슬롯 필터링, 연습경기는 추가 타자 슬롯 유지를 위해 보존
         const cleanedMatch = {
           ...match,
-          lineups: match.lineups ? {
-            home: filterEmptySlots(match.lineups.home),
-            away: filterEmptySlots(match.lineups.away),
-          } : undefined,
+          lineups: match.lineups
+            ? preserveEmptySlots
+              ? match.lineups
+              : {
+                  home: filterEmptySlots(match.lineups.home),
+                  away: filterEmptySlots(match.lineups.away),
+                }
+            : undefined,
         };
         batch.set(doc(firestore, 'matches', match.id), pruneUndefined(cleanedMatch), { merge: true });
       });
@@ -4240,6 +4352,10 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       setTeamName: (side: Side, name: string) => dispatch({ type: 'setTeamName', side, name }),
       setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) =>
         dispatch({ type: 'setLineup', side, index, updates }),
+      removeLineupSlot: (side: Side, index: number) =>
+        dispatch({ type: 'removeLineupSlot', side, index }),
+      removePracticeBatter: (side: Side, battingOrderIndex: number) =>
+        dispatch({ type: 'removePracticeBatter', side, battingOrderIndex }),
       swapPositions: (side: Side, swaps: { index: number; newPos: string }[], benchSwaps?: { index: number; newPos: string }[]) =>
         dispatch({ type: 'swapPositions', side, swaps, benchSwaps }),
       addBench: (side: Side, player: PlayerSlot) => dispatch({ type: 'addBench', side, player }),
@@ -4260,6 +4376,18 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         const matchId = stateRef.current.activeMatchId;
         if (matchId) {
           const snapshot = stateRef.current;
+          const activeMatch = snapshot.matches.find((m) => m.id === matchId);
+          const isPractice = isPracticeMatch(activeMatch);
+
+          if (isPractice) {
+            void pushMatchUpdate(matchId, {
+              status: 'completed',
+              homeScore: snapshot.score.home,
+              awayScore: snapshot.score.away,
+              postGame: undefined,
+            }).catch(() => {});
+            return;
+          }
           
           // 상세 기록 산출
           const gameRecord = buildGameRecord(snapshot);

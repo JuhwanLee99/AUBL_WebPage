@@ -5,6 +5,7 @@ import { useDemoStore } from '../../shared/state/demoStore';
 import type {
   MatchSchedule,
   MatchStatus,
+  MatchRecordMode,
   PostGameRecord,
   PostGameBatterLine,
   PostGamePitcherLine,
@@ -19,6 +20,7 @@ const emptyForm = {
   startTime: '',
   venue: '',
   status: 'scheduled' as MatchStatus,
+  recordMode: 'official' as MatchRecordMode,
   division: 'auto' as 'auto' | LeagueDivision,
   homeScore: '',
   awayScore: '',
@@ -54,7 +56,17 @@ const createEmptyBenchInput = () => ({
   bats: 'R',
 });
 
-const normalizeLineupForEditing = (lineup?: PlayerSlot[]) => {
+const normalizeLineupForEditing = (lineup: PlayerSlot[] | undefined, mode: MatchRecordMode) => {
+  if (mode === 'practice') {
+    if (!lineup?.length) return createEmptyLineup();
+    const filled = lineup.map((slot) => ({ ...defaultPlayerSlot, ...slot }));
+    const hasTrailingPitcher = filled.length > 0 && filled[filled.length - 1].pos.toUpperCase() === 'P';
+    const hasAnyPitcher = filled.some((slot) => slot.pos.toUpperCase() === 'P');
+    if (!hasAnyPitcher || !hasTrailingPitcher) {
+      filled.push({ ...defaultPlayerSlot, pos: 'P' });
+    }
+    return filled;
+  }
   const base = lineup?.length ? lineup.map((slot) => ({ ...defaultPlayerSlot, ...slot })) : createEmptyLineup();
   const filled = [...base];
   const hasPitcher = filled.some((slot) => slot.pos.toUpperCase() === 'P');
@@ -69,6 +81,35 @@ const normalizeLineupForEditing = (lineup?: PlayerSlot[]) => {
 
 const normalizeBenchForEditing = (bench?: PlayerSlot[]) =>
   bench?.length ? bench.map((player) => ({ ...defaultPlayerSlot, ...player })) : [];
+
+const updateLineupSlot = (lineup: PlayerSlot[], index: number, updates: Partial<PlayerSlot>) => {
+  const next = [...lineup];
+  while (next.length <= index) next.push({ ...defaultPlayerSlot });
+  next[index] = { ...next[index], ...updates };
+  return next;
+};
+
+const addPracticeBatterSlot = (lineup: PlayerSlot[]) => {
+  const next = [...lineup];
+  let pitcherIndex = -1;
+  for (let idx = next.length - 1; idx >= 0; idx -= 1) {
+    if (next[idx].pos.toUpperCase() === 'P') {
+      pitcherIndex = idx;
+      break;
+    }
+  }
+  if (pitcherIndex >= 0) {
+    next.splice(pitcherIndex, 0, { ...defaultPlayerSlot });
+    return next;
+  }
+  next.push({ ...defaultPlayerSlot });
+  return next;
+};
+
+const normalizeLineupByMode = (lineup: PlayerSlot[], mode: MatchRecordMode) => {
+  if (mode === 'practice') return lineup;
+  return lineup.slice(0, 10);
+};
 
 function toIsoString(value: string) {
   if (!value) return new Date().toISOString();
@@ -151,10 +192,12 @@ function extractDateParts(value: string) {
   if (!value) return { date: '', hour: '', minute: '' };
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return { date: '', hour: '', minute: '' };
+  const pad = (n: number) => String(n).padStart(2, '0');
   return {
-    date: date.toISOString().slice(0, 10),
-    hour: String(date.getHours()).padStart(2, '0'),
-    minute: String(date.getMinutes()).padStart(2, '0'),
+    // date input은 로컬 캘린더 날짜를 써야 UTC 변환으로 하루가 밀리지 않는다.
+    date: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+    hour: pad(date.getHours()),
+    minute: pad(date.getMinutes()),
   };
 }
 
@@ -347,8 +390,14 @@ export default function MatchSchedulePage() {
       homeLineup || awayLineup ? { home: parseLineup(homeLineup), away: parseLineup(awayLineup) } : undefined;
     const trimmedLineups = form.status === 'scheduled'
       ? {
-          home: formLineups.home.filter(hasMeaningfulPlayerData).map(normalizePlayerSlot),
-          away: formLineups.away.filter(hasMeaningfulPlayerData).map(normalizePlayerSlot),
+          home: normalizeLineupByMode(
+            formLineups.home.filter(hasMeaningfulPlayerData).map(normalizePlayerSlot),
+            form.recordMode,
+          ),
+          away: normalizeLineupByMode(
+            formLineups.away.filter(hasMeaningfulPlayerData).map(normalizePlayerSlot),
+            form.recordMode,
+          ),
         }
       : undefined;
     const trimmedBenches = form.status === 'scheduled'
@@ -366,6 +415,7 @@ export default function MatchSchedulePage() {
       startTime: toIsoString(form.startTime),
       venue: form.venue || '미정',
       status: form.status,
+      recordMode: form.recordMode,
       division: selectedDivision,
       homeScore: form.status === 'completed' ? Number(form.homeScore || 0) : null,
       awayScore: form.status === 'completed' ? Number(form.awayScore || 0) : null,
@@ -383,9 +433,10 @@ export default function MatchSchedulePage() {
 
   const handleEditLineups = (match: MatchSchedule) => {
     if (!canEdit) return;
+    const mode = match.recordMode ?? 'official';
     setEditingLineups({
-      home: normalizeLineupForEditing(match.lineups?.home),
-      away: normalizeLineupForEditing(match.lineups?.away),
+      home: normalizeLineupForEditing(match.lineups?.home, mode),
+      away: normalizeLineupForEditing(match.lineups?.away, mode),
     });
     setEditingBenches({
       home: normalizeBenchForEditing(match.benches?.home),
@@ -404,9 +455,17 @@ export default function MatchSchedulePage() {
 
   const handleSaveLineups = (matchId: string) => {
     if (!canEdit) return;
+    const targetMatch = state.matches.find((match) => match.id === matchId);
+    const mode = targetMatch?.recordMode ?? 'official';
     const trimmedLineups = {
-      home: editingLineups.home.filter(hasMeaningfulPlayerData).map(normalizePlayerSlot),
-      away: editingLineups.away.filter(hasMeaningfulPlayerData).map(normalizePlayerSlot),
+      home: normalizeLineupByMode(
+        editingLineups.home.filter(hasMeaningfulPlayerData).map(normalizePlayerSlot),
+        mode,
+      ),
+      away: normalizeLineupByMode(
+        editingLineups.away.filter(hasMeaningfulPlayerData).map(normalizePlayerSlot),
+        mode,
+      ),
     };
     const trimmedBenches = {
       home: editingBenches.home.filter((player) => player.name.trim()).map(normalizePlayerSlot),
@@ -435,6 +494,7 @@ export default function MatchSchedulePage() {
       goTo('/scorekeeper');
     };
     const division = deriveDivision(match);
+    const mode = match.recordMode ?? 'official';
     const quickActionStyle: CSSProperties = {
       display: 'inline-flex',
       alignItems: 'center',
@@ -487,6 +547,20 @@ export default function MatchSchedulePage() {
                 {badge.text}
               </span>
               {isActive && <span style={{ fontSize: '12px', color: '#f97316' }}>선택됨</span>}
+              {mode === 'practice' && (
+                <span
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '999px',
+                    background: 'rgba(16,185,129,0.16)',
+                    color: '#34d399',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                  }}
+                >
+                  연습경기
+                </span>
+              )}
             </div>
             <div style={{ color: '#94a3b8', marginTop: '4px', fontSize: '13px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
               <span>
@@ -610,12 +684,25 @@ export default function MatchSchedulePage() {
                 label="원정 라인업 & 후보"
                 side="away"
                 lineup={editingLineups.away}
+                practiceMode={(match.recordMode ?? 'official') === 'practice'}
                 bench={editingBenches.away}
                 benchInput={editingBenchInputs.away}
                 onSetLineup={(side, index, updates) =>
                   setEditingLineups((prev) => ({
                     ...prev,
-                    [side]: prev[side].map((slot, idx) => (idx === index ? { ...slot, ...updates } : slot)),
+                    [side]: updateLineupSlot(prev[side], index, updates),
+                  }))
+                }
+                onAddBatterSlot={(side) =>
+                  setEditingLineups((prev) => ({
+                    ...prev,
+                    [side]: addPracticeBatterSlot(prev[side]),
+                  }))
+                }
+                onRemoveBatterSlot={(side, index) =>
+                  setEditingLineups((prev) => ({
+                    ...prev,
+                    [side]: prev[side].filter((_, idx) => idx !== index),
                   }))
                 }
                 onChangeBenchInput={(side, updates) =>
@@ -630,12 +717,25 @@ export default function MatchSchedulePage() {
                 label="홈 라인업 & 후보"
                 side="home"
                 lineup={editingLineups.home}
+                practiceMode={(match.recordMode ?? 'official') === 'practice'}
                 bench={editingBenches.home}
                 benchInput={editingBenchInputs.home}
                 onSetLineup={(side, index, updates) =>
                   setEditingLineups((prev) => ({
                     ...prev,
-                    [side]: prev[side].map((slot, idx) => (idx === index ? { ...slot, ...updates } : slot)),
+                    [side]: updateLineupSlot(prev[side], index, updates),
+                  }))
+                }
+                onAddBatterSlot={(side) =>
+                  setEditingLineups((prev) => ({
+                    ...prev,
+                    [side]: addPracticeBatterSlot(prev[side]),
+                  }))
+                }
+                onRemoveBatterSlot={(side, index) =>
+                  setEditingLineups((prev) => ({
+                    ...prev,
+                    [side]: prev[side].filter((_, idx) => idx !== index),
                   }))
                 }
                 onChangeBenchInput={(side, updates) =>
@@ -794,6 +894,7 @@ export default function MatchSchedulePage() {
         {[
           { path: '/schedule/results', label: '경기 결과', desc: '종료 경기 모아보기' },
           { path: '/schedule/groups', label: '조별 일정', desc: '구분(으뜸/버금)별 캘린더' },
+          { path: '/schedule/practice', label: '연습경기', desc: '연습경기 전용 목록' },
           { path: '/schedule/manage', label: '일정 관리', desc: '데모용 더미 등록 & 상태 변경' },
         ].map((item) => (
           <button
@@ -932,6 +1033,17 @@ export default function MatchSchedulePage() {
                 <option value="inProgress">경기 진행 중</option>
               </select>
             </label>
+            <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
+              경기 모드
+              <select
+                value={form.recordMode}
+                onChange={(event) => setForm((prev) => ({ ...prev, recordMode: event.target.value as MatchRecordMode }))}
+                style={inputStyle}
+              >
+                <option value="official">AUBL 공식경기</option>
+                <option value="practice">연습경기 (공식기록 미반영)</option>
+              </select>
+            </label>
             {form.status === 'completed' && (
               <>
                 <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
@@ -965,12 +1077,25 @@ export default function MatchSchedulePage() {
                   label="원정 라인업 & 후보"
                   side="away"
                   lineup={formLineups.away}
+                  practiceMode={form.recordMode === 'practice'}
                   bench={formBenches.away}
                   benchInput={benchInputs.away}
                   onSetLineup={(side, index, updates) =>
                     setFormLineups((prev) => ({
                       ...prev,
-                      [side]: prev[side].map((slot, idx) => (idx === index ? { ...slot, ...updates } : slot)),
+                      [side]: updateLineupSlot(prev[side], index, updates),
+                    }))
+                  }
+                  onAddBatterSlot={(side) =>
+                    setFormLineups((prev) => ({
+                      ...prev,
+                      [side]: addPracticeBatterSlot(prev[side]),
+                    }))
+                  }
+                  onRemoveBatterSlot={(side, index) =>
+                    setFormLineups((prev) => ({
+                      ...prev,
+                      [side]: prev[side].filter((_, idx) => idx !== index),
                     }))
                   }
                   onChangeBenchInput={(side, updates) =>
@@ -987,12 +1112,25 @@ export default function MatchSchedulePage() {
                   label="홈 라인업 & 후보"
                   side="home"
                   lineup={formLineups.home}
+                  practiceMode={form.recordMode === 'practice'}
                   bench={formBenches.home}
                   benchInput={benchInputs.home}
                   onSetLineup={(side, index, updates) =>
                     setFormLineups((prev) => ({
                       ...prev,
-                      [side]: prev[side].map((slot, idx) => (idx === index ? { ...slot, ...updates } : slot)),
+                      [side]: updateLineupSlot(prev[side], index, updates),
+                    }))
+                  }
+                  onAddBatterSlot={(side) =>
+                    setFormLineups((prev) => ({
+                      ...prev,
+                      [side]: addPracticeBatterSlot(prev[side]),
+                    }))
+                  }
+                  onRemoveBatterSlot={(side, index) =>
+                    setFormLineups((prev) => ({
+                      ...prev,
+                      [side]: prev[side].filter((_, idx) => idx !== index),
                     }))
                   }
                   onChangeBenchInput={(side, updates) =>
@@ -1572,9 +1710,12 @@ function ScheduleLineupEditor({
   label,
   side,
   lineup,
+  practiceMode,
   bench,
   benchInput,
   onSetLineup,
+  onAddBatterSlot,
+  onRemoveBatterSlot,
   onChangeBenchInput,
   onAddBench,
   onRemoveBench,
@@ -1582,16 +1723,25 @@ function ScheduleLineupEditor({
   label: string;
   side: Side;
   lineup: PlayerSlot[];
+  practiceMode: boolean;
   bench: PlayerSlot[];
   benchInput: PlayerSlot;
   onSetLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) => void;
+  onAddBatterSlot: (side: Side) => void;
+  onRemoveBatterSlot: (side: Side, index: number) => void;
   onChangeBenchInput: (side: Side, updates: Partial<PlayerSlot>) => void;
   onAddBench: (side: Side, player: PlayerSlot) => void;
   onRemoveBench: (side: Side, index: number) => void;
 }) {
   const lineupEntries = lineup.map((slot, idx) => ({ slot, idx }));
-  const battingEntries = lineupEntries.slice(0, 9);
-  const pitcherEntry = lineupEntries[9];
+  const officialPitcherEntry = lineupEntries[9];
+  const practicePitcherEntry = practiceMode
+    ? [...lineupEntries].reverse().find((entry) => entry.slot.pos.toUpperCase() === 'P') ?? null
+    : null;
+  const battingEntries = practiceMode
+    ? lineupEntries.filter((entry) => entry.idx !== practicePitcherEntry?.idx)
+    : lineupEntries.slice(0, 9);
+  const pitcherEntry = practiceMode ? practicePitcherEntry : officialPitcherEntry;
   return (
     <div style={{ display: 'grid', gap: '8px' }}>
       <span style={{ fontWeight: 800, color: '#cbd5e1' }}>{label}</span>
@@ -1610,7 +1760,7 @@ function ScheduleLineupEditor({
             key={entry.idx}
             style={{
               display: 'grid',
-              gridTemplateColumns: '24px 85px 55px 50px 70px 70px',
+              gridTemplateColumns: practiceMode ? '24px 1fr 70px 60px 70px 70px 56px' : '24px 1fr 70px 60px 70px 70px',
               gap: '8px',
               alignItems: 'center',
               padding: '4px',
@@ -1695,8 +1845,46 @@ function ScheduleLineupEditor({
               <option value="R">타 R</option>
               <option value="L">타 L</option>
             </select>
+            {practiceMode && (
+              <button
+                type="button"
+                onClick={() => onRemoveBatterSlot(side, entry.idx)}
+                style={{
+                  borderRadius: '8px',
+                  border: '1px solid rgba(239,68,68,0.45)',
+                  background: 'rgba(248,113,113,0.08)',
+                  color: '#fca5a5',
+                  fontWeight: 900,
+                  fontSize: '11px',
+                  padding: '6px 8px',
+                  cursor: 'pointer',
+                }}
+              >
+                삭제
+              </button>
+            )}
           </div>
         ))}
+        {practiceMode && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              onClick={() => onAddBatterSlot(side)}
+              style={{
+                padding: '8px 10px',
+                borderRadius: '10px',
+                border: '1px solid rgba(59,130,246,0.4)',
+                background: 'rgba(59,130,246,0.1)',
+                color: '#93c5fd',
+                fontWeight: 800,
+                cursor: 'pointer',
+                fontSize: '12px',
+              }}
+            >
+              타자 슬롯 추가
+            </button>
+          </div>
+        )}
         <div
           style={{
             marginTop: '6px',
