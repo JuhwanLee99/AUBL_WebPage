@@ -2161,12 +2161,30 @@ const handleConfirmHitWizard = () => {
             {state.half === 'top' ? 'Top' : 'Bot'} {state.inning} | B:{state.balls} S:{state.strikes} O:{state.outs}
           </span>
         </div>
-        {/* 기록원 정보 표시 영역 */}
-        <span style={{ fontSize: '14px', color: state.scorerUid ? '#38bdf8' : '#b33131' }}>
-          {state.scorerUid 
-            ? `현재 기록원: ${state.scorerName || state.scorerEmail || '알 수 없음'}` 
-            : '기록원 부재'}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          {/* 기록원 정보 표시 영역 */}
+          <span style={{ fontSize: '14px', color: state.scorerUid ? '#38bdf8' : '#b33131' }}>
+            {state.scorerUid
+              ? `현재 기록원: ${state.scorerName || state.scorerEmail || '알 수 없음'}`
+              : '기록원 부재'}
+          </span>
+          {/* 동접자 수 표시 */}
+          <span
+            style={{
+              fontSize: '13px',
+              color: '#22c55e',
+              padding: '4px 10px',
+              borderRadius: '8px',
+              background: 'rgba(34, 197, 94, 0.1)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <span style={{ fontSize: '14px' }}>👥</span>
+            {state.onlineViewerCount}명 접속
+          </span>
+        </div>
       </header>
 
       <section
