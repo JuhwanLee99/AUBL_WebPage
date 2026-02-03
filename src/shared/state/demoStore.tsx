@@ -82,6 +82,9 @@ interface PlayerSlot {
   isOhtaniRule?: boolean;
   // 교체 유형: 대수비, 대타, 대주자
   substitutionType?: '대수비' | '대타' | '대주자';
+  // 선출(선수 출신): 고등학교 이상 대한야구소프트볼협회/스포츠지원포털 등록자
+  // 한 경기 최대 2명, 투수/포수 불가
+  isElite?: boolean;
 }
 
 export type PostGameLineScore = { innings: number[]; home: number[]; away: number[] };
@@ -425,6 +428,8 @@ const normalizePlayerSlotForGame = (player: PlayerSlot): PlayerSlot => ({
   isOhtaniRule: !!player.isOhtaniRule,
   // [수정] 교체 유형 보존 (추가됨: 이 부분이 없으면 게임 로직 진행 중 정보가 사라질 수 있음)
   substitutionType: player.substitutionType,
+  // [수정] 선출 플래그 보존
+  isElite: !!player.isElite,
 });
 
 // 라인업 채움 로직 (UI 9칸 유지 보장 수정)
@@ -660,6 +665,8 @@ function normalizePlayerSlot(slot: unknown): PlayerSlot | null {
       ['대수비', '대타', '대주자'].includes(s.substitutionType)
         ? (s.substitutionType as '대수비' | '대타' | '대주자')
         : undefined,
+    // [수정] 선출(선수 출신) 플래그 보존
+    isElite: typeof s.isElite === 'boolean' ? s.isElite : undefined,
   };
 }
 
