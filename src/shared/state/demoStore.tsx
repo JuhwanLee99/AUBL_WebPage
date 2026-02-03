@@ -2398,8 +2398,9 @@ function applyError(state: DemoState, details: ErrorDetails): DemoState {
   const pitchNumber = Math.max(1, state.pitchCount + 1);
   const isBatterHold = details.advanceResults.batter === 'hold';
   const { batter } = currentBatterInfo(state);
-  const batterName = isBatterHold ? batter : nextBatter(state).batterName;
-  const batterIndex = isBatterHold ? state.batterIndex[hittingSide(state)] : nextBatter(state).batterIndex;
+  const nextBatterResult = nextBatter(state);
+  const batterName = isBatterHold ? batter : nextBatterResult.batterName;
+  const newBatterIndex = isBatterHold ? state.batterIndex : nextBatterResult.batterIndex;
   const bases = [null, null, null] as Bases;
   const runnerMoves: { feedText: string; lastPlay: string; runnerSummary: string }[] = [];
   let runs = 0;
@@ -2492,9 +2493,7 @@ function applyError(state: DemoState, details: ErrorDetails): DemoState {
     balls: 0,
     strikes: 0,
     pitchCount: isBatterHold ? state.pitchCount : 0,
-    batterIndex: isBatterHold
-      ? state.batterIndex
-      : { ...state.batterIndex, [hittingSide(state)]: batterIndex },
+    batterIndex: newBatterIndex,
     outs,
     lastPlay: summary,
     feed,
@@ -3132,6 +3131,23 @@ function swapPositions(
     const changeText = `포지션 교체 · ${changes.join(', ')}`;
     feed = pushFeed(state.feed, createLogEntryForBaserunning(state, changeText, 0));
     lastPlay = changeText;
+
+    // 야수 → 투수 포지션 변경 시 투수 등판 로그 추가 (투구수 누적을 위해)
+    for (const { index, newPos } of swaps) {
+      if (index >= 0 && index < lineup.length) {
+        const player = lineup[index];
+        const normalizedNewPos = newPos.toUpperCase();
+        const originalPos = state.lineups[side][index]?.pos?.toUpperCase();
+        // 기존 포지션이 투수가 아니고 새 포지션이 투수인 경우
+        if (player && originalPos !== 'P' && normalizedNewPos === 'P') {
+          const pitcherAppearanceCount = calculatePitcherAppearanceCount(feed, side);
+          const appearanceLabel = pitcherAppearanceCount === 0 ? '선발' : `${pitcherAppearanceCount}차 계투`;
+          const playerNum = player.number ? `(${player.number})` : '';
+          const newPitcherLog = `${player.name}${playerNum} 투수 (${appearanceLabel})`;
+          feed = pushFeed(feed, createLogEntryForBaserunning(state, newPitcherLog, 0));
+        }
+      }
+    }
   }
 
   return {
