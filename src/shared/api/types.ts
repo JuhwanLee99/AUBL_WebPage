@@ -22,7 +22,8 @@ export interface CreateGameResponse {
 }
 
 export interface ImportFirestoreMatchesRequest {
-  // Firestore에서 자동으로 가져오므로 별도 요청 바디 없음
+  // 확장성을 위한 예약 필드 (현재 서버는 비워도 동작)
+  force?: boolean;
 }
 
 export interface ImportFirestoreMatchesResponse {
@@ -31,9 +32,11 @@ export interface ImportFirestoreMatchesResponse {
   pitcherLogsInserted: number;
 }
 
-export interface PlayerStats {
-  playerId: number;
+export interface BatterStatSummary {
+  id: number;
+  teamPlayerId: number;
   seasonId: number;
+  seasonType: string;
   gamesPlayed: number;
   plateAppearance: number;
   atBats: number;
@@ -45,16 +48,144 @@ export interface PlayerStats {
   ops: number;
 }
 
-export interface PlayerGameLog {
+export interface PitcherStatSummary {
+  id: number;
+  teamPlayerId: number;
+  seasonId: number;
+  seasonType: string;
+  gamesPlayed: number;
+  gamesStarted: number;
+  inningsPitched: number;
+  wins: number;
+  losses: number;
+  saves: number;
+  era: number;
+  whip: number;
+  kPer9: number;
+  bbPer9: number;
+}
+
+export interface PlayerStatsResponse {
+  batterStats: BatterStatSummary[];
+  pitcherStats: PitcherStatSummary[];
+}
+
+export interface BatterGameLogSummary {
+  id: number;
   gameId: number;
+  teamId: number;
+  teamSide: 'home' | 'away';
+  playerId: number | null;
+  playerName: string;
+  playerPosition: string;
+  atBats: number;
+  runs: number;
+  hits: number;
+  rbi: number;
+  walks: number;
+  strikeouts: number;
+}
+
+export interface PitcherGameLogSummary {
+  id: number;
+  gameId: number;
+  teamId: number;
+  teamSide: 'home' | 'away';
+  playerId: number | null;
+  playerName: string;
+  playerPosition: string;
+  inningsPitched: number;
+  hitsAllowed: number;
+  runsAllowed: number;
+  earnedRuns: number;
+  walks: number;
+  strikeouts: number;
+}
+
+export interface PlayerGameLogsResponse {
+  batterLogs: BatterGameLogSummary[];
+  pitcherLogs: PitcherGameLogSummary[];
+}
+
+export interface SeasonSummary {
+  id: number;
+  year: number;
+}
+
+export interface TeamRecordRow {
+  teamId: number;
+  teamName: string;
+  teamCode?: string;
+  division?: string;
+  games: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winPct?: number;
+  runsFor?: number;
+  runsAgainst?: number;
+  era?: number;
+  ops?: number;
+  stolenBases?: number;
+  dataSource?: string;
+}
+
+export interface RecordOverviewResponse {
+  seasonId: number;
+  year: number;
+  totalGames: number;
+  totalTeams: number;
+  avgEra: number;
+  avgOps: number;
+  totalRuns: number;
+  dataSource?: string;
+  updatedAt?: string;
+}
+
+export interface BatterRecordRow {
   playerId: number;
-  gameDate: string;
-  opponent: string;
+  playerName: string;
+  teamId: number;
+  teamName: string;
+  seasonId: number;
+  seasonYear: number;
+  gamesPlayed: number;
   plateAppearance: number;
   atBats: number;
   hits: number;
   homeRuns: number;
-  rbis: number;
+  runsBattedIn: number;
+  runsScored: number;
+  stolenBases: number;
+  walks: number;
+  strikeouts: number;
+  battingAverage: number;
+  onBasePct: number;
+  sluggingPct: number;
+  ops: number;
+  dataSource?: string;
+}
+
+export interface PitcherRecordRow {
+  playerId: number;
+  playerName: string;
+  teamId: number;
+  teamName: string;
+  seasonId: number;
+  seasonYear: number;
+  gamesPlayed: number;
+  gamesStarted: number;
+  inningsPitched: number;
+  wins: number;
+  losses: number;
+  saves: number;
+  strikeouts: number;
+  walksAllowed: number;
+  era: number;
+  whip: number;
+  kPer9: number;
+  bbPer9: number;
+  dataSource?: string;
 }
 
 // 백엔드로 전송할 경기 상세 데이터

@@ -11,6 +11,7 @@ import type {
 } from '../../shared/state/demoStore';
 import type { LeagueDivision } from '../../shared/types';
 import { TEAMS } from '../../shared/lib/mockData';
+import { resolveTeamIdByName } from '../../shared/lib/teamNameMapping';
 import { useAdmin } from '../../shared/auth/useAdmin';
 
 const emptyForm = {
@@ -333,6 +334,12 @@ export default function MatchSchedulePage() {
   const handleFormSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canEdit) return;
+    const resolvedHomeTeamId = resolveTeamIdByName(form.homeTeamName);
+    const resolvedAwayTeamId = resolveTeamIdByName(form.awayTeamName);
+    if (!resolvedHomeTeamId || !resolvedAwayTeamId) {
+      window.alert('팀명을 인식할 수 없습니다. 팀명을 다시 확인해 주세요.');
+      return;
+    }
     const homeLineup = form.homeLineup.trim();
     const awayLineup = form.awayLineup.trim();
     const selectedDivision = form.division === 'auto' ? undefined : (form.division as LeagueDivision);
@@ -354,6 +361,8 @@ export default function MatchSchedulePage() {
     const hasStructuredBenches = Boolean(trimmedBenches?.home.length || trimmedBenches?.away.length);
     const match: MatchSchedule = {
       id: `match-${Date.now()}`,
+      homeTeamId: resolvedHomeTeamId,
+      awayTeamId: resolvedAwayTeamId,
       homeTeamName: form.homeTeamName || '홈팀',
       awayTeamName: form.awayTeamName || '원정팀',
       startTime: toIsoString(form.startTime),

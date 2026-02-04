@@ -4026,15 +4026,14 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
           // 백엔드 연동이 활성화된 경우에만 전송
           const isBackendEnabled = import.meta.env.VITE_ENABLE_BACKEND_INTEGRATION === 'true';
           if (isBackendEnabled) {
-            // 백엔드가 Firestore에서 완료된 경기를 직접 읽어가므로,
-            // Firestore에 저장 후 임포트 API를 호출하여 백엔드가 데이터를 가져가도록 트리거
-            void import('../api').then(({ importFirestoreMatches }) => {
-              importFirestoreMatches()
+            // 완료된 경기 단건만 즉시 임포트하여 중복 처리 위험을 낮춘다.
+            void import('../api').then(({ importFirestoreMatch }) => {
+              importFirestoreMatch(matchId)
                 .then((response) => {
-                  console.log('✅ 백엔드 임포트 트리거 성공:', response);
+                  console.log('✅ 백엔드 단건 임포트 성공:', response);
                 })
                 .catch((error) => {
-                  console.error('❌ 백엔드 임포트 실패:', error);
+                  console.error('❌ 백엔드 단건 임포트 실패:', error);
                   // 실패해도 Firestore에는 저장되어 있으므로 나중에 재시도 가능
                 });
             }).catch(() => {

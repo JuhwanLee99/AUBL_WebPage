@@ -9,8 +9,8 @@ import type {
   GameDetailRequest,
   ImportFirestoreMatchesRequest,
   ImportFirestoreMatchesResponse,
-  PlayerStats,
-  PlayerGameLog,
+  PlayerStatsResponse,
+  PlayerGameLogsResponse,
 } from './types';
 
 /**
@@ -46,17 +46,34 @@ export async function importFirestoreMatches(
 }
 
 /**
+ * Firestore에서 완료된 특정 경기 단건 임포트
+ */
+export async function importFirestoreMatch(
+  matchId: string
+): Promise<ImportFirestoreMatchesResponse> {
+  return api.post<ImportFirestoreMatchesResponse>(
+    `/api/import/firestore/matches/${encodeURIComponent(matchId)}`
+  );
+}
+
+/**
  * 선수 시즌 통계 조회
  */
-export async function getPlayerStats(playerId: number): Promise<PlayerStats> {
-  return api.get<PlayerStats>(`/api/players/${playerId}/stats`);
+export async function getPlayerStats(
+  playerId: number,
+  seasonId?: number
+): Promise<PlayerStatsResponse> {
+  const query = seasonId ? `?seasonId=${seasonId}` : '';
+  return api.get<PlayerStatsResponse>(`/api/players/${playerId}/stats${query}`);
 }
 
 /**
  * 선수 경기별 기록 조회
  */
 export async function getPlayerGameLogs(
-  playerId: number
-): Promise<PlayerGameLog[]> {
-  return api.get<PlayerGameLog[]>(`/api/players/${playerId}/game-logs`);
+  playerId: number,
+  gameId?: number
+): Promise<PlayerGameLogsResponse> {
+  const query = gameId ? `?gameId=${gameId}` : '';
+  return api.get<PlayerGameLogsResponse>(`/api/players/${playerId}/game-logs${query}`);
 }

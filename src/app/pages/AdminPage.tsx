@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useContent, type ContentState } from '../../shared/state/contentProvider';
 import { useRef } from 'react';
 import { useDemoStore } from '../../shared/state/demoStore';
-import { transformMatchToGameDetail, sendGameDetail } from '../../shared/api';
+import { importFirestoreMatch } from '../../shared/api';
 
 const cardStyle = {
   borderRadius: '16px',
@@ -36,11 +36,6 @@ export default function AdminPage() {
 
   // 경기 재전송 상태
   const [resendStatus, setResendStatus] = useState<Record<string, 'pending' | 'sending' | 'success' | 'error'>>({});
-
-  // 시즌 ID 설정
-  const [seasonId, setSeasonId] = useState(
-    String(import.meta.env.VITE_CURRENT_SEASON_ID || '1')
-  );
 
   const [tickerDraft, setTickerDraft] = useState(lines(content.tickerItems));
 
@@ -209,40 +204,18 @@ export default function AdminPage() {
     setResendStatus(prev => ({ ...prev, [matchId]: 'sending' }));
 
     try {
-      // 로컬스토리지 또는 환경 변수에서 시즌 ID 가져오기
-      const savedSeasonId = localStorage.getItem('aubl:current-season-id');
-      const seasonId = savedSeasonId ? Number(savedSeasonId) : (Number(import.meta.env.VITE_CURRENT_SEASON_ID) || 1);
-      const gameDetail = transformMatchToGameDetail(match, seasonId);
-
-      if (!gameDetail) {
-        throw new Error('경기 데이터 변환 실패');
-      }
-
-      await sendGameDetail(gameDetail);
+      await importFirestoreMatch(matchId);
 
       setResendStatus(prev => ({ ...prev, [matchId]: 'success' }));
-      setStatus(`✅ ${match.homeTeamName} vs ${match.awayTeamName} 경기 데이터 전송 성공`);
+      setStatus(`✅ ${match.homeTeamName} vs ${match.awayTeamName} 경기 단건 임포트 성공`);
     } catch (error) {
       setResendStatus(prev => ({ ...prev, [matchId]: 'error' }));
-      setStatus(`❌ 경기 데이터 전송 실패: ${error instanceof Error ? error.message : String(error)}`);
+      setStatus(`❌ 경기 단건 임포트 실패: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
   // 완료된 경기 목록
   const completedMatches = state.matches.filter(m => m.status === 'completed' && m.postGame);
-
-  // 시즌 ID 저장 함수 (로컬스토리지에 저장)
-  const handleSaveSeasonId = () => {
-    const newId = Number(seasonId);
-    if (isNaN(newId) || newId < 1) {
-      setStatus('❌ 유효하지 않은 시즌 ID입니다. (1 이상의 숫자를 입력하세요)');
-      return;
-    }
-
-    // 로컬스토리지에 저장 (환경 변수는 빌드 시에만 적용되므로)
-    localStorage.setItem('aubl:current-season-id', String(newId));
-    setStatus(`✅ 시즌 ID를 ${newId}(으)로 설정했습니다. (새로고침 후 적용)`);
-  };
 
   const infoText = useMemo(
     () =>
@@ -339,47 +312,8 @@ export default function AdminPage() {
           </div>
         </div>
 
-        <p style={{ margin: '0 0 12px 0', color: '#94a3b8', fontSize: '14px' }}>
-          백엔드로 전송할 경기의 시즌 ID를 설정합니다. (현재: {import.meta.env.VITE_CURRENT_SEASON_ID || '1'})
-        </p>
-
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
-          <div style={{ flex: 1 }}>
-            <label style={labelStyle} htmlFor="season-id">
-              시즌 ID
-            </label>
-            <input
-              id="season-id"
-              type="number"
-              min="1"
-              style={inputStyle}
-              value={seasonId}
-              onChange={(e) => setSeasonId(e.target.value)}
-              placeholder="예) 1, 2, 3..."
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={handleSaveSeasonId}
-            style={{
-              padding: '10px 16px',
-              borderRadius: '10px',
-              border: '1px solid rgba(96,165,250,0.4)',
-              background: 'rgba(96,165,250,0.16)',
-              color: '#bfdbfe',
-              fontWeight: 800,
-              fontSize: '14px',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            저장
-          </button>
-        </div>
-
-        <p style={{ margin: '12px 0 0 0', color: '#64748b', fontSize: '13px', fontStyle: 'italic' }}>
-          ⚠️ 변경 사항은 로컬스토리지에 저장되며, 새로고침 후 적용됩니다.
+        <p style={{ margin: 0, color: '#94a3b8', fontSize: '14px' }}>
+          자동 전송이 켜져 있으면 경기 종료 시 Firestore 단건 임포트 API를 호출합니다.
         </p>
       </div>
 
