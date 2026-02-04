@@ -1,7 +1,9 @@
 import type * as React from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../shared/auth/AuthProvider';
+import { sendLoginSuccessToFlutter } from '../../shared/bridge/flutterBridge';
+import { auth } from '../../shared/firebase/client';
 
 type LocationState = {
   from?: string;
@@ -11,7 +13,11 @@ export default function LoginPage() {
   const { loginWithEmail, registerWithEmail, loginWithGoogle, error } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const redirectTo = useMemo(() => (location.state as LocationState | null)?.from || '/', [location.state]);
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const embedded = searchParams.get('embedded') === 'flutter';
+  const rawNext = searchParams.get('next');
+  const next = rawNext && rawNext.startsWith('/') ? rawNext : null;
+  const redirectTo = useMemo(() => next || (location.state as LocationState | null)?.from || '/', [location.state, next]);
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
@@ -21,6 +27,12 @@ export default function LoginPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+
+  useEffect(() => {
+    if (!embedded || !auth.currentUser) return;
+    void sendLoginSuccessToFlutter(auth.currentUser);
+    navigate(redirectTo, { replace: true });
+  }, [embedded, navigate, redirectTo]);
 
   const handleSubmit = async (evt: React.FormEvent<HTMLFormElement>) => {
     evt.preventDefault();
@@ -37,6 +49,9 @@ export default function LoginPage() {
         }
         await registerWithEmail(email, password);
       }
+      if (auth.currentUser) {
+        void sendLoginSuccessToFlutter(auth.currentUser);
+      }
       navigate(redirectTo, { replace: true });
     } catch (err) {
       setMessage(err instanceof Error ? err.message : '로그인 중 오류가 발생했습니다.');
@@ -50,6 +65,12 @@ export default function LoginPage() {
     setMessage(null);
     try {
       await loginWithGoogle();
+      if (embedded && !auth.currentUser) {
+        return;
+      }
+      if (auth.currentUser) {
+        void sendLoginSuccessToFlutter(auth.currentUser);
+      }
       navigate(redirectTo, { replace: true });
     } catch (err) {
       setMessage(err instanceof Error ? err.message : '구글 로그인에 실패했습니다.');

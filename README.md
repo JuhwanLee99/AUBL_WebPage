@@ -76,6 +76,42 @@ npm run dev
 
 ---
 
+## 📱 Flutter 하이브리드 앱 (1차)
+
+레포의 `flutter_app/` 폴더에 Flutter 앱 초기 구조가 포함되어 있습니다.
+
+### 1) SDK 준비 및 의존성 설치
+
+```bash
+cd flutter_app
+flutter pub get
+```
+
+플랫폼 파일이 누락된 환경이면 아래 명령으로 복원 가능합니다.
+
+```bash
+flutter create . --platforms=android,ios
+```
+
+### 2) Firebase 모바일 설정 파일 배치
+
+* Android: `flutter_app/android/app/google-services.json`
+* iOS: `flutter_app/ios/Runner/GoogleService-Info.plist`
+
+### 3) 실행 예시 (`dart-define`)
+
+```bash
+cd flutter_app
+flutter run \
+  --dart-define=AUBL_ENV=dev \
+  --dart-define=AUBL_WEB_BASE_URL=https://aubl-backup.web.app \
+  --dart-define=AUBL_AUTH_BRIDGE_URL=https://asia-northeast3-aubl-backup.cloudfunctions.net/exchange_web_id_token
+```
+
+하이브리드 인증 및 WebView 동작 계약은 `flutter_app/README.md`를 참고하세요.
+
+---
+
 ## 🧭 크롤러(Gameone) 세팅 및 실행
 
 크롤러는 `crawler/` 디렉토리의 독립 패키지로 관리됩니다. 현재 구현은 **DB 저장소(MySQL) 필수**이며,
