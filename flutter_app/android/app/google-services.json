@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "74667071214",
+    "project_id": "aubl-backup",
+    "storage_bucket": "aubl-backup.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:74667071214:android:ab0c79c21a235c9a3e05ff",
+        "android_client_info": {
+          "package_name": "com.aubl.aubl_flutter_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "74667071214-c0iq29sa6fkf2gah8bf0nah4i6ptrvlf.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCzNcgkRwhjHSHvg3HPe0o61quR4j0Z0B0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "74667071214-c0iq29sa6fkf2gah8bf0nah4i6ptrvlf.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
