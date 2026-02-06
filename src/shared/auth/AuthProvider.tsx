@@ -7,7 +7,6 @@ import {
   setPersistence,
   signInWithEmailAndPassword,
   signInWithPopup,
-  signInWithRedirect,
   signOut,
 } from 'firebase/auth';
 import type { User } from 'firebase/auth';
@@ -124,14 +123,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setError(null);
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
-    const embedded = typeof window !== 'undefined'
-      && (new URLSearchParams(window.location.search).get('embedded') === 'flutter' || Boolean(window.FlutterBridge));
-
-    if (embedded) {
-      await signInWithRedirect(auth, provider);
-      return;
-    }
-
     await signInWithPopup(auth, provider);
   }, []);
 

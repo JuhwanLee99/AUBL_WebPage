@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../core/config/app_config.dart';
@@ -18,19 +22,56 @@ class LoginWebViewScreen extends StatefulWidget {
   State<LoginWebViewScreen> createState() => _LoginWebViewScreenState();
 }
 
-class _LoginWebViewScreenState extends State<LoginWebViewScreen> {
+class _LoginWebViewScreenState extends State<LoginWebViewScreen> with WidgetsBindingObserver {
+  static const Color _chromeColor = Color(0xFF0F172A);
+  static const SystemUiOverlayStyle _overlayStyle = SystemUiOverlayStyle(
+    statusBarColor: _chromeColor,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark,
+    systemNavigationBarColor: _chromeColor,
+    systemNavigationBarIconBrightness: Brightness.light,
+    systemNavigationBarDividerColor: _chromeColor,
+  );
+
   final AuthBridgeService _authBridgeService = AuthBridgeService();
+  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: const ['email']);
   late final WebViewController _controller;
 
   bool _pageLoading = true;
   bool _authenticating = false;
+  bool _googleSigningIn = false;
   String? _error;
+
+  void _applySystemUiChrome() {
+    unawaited(SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.manual,
+      overlays: SystemUiOverlay.values,
+    ));
+    SystemChrome.setSystemUIOverlayStyle(_overlayStyle);
+  }
+
+  bool _isGoogleOAuthRequest(Uri uri) {
+    final host = uri.host.toLowerCase();
+    final isGoogleHost = host.contains('accounts.google.com') || host.contains('oauth2.googleapis.com');
+    if (isGoogleHost) return true;
+
+    // Firebase Auth redirect handler for Google provider.
+    final providerId = uri.queryParameters['providerId'];
+    if (providerId == 'google.com' && uri.path.contains('/__/auth/handler')) {
+      return true;
+    }
+
+    return false;
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _applySystemUiChrome();
 
     _controller = WebViewController()
+      ..setBackgroundColor(_chromeColor)
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..addJavaScriptChannel(
         'FlutterBridge',
@@ -40,13 +81,25 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> {
       )
       ..setNavigationDelegate(
         NavigationDelegate(
+          onNavigationRequest: (request) {
+            final uri = Uri.tryParse(request.url);
+            if (uri != null && _isGoogleOAuthRequest(uri)) {
+              if (!_googleSigningIn) {
+                unawaited(_signInWithNativeGoogle());
+              }
+              return NavigationDecision.prevent;
+            }
+            return NavigationDecision.navigate;
+          },
           onPageStarted: (_) {
+            _applySystemUiChrome();
             if (!mounted) return;
             setState(() {
               _pageLoading = true;
             });
           },
           onPageFinished: (_) {
+            _applySystemUiChrome();
             if (!mounted) return;
             setState(() {
               _pageLoading = false;
@@ -66,12 +119,23 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _authBridgeService.dispose();
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _applySystemUiChrome();
+    }
+  }
+
   Uri _loginUri() {
-    final query = <String, String>{'embedded': 'flutter'};
+    final query = <String, String>{
+      'embedded': 'flutter',
+      'nativeGoogle': '1',
+    };
     if (widget.nextPath != null && widget.nextPath!.startsWith('/')) {
       query['next'] = widget.nextPath!;
     }
@@ -91,6 +155,9 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> {
         return;
       case BridgeMessageType.logout:
         await FirebaseAuth.instance.signOut();
+        return;
+      case BridgeMessageType.requestNativeGoogle:
+        await _signInWithNativeGoogle();
         return;
       case BridgeMessageType.unknown:
         return;
@@ -126,37 +193,78 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> {
     }
   }
 
+  Future<void> _signInWithNativeGoogle() async {
+    if (_googleSigningIn || _authenticating) return;
+
+    setState(() {
+      _googleSigningIn = true;
+      _error = null;
+    });
+
+    try {
+      final account = await _googleSignIn.signIn();
+      if (account == null) return;
+
+      final authData = await account.authentication;
+      final idToken = authData.idToken;
+
+      if (idToken == null || idToken.isEmpty) {
+        throw Exception('Google idToken이 없습니다. iOS URL Scheme 설정을 확인하세요.');
+      }
+
+      final credential = GoogleAuthProvider.credential(
+        idToken: idToken,
+        accessToken: authData.accessToken,
+      );
+      await FirebaseAuth.instance.signInWithCredential(credential);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Google 로그인 실패: $e';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _googleSigningIn = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('AUBL 로그인'),
-      ),
-      body: Stack(
-        children: [
-          WebViewWidget(controller: _controller),
-          if (_pageLoading || _authenticating)
-            const Center(
-              child: CircularProgressIndicator(),
-            ),
-          if (_error != null)
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: Container(
-                width: double.infinity,
-                margin: const EdgeInsets.all(12),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade700,
-                  borderRadius: BorderRadius.circular(12),
+      backgroundColor: _chromeColor,
+      body: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: _overlayStyle,
+        child: SafeArea(
+          child: Stack(
+            children: [
+              WebViewWidget(controller: _controller),
+              if (_pageLoading || _authenticating || _googleSigningIn)
+                const Center(
+                  child: CircularProgressIndicator(),
                 ),
-                child: Text(
-                  _error!,
-                  style: const TextStyle(color: Colors.white),
+              if (_error != null)
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade700,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      _error!,
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }
