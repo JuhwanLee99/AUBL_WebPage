@@ -1439,6 +1439,11 @@ export default function ScorekeeperPage() {
     outsCount: 2 | 3;
     battedBall?: BattedBallDetails | null;
   }>(null);
+  const [droppedThirdStrikeRunnerOutModal, setDroppedThirdStrikeRunnerOutModal] = useState<null | {
+    variant: 'strikeout' | 'reach' | 'tag_out' | 'force_out';
+    strikeType?: 'swinging' | 'looking';
+    runners: { runner: string; baseIndex: 0 | 1 | 2 }[];
+  }>(null);
   const [multipleRunnersOutModal, setMultipleRunnersOutModal] = useState(false);
   const [lastHitWizard, setLastHitWizard] = useState<HitWizardState | null>(null);
   const [errorOnPlayModal, setErrorOnPlayModal] = useState<null | { selections: RunnerAdvanceSelections; batterResult: 'out' | 'hold' | 1 | 2 | 3 | 4; errorType: string; context: string; fielder: string }>(null);
@@ -1818,18 +1823,13 @@ const handleConfirmHitWizard = () => {
       return;
     }
 
-    if (action === 'strike' && state.strikes >= 2) {
-      setShowStrikeOutTypeModal(true);
-      setHitWizard(null);
-      return;
-    }
-
     switch (action) {
       case 'ball':
         actions.addBall();
         break;
       case 'strike':
-        actions.addStrike();
+        setShowStrikeOutTypeModal(true);
+        setHitWizard(null);
         break;
       case 'foul':
         setShowFoulTypeModal(true);
@@ -1936,6 +1936,7 @@ const handleConfirmHitWizard = () => {
         showStrikeOutTypeModal ||
         showFoulTypeModal ||
         showDroppedThirdStrike ||
+        droppedThirdStrikeRunnerOutModal ||
         errorOnPlayModal ||
         doublePlayModal ||
         positionSwapModal
@@ -1965,12 +1966,8 @@ const handleConfirmHitWizard = () => {
           break;
         case '2':
           e.preventDefault();
-          if (state.strikes >= 2) {
-            setShowStrikeOutTypeModal(true);
-            setHitWizard(null);
-          } else {
-            actions.addStrike();
-          }
+          setShowStrikeOutTypeModal(true);
+          setHitWizard(null);
           break;
         case '3':
           e.preventDefault();
@@ -1998,6 +1995,7 @@ const handleConfirmHitWizard = () => {
     showStrikeOutTypeModal,
     showFoulTypeModal,
     showDroppedThirdStrike,
+    droppedThirdStrikeRunnerOutModal,
     errorOnPlayModal,
     doublePlayModal,
     positionSwapModal,
@@ -2063,16 +2061,27 @@ const handleConfirmHitWizard = () => {
     actions.startGame();
   };
 
-  const handleStrikeOutType = (type: 'swinging' | 'looking') => {
+  const handleStrikeTypeSelect = (type: 'swinging' | 'looking') => {
     setShowStrikeOutTypeModal(false);
-    setPendingStrikeType(type);
-    setShowDroppedThirdStrike(true);
+    if (state.strikes >= 2) {
+      setPendingStrikeType(type);
+      setShowDroppedThirdStrike(true);
+    } else {
+      actions.addStrike(type);
+    }
   };
 
-  const handleDroppedThirdStrike = (variant: 'strikeout' | 'reach' | 'tag_out') => {
+  const handleDroppedThirdStrike = (variant: 'strikeout' | 'reach' | 'tag_out' | 'force_out') => {
     setShowDroppedThirdStrike(false);
     const strikeType = pendingStrikeType ?? undefined;
     setPendingStrikeType(null);
+    const runners = state.bases
+      .map((runner, idx) => (runner ? { runner, baseIndex: idx as 0 | 1 | 2 } : null))
+      .filter(Boolean) as { runner: string; baseIndex: 0 | 1 | 2 }[];
+    if (runners.length) {
+      setDroppedThirdStrikeRunnerOutModal({ variant, strikeType, runners });
+      return;
+    }
     actions.droppedThirdStrike(variant, strikeType);
   };
 
@@ -3102,8 +3111,9 @@ const handleConfirmHitWizard = () => {
       {showStrikeOutTypeModal && (
         <StrikeOutTypeModal
           batterName={currentBatter}
+          isThirdStrike={state.strikes >= 2}
           onClose={() => setShowStrikeOutTypeModal(false)}
-          onSelect={handleStrikeOutType}
+          onSelect={handleStrikeTypeSelect}
         />
       )}
       {showFoulTypeModal && (
@@ -3125,6 +3135,26 @@ const handleConfirmHitWizard = () => {
             setPendingStrikeType(null);
           }}
           onSelect={(variant) => handleDroppedThirdStrike(variant)}
+        />
+      )}
+      {droppedThirdStrikeRunnerOutModal && (
+        <DroppedThirdStrikeRunnerOutModal
+          runners={droppedThirdStrikeRunnerOutModal.runners}
+          onClose={() => {
+            actions.droppedThirdStrike(
+              droppedThirdStrikeRunnerOutModal.variant,
+              droppedThirdStrikeRunnerOutModal.strikeType,
+            );
+            setDroppedThirdStrikeRunnerOutModal(null);
+          }}
+          onConfirm={(selectedRunners) => {
+            actions.droppedThirdStrike(
+              droppedThirdStrikeRunnerOutModal.variant,
+              droppedThirdStrikeRunnerOutModal.strikeType,
+              selectedRunners,
+            );
+            setDroppedThirdStrikeRunnerOutModal(null);
+          }}
         />
       )}
 
@@ -4904,13 +4934,45 @@ function ErrorOnPlayModal({
 
 function StrikeOutTypeModal({
   batterName,
+  isThirdStrike,
   onClose,
   onSelect,
 }: {
   batterName: string;
+  isThirdStrike: boolean;
   onClose: () => void;
   onSelect: (type: 'swinging' | 'looking') => void;
 }) {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      const activeElement = document.activeElement;
+      if (
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement ||
+        activeElement instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key === '1') {
+        event.preventDefault();
+        onSelect('swinging');
+        return;
+      }
+      if (event.key === '2') {
+        event.preventDefault();
+        onSelect('looking');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, onSelect]);
+
   return (
     <div
       style={{
@@ -4939,9 +5001,12 @@ function StrikeOutTypeModal({
         }}
       >
         <div style={{ display: 'grid', gap: '4px' }}>
-          <span style={{ fontWeight: 900 }}>삼진 유형 선택</span>
+          <span style={{ fontWeight: 900 }}>{isThirdStrike ? '삼진 유형 선택' : '스트라이크 유형 선택'}</span>
           <span style={{ color: '#94a3b8', fontWeight: 700 }}>
-            {batterName} · 삼진 유형을 선택하세요.
+            {batterName} · {isThirdStrike ? '삼진 유형을 선택하세요.' : '헛스윙/루킹을 선택하세요.'}
+          </span>
+          <span style={{ color: '#64748b', fontWeight: 700, fontSize: '12px' }}>
+            단축키: 1=헛스윙 · 2=루킹 · Esc=취소
           </span>
         </div>
         <div style={{ display: 'grid', gap: '10px' }}>
@@ -4960,7 +5025,10 @@ function StrikeOutTypeModal({
               textAlign: 'left',
             }}
           >
-            <div>헛스윙 삼진 (K)</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <span>{isThirdStrike ? '헛스윙 삼진 (K)' : '헛스윙 스트라이크'}</span>
+              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>(1)</span>
+            </div>
             <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>배트를 휘둘러 스트라이크</div>
           </button>
           <button
@@ -4978,7 +5046,10 @@ function StrikeOutTypeModal({
               textAlign: 'left',
             }}
           >
-            <div>루킹 삼진 (Kc)</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <span>{isThirdStrike ? '루킹 삼진 (Kc)' : '루킹 스트라이크'}</span>
+              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>(2)</span>
+            </div>
             <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>배트를 휘두르지 않고 스트라이크</div>
           </button>
           <button
@@ -4995,7 +5066,10 @@ function StrikeOutTypeModal({
               cursor: 'pointer',
             }}
           >
-            취소
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <span>취소</span>
+              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>(Esc)</span>
+            </span>
           </button>
         </div>
       </div>
@@ -5015,6 +5089,36 @@ function FoulTypeModal({
   onSelect: (isBunt: boolean) => void;
 }) {
   const isTwoStrikes = strikes >= 2;
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      const activeElement = document.activeElement;
+      if (
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement ||
+        activeElement instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key === '1') {
+        event.preventDefault();
+        onSelect(false);
+        return;
+      }
+      if (event.key === '2') {
+        event.preventDefault();
+        onSelect(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, onSelect]);
+
   return (
     <div
       style={{
@@ -5047,6 +5151,9 @@ function FoulTypeModal({
           <span style={{ color: '#94a3b8', fontWeight: 700 }}>
             {batterName} · 파울 유형을 선택하세요.
           </span>
+          <span style={{ color: '#64748b', fontWeight: 700, fontSize: '12px' }}>
+            단축키: 1=타격 파울 · 2=번트 파울 · Esc=취소
+          </span>
         </div>
         <div style={{ display: 'grid', gap: '10px' }}>
           <button
@@ -5064,7 +5171,10 @@ function FoulTypeModal({
               textAlign: 'left',
             }}
           >
-            <div>타격 파울</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <span>타격 파울</span>
+              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>(1)</span>
+            </div>
             <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>
               {isTwoStrikes ? '2스트라이크 이후 파울 (카운트 유지)' : '스트라이크 카운트 +1'}
             </div>
@@ -5084,7 +5194,10 @@ function FoulTypeModal({
               textAlign: 'left',
             }}
           >
-            <div>번트 파울{isTwoStrikes && ' (쓰리번트 아웃)'}</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <span>번트 파울{isTwoStrikes && ' (쓰리번트 아웃)'}</span>
+              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>(2)</span>
+            </div>
             <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>
               {isTwoStrikes ? '2스트라이크 이후 번트 파울 → 삼진 아웃' : '스트라이크 카운트 +1'}
             </div>
@@ -5103,7 +5216,10 @@ function FoulTypeModal({
               cursor: 'pointer',
             }}
           >
-            취소
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <span>취소</span>
+              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>(Esc)</span>
+            </span>
           </button>
         </div>
       </div>
@@ -5118,7 +5234,7 @@ function DroppedThirdStrikeModal({
 }: {
   batterName: string;
   onClose: () => void;
-  onSelect: (variant: 'strikeout' | 'reach' | 'tag_out') => void;
+  onSelect: (variant: 'strikeout' | 'reach' | 'tag_out' | 'force_out') => void;
 }) {
   return (
     <div
@@ -5204,6 +5320,22 @@ function DroppedThirdStrikeModal({
           </button>
           <button
             type="button"
+            onClick={() => onSelect('force_out')}
+            style={{
+              width: '100%',
+              borderRadius: '12px',
+              border: '1px solid rgba(148,163,184,0.5)',
+              background: 'rgba(148,163,184,0.15)',
+              color: '#e2e8f0',
+              fontWeight: 800,
+              padding: '10px 12px',
+              cursor: 'pointer',
+            }}
+          >
+            낫아웃 실패(1루 포스)
+          </button>
+          <button
+            type="button"
             onClick={onClose}
             style={{
               width: '100%',
@@ -5218,6 +5350,173 @@ function DroppedThirdStrikeModal({
           >
             취소
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DroppedThirdStrikeRunnerOutModal({
+  runners,
+  onClose,
+  onConfirm,
+}: {
+  runners: { runner: string; baseIndex: 0 | 1 | 2 }[];
+  onClose: () => void;
+  onConfirm: (selectedRunners: string[]) => void;
+}) {
+  const [selected, setSelected] = useState<string[]>([]);
+
+  const toggleRunner = (name: string) => {
+    if (selected.includes(name)) {
+      setSelected(selected.filter((entry) => entry !== name));
+    } else {
+      setSelected([...selected, name]);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'grid',
+        placeItems: 'center',
+        zIndex: 1000,
+        padding: '20px',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: '#1e293b',
+          borderRadius: '20px',
+          border: '1px solid rgba(148,163,184,0.25)',
+          maxWidth: '520px',
+          width: '100%',
+          maxHeight: '90vh',
+          overflow: 'auto',
+        }}
+      >
+        <div
+          style={{
+            padding: '20px 24px',
+            borderBottom: '1px solid rgba(148,163,184,0.2)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <h3 style={{ fontSize: '18px', fontWeight: 900, color: '#f8fafc', margin: 0 }}>
+            낫아웃 주자 아웃 선택
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: 'rgba(148,163,184,0.2)',
+              border: 'none',
+              color: '#e2e8f0',
+              borderRadius: '8px',
+              padding: '6px 10px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: 700,
+            }}
+          >
+            닫기
+          </button>
+        </div>
+        <div style={{ padding: '24px' }}>
+          <p style={{ color: '#cbd5e1', fontSize: '14px', marginBottom: '16px', marginTop: 0 }}>
+            아웃된 주자가 있으면 선택하세요. 없으면 '없음'으로 진행됩니다.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+            {runners.map((entry) => {
+              const isSelected = selected.includes(entry.runner);
+              return (
+                <button
+                  key={`${entry.baseIndex}-${entry.runner}`}
+                  type="button"
+                  onClick={() => toggleRunner(entry.runner)}
+                  style={{
+                    padding: '16px',
+                    borderRadius: '12px',
+                    border: isSelected ? '2px solid #ef4444' : '1px solid rgba(148,163,184,0.3)',
+                    background: isSelected ? 'rgba(239,68,68,0.15)' : 'rgba(15,23,42,0.6)',
+                    color: isSelected ? '#fca5a5' : '#e2e8f0',
+                    fontWeight: 700,
+                    fontSize: '15px',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      border: isSelected ? '2px solid #ef4444' : '2px solid rgba(148,163,184,0.4)',
+                      background: isSelected ? '#ef4444' : 'transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '12px',
+                    }}
+                  >
+                    {isSelected && '✓'}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '4px' }}>
+                      {baseLabelForIndex(entry.baseIndex)} 주자
+                    </div>
+                    <div style={{ fontSize: '16px', fontWeight: 900 }}>{entry.runner}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ display: 'grid', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={() => onConfirm([])}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '10px',
+                border: '1px solid rgba(148,163,184,0.35)',
+                background: 'transparent',
+                color: '#cbd5e1',
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              없음
+            </button>
+            <button
+              type="button"
+              onClick={() => onConfirm(selected)}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '10px',
+                border: 'none',
+                background: 'linear-gradient(90deg, #ef4444, #dc2626)',
+                color: '#fff',
+                fontWeight: 900,
+                cursor: 'pointer',
+                opacity: selected.length ? 1 : 0.8,
+              }}
+            >
+              {selected.length ? `주자 ${selected.length}명 아웃 기록` : '확인'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -5271,6 +5570,129 @@ function HitWizardModal({
 
   const primaryLabel = isZoneStep ? (isFinalStep ? '기록하기' : '다음') : isFinalStep ? '기록하기' : '다음';
   const primaryAction = isZoneStep ? onConfirm : isFinalStep ? onConfirm : onNext;
+  const formatShortcutHint = (index?: number | null) => {
+    if (index == null || index < 0 || index > 9) return null;
+    return index === 9 ? '0' : String(index + 1);
+  };
+  const resultOptionsOrdered = (() => {
+    const ordered: BattedBallResultAction[] = [];
+    battedBallResultGroups.forEach((group) => {
+      battedBallResultOptions
+        .filter((option) => option.group === group.key)
+        .forEach((option) => ordered.push(option.value));
+    });
+    return ordered;
+  })();
+  const outFlyStartIndex = resultOptionsOrdered.findIndex((option) => option === 'out_fly');
+  const letterKeys = ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'];
+  const resultShortcutMap = (() => {
+    const map = new Map<BattedBallResultAction, string | null>();
+    resultOptionsOrdered.forEach((option, idx) => {
+      if (outFlyStartIndex !== -1 && idx >= outFlyStartIndex) {
+        const key = letterKeys[idx - outFlyStartIndex];
+        map.set(option, key ? key.toUpperCase() : null);
+      } else {
+        map.set(option, formatShortcutHint(idx));
+      }
+    });
+    return map;
+  })();
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      const activeElement = document.activeElement;
+      if (
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement ||
+        activeElement instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key === 'Backspace' || event.key === 'ArrowLeft') {
+        if (state.step !== 'result') {
+          event.preventDefault();
+          onBack();
+        }
+        return;
+      }
+      if (event.key === 'Enter') {
+        if (!primaryDisabled) {
+          event.preventDefault();
+          primaryAction();
+        }
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (state.step === 'result') {
+        const actionMap = new Map<string, () => void>();
+        resultOptionsOrdered.forEach((option, idx) => {
+          const numKey = formatShortcutHint(idx);
+          if (numKey) {
+            actionMap.set(numKey, () => onSelectResult(option));
+          }
+          if (outFlyStartIndex !== -1 && idx >= outFlyStartIndex) {
+            const letterKey = letterKeys[idx - outFlyStartIndex];
+            if (letterKey) {
+              actionMap.set(letterKey, () => onSelectResult(option));
+            }
+          }
+        });
+        const action = actionMap.get(key);
+        if (action) {
+          event.preventDefault();
+          action();
+        }
+        return;
+      }
+
+      if (!/^[0-9]$/.test(key)) return;
+      const index = key === '0' ? 9 : Number(key) - 1;
+      const actions: Array<() => void> = [];
+      if (state.step === 'type') {
+        if (state.result) {
+          if (!isInfieldFlyResult(state.result)) {
+            getTypeOptionsForResult(state.result).forEach((option) => actions.push(() => onSelectType(option)));
+          }
+          const fielderList = getFielderOptionsForResult(state.result);
+          if (fielderList) {
+            fielderList.forEach((option) => actions.push(() => onSelectFielder(option)));
+          }
+        }
+      } else if (state.step === 'zone') {
+        getZoneOptionsForResult(state.result).forEach((option) => actions.push(() => onSelectZone(option)));
+      }
+      const action = actions[index];
+      if (action) {
+        event.preventDefault();
+        action();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    onBack,
+    onClose,
+    onConfirm,
+    onNext,
+    onSelectFielder,
+    onSelectResult,
+    onSelectType,
+    onSelectZone,
+    primaryAction,
+    primaryDisabled,
+    letterKeys,
+    resultOptionsOrdered,
+    outFlyStartIndex,
+    formatShortcutHint,
+    state.result,
+    state.step,
+  ]);
 
   const renderStep = () => {
     if (state.step === 'result') {
@@ -5287,6 +5709,7 @@ function HitWizardModal({
                     {options.map((option) => {
                       const isSelected = state.result === option.value;
                       const outlineColor = option.group === 'out' ? '#ef4444' : option.color;
+                      const shortcutHint = resultShortcutMap.get(option.value);
                       return (
                         <button
                           key={option.value}
@@ -5304,7 +5727,14 @@ function HitWizardModal({
                             cursor: 'pointer',
                           }}
                         >
-                          <div>{option.label}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                            <span>{option.label}</span>
+                            {shortcutHint ? (
+                              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>
+                                ({shortcutHint})
+                              </span>
+                            ) : null}
+                          </div>
                           <div style={{ color: '#cbd5e1', fontSize: '12px', fontWeight: 700 }}>{option.helper}</div>
                         </button>
                       );
@@ -5323,6 +5753,17 @@ function HitWizardModal({
 
     if (state.step === 'type') {
       const options = getTypeOptionsForResult(state.result);
+      const shortcutOptions: string[] = [];
+      if (state.result && !isInfieldFlyResult(state.result)) {
+        shortcutOptions.push(...options);
+      }
+      if (fielderOptions) {
+        shortcutOptions.push(...fielderOptions);
+      }
+      const optionShortcutMap = new Map<string, string | null>();
+      shortcutOptions.forEach((option, idx) => {
+        optionShortcutMap.set(option, formatShortcutHint(idx));
+      });
       return (
         <div style={{ display: 'grid', gap: '10px' }}>
           <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '14px' }}>
@@ -5340,12 +5781,12 @@ function HitWizardModal({
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
                   {options.map((option) => {
                     const isSelected = state.type === option;
-                    return (
-                      <button
-                        key={option}
-                        type="button"
-                        onClick={() => onSelectType(option)}
-                        style={{
+                      return (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => onSelectType(option)}
+                          style={{
                           padding: '10px',
                           borderRadius: '10px',
                           border: isSelected ? '1px solid rgba(59,130,246,0.6)' : '1px solid rgba(148,163,184,0.25)',
@@ -5354,12 +5795,19 @@ function HitWizardModal({
                           fontWeight: 800,
                           cursor: 'pointer',
                           boxShadow: isSelected ? '0 0 0 1px rgba(59,130,246,0.35)' : 'none',
-                        }}
-                      >
-                        {option}
-                      </button>
-                    );
-                  })}
+                          }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                            <span>{option}</span>
+                            {optionShortcutMap.get(option) ? (
+                              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>
+                                ({optionShortcutMap.get(option)})
+                              </span>
+                            ) : null}
+                          </span>
+                        </button>
+                      );
+                    })}
                 </div>
               )}
               {fielderOptions ? (
@@ -5386,7 +5834,14 @@ function HitWizardModal({
                             boxShadow: isSelected ? '0 0 0 1px rgba(239,68,68,0.35)' : 'none',
                           }}
                         >
-                          {option}
+                          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                            <span>{option}</span>
+                            {optionShortcutMap.get(option) ? (
+                              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>
+                                ({optionShortcutMap.get(option)})
+                              </span>
+                            ) : null}
+                          </span>
                         </button>
                       );
                     })}
@@ -5410,8 +5865,9 @@ function HitWizardModal({
       <div style={{ display: 'grid', gap: '10px' }}>
         <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '14px' }}>타구가 향한 방향을 선택하세요.</span>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
-          {zoneOptions.map((option) => {
+          {zoneOptions.map((option, idx) => {
             const isSelected = state.zone === option;
+            const shortcutHint = formatShortcutHint(idx);
             return (
               <button
                 key={option}
@@ -5428,7 +5884,14 @@ function HitWizardModal({
                   boxShadow: isSelected ? '0 0 0 1px rgba(52,211,153,0.35)' : 'none',
                 }}
               >
-                {option}
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                  <span>{option}</span>
+                  {shortcutHint ? (
+                    <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>
+                      ({shortcutHint})
+                    </span>
+                  ) : null}
+                </span>
               </button>
             );
           })}
@@ -5469,6 +5932,9 @@ function HitWizardModal({
           <div style={{ display: 'grid', gap: '4px' }}>
             <span style={{ fontWeight: 900 }}>타격 기록</span>
             <span style={{ color: '#94a3b8', fontWeight: 700 }}>결과 → 유형 → 방향 순서로 안내합니다.</span>
+            <span style={{ color: '#64748b', fontWeight: 700, fontSize: '12px' }}>
+              단축키: 1-9/0=선택 · Q~P/A~L=뜬공 아웃부터 · Enter=다음/기록 · Backspace=이전 · Esc=취소
+            </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div
                 style={{
@@ -5566,7 +6032,10 @@ function HitWizardModal({
               cursor: 'pointer',
             }}
           >
-            취소
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <span>취소</span>
+              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>(Esc)</span>
+            </span>
           </button>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button
@@ -5584,7 +6053,10 @@ function HitWizardModal({
                 opacity: state.step === 'result' ? 0.6 : 1,
               }}
             >
-              이전
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                <span>이전</span>
+                <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>(Backspace)</span>
+              </span>
             </button>
             <button
               type="button"
@@ -5602,7 +6074,10 @@ function HitWizardModal({
                 boxShadow: primaryDisabled ? 'none' : '0 10px 20px rgba(37,99,235,0.25)',
               }}
             >
-              {primaryLabel}
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                <span>{primaryLabel}</span>
+                <span style={{ fontSize: '12px', color: '#dbeafe', fontWeight: 700 }}>(Enter)</span>
+              </span>
             </button>
           </div>
         </div>
