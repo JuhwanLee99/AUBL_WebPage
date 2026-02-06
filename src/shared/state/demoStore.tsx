@@ -3361,12 +3361,37 @@ function updateLineup(state: DemoState, side: Side, index: number, updates: Part
   let feed = state.feed;
   let lastPlay = state.lastPlay;
 
+  if (state.gameStarted) {
+    const prevPitcher = state.lineups[side].find((slot) => slot.pos?.toUpperCase() === 'P');
+    const nextPitcher = lineup.find((slot) => slot.pos?.toUpperCase() === 'P');
+    const prevKey = formatUniqueName(prevPitcher?.name ?? '', prevPitcher?.number);
+    const nextKey = formatUniqueName(nextPitcher?.name ?? '', nextPitcher?.number);
+    const pitcherChanged = prevKey !== nextKey;
+    if (pitcherChanged && (prevPitcher || nextPitcher)) {
+      const formatPlayer = (player?: PlayerSlot) => {
+        if (!player) return '미정';
+        const name = player.name?.trim() ? player.name.trim() : '미정';
+        const num = player.number ? `(${player.number})` : '';
+        return `${name}${num}`;
+      };
+      const changeText = `투수 교체 · ${formatPlayer(prevPitcher)} → ${formatPlayer(nextPitcher)}`;
+      const appearanceCount = calculatePitcherAppearanceCount(state.feed, side);
+      feed = pushFeed(feed, createLogEntryForBaserunning(state, changeText, 0));
+      lastPlay = changeText;
+      if (nextPitcher && nextPitcher.pos?.toUpperCase() === 'P' && (nextPitcher.name || nextPitcher.number)) {
+        const appearanceLabel = appearanceCount === 0 ? '선발' : `${appearanceCount}차 계투`;
+        const newPitcherLog = `${formatPlayer(nextPitcher)} 투수 (${appearanceLabel})`;
+        feed = pushFeed(feed, createLogEntryForBaserunning(state, newPitcherLog, 0));
+      }
+    }
+  }
+
   // [수정] 경기가 시작된 상태(state.gameStarted)일 때만 포지션 변경 로그를 남기도록 조건 추가
   if (state.gameStarted && updates.pos && original?.pos && updates.pos !== original.pos) {
     const playerName = original.name || '선수';
     const playerNum = original.number ? `(${original.number})` : '';
     const changeText = `포지션 변경 · ${playerName}${playerNum}: ${original.pos} → ${updates.pos}`;
-    feed = pushFeed(state.feed, createLogEntryForBaserunning(state, changeText, 0));
+    feed = pushFeed(feed, createLogEntryForBaserunning(state, changeText, 0));
     lastPlay = changeText;
   }
 

@@ -1130,16 +1130,21 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
     // [수정됨] 투수 기록 집계 안전장치 추가
     // 1. 피드에서 투수 이름을 찾음
     let pitcherName = currentPitcher[pitchSide];
-    
-    // 2. 피드에 투수 정보가 없다면(null), 현재 로스터에서 'P' 포지션인 선수를 찾음 (Fallback)
-    if (!pitcherName) {
-      const roster = pitchSide === 'home' ? rosterHome : rosterAway;
+    const pitchRoster = pitchSide === 'home' ? rosterHome : rosterAway;
+    const hasValidPitcher =
+      pitcherName &&
+      pitchRoster.has(pitcherName) &&
+      pitchRoster.get(pitcherName)?.pos?.toUpperCase() === 'P';
+
+    // 2. 피드에 투수 정보가 없거나(또는 라인업 변경으로 유효하지 않으면) 현재 로스터에서 'P' 포지션인 선수를 찾음
+    if (!hasValidPitcher) {
       // 로스터 맵을 순회하며 포지션이 P인 선수 찾기
-      for (const [pName, info] of roster.entries()) {
+      for (const [pName, info] of pitchRoster.entries()) {
+        if (!pName || !pName.trim()) continue;
         if (info.pos && info.pos.toUpperCase() === 'P') {
           pitcherName = pName;
           // 피드 처리의 일관성을 위해 currentPitcher 캐시에도 저장
-          currentPitcher[pitchSide] = pName; 
+          currentPitcher[pitchSide] = pName;
           break;
         }
       }
