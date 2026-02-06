@@ -427,6 +427,17 @@ const cloneBenches = (benches: { home: PlayerSlot[]; away: PlayerSlot[] }) => ({
 
 const emptyPlayerSlot: PlayerSlot = { name: '', pos: '', number: '', throws: 'R', bats: 'R', order: null };
 
+const slotSignature = (slot: PlayerSlot) =>
+  `${slot.name}|${slot.pos}|${slot.number}|${slot.throws}|${slot.bats}`;
+
+const lineupMatches = (left: PlayerSlot[], right: PlayerSlot[]) =>
+  left.length === right.length && left.every((slot, idx) => slotSignature(slot) === slotSignature(right[idx]));
+
+const isDemoLineups = (lineups?: { home: PlayerSlot[]; away: PlayerSlot[] } | null) => {
+  if (!lineups) return false;
+  return lineupMatches(lineups.home, demoLineups.home) && lineupMatches(lineups.away, demoLineups.away);
+};
+
 // 게임 로직용 슬롯 정규화 함수 (isOhtaniRule 보존 추가)
 const normalizePlayerSlotForGame = (player: PlayerSlot): PlayerSlot => ({
   name: typeof player.name === 'string' ? player.name : '',
@@ -496,14 +507,29 @@ function applyLineupVisibility(
   }
 
   if (isAdmin && match.lineups) {
+    const dataLineups = data.lineups ?? { home: [], away: [] };
+    const dataIsDemo = isDemoLineups(dataLineups);
     const dataHasPlayers =
-      hasActualPlayers(data.lineups?.home ?? []) || hasActualPlayers(data.lineups?.away ?? []);
+      !dataIsDemo && (hasActualPlayers(dataLineups.home) || hasActualPlayers(dataLineups.away));
     const matchHasPlayers =
       hasActualPlayers(match.lineups.home) || hasActualPlayers(match.lineups.away);
-    if (!dataHasPlayers && matchHasPlayers) {
+    if (matchHasPlayers && match.status === 'scheduled' && !data.scorerUid) {
+      const preparedLineups = isPracticeMatch(match)
+        ? cloneLineups(match.lineups)
+        : ensureCompleteLineups(match.lineups);
       return {
         ...data,
-        lineups: cloneLineups(match.lineups),
+        lineups: preparedLineups,
+        benches: match.benches ? cloneBenches(match.benches) : data.benches,
+      };
+    }
+    if (!dataHasPlayers && matchHasPlayers) {
+      const preparedLineups = isPracticeMatch(match)
+        ? cloneLineups(match.lineups)
+        : ensureCompleteLineups(match.lineups);
+      return {
+        ...data,
+        lineups: preparedLineups,
         benches: match.benches ? cloneBenches(match.benches) : data.benches,
       };
     }
@@ -3943,7 +3969,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       try {
-        const token = await getIdTokenResult(user);
+        const token = await getIdTokenResult(user, true);
         if (cancelled) return;
         const admin = Boolean((token.claims as Record<string, unknown>).admin) || ADMIN_EMAILS.includes(user.email?.toLowerCase() ?? '');
         setIsAdmin(admin);
@@ -4042,7 +4068,9 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     const match = state.matches.find((m) => m.id === matchId);
     if (!match?.lineups) return;
     const matchHasPlayers = hasActualPlayers(match.lineups.home) || hasActualPlayers(match.lineups.away);
-    const stateHasPlayers = hasActualPlayers(state.lineups.home) || hasActualPlayers(state.lineups.away);
+    const stateIsDemo = isDemoLineups(state.lineups);
+    const stateHasPlayers =
+      !stateIsDemo && (hasActualPlayers(state.lineups.home) || hasActualPlayers(state.lineups.away));
     if (!matchHasPlayers || stateHasPlayers) return;
     skipFirestoreWriteRef.current = true;
     dispatch({ type: 'selectMatch', matchId, followCurrent: state.followCurrent });
@@ -4811,6 +4839,22 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         
         // Firestore 저장 (새로운 ID 사용)
         void setDoc(doc(firestore, 'matches', matchWithId.id), pruneUndefined(matchWithId), { merge: true });
+
+        // 라인업이 포함된 새 일정은 matchStates에도 저장 (경기 전 기록원 확인용)
+        if (
+          matchWithId.lineups &&
+          (hasActualPlayers(matchWithId.lineups.home) || hasActualPlayers(matchWithId.lineups.away))
+        ) {
+          void setDoc(
+            doc(firestore, 'matchStates', matchWithId.id),
+            pruneUndefined({
+              lineups: cloneLineups(matchWithId.lineups),
+              benches: matchWithId.benches ? cloneBenches(matchWithId.benches) : undefined,
+              updatedAt: Date.now(),
+            }),
+            { merge: true },
+          ).catch(() => {});
+        }
       },
       updateMatch: (matchId: string, updates: Partial<MatchSchedule>) => {
         matchesReadyRef.current = true;
@@ -4886,6 +4930,21 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         matchesReadyRef.current = true;
         dispatch({ type: 'saveMatchLineups', matchId, lineups, benches });
         void pushMatchUpdate(matchId, { lineups: cloneLineups(lineups), benches: cloneBenches(benches) }).catch(() => {});
+        const match = stateRef.current.matches.find((m) => m.id === matchId);
+        const isActiveMatch = stateRef.current.activeMatchId === matchId;
+        const shouldSyncState =
+          match?.status === 'scheduled' && (!isActiveMatch || !stateRef.current.gameStarted);
+        if (shouldSyncState) {
+          void setDoc(
+            doc(firestore, 'matchStates', matchId),
+            pruneUndefined({
+              lineups: cloneLineups(lineups),
+              benches: cloneBenches(benches),
+              updatedAt: Date.now(),
+            }),
+            { merge: true },
+          ).catch(() => {});
+        }
       },
       selectMatch: (matchId: string | null) => {
         const followCurrent = isAdmin;
