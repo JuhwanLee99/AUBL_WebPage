@@ -41,8 +41,8 @@ const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
   .split(',')
   .map((email: string) => email.trim().toLowerCase())
   .filter(Boolean);
-const FEED_LIMIT = 50; // 관중 뷰 기본 구독 크기
-const SCORER_FEED_LIMIT = 200; // 기록원 재접속 시 충분한 버퍼
+const FEED_LIMIT = 500; // 관중 뷰 기본 구독 크기 (이전 이닝 확인 가능하도록 확장)
+const SCORER_FEED_LIMIT = 1000; // 기록원 재접속 시 충분한 버퍼
 const WRITE_DEBOUNCE_MS = 1_000; // 기록원 상태 동기화 디바운스 (쓰기 폭주 방지)
 const SCORER_LOCK_TTL_MS = 300_000; // 5분 후 락 만료 (이닝 교대 대비 여유)
 const SCORER_LOCK_HEARTBEAT_MS = 60_000; // 60초마다 하트비트 갱신
