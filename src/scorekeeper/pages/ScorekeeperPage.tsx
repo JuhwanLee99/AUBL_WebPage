@@ -62,8 +62,8 @@ const battedBallResultOptions = [
   { label: '인정 2루타', color: '#3b82f6', value: 'double_ground' as const, helper: '2루타 · 규정', group: 'hit' as const },
   { label: '3루타', color: '#3b82f6', value: 'triple' as const, helper: '타자·주자 3루', group: 'hit' as const },
   { label: '홈런', color: '#f97316', value: 'hr' as const, helper: '전원 득점', group: 'hit' as const },
-  { label: '땅볼 아웃', color: '#ef4444', value: 'out_ground' as const, helper: '타자만 아웃', group: 'out' as const },
-  { label: '뜬공 아웃', color: '#ef4444', value: 'out_fly' as const, helper: '타자만 아웃', group: 'out' as const },
+  { label: '땅볼 아웃', color: '#ef4444', value: 'out_ground' as const, helper: '타자 아웃 및 주자 선택', group: 'out' as const },
+  { label: '뜬공 아웃', color: '#ef4444', value: 'out_fly' as const, helper: '타자 아웃 및 주자 선택', group: 'out' as const },
   { label: '라인드라이브', color: '#ef4444', value: 'out_line' as const, helper: '직선타 아웃', group: 'out' as const },
   { label: '병살타(2아웃)', color: '#ef4444', value: 'out_dp2' as const, helper: '타자+주자 아웃', group: 'out' as const },
   { label: '삼중살(3아웃)', color: '#ef4444', value: 'out_tp3' as const, helper: '모두 아웃', group: 'out' as const },
@@ -1444,6 +1444,16 @@ export default function ScorekeeperPage() {
     strikeType?: 'swinging' | 'looking';
     runners: { runner: string; baseIndex: 0 | 1 | 2 }[];
   }>(null);
+  const [runnerAdvanceModal, setRunnerAdvanceModal] = useState<null | {
+    mode: 'ground_out' | 'pickoff';
+    title: string;
+    description: string;
+    outMessage: string;
+    battedBall?: BattedBallDetails | null;
+    pickoffBase?: 0 | 1 | 2;
+    runners: { runner: string; baseIndex: 0 | 1 | 2 }[];
+  }>(null);
+  const [runnerAdvanceSelections, setRunnerAdvanceSelections] = useState<RunnerAdvanceSelections>({});
   const [multipleRunnersOutModal, setMultipleRunnersOutModal] = useState(false);
   const [lastHitWizard, setLastHitWizard] = useState<HitWizardState | null>(null);
   const [errorOnPlayModal, setErrorOnPlayModal] = useState<null | { selections: RunnerAdvanceSelections; batterResult: 'out' | 'hold' | 1 | 2 | 3 | 4; errorType: string; context: string; fielder: string }>(null);
@@ -1694,6 +1704,48 @@ const handleSelectBattedBallType = (type: string) =>
   const handleSelectFielder = (fielder: string) =>
     setHitWizard((prev) => (prev ? { ...prev, fielder } : prev));
 
+  const openRunnerAdvanceModal = ({
+    mode,
+    outMessage,
+    battedBall,
+    pickoffBase,
+  }: {
+    mode: 'ground_out' | 'pickoff';
+    outMessage: string;
+    battedBall?: BattedBallDetails | null;
+    pickoffBase?: 0 | 1 | 2;
+  }) => {
+    const runners = state.bases
+      .map((runner, idx) => (runner ? { runner, baseIndex: idx as 0 | 1 | 2 } : null))
+      .filter(Boolean) as { runner: string; baseIndex: 0 | 1 | 2 }[];
+    const filtered =
+      mode === 'pickoff' && typeof pickoffBase === 'number'
+        ? runners.filter((entry) => entry.baseIndex !== pickoffBase)
+        : runners;
+    if (!filtered.length || state.outs >= 2) {
+      if (mode === 'ground_out') {
+        actions.addOutWithMessage(outMessage, battedBall);
+      } else if (mode === 'pickoff' && typeof pickoffBase === 'number') {
+        actions.runnerPickoff(pickoffBase);
+      }
+      return;
+    }
+    const initialSelections = filtered.reduce<RunnerAdvanceSelections>((acc, entry) => {
+      acc[entry.baseIndex] = 'hold';
+      return acc;
+    }, {});
+    setRunnerAdvanceSelections(initialSelections);
+    setRunnerAdvanceModal({
+      mode,
+      title: mode === 'ground_out' ? '땅볼 아웃 주자 진루' : '견제사 주자 진루',
+      description: mode === 'ground_out' ? '타자 아웃 후 주자 진루 여부를 선택하세요.' : '견제사 발생 시 다른 주자들의 진루를 선택하세요.',
+      outMessage,
+      battedBall,
+      pickoffBase,
+      runners: filtered,
+    });
+  };
+
   const isHitResult = (result: BattedBallResultAction): result is HitResultAction =>
     ['single', 'single_infield', 'single_bunt', 'double', 'double_ground', 'triple', 'hr'].includes(
       result as HitResultAction,
@@ -1761,7 +1813,11 @@ const handleConfirmHitWizard = () => {
         actions.sacBunt(details);
         break;
       case 'out_ground':
-        actions.addOutWithMessage(`땅볼 아웃${zoneNote}${fielderNote}`, details);
+        openRunnerAdvanceModal({
+          mode: 'ground_out',
+          outMessage: `땅볼 아웃${zoneNote}${fielderNote}`,
+          battedBall: details,
+        });
         break;
       case 'out_fly':
         actions.addOutWithMessage(`뜬공 아웃${zoneNote}${fielderNote}`, details);
@@ -1859,7 +1915,11 @@ const handleConfirmHitWizard = () => {
         actions.catcherInterference();
         break;
       case 'out_ground':
-        actions.addOutWithMessage('땅볼 아웃', battedBallDetails);
+        openRunnerAdvanceModal({
+          mode: 'ground_out',
+          outMessage: '땅볼 아웃',
+          battedBall: battedBallDetails,
+        });
         break;
       case 'out_fly':
         actions.addOutWithMessage('뜬공 아웃', battedBallDetails);
@@ -1936,6 +1996,7 @@ const handleConfirmHitWizard = () => {
         showStrikeOutTypeModal ||
         showFoulTypeModal ||
         showDroppedThirdStrike ||
+        runnerAdvanceModal ||
         droppedThirdStrikeRunnerOutModal ||
         errorOnPlayModal ||
         doublePlayModal ||
@@ -1981,6 +2042,10 @@ const handleConfirmHitWizard = () => {
           e.preventDefault();
           setShowFoulTypeModal(true);
           break;
+        case 'Escape':
+          e.preventDefault();
+          if (canUndo) actions.undo();
+          break;
       }
     };
 
@@ -1996,10 +2061,12 @@ const handleConfirmHitWizard = () => {
     showFoulTypeModal,
     showDroppedThirdStrike,
     droppedThirdStrikeRunnerOutModal,
+    runnerAdvanceModal,
     errorOnPlayModal,
     doublePlayModal,
     positionSwapModal,
     actions,
+    canUndo,
     state.strikes,
     openHitWizardFlow,
   ]);
@@ -2994,6 +3061,13 @@ const handleConfirmHitWizard = () => {
           onClose={() => setActionModal(null)}
           actions={actions}
           bases={state.bases}
+          onRunnerPickoffWithAdvance={(baseIndex) =>
+            openRunnerAdvanceModal({
+              mode: 'pickoff',
+              outMessage: '견제사',
+              pickoffBase: baseIndex,
+            })
+          }
           bench={actionModal.role === 'fielder' ? state.benches[defenseSide] : state.benches[hittingSide]}
           lineup={actionModal.role === 'fielder' ? state.lineups[defenseSide] : state.lineups[hittingSide]}
         />
@@ -3105,6 +3179,39 @@ const handleConfirmHitWizard = () => {
               actions.multipleRunnersOut(selectedRunners, label);
             }
             setMultipleRunnersOutModal(false);
+          }}
+        />
+      )}
+      {runnerAdvanceModal && (
+        <RunnerAdvanceModal
+          title={runnerAdvanceModal.title}
+          description={runnerAdvanceModal.description}
+          runners={runnerAdvanceModal.runners}
+          selections={runnerAdvanceSelections}
+          onChangeSelections={setRunnerAdvanceSelections}
+          onClose={() => {
+            setRunnerAdvanceModal(null);
+            setRunnerAdvanceSelections({});
+          }}
+          onSkip={() => {
+            if (runnerAdvanceModal.mode === 'ground_out') {
+              actions.addOutWithMessage(runnerAdvanceModal.outMessage, runnerAdvanceModal.battedBall);
+            } else if (runnerAdvanceModal.mode === 'pickoff' && typeof runnerAdvanceModal.pickoffBase === 'number') {
+              actions.runnerPickoff(runnerAdvanceModal.pickoffBase);
+            }
+            setRunnerAdvanceModal(null);
+            setRunnerAdvanceSelections({});
+          }}
+          onConfirm={() => {
+            if (runnerAdvanceModal.mode === 'ground_out') {
+              actions.addOutWithMessage(runnerAdvanceModal.outMessage, runnerAdvanceModal.battedBall);
+              actions.advanceRunners(runnerAdvanceSelections, runnerAdvanceModal.outMessage, true);
+            } else if (runnerAdvanceModal.mode === 'pickoff' && typeof runnerAdvanceModal.pickoffBase === 'number') {
+              actions.runnerPickoff(runnerAdvanceModal.pickoffBase);
+              actions.advanceRunners(runnerAdvanceSelections, runnerAdvanceModal.outMessage, true);
+            }
+            setRunnerAdvanceModal(null);
+            setRunnerAdvanceSelections({});
           }}
         />
       )}
@@ -4268,6 +4375,169 @@ function MultipleRunnersOutModal({
           >
             {canConfirm ? '확인' : `주자 ${minOuts}명 이상 선택하세요`}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RunnerAdvanceModal({
+  title,
+  description,
+  runners,
+  selections,
+  onChangeSelections,
+  onConfirm,
+  onSkip,
+  onClose,
+}: {
+  title: string;
+  description: string;
+  runners: { runner: string; baseIndex: 0 | 1 | 2 }[];
+  selections: RunnerAdvanceSelections;
+  onChangeSelections: (next: RunnerAdvanceSelections) => void;
+  onConfirm: () => void;
+  onSkip: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'grid',
+        placeItems: 'center',
+        zIndex: 1000,
+        padding: '20px',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: '#1e293b',
+          borderRadius: '20px',
+          border: '1px solid rgba(148,163,184,0.25)',
+          maxWidth: '540px',
+          width: '100%',
+          maxHeight: '90vh',
+          overflow: 'auto',
+        }}
+      >
+        <div
+          style={{
+            padding: '20px 24px',
+            borderBottom: '1px solid rgba(148,163,184,0.2)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <h3 style={{ fontSize: '18px', fontWeight: 900, color: '#f8fafc', margin: 0 }}>
+            {title}
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: 'rgba(148,163,184,0.2)',
+              border: 'none',
+              color: '#e2e8f0',
+              borderRadius: '8px',
+              padding: '6px 10px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: 700,
+            }}
+          >
+            취소
+          </button>
+        </div>
+        <div style={{ padding: '24px' }}>
+          <p style={{ color: '#cbd5e1', fontSize: '14px', marginBottom: '16px', marginTop: 0 }}>
+            {description}
+          </p>
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {runners.map((entry) => (
+              <div
+                key={`${entry.baseIndex}-${entry.runner}`}
+                style={{
+                  padding: '12px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(148,163,184,0.25)',
+                  background: 'rgba(15,23,42,0.6)',
+                  display: 'grid',
+                  gap: '10px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 900 }}>
+                    {baseLabelForIndex(entry.baseIndex)} 주자 · {entry.runner}
+                  </span>
+                  <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>기본: 정지</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
+                  {buildRunnerOutcomeOptions(entry.baseIndex).map((option) => {
+                    const isSelected = selections[entry.baseIndex] === option.value;
+                    return (
+                      <button
+                        key={`${entry.baseIndex}-${option.value}`}
+                        type="button"
+                        onClick={() => onChangeSelections({ ...selections, [entry.baseIndex]: option.value })}
+                        style={{
+                          padding: '8px 10px',
+                          borderRadius: '10px',
+                          border: isSelected ? `1px solid ${option.color}` : '1px solid rgba(148,163,184,0.25)',
+                          background: isSelected ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)',
+                          color: option.color,
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'grid', gap: '8px', marginTop: '16px' }}>
+            <button
+              type="button"
+              onClick={onSkip}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '10px',
+                border: '1px solid rgba(148,163,184,0.35)',
+                background: 'transparent',
+                color: '#cbd5e1',
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              진루 없음
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '10px',
+                border: 'none',
+                background: 'linear-gradient(90deg, #2563eb, #1d4ed8)',
+                color: '#fff',
+                fontWeight: 900,
+                cursor: 'pointer',
+              }}
+            >
+              확인
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -6091,6 +6361,7 @@ function ActionModal({
   onClose,
   actions,
   bases,
+  onRunnerPickoffWithAdvance,
   bench,
   lineup,
 }: {
@@ -6098,6 +6369,7 @@ function ActionModal({
   onClose: () => void;
   actions: ReturnType<typeof useDemoStore>['actions'];
   bases: (string | null)[];
+  onRunnerPickoffWithAdvance?: (baseIndex: 0 | 1 | 2) => void;
   bench: { name: string; pos: string; number: string; throws: string; bats: string }[];
   lineup: { name: string; pos: string; number: string; throws: string; bats: string }[];
 }) {
@@ -6154,7 +6426,18 @@ function ActionModal({
         <>
           <RunnerActionButton label="도루 성공" color="#22c55e" onClick={handleRunnerAction(() => actions.runnerStealSuccess(data.base))} />
           <RunnerActionButton label="도루자 아웃" color="#ef4444" onClick={handleRunnerAction(() => actions.runnerCaught(data.base))} />
-          <RunnerActionButton label="견제사" color="#ef4444" onClick={handleRunnerAction(() => actions.runnerPickoff(data.base))} />
+          <RunnerActionButton
+            label="견제사"
+            color="#ef4444"
+            onClick={() => {
+              if (onRunnerPickoffWithAdvance) {
+                onRunnerPickoffWithAdvance(data.base);
+              } else {
+                actions.runnerPickoff(data.base);
+              }
+              onClose();
+            }}
+          />
           <RunnerActionButton label="주루사" color="#ef4444" onClick={handleRunnerAction(() => actions.runnerOut(data.base))} />
           <RunnerActionButton label="런다운 아웃" color="#ef4444" onClick={handleRunnerAction(() => actions.runnerRundownOut(data.base))} />
           <RunnerActionButton label="주루 방해" color="#f97316" onClick={handleRunnerAction(() => actions.runnerInterference(data.base))} />

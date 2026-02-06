@@ -320,6 +320,7 @@ type Action =
   | { type: 'foul'; isBunt?: boolean }
   | { type: 'strikeOut'; strikeType?: 'swinging' | 'looking' }
   | { type: 'droppedThirdStrike'; variant?: 'strikeout' | 'reach' | 'tag_out' | 'force_out'; strikeType?: 'swinging' | 'looking'; runnerOuts?: string[] }
+  | { type: 'advanceRunners'; selections: RunnerAdvanceSelections; message: string; preserveLastPlay?: boolean }
   | { type: 'out'; battedBall?: BattedBallDetails | null }
   | { type: 'outWithMessage'; note: string; battedBall?: BattedBallDetails | null }
   | { type: 'doublePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[]; route?: number[]; runnerAdvancements?: Record<number, number> }
@@ -1634,6 +1635,9 @@ function reducer(state: DemoState, action: Action): DemoState {
     case 'multipleRunnersOut':
       nextState = applyMultipleRunnersOut(state, action.bases, action.label);
       break;
+    case 'advanceRunners':
+      nextState = applyRunnerAdvancements(state, action.selections, action.message, action.preserveLastPlay);
+      break;
     case 'setTeamName':
       nextState = { ...state, teamNames: { ...state.teamNames, [action.side]: action.name } };
       break;
@@ -2872,6 +2876,142 @@ function applyRunnerOutsByName(state: DemoState, runnerNames: string[], label?: 
   return applyMultipleRunnersOut(state, basesToRemove, defaultLabel);
 }
 
+function applyRunnerAdvancements(
+  state: DemoState,
+  selections: RunnerAdvanceSelections,
+  message: string,
+  preserveLastPlay = false,
+): DemoState {
+  const hasSelections = Object.values(selections).some((value) => value && value !== 'hold');
+  if (!hasSelections) return state;
+
+  const bases = [null, null, null] as Bases;
+  let runs = 0;
+  let outs = state.outs;
+  const runnerMoves: { feedText: string; lastPlay: string; runnerSummary: string }[] = [];
+
+  for (let i = 2; i >= 0; i -= 1) {
+    const runner = state.bases[i];
+    if (!runner) continue;
+    const outcome = selections[i as 0 | 1 | 2] ?? 'hold';
+    const resolved = resolveAdvanceOutcome(outcome, i, 0);
+    if (resolved.type === 'out') {
+      outs += 1;
+      runnerMoves.push(
+        formatRunnerMove({
+          runner,
+          from: i,
+          to: i,
+          outcome: 'out',
+          outsCount: outs,
+          message,
+        }),
+      );
+      continue;
+    }
+    if (resolved.type === 'score') {
+      runs += 1;
+      runnerMoves.push(
+        formatRunnerMove({
+          runner,
+          from: i,
+          to: 3,
+          outcome: 'score',
+          message,
+        }),
+      );
+      continue;
+    }
+    if (resolved.type === 'hold') {
+      const placed = placeRunnerOnBases(bases, runner, resolved.targetBaseIndex);
+      if (placed.scored) {
+        runs += 1;
+        runnerMoves.push(
+          formatRunnerMove({
+            runner,
+            from: i,
+            to: 3,
+            outcome: 'score',
+            message,
+          }),
+        );
+      } else {
+        runnerMoves.push(
+          formatRunnerMove({
+            runner,
+            from: i,
+            to: placed.dest,
+            outcome: 'hold',
+            message,
+          }),
+        );
+      }
+      continue;
+    }
+    const placed = placeRunnerOnBases(bases, runner, resolved.targetBaseIndex);
+    if (placed.scored) {
+      runs += 1;
+      runnerMoves.push(
+        formatRunnerMove({
+          runner,
+          from: i,
+          to: 3,
+          outcome: 'score',
+          message,
+        }),
+      );
+    } else {
+      runnerMoves.push(
+        formatRunnerMove({
+          runner,
+          from: i,
+          to: placed.dest,
+          outcome: 'advance',
+          message,
+        }),
+      );
+    }
+  }
+
+  if (!runnerMoves.length) return state;
+
+  const side = hittingSide(state);
+  const score =
+    side === 'home'
+      ? { ...state.score, home: state.score.home + runs }
+      : { ...state.score, away: state.score.away + runs };
+
+  const eventEntry = createPlayEventForBaserunning(
+    state,
+    { type: 'runner', runners: runnerMoves.map((move) => move.runnerSummary), notes: message },
+    state.pitchCount,
+  );
+
+  let feed = state.feed;
+  runnerMoves.forEach((move) => {
+    feed = pushFeed(feed, createLogEntryForBaserunning(state, move.feedText, state.pitchCount, eventEntry.eventId));
+  });
+
+  const lastMove = runnerMoves[runnerMoves.length - 1];
+  const lastPlay = preserveLastPlay ? state.lastPlay : lastMove.lastPlay;
+
+  const nextState = {
+    ...state,
+    bases,
+    score,
+    outs,
+    lastPlay,
+    feed,
+    events: pushEvent(state.events, eventEntry),
+  };
+
+  if (outs >= 3) {
+    return changeHalf(nextState, lastMove.lastPlay, state.pitchCount, state);
+  }
+
+  return nextState;
+}
+
 function applyDoublePlay(
   state: DemoState,
   outsToAdd: 2 | 3,
@@ -3497,6 +3637,7 @@ interface DemoStoreValue {
     addFoul: (isBunt?: boolean) => void;
     strikeOut: (strikeType?: 'swinging' | 'looking') => void;
     droppedThirdStrike: (variant?: 'strikeout' | 'reach' | 'tag_out' | 'force_out', strikeType?: 'swinging' | 'looking', runnerOuts?: string[]) => void;
+    advanceRunners: (selections: RunnerAdvanceSelections, message: string, preserveLastPlay?: boolean) => void;
     addOut: (battedBall?: BattedBallDetails | null) => void;
     hitSingle: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) => void;
     hitDouble: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) => void;
@@ -4365,6 +4506,8 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       resetCount: () => dispatch({ type: 'resetCount' }),
       clearBases: () => dispatch({ type: 'clearBases' }),
       nextHalf: () => dispatch({ type: 'nextHalf' }),
+      advanceRunners: (selections: RunnerAdvanceSelections, message: string, preserveLastPlay?: boolean) =>
+        dispatch({ type: 'advanceRunners', selections, message, preserveLastPlay }),
       runnerStealSuccess: (base: 0 | 1 | 2) => dispatch({ type: 'runnerStealSuccess', base }),
       runnerCaught: (base: 0 | 1 | 2) => dispatch({ type: 'runnerCaught', base }),
       runnerPickoff: (base: 0 | 1 | 2) => dispatch({ type: 'runnerPickoff', base }),
