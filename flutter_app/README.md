@@ -4,6 +4,7 @@ Flutter 기반 하이브리드 앱(네이티브 + WebView) 1차 구현입니다.
 
 ## 현재 범위
 - WebView 로그인: `/login?embedded=flutter`
+- 네이티브 Google 로그인 (`google_sign_in` + Firebase Auth)
 - 로그인 성공 토큰 브리지 수신 후 네이티브 Firebase 로그인 동기화
 - 관리자 권한 확인 후 "기록실 입장" 버튼 노출
 - 기록실 WebView: `/scorekeeper` (세션 미동기화 시 `/login?embedded=flutter&next=/scorekeeper` 폴백)
@@ -63,3 +64,7 @@ flutter run --dart-define-from-file=env/prod.json
 - 토큰 교환 실패 시 WebView 하단 오류 배너 표시
 - 권한 미확인 시 기록실 버튼 비노출
 - 기록실 접근 중 로그인 페이지로 이동되면 자동 폴백 URL로 재진입
+
+## 네이티브 Google 로그인 체크포인트
+- Android: Firebase Console에 앱 `com.aubl.aubl_flutter_app` 등록 + 디버그/릴리즈 SHA-1 등록
+- iOS: `GoogleService-Info.plist` 포함 + `Info.plist` URL Scheme(`REVERSED_CLIENT_ID`) 등록

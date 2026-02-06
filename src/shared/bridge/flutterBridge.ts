@@ -14,13 +14,17 @@ type FlutterBridgeMessage =
     }
   | {
       type: 'LOGOUT';
+    }
+  | {
+      type: 'REQUEST_NATIVE_GOOGLE';
     };
 
-function postToFlutterBridge(payload: FlutterBridgeMessage) {
-  if (typeof window === 'undefined') return;
+function postToFlutterBridge(payload: FlutterBridgeMessage): boolean {
+  if (typeof window === 'undefined') return false;
   const bridge = window.FlutterBridge;
-  if (!bridge || typeof bridge.postMessage !== 'function') return;
+  if (!bridge || typeof bridge.postMessage !== 'function') return false;
   bridge.postMessage(JSON.stringify(payload));
+  return true;
 }
 
 export async function sendLoginSuccessToFlutter(user: User, idToken?: string) {
@@ -43,4 +47,8 @@ export async function sendTokenRefreshToFlutter(user: User, idToken?: string) {
 
 export function sendLogoutToFlutter() {
   postToFlutterBridge({ type: 'LOGOUT' });
+}
+
+export function requestNativeGoogleSignInFromFlutter() {
+  return postToFlutterBridge({ type: 'REQUEST_NATIVE_GOOGLE' });
 }

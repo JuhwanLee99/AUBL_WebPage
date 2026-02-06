@@ -2,7 +2,7 @@ import type * as React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../shared/auth/AuthProvider';
-import { sendLoginSuccessToFlutter } from '../../shared/bridge/flutterBridge';
+import { requestNativeGoogleSignInFromFlutter, sendLoginSuccessToFlutter } from '../../shared/bridge/flutterBridge';
 import { auth } from '../../shared/firebase/client';
 
 type LocationState = {
@@ -15,6 +15,7 @@ export default function LoginPage() {
   const location = useLocation();
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const embedded = searchParams.get('embedded') === 'flutter';
+  const nativeGoogleEnabled = searchParams.get('nativeGoogle') === '1';
   const rawNext = searchParams.get('next');
   const next = rawNext && rawNext.startsWith('/') ? rawNext : null;
   const redirectTo = useMemo(() => next || (location.state as LocationState | null)?.from || '/', [location.state, next]);
@@ -64,6 +65,14 @@ export default function LoginPage() {
     setSubmitting(true);
     setMessage(null);
     try {
+      const hasFlutterBridge = typeof window !== 'undefined' && Boolean(window.FlutterBridge);
+      if (embedded && (nativeGoogleEnabled || hasFlutterBridge)) {
+        const sent = requestNativeGoogleSignInFromFlutter();
+        if (!sent) {
+          setMessage('앱 브리지 연결을 찾지 못했습니다. 앱을 다시 실행해 주세요.');
+        }
+        return;
+      }
       await loginWithGoogle();
       if (embedded && !auth.currentUser) {
         return;
@@ -85,7 +94,11 @@ export default function LoginPage() {
         <p className="eyebrow">AUBL 계정</p>
         <h1>로그인하고 경기 소식을 가장 빠르게 만나보세요</h1>
         <p className="lede">
-          이메일·비밀번호(재확인) 또는 Google 계정으로 간편 로그인하세요.
+          {embedded
+            ? nativeGoogleEnabled
+              ? '이메일·비밀번호 또는 Google 계정으로 로그인하세요.'
+              : '앱 내 WebView에서는 이메일·비밀번호 로그인만 지원합니다.'
+            : '이메일·비밀번호(재확인) 또는 Google 계정으로 간편 로그인하세요.'}
           <br />
           로그인하면 실시간 전광판, 일정, 기록 열람과 알림 설정을 이용할 수 있습니다.
         </p>
@@ -191,14 +204,18 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="auth-divider">
-          <span>또는</span>
-        </div>
+        {(!embedded || nativeGoogleEnabled) && (
+          <>
+            <div className="auth-divider">
+              <span>또는</span>
+            </div>
 
-        <button type="button" className="auth-google" onClick={handleGoogle} disabled={submitting}>
-          <span>G</span>
-          Google 계정으로 계속하기
-        </button>
+            <button type="button" className="auth-google" onClick={handleGoogle} disabled={submitting}>
+              <span>G</span>
+              Google 계정으로 계속하기
+            </button>
+          </>
+        )}
 
         <p className="auth-footer">
           관리 권한이 없나요?{' '}

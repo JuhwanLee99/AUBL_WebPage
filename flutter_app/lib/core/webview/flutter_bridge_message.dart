@@ -4,6 +4,7 @@ enum BridgeMessageType {
   loginSuccess,
   tokenRefresh,
   logout,
+  requestNativeGoogle,
   unknown,
 }
 
@@ -40,6 +41,8 @@ class FlutterBridgeMessage {
           );
         case 'LOGOUT':
           return FlutterBridgeMessage(type: BridgeMessageType.logout);
+        case 'REQUEST_NATIVE_GOOGLE':
+          return FlutterBridgeMessage(type: BridgeMessageType.requestNativeGoogle);
         default:
           return FlutterBridgeMessage(type: BridgeMessageType.unknown);
       }

@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../core/config/app_config.dart';
@@ -19,6 +22,16 @@ class ScorekeeperWebViewScreen extends StatefulWidget {
 }
 
 class _ScorekeeperWebViewScreenState extends State<ScorekeeperWebViewScreen> {
+  static const Color _chromeColor = Color(0xFF0F172A);
+  static const SystemUiOverlayStyle _overlayStyle = SystemUiOverlayStyle(
+    statusBarColor: _chromeColor,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark,
+    systemNavigationBarColor: _chromeColor,
+    systemNavigationBarIconBrightness: Brightness.light,
+    systemNavigationBarDividerColor: _chromeColor,
+  );
+
   final AuthBridgeService _authBridgeService = AuthBridgeService();
   late final WebViewController _controller;
 
@@ -26,6 +39,14 @@ class _ScorekeeperWebViewScreenState extends State<ScorekeeperWebViewScreen> {
   bool _authenticating = false;
   bool _redirectedToFallbackLogin = false;
   String? _error;
+
+  void _applySystemUiChrome() {
+    unawaited(SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.manual,
+      overlays: SystemUiOverlay.values,
+    ));
+    SystemChrome.setSystemUIOverlayStyle(_overlayStyle);
+  }
 
   Uri get _scorekeeperUri => AppConfig.webUri('/scorekeeper');
 
@@ -40,8 +61,10 @@ class _ScorekeeperWebViewScreenState extends State<ScorekeeperWebViewScreen> {
   @override
   void initState() {
     super.initState();
+    _applySystemUiChrome();
 
     _controller = WebViewController()
+      ..setBackgroundColor(_chromeColor)
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..addJavaScriptChannel(
         'FlutterBridge',
@@ -52,12 +75,14 @@ class _ScorekeeperWebViewScreenState extends State<ScorekeeperWebViewScreen> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (_) {
+            _applySystemUiChrome();
             if (!mounted) return;
             setState(() {
               _loading = true;
             });
           },
           onPageFinished: (_) {
+            _applySystemUiChrome();
             if (!mounted) return;
             setState(() {
               _loading = false;
@@ -110,6 +135,8 @@ class _ScorekeeperWebViewScreenState extends State<ScorekeeperWebViewScreen> {
         return;
       case BridgeMessageType.logout:
         await FirebaseAuth.instance.signOut();
+        return;
+      case BridgeMessageType.requestNativeGoogle:
         return;
       case BridgeMessageType.unknown:
         return;
