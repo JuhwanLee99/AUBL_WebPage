@@ -109,6 +109,7 @@ export default function ScoreboardTextPage() {
   const { matchId } = useParams<{ matchId?: string }>();
   const [showReplay, setShowReplay] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [feedExpanded, setFeedExpanded] = useState(false);
   const navigate = useNavigate(); // [수정] 훅 초기화
 
   // URL에서 matchId가 있으면 해당 경기 자동 선택
@@ -121,6 +122,10 @@ export default function ScoreboardTextPage() {
       }
     }
   }, [matchId, state.activeMatchId, state.matches, actions]);
+
+  useEffect(() => {
+    setFeedExpanded(false);
+  }, [state.activeMatchId]);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -237,27 +242,10 @@ export default function ScoreboardTextPage() {
     <div className="scoreboard-text-page">
       <div className="main-content-grid">
         <div className={`scoreboard-section ${isMobile ? 'mobile-layout' : ''}`}>
-          {/* 동접자 수 표시 */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              marginBottom: '12px',
-              padding: '8px 12px',
-              background: 'rgba(34, 197, 94, 0.08)',
-              borderRadius: '10px',
-              width: 'fit-content',
-            }}
-          >
-            <span style={{ fontSize: '15px' }}>👥</span>
-            <span style={{ fontSize: '13px', color: '#22c55e', fontWeight: 600 }}>
-              현재 {state.onlineViewerCount}명 시청 중
-            </span>
-          </div>
           <ScoreboardFrame
             variant="text"
             showFootnote={false}
+            showViewerBadge
             panelStyle={
               isMobile
                 ? { width: '100%', height: 'auto', minHeight: '500px' }
@@ -278,35 +266,61 @@ export default function ScoreboardTextPage() {
         <div className={state.gameOver ? 'live-feed-section game-over' : 'live-feed-section'}>
           {state.gameOver ? (
             <>
-              {/* [추가] 기록지 다운로드 버튼 영역 */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
-                <button
-                  type="button"
-                  onClick={handleDownloadCsv}
-                  style={{
-                    padding: '8px 14px',
-                    borderRadius: '10px',
-                    border: '1px solid rgba(59, 130, 246, 0.4)',
-                    background: 'linear-gradient(90deg, #2563eb, #1d4ed8)',
-                    color: '#f8fafc',
-                    fontWeight: 900,
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                  }}
-                >
-                  <span style={{ fontSize: '16px' }}>📥</span>
-                  기록지 다운로드 (CSV)
-                </button>
-              </div>
-
               {postGameDetail ? (
-                <PostGameDetailSection detail={postGameDetail} teams={{ home: state.teamNames.home, away: state.teamNames.away }} />
+                <PostGameDetailSection
+                  detail={postGameDetail}
+                  teams={{ home: state.teamNames.home, away: state.teamNames.away }}
+                  actionSlot={
+                    <button
+                      type="button"
+                      onClick={handleDownloadCsv}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(59, 130, 246, 0.4)',
+                        background: 'linear-gradient(90deg, #2563eb, #1d4ed8)',
+                        color: '#f8fafc',
+                        fontWeight: 800,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        boxShadow: '0 3px 8px rgba(37, 99, 235, 0.2)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0px',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      기록지 다운로드 (CSV)
+                    </button>
+                  }
+                />
               ) : (
-                <PostGameSummary summary={postSummary} />
+                <PostGameSummary
+                  summary={postSummary}
+                  actionSlot={
+                    <button
+                      type="button"
+                      onClick={handleDownloadCsv}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(59, 130, 246, 0.4)',
+                        background: 'linear-gradient(90deg, #2563eb, #1d4ed8)',
+                        color: '#f8fafc',
+                        fontWeight: 800,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        boxShadow: '0 3px 8px rgba(37, 99, 235, 0.2)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0px',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      기록지 다운로드 (CSV)
+                    </button>
+                  }
+                />
               )}
               <div
                 style={{
@@ -315,10 +329,10 @@ export default function ScoreboardTextPage() {
                   padding: '8px 10px',
                   background: 'rgba(255,255,255,0.02)',
                   display: 'grid',
-                  gridTemplateRows: 'auto 1fr',
+                  gridTemplateRows: 'auto minmax(0, 1fr)',
                   gap: '6px',
                   minHeight: 0,
-                  maxHeight: showReplay ? '560px' : '260px',
+                  maxHeight: showReplay ? '1100px' : '240px',
                   transition: 'max-height 180ms ease',
                   overflow: 'hidden',
                 }}
@@ -353,7 +367,8 @@ export default function ScoreboardTextPage() {
                       background: 'rgba(15,23,42,0.55)',
                       padding: '8px',
                       minHeight: 0,
-                      maxHeight: '420px',
+                      height: '100%',
+                      maxHeight: '100%',
                       overflowY: 'auto',
                       alignSelf: 'stretch',
                     }}
@@ -450,6 +465,29 @@ export default function ScoreboardTextPage() {
                 </span>
               )}
             </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '6px' }}>
+            <button
+              type="button"
+              onClick={() => {
+                actions.loadMoreFeed();
+                setFeedExpanded(true);
+              }}
+              disabled={feedExpanded}
+              style={{
+                padding: '6px 10px',
+                borderRadius: '10px',
+                border: '1px solid rgba(148,163,184,0.5)',
+                background: feedExpanded ? 'rgba(148,163,184,0.12)' : 'rgba(59,130,246,0.12)',
+                color: feedExpanded ? '#94a3b8' : '#93c5fd',
+                fontWeight: 800,
+                fontSize: '12px',
+                cursor: feedExpanded ? 'not-allowed' : 'pointer',
+              }}
+              title={feedExpanded ? '이전 이닝까지 불러왔습니다' : '이전 이닝 더보기'}
+            >
+              {feedExpanded ? '이전 이닝 불러옴' : '이전 이닝 더보기'}
+            </button>
           </div>
           <LiveFeed sections={sections} collapsedMap={collapsedMap} gameOverInfo={gameOverInfo} isMobile={isMobile} />
           <div
@@ -2352,7 +2390,7 @@ function buildPostGameSummary(
   };
 }
 
-function PostGameSummary({ summary }: { summary: PostGameSummary }) {
+function PostGameSummary({ summary, actionSlot }: { summary: PostGameSummary; actionSlot?: React.ReactNode }) {
   const pill = (label: string, value: string, color: string) => (
     <span
       style={{
@@ -2439,9 +2477,10 @@ function PostGameSummary({ summary }: { summary: PostGameSummary }) {
           {pill('원정 득점', String(summary.totals.away.runs), '#60a5fa')}
           {pill('원정 안타', String(summary.totals.away.hits), '#60a5fa')}
         </div>
-        <div style={{ color: '#94a3b8', fontSize: 12 }}>
-          경기 종료 후 상세보기 · 문자중계 기록은 좌측 “문자 중계” 탭으로 이동
-        </div>
+        {actionSlot ? <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{actionSlot}</div> : null}
+      </div>
+      <div style={{ color: '#94a3b8', fontSize: 12 }}>
+        경기 종료 후 상세보기 · 문자중계 기록은 좌측 “문자 중계” 탭으로 이동
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
         {renderLeaders('타자 TOP3 (양 팀)', summary.topHitters)}
@@ -2455,7 +2494,15 @@ function PostGameSummary({ summary }: { summary: PostGameSummary }) {
 
 type PostGameDetailData = NonNullable<MatchSchedule['postGame']>;
 
-function PostGameDetailSection({ detail, teams }: { detail: PostGameDetailData; teams: { home: string; away: string } }) {
+function PostGameDetailSection({
+  detail,
+  teams,
+  actionSlot,
+}: {
+  detail: PostGameDetailData;
+  teams: { home: string; away: string };
+  actionSlot?: React.ReactNode;
+}) {
   return (
     <div style={{ display: 'grid', gap: 12, overflow: 'auto', paddingRight: 4 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -2463,7 +2510,12 @@ function PostGameDetailSection({ detail, teams }: { detail: PostGameDetailData; 
           <span style={{ fontWeight: 900, fontSize: 18 }}>경기 종료 · 상세 기록</span>
           <span style={{ color: '#94a3b8', fontSize: 12 }}>문자중계 대신 박스스코어를 표시합니다.</span>
         </div>
-        {detail.note && <span style={{ color: '#94a3b8', fontSize: 12 }}>{detail.note}</span>}
+        {detail.note || actionSlot ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {detail.note && <span style={{ color: '#94a3b8', fontSize: 12 }}>{detail.note}</span>}
+            {actionSlot}
+          </div>
+        ) : null}
       </div>
 
       <LineScoreTable teams={teams} lineScore={detail.lineScore} totals={detail.totals} />
