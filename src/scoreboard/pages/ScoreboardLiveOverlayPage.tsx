@@ -1,13 +1,58 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
+import { useAdmin } from '../../shared/auth/useAdmin';
 
 const defaultLiveSrc = 'https://www.youtube.com/embed/live_stream?channel=YOUR_CHANNEL_ID';
 
+type PlayerNameParts = { raw: string; base: string; number?: string };
+
+function parsePlayerName(raw: string | null | undefined): PlayerNameParts {
+  const trimmed = (raw ?? '').trim();
+  const match = trimmed.match(/^(.*?)(?:\(([^)]*)\))?\s*$/);
+  const base = (match?.[1] ?? '').trim();
+  const number = (match?.[2] ?? '').trim();
+  return { raw: trimmed, base, number: number || undefined };
+}
+
+function isSamePlayerName(a: string | null | undefined, b: string | null | undefined): boolean {
+  const pa = parsePlayerName(a);
+  const pb = parsePlayerName(b);
+  if (!pa.base || !pb.base) return (pa.raw || '') === (pb.raw || '');
+  if (pa.base !== pb.base) return false;
+  if (pa.number && pb.number) return pa.number === pb.number;
+  return true;
+}
+
+function classifyResult(result: string) {
+  const normalized = result.replace(/\s+/g, '');
+  if (normalized.includes('홈런')) return 'hr' as const;
+  if (normalized.includes('3루타')) return 'triple' as const;
+  if (normalized.includes('2루타')) return 'double' as const;
+  if (normalized.includes('1루타')) return 'single' as const;
+  if (normalized.includes('고의') || normalized.toUpperCase().includes('IB')) return 'bb' as const;
+  if (normalized.includes('볼넷')) return 'bb' as const;
+  if (normalized.includes('몸에맞는공')) return 'hbp' as const;
+  if (normalized.includes('타격방해')) return 'ci' as const;
+  if (normalized.includes('야수선택') || normalized.toUpperCase().includes('F.C')) return 'fc' as const;
+  if (normalized.includes('희생플라이')) return 'sac' as const;
+  if (normalized.includes('희생번트')) return 'sac' as const;
+  if (normalized.includes('낫아웃')) return 'so_reach' as const;
+  if (normalized.includes('삼진')) return 'so' as const;
+  if (normalized.includes('아웃') && !normalized.includes('도루')) return 'out' as const;
+  return null;
+}
+
 export default function ScoreboardLiveOverlayPage() {
   const { state, actions } = useDemoStore();
+  const { isAdmin } = useAdmin();
   const navigate = useNavigate();
   const matches = useMemo(() => state.matches.filter((m) => !m.deleted), [state.matches]);
+  const activeMatch = useMemo(
+    () => state.matches.find((match) => match.id === state.activeMatchId) ?? null,
+    [state.matches, state.activeMatchId],
+  );
+  const lineupVisible = isAdmin || state.gameStarted || Boolean(activeMatch?.lineupPublic);
 
   // 모바일 감지 함수
   const isMobileDevice = () => {
@@ -140,6 +185,7 @@ export default function ScoreboardLiveOverlayPage() {
 
   // 현재 투수 정보 (수비팀의 1번 포지션)
   const currentPitcher = useMemo(() => {
+    if (!lineupVisible) return null;
     const pitcher = delayedState.lineups[fieldingSide]?.[0];
     if (!pitcher || !pitcher.name) return null;
     return {
@@ -148,46 +194,64 @@ export default function ScoreboardLiveOverlayPage() {
       balls: delayedState.balls,
       strikes: delayedState.strikes,
     };
-  }, [delayedState.lineups, delayedState.pitchCount, delayedState.balls, delayedState.strikes, fieldingSide]);
+  }, [delayedState.lineups, delayedState.pitchCount, delayedState.balls, delayedState.strikes, fieldingSide, lineupVisible]);
 
   // 현재 타자 정보
   const currentBatter = useMemo(() => {
+    if (!lineupVisible) return null;
     const batterIdx = delayedState.batterIndex[battingSide];
     const batter = delayedState.lineups[battingSide]?.[batterIdx];
     if (!batter || !batter.name) return null;
 
-    // 타자의 오늘 기록 계산 (events에서)
+    // 타자의 오늘 기록 계산 (feed 기반)
     let atBats = 0;
     let hits = 0;
     let walks = 0;
     let strikeouts = 0;
 
-    if (delayedState.events && Array.isArray(delayedState.events)) {
-      delayedState.events.forEach((event: { batterName?: string; batterSide?: string; result?: string }) => {
-        if (event.batterName === batter.name && event.batterSide === battingSide) {
-          // 타수 계산
-          if (event.result === 'single' || event.result === 'double' ||
-              event.result === 'triple' || event.result === 'homerun' ||
-              event.result === 'out' || event.result === 'fieldersChoice') {
-            atBats++;
-          }
-          // 안타 계산
-          if (event.result === 'single' || event.result === 'double' ||
-              event.result === 'triple' || event.result === 'homerun') {
-            hits++;
-          }
-          // 볼넷
-          if (event.result === 'walk' || event.result === 'intentionalWalk') {
-            walks++;
-          }
-          // 삼진
-          if (event.result === 'strikeOut') {
-            strikeouts++;
-            atBats++;
-          }
-        }
-      });
-    }
+    (delayedState.feed ?? []).forEach((entry) => {
+      const side = entry.half === 'top' ? 'away' : 'home';
+      if (side !== battingSide) return;
+      if (!isSamePlayerName(entry.batter, batter.name)) return;
+      const kind = classifyResult(entry.result || '');
+      switch (kind) {
+        case 'single':
+          hits += 1;
+          atBats += 1;
+          break;
+        case 'double':
+          hits += 1;
+          atBats += 1;
+          break;
+        case 'triple':
+          hits += 1;
+          atBats += 1;
+          break;
+        case 'hr':
+          hits += 1;
+          atBats += 1;
+          break;
+        case 'so':
+          strikeouts += 1;
+          atBats += 1;
+          break;
+        case 'so_reach':
+          strikeouts += 1;
+          atBats += 1;
+          break;
+        case 'out':
+          atBats += 1;
+          break;
+        case 'fc':
+          atBats += 1;
+          break;
+        case 'bb':
+          walks += 1;
+          break;
+        default:
+          break;
+      }
+    });
 
     return {
       name: batter.name,
@@ -197,7 +261,7 @@ export default function ScoreboardLiveOverlayPage() {
       strikeouts,
       avg: atBats > 0 ? (hits / atBats).toFixed(3).substring(1) : '.000',
     };
-  }, [delayedState.lineups, delayedState.batterIndex, delayedState.events, battingSide]);
+  }, [delayedState.lineups, delayedState.batterIndex, delayedState.events, battingSide, lineupVisible]);
 
   const toggleFullscreen = () => {
     if (isIOS || !supportsFullscreen) {

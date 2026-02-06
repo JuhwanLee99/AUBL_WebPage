@@ -45,6 +45,17 @@ const formatRemaining = (purgeAt: number) => {
   return `${hours}시간 ${minutes}분 후 삭제`;
 };
 
+const buildMatchId = (startTime: string, homeTeamName: string, awayTeamName: string) => {
+  const dateObj = new Date(startTime);
+  const yyyy = dateObj.getFullYear();
+  const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const dd = String(dateObj.getDate()).padStart(2, '0');
+  const cleanName = (name: string) => name.trim().replace(/\s+/g, '');
+  const home = cleanName(homeTeamName || 'Home');
+  const away = cleanName(awayTeamName || 'Away');
+  return `${yyyy}${mm}${dd}-${home}-${away}`;
+};
+
 // 더미 라인업 생성 (더미 일정 전용)
 const DUMMY_NAMES = [
   '김민수', '이정훈', '박준호', '최승우', '정대현',
@@ -106,28 +117,34 @@ export default function ScheduleManagePage() {
     const teams = TEAMS.slice().sort(() => Math.random() - 0.5);
     const [home, away] = teams.slice(0, 2);
     const start = new Date(Date.now() + 1000 * 60 * 60 * (Math.floor(Math.random() * 96) + 12));
+    const startIso = start.toISOString();
+    const matchId = buildMatchId(startIso, home.name, away.name);
+    const lineups = {
+      home: generateDummyLineup(),
+      away: generateDummyLineup(),
+    };
+    const benches = {
+      home: generateDummyBench(),
+      away: generateDummyBench(),
+    };
     const match: MatchSchedule = {
-      id: `mock-${Date.now()}`,
+      id: matchId,
       homeTeamId: home.id,
       awayTeamId: away.id,
       homeTeamName: home.name,
       awayTeamName: away.name,
       division: home.division === away.division ? home.division : undefined,
-      startTime: start.toISOString(),
+      startTime: startIso,
       venue: 'AUBL 임시구장',
       status: 'scheduled',
       notes: '빠른 더미 등록',
+      lineupPublic: false,
       // 더미 라인업 추가
-      lineups: {
-        home: generateDummyLineup(),
-        away: generateDummyLineup(),
-      },
-      benches: {
-        home: generateDummyBench(),
-        away: generateDummyBench(),
-      },
+      lineups,
+      benches,
     };
     actions.addMatch(match);
+    actions.saveMatchLineups(matchId, lineups, benches);
   };
 
   return (

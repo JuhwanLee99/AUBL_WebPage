@@ -9,7 +9,7 @@ import MaintenancePage from '../../app/pages/MaintenancePage';
 // ========================================
 
 // 유지보수 모드 활성화 여부 (true: 활성화, false: 비활성화)
-export const MAINTENANCE_MODE_ENABLED = true;
+export const MAINTENANCE_MODE_ENABLED = false;
 
 // 서비스 재개 예정일
 export const MAINTENANCE_RESUME_DATE = '2026년 2월 7일';

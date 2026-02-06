@@ -1476,6 +1476,8 @@ export default function ScorekeeperPage() {
   const isGameStarted = state.gameStarted;
   const isGameOver = state.gameOver;
   const hasActiveMatch = Boolean(state.activeMatchId);
+  const lineupPublic = Boolean(activeMatch?.lineupPublic);
+  const canToggleLineup = hasActiveMatch && !isGameStarted && !isGameOver;
   const LOCK_TTL_MS = 300_000; // UI-side TTL (demoStore와 동일)
   const formatMs = useCallback((ms: number) => {
     const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -2126,6 +2128,16 @@ const handleConfirmHitWizard = () => {
     }
   };
 
+  const handleToggleLineupPublic = () => {
+    if (!activeMatch || lockedByOther) return;
+    actions.updateMatch(activeMatch.id, { lineupPublic: !lineupPublic });
+  };
+
+  const handleSaveLineups = () => {
+    if (!activeMatch || lockedByOther) return;
+    actions.saveMatchLineups(activeMatch.id, state.lineups, state.benches);
+  };
+
   const handleStartGame = () => {
     if (!hasActiveMatch || isGameStarted || isGameOver || lockedByOther) return;
     setHitWizard(null);
@@ -2262,6 +2274,7 @@ const handleConfirmHitWizard = () => {
             <span>선택된 경기: {activeMatch.awayTeamName} vs {activeMatch.homeTeamName}</span>
             <span>일시: {formatDateTimeLabel(activeMatch.startTime)}</span>
             <span>라인업: {activeMatch.lineups ? '사전 저장됨' : '미저장'}</span>
+            <span>라인업 공개: {activeMatch.lineupPublic ? '공개됨' : '비공개'}</span>
           </div>
         ) : (
           <span style={{ color: '#fbbf24', fontSize: '13px' }}>현재 선택된 경기가 없습니다.</span>
@@ -2509,27 +2522,93 @@ const handleConfirmHitWizard = () => {
                       </>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleStartGame}
-                    disabled={isGameOver || isGameStarted || lockedByOther}
-                    style={{
-                      padding: '10px 12px',
-                      borderRadius: '10px',
-                      border: '1px solid rgba(16,185,129,0.5)',
-                      background: isGameStarted
-                        ? 'rgba(148,163,184,0.16)'
-                        : 'linear-gradient(90deg, #10b981, #0ea5e9)',
-                      color: isGameStarted ? '#cbd5e1' : '#0b0f1a',
-                      fontWeight: 900,
-                      fontSize: '13px',
-                      cursor: isGameOver || isGameStarted ? 'not-allowed' : 'pointer',
-                      opacity: isGameOver ? 0.6 : 1,
-                      boxShadow: isGameStarted ? 'none' : '0 10px 20px rgba(16,185,129,0.22)',
-                    }}
-                  >
-                    {isGameStarted ? '경기 진행 중' : '경기 시작'}
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {hasActiveMatch && (
+                      <span
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: '999px',
+                          border: lineupPublic ? '1px solid rgba(34,197,94,0.5)' : '1px solid rgba(148,163,184,0.5)',
+                          background: lineupPublic ? 'rgba(34,197,94,0.12)' : 'rgba(148,163,184,0.12)',
+                          color: lineupPublic ? '#86efac' : '#cbd5e1',
+                          fontWeight: 900,
+                          fontSize: '12px',
+                        }}
+                      >
+                        {lineupPublic ? '라인업 공개됨' : '라인업 비공개'}
+                      </span>
+                    )}
+                    {!isGameStarted && (
+                      <button
+                        type="button"
+                        onClick={handleToggleLineupPublic}
+                        disabled={!canToggleLineup || lockedByOther}
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: '10px',
+                          border: lineupPublic ? '1px solid rgba(248,113,113,0.5)' : '1px solid rgba(59,130,246,0.5)',
+                          background: lineupPublic
+                            ? 'linear-gradient(90deg, #f97316, #ef4444)'
+                            : 'linear-gradient(90deg, #38bdf8, #6366f1)',
+                          color: '#0b0f1a',
+                          fontWeight: 900,
+                          fontSize: '13px',
+                          cursor: !canToggleLineup || lockedByOther ? 'not-allowed' : 'pointer',
+                          opacity: !canToggleLineup || lockedByOther ? 0.6 : 1,
+                          boxShadow: lineupPublic ? '0 10px 20px rgba(239,68,68,0.22)' : '0 10px 20px rgba(59,130,246,0.22)',
+                        }}
+                        title={
+                          !canToggleLineup
+                            ? '경기 시작 전까지만 전환할 수 있습니다'
+                            : lineupPublic
+                              ? '라인업 비공개로 전환'
+                              : '라인업 공개'
+                        }
+                      >
+                        {lineupPublic ? '라인업 비공개' : '라인업 공개'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleSaveLineups}
+                      disabled={!hasActiveMatch || lockedByOther}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(16,185,129,0.45)',
+                        background: 'rgba(16,185,129,0.14)',
+                        color: '#34d399',
+                        fontWeight: 900,
+                        fontSize: '13px',
+                        cursor: !hasActiveMatch || lockedByOther ? 'not-allowed' : 'pointer',
+                        opacity: !hasActiveMatch || lockedByOther ? 0.6 : 1,
+                      }}
+                      title="라인업을 경기 일정에 저장"
+                    >
+                      라인업 저장
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleStartGame}
+                      disabled={isGameOver || isGameStarted || lockedByOther}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(16,185,129,0.5)',
+                        background: isGameStarted
+                          ? 'rgba(148,163,184,0.16)'
+                          : 'linear-gradient(90deg, #10b981, #0ea5e9)',
+                        color: isGameStarted ? '#cbd5e1' : '#0b0f1a',
+                        fontWeight: 900,
+                        fontSize: '13px',
+                        cursor: isGameOver || isGameStarted ? 'not-allowed' : 'pointer',
+                        opacity: isGameOver ? 0.6 : 1,
+                        boxShadow: isGameStarted ? 'none' : '0 10px 20px rgba(16,185,129,0.22)',
+                      }}
+                    >
+                      {isGameStarted ? '경기 진행 중' : '경기 시작'}
+                    </button>
+                  </div>
                 </div>
 
                 {/* 하단: 락 설명 + 카운트다운 + 잠금 해제 한 줄 배치 */}
