@@ -316,10 +316,10 @@ type SharedGameState = Pick<
 
 type Action =
   | { type: 'ball' }
-  | { type: 'strike' }
+  | { type: 'strike'; strikeType?: 'swinging' | 'looking' }
   | { type: 'foul'; isBunt?: boolean }
   | { type: 'strikeOut'; strikeType?: 'swinging' | 'looking' }
-  | { type: 'droppedThirdStrike'; variant?: 'strikeout' | 'reach' | 'tag_out'; strikeType?: 'swinging' | 'looking' }
+  | { type: 'droppedThirdStrike'; variant?: 'strikeout' | 'reach' | 'tag_out' | 'force_out'; strikeType?: 'swinging' | 'looking'; runnerOuts?: string[] }
   | { type: 'out'; battedBall?: BattedBallDetails | null }
   | { type: 'outWithMessage'; note: string; battedBall?: BattedBallDetails | null }
   | { type: 'doublePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[]; route?: number[]; runnerAdvancements?: Record<number, number> }
@@ -1413,20 +1413,28 @@ function reducer(state: DemoState, action: Action): DemoState {
         };
       }
       break;
-    case 'strike':
+    case 'strike': {
+      const strikeLabel =
+        action.strikeType === 'looking'
+          ? '루킹 스트라이크'
+          : action.strikeType === 'swinging'
+            ? '헛스윙 스트라이크'
+            : '스트라이크';
       if (state.strikes >= 2) {
-        nextState = applyOut(state, '삼진', { pitchNumber: state.pitchCount + 1 });
+        const strikeOutLabel = action.strikeType === 'looking' ? '삼진(루킹)' : '삼진';
+        nextState = applyOut(state, strikeOutLabel, { pitchNumber: state.pitchCount + 1, strikeType: action.strikeType });
       } else {
         const pitchCount = state.pitchCount + 1;
         nextState = {
           ...state,
           strikes: state.strikes + 1,
           pitchCount,
-          lastPlay: '스트라이크',
-          feed: pushPlayFeed(state, createLogEntry(state, '스트라이크', pitchCount)),
+          lastPlay: strikeLabel,
+          feed: pushPlayFeed(state, createLogEntry(state, strikeLabel, pitchCount)),
         };
       }
       break;
+    }
     case 'foul': {
       const isBuntFoul = action.isBunt === true;
       const foulLabel = isBuntFoul ? '번트 파울' : '파울';
@@ -1468,8 +1476,14 @@ function reducer(state: DemoState, action: Action): DemoState {
       } else if (action.variant === 'tag_out') {
         const tagLabel = action.strikeType === 'looking' ? '삼진 낫아웃 실패(포수 태그/루킹)' : '삼진 낫아웃 실패(포수 태그)';
         nextState = applyOut(state, tagLabel, { pitchNumber: state.pitchCount + 1, strikeType: action.strikeType });
+      } else if (action.variant === 'force_out') {
+        const forceLabel = action.strikeType === 'looking' ? '삼진 낫아웃 실패(1루 포스/루킹)' : '삼진 낫아웃 실패(1루 포스)';
+        nextState = applyOut(state, forceLabel, { pitchNumber: state.pitchCount + 1, strikeType: action.strikeType });
       } else {
         nextState = applyDroppedThirdStrike(state, action.strikeType);
+      }
+      if (action.runnerOuts && action.runnerOuts.length) {
+        nextState = applyRunnerOutsByName(nextState, action.runnerOuts);
       }
       break;
     }
@@ -2844,6 +2858,20 @@ function applyMultipleRunnersOut(state: DemoState, bases: number[], label?: stri
   return nextState;
 }
 
+function applyRunnerOutsByName(state: DemoState, runnerNames: string[], label?: string): DemoState {
+  if (!runnerNames.length) return state;
+  const basesToRemove: number[] = [];
+  runnerNames.forEach((name) => {
+    const idx = state.bases.findIndex((runner) => runner === name);
+    if (idx >= 0) basesToRemove.push(idx);
+  });
+  if (!basesToRemove.length) return state;
+  const defaultLabel =
+    label ??
+    (runnerNames.length === 1 ? '주자 아웃' : runnerNames.length === 2 ? '더블아웃' : `${runnerNames.length}명 아웃`);
+  return applyMultipleRunnersOut(state, basesToRemove, defaultLabel);
+}
+
 function applyDoublePlay(
   state: DemoState,
   outsToAdd: 2 | 3,
@@ -3465,10 +3493,10 @@ interface DemoStoreValue {
   state: DemoState;
   actions: {
     addBall: () => void;
-    addStrike: () => void;
+    addStrike: (strikeType?: 'swinging' | 'looking') => void;
     addFoul: (isBunt?: boolean) => void;
     strikeOut: (strikeType?: 'swinging' | 'looking') => void;
-    droppedThirdStrike: (variant?: 'strikeout' | 'reach' | 'tag_out', strikeType?: 'swinging' | 'looking') => void;
+    droppedThirdStrike: (variant?: 'strikeout' | 'reach' | 'tag_out' | 'force_out', strikeType?: 'swinging' | 'looking', runnerOuts?: string[]) => void;
     addOut: (battedBall?: BattedBallDetails | null) => void;
     hitSingle: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) => void;
     hitDouble: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) => void;
@@ -4308,10 +4336,11 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   const actions = useMemo(
     () => ({
       addBall: () => dispatch({ type: 'ball' }),
-      addStrike: () => dispatch({ type: 'strike' }),
+      addStrike: (strikeType?: 'swinging' | 'looking') => dispatch({ type: 'strike', strikeType }),
       addFoul: (isBunt?: boolean) => dispatch({ type: 'foul', isBunt }),
       strikeOut: (strikeType?: 'swinging' | 'looking') => dispatch({ type: 'strikeOut', strikeType }),
-      droppedThirdStrike: (variant?: 'strikeout' | 'reach' | 'tag_out', strikeType?: 'swinging' | 'looking') => dispatch({ type: 'droppedThirdStrike', variant, strikeType }),
+      droppedThirdStrike: (variant?: 'strikeout' | 'reach' | 'tag_out' | 'force_out', strikeType?: 'swinging' | 'looking', runnerOuts?: string[]) =>
+        dispatch({ type: 'droppedThirdStrike', variant, strikeType, runnerOuts }),
       addOut: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'out', battedBall }),
       hitSingle: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) =>
         dispatch({ type: 'hit', bases: 1, advances, battedBall }),
