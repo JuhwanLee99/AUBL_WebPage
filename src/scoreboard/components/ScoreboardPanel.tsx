@@ -4,6 +4,7 @@ import { TEAMS } from '../../shared/lib/mockData';
 import { useDemoStore, buildGameRecord } from '../../shared/state/demoStore';
 import MatchSelectorBar from './MatchSelectorBar';
 import { GameTimerDisplay } from '../../shared/components/GameTimerDisplay';
+import { useAdmin } from '../../shared/auth/useAdmin';
 
 // 타입 정의
 type BatterLine = {
@@ -273,30 +274,36 @@ type ScoreboardPanelProps = {
 
 export default function ScoreboardPanel({ style, showFootnote = true, showViewerBadge = false }: ScoreboardPanelProps) {
   const { state } = useDemoStore();
+  const { isAdmin } = useAdmin();
   const homeTeam = useMemo(() => TEAMS.find((t) => t.id === state.homeTeamId), [state.homeTeamId]);
   const awayTeam = useMemo(() => TEAMS.find((t) => t.id === state.awayTeamId), [state.awayTeamId]);
   const activeMatch = useMemo(
     () => state.matches.find((match) => match.id === state.activeMatchId),
     [state.matches, state.activeMatchId],
   );
+  const lineupVisible = isAdmin || state.gameStarted || Boolean(activeMatch?.lineupPublic);
   const hittingSide = state.half === 'top' ? 'away' : 'home';
   const defenseSide = hittingSide === 'home' ? 'away' : 'home';
   const offenseLineup = useMemo(
-    () => state.lineups[hittingSide].filter((slot) => slot.pos.toUpperCase() !== 'P'),
-    [hittingSide, state.lineups],
+    () => (lineupVisible ? state.lineups[hittingSide].filter((slot) => slot.pos.toUpperCase() !== 'P') : []),
+    [hittingSide, state.lineups, lineupVisible],
   );
-  const activeOffense = offenseLineup.length ? offenseLineup : state.lineups[hittingSide];
+  const activeOffense = offenseLineup.length ? offenseLineup : lineupVisible ? state.lineups[hittingSide] : [];
   // [수정됨] 현재 타자 이름 가져오기: 이름 + 등번호 조합 사용
   const currentBatterSlot = activeOffense[state.batterIndex[hittingSide] % Math.max(activeOffense.length, 1)];
-  const currentBatter = currentBatterSlot
-    ? getUniqueName(currentBatterSlot.name, currentBatterSlot.number)
-    : '타자';
+  const currentBatter = lineupVisible
+    ? currentBatterSlot
+      ? getUniqueName(currentBatterSlot.name, currentBatterSlot.number)
+      : '타자'
+    : '라인업 공개 전';
 
   // [수정됨] 현재 투수 이름 가져오기: 이름 + 등번호 조합 사용
-  const currentPitcherSlot = state.lineups[defenseSide].find((slot) => slot.pos.toUpperCase() === 'P');
-  const currentPitcher = currentPitcherSlot
-    ? getUniqueName(currentPitcherSlot.name, currentPitcherSlot.number)
-    : '투수';
+  const currentPitcherSlot = lineupVisible ? state.lineups[defenseSide].find((slot) => slot.pos.toUpperCase() === 'P') : null;
+  const currentPitcher = lineupVisible
+    ? currentPitcherSlot
+      ? getUniqueName(currentPitcherSlot.name, currentPitcherSlot.number)
+      : '투수'
+    : '라인업 공개 전';
 
   const inningHalf = state.half === 'top' ? '▲' : '▼';
   const inning = state.inning;

@@ -72,7 +72,7 @@ type Half = 'top' | 'bottom';
 type Bases = (string | null)[];
 
 type Side = 'home' | 'away';
-interface PlayerSlot {
+export interface PlayerSlot {
   name: string;
   pos: string;
   number: string;
@@ -172,6 +172,7 @@ export interface MatchSchedule {
   division?: LeagueDivision; // 으뜸/버금 구분 (관리자 지정)
   homeScore?: number | null;
   awayScore?: number | null;
+  lineupPublic?: boolean;
   lineups?: { home: PlayerSlot[]; away: PlayerSlot[] };
   benches?: { home: PlayerSlot[]; away: PlayerSlot[] };
   notes?: string;
@@ -470,6 +471,66 @@ const ensureCompleteLineups = (lineups: { home: PlayerSlot[]; away: PlayerSlot[]
   home: ensureLineupFilled(lineups.home),
   away: ensureLineupFilled(lineups.away),
 });
+
+const hasActualPlayers = (lineup: PlayerSlot[]) =>
+  lineup.some((slot) => slot.name && slot.name.trim() !== '');
+
+function applyLineupVisibility(
+  data: SharedGameState,
+  match: MatchSchedule | null | undefined,
+  isAdmin: boolean,
+): SharedGameState {
+  if (!match) return data;
+  const lineupVisible =
+    Boolean(match.lineupPublic) ||
+    data.gameStarted === true ||
+    match.status === 'inProgress' ||
+    match.status === 'completed';
+
+  if (!isAdmin && !lineupVisible) {
+    return {
+      ...data,
+      lineups: { home: [], away: [] },
+      benches: { home: [], away: [] },
+    };
+  }
+
+  if (isAdmin && match.lineups) {
+    const dataHasPlayers =
+      hasActualPlayers(data.lineups?.home ?? []) || hasActualPlayers(data.lineups?.away ?? []);
+    const matchHasPlayers =
+      hasActualPlayers(match.lineups.home) || hasActualPlayers(match.lineups.away);
+    if (!dataHasPlayers && matchHasPlayers) {
+      return {
+        ...data,
+        lineups: cloneLineups(match.lineups),
+        benches: match.benches ? cloneBenches(match.benches) : data.benches,
+      };
+    }
+  }
+
+  return data;
+}
+
+function mergeOwnerLineups(
+  data: SharedGameState,
+  matchId: string | null,
+  localState: DemoState,
+): SharedGameState {
+  const currentUid = auth.currentUser?.uid ?? null;
+  if (!currentUid || !matchId) return data;
+  if (data.scorerUid && data.scorerUid !== currentUid) return data;
+
+  const localHasPlayers =
+    hasActualPlayers(localState.lineups.home) || hasActualPlayers(localState.lineups.away);
+  if (!localHasPlayers) return data;
+
+  return {
+    ...data,
+    lineups: cloneLineups(localState.lineups),
+    benches: cloneBenches(localState.benches),
+  };
+}
 
 // 오타니룰 관련 헬퍼 함수
 // 투수가 타석에 들어갈 수 있는지 확인 (오타니룰 적용 투수 또는 DH가 없는 경우)
@@ -902,6 +963,7 @@ function normalizeMatches(matches: unknown): MatchSchedule[] {
       division: deriveMatchDivision(match.division, match.homeTeamId, match.awayTeamId),
       homeScore: typeof match.homeScore === 'number' ? match.homeScore : null,
       awayScore: typeof match.awayScore === 'number' ? match.awayScore : null,
+      lineupPublic: typeof match.lineupPublic === 'boolean' ? match.lineupPublic : false,
       lineups: normalizeLineups(match.lineups),
       benches: normalizeBenches(match.benches),
       notes: typeof match.notes === 'string' ? match.notes : undefined,
@@ -915,6 +977,7 @@ function normalizeMatches(matches: unknown): MatchSchedule[] {
 }
 
 function projectSpectatorMatch(match: MatchSchedule): MatchSchedule {
+  const lineupVisible = Boolean(match.lineupPublic) || match.status === 'inProgress' || match.status === 'completed';
   return {
     id: match.id,
     homeTeamId: match.homeTeamId,
@@ -930,6 +993,9 @@ function projectSpectatorMatch(match: MatchSchedule): MatchSchedule {
     division: match.division,
     homeScore: match.homeScore,
     awayScore: match.awayScore,
+    lineupPublic: Boolean(match.lineupPublic),
+    lineups: lineupVisible ? match.lineups : undefined,
+    benches: lineupVisible ? match.benches : undefined,
     deleted: match.deleted,
     deletedAt: match.deletedAt,
     purgeAt: match.purgeAt,
@@ -1564,7 +1630,7 @@ function reducer(state: DemoState, action: Action): DemoState {
       const feed = pushFeed([], createLogEntryForBaserunning(state, broadcast, 0));
       
       const matches = state.activeMatchId
-        ? updateMatchSchedule(state.matches, state.activeMatchId, { status: 'inProgress' })
+        ? updateMatchSchedule(state.matches, state.activeMatchId, { status: 'inProgress', lineupPublic: true })
         : state.matches;
       nextState = {
         ...state,
@@ -3870,14 +3936,14 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   // Determine admin (for schedule write privileges & full subscription)
   useEffect(() => {
     let cancelled = false;
-    const run = async () => {
-      const user = auth.currentUser;
+    const unsubscribe = onIdTokenChanged(auth, async (user) => {
+      if (cancelled) return;
       if (!user) {
         setIsAdmin(false);
         return;
       }
       try {
-        const token = await getIdTokenResult(user, true);
+        const token = await getIdTokenResult(user);
         if (cancelled) return;
         const admin = Boolean((token.claims as Record<string, unknown>).admin) || ADMIN_EMAILS.includes(user.email?.toLowerCase() ?? '');
         setIsAdmin(admin);
@@ -3885,10 +3951,10 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
         setIsAdmin(ADMIN_EMAILS.includes(user.email?.toLowerCase() ?? ''));
       }
-    };
-    void run();
+    });
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, []);
 
@@ -3967,6 +4033,21 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     return () => unsub();
   }, [isAdmin]);
 
+  // Admin: if active match lineups exist in schedule but local game state is empty, resync once.
+  useEffect(() => {
+    if (!isAdmin) return;
+    const matchId = state.activeMatchId;
+    if (!matchId) return;
+    if (state.gameStarted || state.gameOver) return;
+    const match = state.matches.find((m) => m.id === matchId);
+    if (!match?.lineups) return;
+    const matchHasPlayers = hasActualPlayers(match.lineups.home) || hasActualPlayers(match.lineups.away);
+    const stateHasPlayers = hasActualPlayers(state.lineups.home) || hasActualPlayers(state.lineups.away);
+    if (!matchHasPlayers || stateHasPlayers) return;
+    skipFirestoreWriteRef.current = true;
+    dispatch({ type: 'selectMatch', matchId, followCurrent: state.followCurrent });
+  }, [isAdmin, state.activeMatchId, state.gameStarted, state.gameOver, state.matches, state.lineups, state.followCurrent]);
+
   // Listen to current active match pointer so spectators know which match to watch.
   useEffect(() => {
     const currentRef = doc(firestore, 'app', 'current');
@@ -3992,12 +4073,26 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     const matchId = state.activeMatchId;
     if (!matchId) return;
     const stateDoc = doc(firestore, 'matchStates', matchId);
+    const sanitizeSpectatorState = (data: SharedGameState): SharedGameState => {
+      const active = stateRef.current.matches.find((m) => m.id === matchId);
+      return applyLineupVisibility(data, active, isAdmin);
+    };
+    const shouldSkipSnapshotForScorer = () => {
+      const currentUid = auth.currentUser?.uid ?? null;
+      if (!currentUid) return false;
+      const isScorer = stateRef.current.scorerUid === currentUid;
+      if (!isScorer) return false;
+      return hasActualPlayers(stateRef.current.lineups.home) || hasActualPlayers(stateRef.current.lineups.away);
+    };
 
     // 1) Fetch the latest state once immediately so spectators see current data without waiting for the next update.
     void getDoc(stateDoc)
       .then((snap) => {
         if (!snap.exists()) return;
-        const data = snap.data() as SharedGameState;
+        if (shouldSkipSnapshotForScorer()) return;
+        const raw = snap.data() as SharedGameState;
+        const merged = mergeOwnerLineups(raw, matchId, stateRef.current);
+        const data = sanitizeSpectatorState(merged);
         skipFirestoreWriteRef.current = true;
         dispatch({
           type: 'hydrate',
@@ -4017,7 +4112,10 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       stateDoc,
       (snap) => {
         if (!snap.exists()) return;
-        const data = snap.data() as SharedGameState;
+        if (shouldSkipSnapshotForScorer()) return;
+        const raw = snap.data() as SharedGameState;
+        const merged = mergeOwnerLineups(raw, matchId, stateRef.current);
+        const data = sanitizeSpectatorState(merged);
         skipFirestoreWriteRef.current = true;
         dispatch({
           type: 'hydrate',
@@ -4033,7 +4131,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       },
     );
     return () => unsub();
-  }, [state.activeMatchId]);
+  }, [state.activeMatchId, isAdmin]);
 
   // Subscribe to feed/events subcollections (최근 N개만).
   useEffect(() => {
@@ -4326,6 +4424,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
 
   // Push game state to Firestore when admin updates locally.
   useEffect(() => {
+    if (!isAdmin) return;
     const matchId = state.activeMatchId;
     const currentUid = auth.currentUser?.uid ?? null;
     if (!matchId || !currentUid) return;
@@ -4421,7 +4520,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         writeTimerRef.current = null;
       }
     };
-  }, [state]);
+  }, [state, isAdmin]);
 
   // Sync schedule changes to Firestore (admin routes only; spectators skip via flag/auth).
   useEffect(() => {
@@ -4447,6 +4546,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         deleted: m.deleted ?? false,
         deletedAt: m.deletedAt ?? null,
         purgeAt: m.purgeAt ?? null,
+        lineupPublic: m.lineupPublic ?? false,
         lineups: m.lineups ?? null,
         benches: m.benches ?? null,
         postGame: m.postGame ?? null,
@@ -4607,7 +4707,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         dispatch({ type: 'startGame' });
         const matchId = stateRef.current.activeMatchId;
         if (matchId) {
-          void pushMatchUpdate(matchId, { status: 'inProgress' }).catch(() => {});
+          void pushMatchUpdate(matchId, { status: 'inProgress', lineupPublic: true }).catch(() => {});
         }
       },
      // [수정] endGame 액션에서 상세 스탯을 계산하여 저장하도록 수정
@@ -4785,6 +4885,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       ) => {
         matchesReadyRef.current = true;
         dispatch({ type: 'saveMatchLineups', matchId, lineups, benches });
+        void pushMatchUpdate(matchId, { lineups: cloneLineups(lineups), benches: cloneBenches(benches) }).catch(() => {});
       },
       selectMatch: (matchId: string | null) => {
         const followCurrent = isAdmin;
@@ -4800,12 +4901,15 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
             const snap = await getDoc(stateDoc);
             if (snap.exists()) {
               const data = snap.data() as SharedGameState & { feed?: PlayLog[]; events?: PlayEvent[] };
+              const mergedOwner = mergeOwnerLineups(data, matchIdLocal, stateRef.current);
+              const active = stateRef.current.matches.find((m) => m.id === matchIdLocal);
+              const sanitized = applyLineupVisibility(mergedOwner, active, isAdmin);
               skipFirestoreWriteRef.current = true;
               dispatch({
                 type: 'hydrate',
                 state: normalizeState(initialState, {
                   ...stateRef.current,
-                  ...data,
+                  ...sanitized,
                   matches: stateRef.current.matches,
                 }),
               });

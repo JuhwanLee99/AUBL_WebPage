@@ -8,6 +8,7 @@ import RemovedPlayersPanel from '../../shared/components/RemovedPlayersPanel';
 import { GameTimerDisplay } from '../../shared/components/GameTimerDisplay';
 import type { BatterStatLine, PitcherStatLine } from '../../shared/types/scoreStats';
 import type { MatchSchedule } from '../../shared/state/demoStore';
+import { useAdmin } from '../../shared/auth/useAdmin';
 import './ScoreboardTextPage.css';
 
 type Half = 'top' | 'bottom';
@@ -106,6 +107,7 @@ function resolveJersey(jerseyMap: JerseyMap, side: 'home' | 'away', name: string
 
 export default function ScoreboardTextPage() {
   const { state, actions } = useDemoStore();
+  const { isAdmin } = useAdmin();
   const { matchId } = useParams<{ matchId?: string }>();
   const [showReplay, setShowReplay] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -140,6 +142,7 @@ export default function ScoreboardTextPage() {
     () => state.matches.find((m) => m.id === state.activeMatchId) ?? null,
     [state.matches, state.activeMatchId],
   );
+  const lineupVisible = isAdmin || state.gameStarted || Boolean(activeMatch?.lineupPublic);
   const hasLiveOverlay = useMemo(() => Boolean((activeMatch?.liveVideoUrl || '').trim()), [activeMatch?.liveVideoUrl]);
   const noActiveMatch = !state.activeMatchId;
   const feed = useMemo(() => state.feed, [state.feed]);
@@ -148,27 +151,36 @@ export default function ScoreboardTextPage() {
   const defenseSide = hittingSide === 'home' ? 'away' : 'home';
   
   const defenseAssignments = useMemo(
-    () => getDefenseAssignments(state.lineups[defenseSide] ?? []),
-    [defenseSide, state.lineups],
+    () =>
+      lineupVisible
+        ? getDefenseAssignments(state.lineups[defenseSide] ?? [])
+        : [{ name: '라인업 공개 전', pos: 'P', x: 50, y: 50 }],
+    [defenseSide, state.lineups, lineupVisible],
   );
 
   // [수정] 타자 라인업 계산 시 오타니 룰 등을 고려하여 ScorekeeperPage와 유사하게 처리
   // 다만 텍스트 페이지에서는 단순 표시용이므로 기본 로직 유지하되 이름은 고유하게 처리
-  const offenseLineup = state.lineups[hittingSide];
+  const offenseLineup = lineupVisible ? state.lineups[hittingSide] : [];
   // 1~9번 타순은 무조건 포함, 그 외는 투수가 아니거나 타격 가능할 때 (여기선 단순화하여 전체 표시)
   const activeOffense = offenseLineup; 
   
   const currentBatterEntry = activeOffense[state.batterIndex[hittingSide] % (activeOffense.length || 1)];
   // [수정] currentBatter를 고유 이름으로 생성
-  const currentBatter = currentBatterEntry
-    ? getUniqueName(currentBatterEntry.name, currentBatterEntry.number)
-    : '타자';
+  const currentBatter = lineupVisible
+    ? currentBatterEntry
+      ? getUniqueName(currentBatterEntry.name, currentBatterEntry.number)
+      : '타자'
+    : '라인업 공개 전';
 
-  const currentPitcherEntry = state.lineups[defenseSide].find((slot) => slot.pos.toUpperCase() === 'P');
+  const currentPitcherEntry = lineupVisible
+    ? state.lineups[defenseSide].find((slot) => slot.pos.toUpperCase() === 'P')
+    : null;
   // [수정] currentPitcher를 고유 이름으로 생성
-  const currentPitcher = currentPitcherEntry
-    ? getUniqueName(currentPitcherEntry.name, currentPitcherEntry.number)
-    : '투수';
+  const currentPitcher = lineupVisible
+    ? currentPitcherEntry
+      ? getUniqueName(currentPitcherEntry.name, currentPitcherEntry.number)
+      : '투수'
+    : '라인업 공개 전';
 
   const currentInning = state.inning;
 

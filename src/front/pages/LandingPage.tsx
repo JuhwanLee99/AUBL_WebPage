@@ -7,6 +7,7 @@ import type { MatchSchedule } from '../../shared/state/demoStore';
 import { collection, onSnapshot, query, where, doc, getDoc } from 'firebase/firestore';
 import { firestore } from '../../shared/firebase/client';
 import { useContent } from '../../shared/state/contentProvider';
+import { useAdmin } from '../../shared/auth/useAdmin';
 
 const formatLiveTime = (value: string) => {
   const date = new Date(value);
@@ -63,7 +64,8 @@ const normalizeBases = (value: unknown): (string | null)[] | undefined => {
   return trimmed as (string | null)[];
 };
 
-const currentBatterName = (state: ReturnType<typeof useDemoStore>['state']) => {
+const currentBatterName = (state: ReturnType<typeof useDemoStore>['state'], lineupVisible: boolean) => {
+  if (!lineupVisible) return '라인업 공개 전';
   const side = state.half === 'top' ? 'away' : 'home';
   const lineup = state.lineups[side];
   const battingLineup = lineup.filter((slot) => slot.pos.toUpperCase() !== 'P');
@@ -74,7 +76,8 @@ const currentBatterName = (state: ReturnType<typeof useDemoStore>['state']) => {
   return batter?.name || '타자 대기 중';
 };
 
-const currentPitcherName = (state: ReturnType<typeof useDemoStore>['state']) => {
+const currentPitcherName = (state: ReturnType<typeof useDemoStore>['state'], lineupVisible: boolean) => {
+  if (!lineupVisible) return '라인업 공개 전';
   const defenseSide = state.half === 'top' ? 'home' : 'away';
   const pitcher = state.lineups[defenseSide].find((slot) => slot.pos.toUpperCase() === 'P');
   return pitcher?.name || '투수 대기 중';
@@ -185,6 +188,7 @@ function MiniBases({ bases }: { bases?: (string | null | undefined)[] }) {
 
 export default function LandingPage() {
   const { state, actions } = useDemoStore();
+  const { isAdmin } = useAdmin();
   const { content } = useContent();
   const landing = content.landing;
   const navigate = useNavigate();
@@ -194,6 +198,11 @@ export default function LandingPage() {
   const [liveMatchesRealtime, setLiveMatchesRealtime] = useState<MatchSchedule[]>([]);
   const [liveScores, setLiveScores] = useState<Record<string, LiveSnapshot>>({});
   const [nowTs, setNowTs] = useState<number>(() => Date.now());
+  const activeMatch = useMemo(
+    () => state.matches.find((match) => match.id === state.activeMatchId) ?? null,
+    [state.matches, state.activeMatchId],
+  );
+  const lineupVisible = isAdmin || state.gameStarted || Boolean(activeMatch?.lineupPublic);
 
   // 1. 오늘 경기 계산
   const todaysScheduled = useMemo(() => {
@@ -728,8 +737,8 @@ export default function LandingPage() {
                     : snapshot?.inning
                       ? `${snapshot.inning}회${snapshot.half === 'top' ? '초' : '말'}`
                       : '이닝 정보 없음';
-                  const batter = isActive ? currentBatterName(state) : '실시간 선택 시 표시';
-                  const pitcher = isActive ? currentPitcherName(state) : '투수 정보 없음';
+                  const batter = isActive ? currentBatterName(state, lineupVisible) : '실시간 선택 시 표시';
+                  const pitcher = isActive ? currentPitcherName(state, lineupVisible) : '투수 정보 없음';
                   const bDots = countDots(balls ?? 0, 3, '#22c55e');
                   const sDots = countDots(strikes ?? 0, 2, '#facc15');
                   const oDots = countDots(outs ?? 0, 3, '#ef4444');
