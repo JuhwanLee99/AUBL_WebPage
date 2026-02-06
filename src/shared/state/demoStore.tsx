@@ -41,8 +41,9 @@ const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
   .split(',')
   .map((email: string) => email.trim().toLowerCase())
   .filter(Boolean);
-const FEED_LIMIT = 500; // 관중 뷰 기본 구독 크기 (이전 이닝 확인 가능하도록 확장)
-const SCORER_FEED_LIMIT = 1000; // 기록원 재접속 시 충분한 버퍼
+const FEED_LIMIT = 50; // 관중 뷰 기본 구독 크기 (최신 50개)
+const SCORER_FEED_LIMIT = 200; // 기록원 재접속 시 충분한 버퍼
+const SPECTATOR_EXPANDED_FEED_LIMIT = 1000; // 더보기 클릭 시 확장 구독 크기
 const WRITE_DEBOUNCE_MS = 1_000; // 기록원 상태 동기화 디바운스 (쓰기 폭주 방지)
 const SCORER_LOCK_TTL_MS = 300_000; // 5분 후 락 만료 (이닝 교대 대비 여유)
 const SCORER_LOCK_HEARTBEAT_MS = 60_000; // 60초마다 하트비트 갱신
@@ -3681,6 +3682,7 @@ interface DemoStoreValue {
     resetCount: () => void;
     clearBases: () => void;
     nextHalf: () => void;
+    loadMoreFeed: () => void;
     runnerStealSuccess: (base: 0 | 1 | 2) => void;
     runnerCaught: (base: 0 | 1 | 2) => void;
     runnerPickoff: (base: 0 | 1 | 2) => void;
@@ -3748,10 +3750,22 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   const presenceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const visitorIdRef = useRef<string | null>(null);
   const STORAGE_KEY = 'aubl-demo-state';
+  const [spectatorFeedLimit, setSpectatorFeedLimit] = useState(FEED_LIMIT);
+  const spectatorFeedLimitRef = useRef(FEED_LIMIT);
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useEffect(() => {
+    spectatorFeedLimitRef.current = spectatorFeedLimit;
+  }, [spectatorFeedLimit]);
+
+  useEffect(() => {
+    if (!state.activeMatchId) return;
+    setSpectatorFeedLimit(FEED_LIMIT);
+    spectatorFeedLimitRef.current = FEED_LIMIT;
+  }, [state.activeMatchId]);
 
   // [수정 1] 상태 변경 시 로컬 스토리지에 저장하던 로직을 주석 처리 또는 삭제
   /*
@@ -4030,7 +4044,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     // 기록원이면 구독하지 않음 (로컬 상태가 Firestore 구독으로 덮어써지는 것을 방지)
     if (isScorer) return;
 
-    const maxEntries = FEED_LIMIT;
+    const maxEntries = isScorer ? SCORER_FEED_LIMIT : spectatorFeedLimit;
 
     const feedQuery = query(
       collection(firestore, 'matchStates', matchId, 'feed'),
@@ -4105,7 +4119,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       unsubFeed();
       unsubEvents();
     };
-  }, [state.activeMatchId, state.scorerUid]);
+  }, [state.activeMatchId, state.scorerUid, spectatorFeedLimit]);
 
   // Attempt to acquire scorer lock for the active match.
   useEffect(() => {
@@ -4531,6 +4545,12 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       resetCount: () => dispatch({ type: 'resetCount' }),
       clearBases: () => dispatch({ type: 'clearBases' }),
       nextHalf: () => dispatch({ type: 'nextHalf' }),
+      loadMoreFeed: () => {
+        const current = spectatorFeedLimitRef.current;
+        const next = current >= SPECTATOR_EXPANDED_FEED_LIMIT ? current : SPECTATOR_EXPANDED_FEED_LIMIT;
+        spectatorFeedLimitRef.current = next;
+        setSpectatorFeedLimit(next);
+      },
       advanceRunners: (selections: RunnerAdvanceSelections, message: string, preserveLastPlay?: boolean) =>
         dispatch({ type: 'advanceRunners', selections, message, preserveLastPlay }),
       runnerStealSuccess: (base: 0 | 1 | 2) => dispatch({ type: 'runnerStealSuccess', base }),
@@ -4792,7 +4812,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
             }
             // Prime feed/events subcollections
             const isScorer = stateRef.current.scorerUid && stateRef.current.scorerUid === (auth.currentUser?.uid ?? null);
-            const maxEntries = isScorer ? SCORER_FEED_LIMIT : FEED_LIMIT;
+            const maxEntries = isScorer ? SCORER_FEED_LIMIT : spectatorFeedLimitRef.current;
             const fallback = { inning: stateRef.current.inning, half: stateRef.current.half as Half };
             const [feedSnap, eventsSnap] = await Promise.all([
               getDocs(

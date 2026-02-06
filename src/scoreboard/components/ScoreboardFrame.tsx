@@ -5,6 +5,7 @@ type ScoreboardFrameProps = {
   variant?: 'page' | 'text';
   panelStyle?: CSSProperties;
   showFootnote?: boolean;
+  showViewerBadge?: boolean;
 };
 
 const variantStyles: Record<NonNullable<ScoreboardFrameProps['variant']>, CSSProperties> = {
@@ -27,10 +28,11 @@ export default function ScoreboardFrame({
   variant = 'page',
   panelStyle,
   showFootnote = true,
+  showViewerBadge = false,
 }: ScoreboardFrameProps) {
   return (
     <div style={variantStyles[variant]}>
-      <ScoreboardPanel style={panelStyle} showFootnote={showFootnote} />
+      <ScoreboardPanel style={panelStyle} showFootnote={showFootnote} showViewerBadge={showViewerBadge} />
     </div>
   );
 }

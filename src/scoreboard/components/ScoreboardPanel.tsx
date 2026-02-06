@@ -265,13 +265,13 @@ const countLights = (filled: number, total: number, color: string) =>
     color,
   }));
 
-export default function ScoreboardPanel({
-  style,
-  showFootnote = true,
-}: {
+type ScoreboardPanelProps = {
   style?: CSSProperties;
   showFootnote?: boolean;
-}) {
+  showViewerBadge?: boolean;
+};
+
+export default function ScoreboardPanel({ style, showFootnote = true, showViewerBadge = false }: ScoreboardPanelProps) {
   const { state } = useDemoStore();
   const homeTeam = useMemo(() => TEAMS.find((t) => t.id === state.homeTeamId), [state.homeTeamId]);
   const awayTeam = useMemo(() => TEAMS.find((t) => t.id === state.awayTeamId), [state.awayTeamId]);
@@ -381,7 +381,12 @@ export default function ScoreboardPanel({
       }}
     >
       <div style={{ display: 'grid', gap: 'clamp(8px, 1.3vw, 12px)' }}>
-        <MatchSelectorBar summaryTime={summaryTime} summaryVenue={summaryVenue} />
+        <MatchSelectorBar
+          summaryTime={summaryTime}
+          summaryVenue={summaryVenue}
+          showViewerBadge={showViewerBadge}
+          viewerCount={state.onlineViewerCount}
+        />
 
         <GameTimerDisplay
           gameLimitMinutes={state.gameLimitMinutes}

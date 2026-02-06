@@ -5,9 +5,11 @@ import { useDemoStore } from '../../shared/state/demoStore';
 type Props = {
   summaryTime: string;
   summaryVenue: string;
+  showViewerBadge?: boolean;
+  viewerCount?: number;
 };
 
-export default function MatchSelectorBar({ summaryTime, summaryVenue }: Props) {
+export default function MatchSelectorBar({ summaryTime, summaryVenue, showViewerBadge = false, viewerCount = 0 }: Props) {
   const { state, actions } = useDemoStore();
   const [searchParams] = useSearchParams();
   const filterParam = searchParams.get('filter');
@@ -69,6 +71,26 @@ export default function MatchSelectorBar({ summaryTime, summaryVenue }: Props) {
             </option>
           ))}
         </select>
+        {showViewerBadge ? (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 10px',
+              background: 'rgba(34, 197, 94, 0.08)',
+              borderRadius: '999px',
+              border: '1px solid rgba(34,197,94,0.25)',
+              color: '#22c55e',
+              fontWeight: 700,
+              fontSize: '12px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span style={{ fontSize: '12px' }}>👥</span>
+            현재 {viewerCount}명 시청 중
+          </span>
+        ) : null}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         {isPracticeMode ? (
