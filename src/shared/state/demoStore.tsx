@@ -4755,7 +4755,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
           }
 
           if (needsEventAdd) {
-            const newEntries = stateRef.current.events.slice(-newEventCount);
+            const newEntries = stateRef.current.events.slice(0, newEventCount);
             newEntries.forEach((entry, idx) => {
               const createdAt =
                 typeof entry.createdAt === 'number' && Number.isFinite(entry.createdAt)
