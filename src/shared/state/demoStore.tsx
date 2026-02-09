@@ -2572,6 +2572,7 @@ function applyWalk(state: DemoState, message: string, pitchNumber: number): Demo
       type: message === '몸에 맞는 공' ? 'hbp' : 'walk',
       runners: getRunnerNames(state.bases),
       notes: `${message} · ${batterName}`,
+      rbi: runs > 0 ? runs : undefined,
     },
     pitchNumber,
   );
@@ -3897,6 +3898,7 @@ interface DemoStoreValue {
     loadFullSchedule: () => Promise<void>;
     releaseLock: () => void;
     resumeLock: () => void;
+    setScorerMode: (enabled: boolean) => void;
     setGameLimit: (minutes: number | null) => void;
     pauseGameTimer: () => void;
     resumeGameTimer: () => void;
@@ -3919,6 +3921,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   const notifiedMatchStartRef = useRef<Set<string>>(new Set());
   const matchesReadyRef = useRef(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [scorerMode, setScorerMode] = useState(false);
   const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const presenceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const visitorIdRef = useRef<string | null>(null);
@@ -4187,6 +4190,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       return applyLineupVisibility(data, active, isAdmin);
     };
     const shouldSkipSnapshotForScorer = () => {
+      if (!scorerMode) return false;
       const currentUid = auth.currentUser?.uid ?? null;
       if (!currentUid) return false;
       const isScorer = stateRef.current.scorerUid === currentUid;
@@ -4240,7 +4244,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       },
     );
     return () => unsub();
-  }, [state.activeMatchId, isAdmin]);
+  }, [state.activeMatchId, isAdmin, scorerMode]);
 
   // Subscribe to feed/events subcollections (최근 N개만).
   useEffect(() => {
@@ -4249,9 +4253,9 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
 
     const isScorer = stateRef.current.scorerUid && stateRef.current.scorerUid === (auth.currentUser?.uid ?? null);
     // 기록원이면 구독하지 않음 (로컬 상태가 Firestore 구독으로 덮어써지는 것을 방지)
-    if (isScorer) return;
+    if (isScorer && scorerMode) return;
 
-    const maxEntries = isScorer ? SCORER_FEED_LIMIT : spectatorFeedLimit;
+    const maxEntries = isScorer && scorerMode ? SCORER_FEED_LIMIT : spectatorFeedLimit;
 
     const feedQuery = query(
       collection(firestore, 'matchStates', matchId, 'feed'),
@@ -4326,10 +4330,11 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       unsubFeed();
       unsubEvents();
     };
-  }, [state.activeMatchId, state.scorerUid, spectatorFeedLimit]);
+  }, [state.activeMatchId, state.scorerUid, spectatorFeedLimit, scorerMode]);
 
   // Attempt to acquire scorer lock for the active match.
   useEffect(() => {
+    if (!scorerMode) return;
     const matchId = state.activeMatchId;
     const user = auth.currentUser;
     if (!matchId || !user) return;
@@ -4378,10 +4383,11 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     void run().catch(() => {
       // ignore lock acquisition errors
     });
-  }, [state.activeMatchId]);
+  }, [state.activeMatchId, scorerMode]);
 
   // Heartbeat to keep scorer lock fresh; expires automatically when stopped.
   useEffect(() => {
+    if (!scorerMode) return;
     const matchId = state.activeMatchId;
     const user = auth.currentUser;
     const isOwner = matchId && user && state.scorerUid === user.uid;
@@ -4410,7 +4416,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
       heartbeatTimerRef.current = null;
     };
-  }, [state.activeMatchId, state.scorerUid, state.scorerLockedAt]);
+  }, [state.activeMatchId, state.scorerUid, state.scorerLockedAt, scorerMode]);
 
   // 동접자 집계: onSnapshot fan-out 대신 count 쿼리 폴링 사용
   useEffect(() => {
@@ -4533,6 +4539,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
 
   // Push game state to Firestore when admin updates locally.
   useEffect(() => {
+    if (!scorerMode) return;
     if (!isAdmin) return;
     const matchId = state.activeMatchId;
     const currentUid = auth.currentUser?.uid ?? null;
@@ -4629,7 +4636,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         writeTimerRef.current = null;
       }
     };
-  }, [state, isAdmin]);
+  }, [state, isAdmin, scorerMode]);
 
   // Sync schedule changes to Firestore (admin routes only; spectators skip via flag/auth).
   useEffect(() => {
@@ -5176,6 +5183,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
           },
         });
       },
+      setScorerMode: (enabled: boolean) => setScorerMode(enabled),
       setGameLimit: (minutes: number | null) => dispatch({ type: 'setGameLimit', minutes }),
       pauseGameTimer: () => dispatch({ type: 'pauseGameTimer' }),
       resumeGameTimer: () => dispatch({ type: 'resumeGameTimer' }),
