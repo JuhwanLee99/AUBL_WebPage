@@ -112,6 +112,7 @@ export default function ScoreboardTextPage() {
   const [showReplay, setShowReplay] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [feedExpanded, setFeedExpanded] = useState(false);
+  const replayLoadRef = useRef(false);
   const navigate = useNavigate(); // [수정] 훅 초기화
 
   // URL에서 matchId가 있으면 해당 경기 자동 선택
@@ -127,7 +128,20 @@ export default function ScoreboardTextPage() {
 
   useEffect(() => {
     setFeedExpanded(false);
+    setShowReplay(false);
+    replayLoadRef.current = false;
   }, [state.activeMatchId]);
+
+  useEffect(() => {
+    if (!state.gameOver) {
+      replayLoadRef.current = false;
+      return;
+    }
+    if (!showReplay) return;
+    if (replayLoadRef.current) return;
+    replayLoadRef.current = true;
+    actions.loadMoreFeed();
+  }, [actions, showReplay, state.gameOver]);
 
   useEffect(() => {
     const checkMobile = () => {
