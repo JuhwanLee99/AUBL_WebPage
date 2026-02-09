@@ -137,6 +137,10 @@ export const router = createBrowserRouter([
         element: <ScoreboardPage />,
       },
       {
+        path: 'scoreboard/:matchId',
+        element: <ScoreboardPage />,
+      },
+      {
         path: 'scoreboard-text',
         element: <ScoreboardTextPage />,
       },
@@ -149,7 +153,19 @@ export const router = createBrowserRouter([
         element: <ScoreboardLiveOverlayPage />,
       },
       {
+        path: 'live-overlay/:matchId',
+        element: <ScoreboardLiveOverlayPage />,
+      },
+      {
         path: 'scorekeeper',
+        element: (
+          <RequireAdmin>
+            <ScorekeeperPage />
+          </RequireAdmin>
+        ),
+      },
+      {
+        path: 'scorekeeper/:matchId',
         element: (
           <RequireAdmin>
             <ScorekeeperPage />

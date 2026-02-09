@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
 import { useAdmin } from '../../shared/auth/useAdmin';
 
@@ -47,12 +47,28 @@ export default function ScoreboardLiveOverlayPage() {
   const { state, actions } = useDemoStore();
   const { isAdmin } = useAdmin();
   const navigate = useNavigate();
+  const { matchId } = useParams<{ matchId?: string }>();
   const matches = useMemo(() => state.matches.filter((m) => !m.deleted), [state.matches]);
   const activeMatch = useMemo(
     () => state.matches.find((match) => match.id === state.activeMatchId) ?? null,
     [state.matches, state.activeMatchId],
   );
   const lineupVisible = isAdmin || state.gameStarted || Boolean(activeMatch?.lineupPublic);
+
+  useEffect(() => {
+    if (matchId && matchId !== state.activeMatchId) {
+      const matchExists = state.matches.some((m) => m.id === matchId);
+      if (matchExists) {
+        actions.selectMatch(matchId);
+      }
+    }
+  }, [matchId, state.activeMatchId, state.matches, actions]);
+
+  useEffect(() => {
+    if (!matchId && state.activeMatchId) {
+      navigate(`/live-overlay/${state.activeMatchId}`, { replace: true });
+    }
+  }, [matchId, state.activeMatchId, navigate]);
 
   // 모바일 감지 함수
   const isMobileDevice = () => {
@@ -355,7 +371,15 @@ export default function ScoreboardLiveOverlayPage() {
           >
             <select
               value={state.activeMatchId ?? ''}
-              onChange={(e) => actions.selectMatch(e.target.value || null)}
+              onChange={(e) => {
+                const nextId = e.target.value || null;
+                actions.selectMatch(nextId);
+                if (nextId) {
+                  navigate(`/live-overlay/${nextId}`);
+                } else {
+                  navigate('/live-overlay');
+                }
+              }}
               style={{
                 padding: `${6 * uiScale}px ${8 * uiScale}px`,
                 borderRadius: '8px',
@@ -398,7 +422,9 @@ export default function ScoreboardLiveOverlayPage() {
             </span>
             <button
               type="button"
-              onClick={() => navigate('/scoreboard-text')}
+              onClick={() =>
+                navigate(state.activeMatchId ? `/scoreboard-text/${state.activeMatchId}` : '/scoreboard-text')
+              }
               style={{ ...controlButtonStyle, padding: `${6 * uiScale}px ${10 * uiScale}px`, fontSize: `${11 * uiScale}px` }}
             >
               문자중계
