@@ -1063,6 +1063,10 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
   const benchMetaAway = new Map<string, { pos?: string; order: number; isElite?: boolean }>();
   record.benches.home.forEach((p, idx) => benchMetaHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, isElite: p.isElite }));
   record.benches.away.forEach((p, idx) => benchMetaAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, isElite: p.isElite }));
+  const removedMetaHome = new Map<string, { pos?: string; order: number; isElite?: boolean }>();
+  const removedMetaAway = new Map<string, { pos?: string; order: number; isElite?: boolean }>();
+  record.removed.home.forEach((p, idx) => removedMetaHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 200 + idx, isElite: p.isElite }));
+  record.removed.away.forEach((p, idx) => removedMetaAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 200 + idx, isElite: p.isElite }));
 
   const extraOrder: Record<'home' | 'away', number> = { home: 100, away: 100 };
   const battingOrders: Record<'home' | 'away', Map<number, string[]>> = { home: new Map(), away: new Map() };
@@ -1114,7 +1118,8 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
     const roster = side === 'home' ? rosterHome : rosterAway;
     if (roster.has(name)) return roster.get(name)!;
     const benchMeta = side === 'home' ? benchMetaHome : benchMetaAway;
-    const meta = benchMeta.get(name);
+    const removedMeta = side === 'home' ? removedMetaHome : removedMetaAway;
+    const meta = benchMeta.get(name) ?? removedMeta.get(name);
     const entry = { pos: meta?.pos, order: meta?.order ?? extraOrder[side], isElite: meta?.isElite };
     extraOrder[side] += 1;
     roster.set(name, entry);
@@ -1309,9 +1314,9 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
     return rawName;
   };
 
-  const inferPitcherSide = (name: string): 'home' | 'away' | null => {
-    if (rosterHome.has(name) || benchMetaHome.has(name)) return 'home';
-    if (rosterAway.has(name) || benchMetaAway.has(name)) return 'away';
+  const inferPlayerSide = (name: string): 'home' | 'away' | null => {
+    if (rosterHome.has(name) || benchMetaHome.has(name) || removedMetaHome.has(name)) return 'home';
+    if (rosterAway.has(name) || benchMetaAway.has(name) || removedMetaAway.has(name)) return 'away';
     // 로스터 키 매칭 시도
     for (const key of rosterHome.keys()) if (key.startsWith(name + '(')) return 'home';
     for (const key of rosterAway.keys()) if (key.startsWith(name + '(')) return 'away';
@@ -1345,6 +1350,133 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
     return name;
   };
 
+  const parseSubstitutionLog = (text: string) => {
+    const normalized = text.trim();
+    if (!normalized) return null;
+    if (!/교체|대타|대주자|대수비/.test(normalized)) return null;
+    if (normalized.startsWith('포지션 교체')) return null;
+    if (!normalized.includes('→') || !normalized.includes('·')) return null;
+    const [left, right] = normalized.split('→');
+    if (!right) return null;
+    const outgoingPart = left.split('·').pop();
+    if (!outgoingPart) return null;
+    const outgoing = cleanName(outgoingPart);
+    const incoming = cleanName(right);
+    if (!outgoing || !incoming) return null;
+    let kind: 'defense' | 'pinch_hit' | 'pinch_run' | 'pitcher' | 'batter' | 'unknown' = 'unknown';
+    if (normalized.includes('대수비')) kind = 'defense';
+    else if (normalized.includes('대타')) kind = 'pinch_hit';
+    else if (normalized.includes('대주자')) kind = 'pinch_run';
+    else if (normalized.includes('투수 교체')) kind = 'pitcher';
+    else if (normalized.includes('타자 교체')) kind = 'batter';
+    return { outgoing, incoming, kind };
+  };
+
+  const resolvePlayerName = (raw: string, side?: 'home' | 'away' | null, orderNum?: number | null) => {
+    if (!raw) return raw;
+    if (side) return resolveBatterName(raw, side, orderNum);
+    const resolvedHome = resolveBatterName(raw, 'home', orderNum);
+    if (rosterHome.has(resolvedHome) || benchMetaHome.has(resolvedHome) || removedMetaHome.has(resolvedHome)) return resolvedHome;
+    const resolvedAway = resolveBatterName(raw, 'away', orderNum);
+    return resolvedAway;
+  };
+
+  const firstOffenseIndex: Record<'home' | 'away', number> = {
+    home: Number.POSITIVE_INFINITY,
+    away: Number.POSITIVE_INFINITY,
+  };
+  const firstPlateIndex: Record<'home' | 'away', Map<string, number>> = {
+    home: new Map(),
+    away: new Map(),
+  };
+  const substitutionOutIndex: Record<'home' | 'away', Map<string, number>> = {
+    home: new Map(),
+    away: new Map(),
+  };
+  const substitutionInIndex: Record<'home' | 'away', Map<string, number>> = {
+    home: new Map(),
+    away: new Map(),
+  };
+
+  const findOrderForPlayer = (side: 'home' | 'away', name: string) => {
+    for (const [order, list] of battingOrders[side]) {
+      if (list.includes(name)) return order;
+    }
+    return null;
+  };
+
+  const addToOrderList = (side: 'home' | 'away', order: number, name: string) => {
+    const list = battingOrders[side].get(order) ?? [];
+    if (!list.includes(name)) {
+      list.push(name);
+      battingOrders[side].set(order, list);
+    }
+  };
+
+  chronological.forEach((entry, idx) => {
+    if (entry.batter && entry.order > 0) {
+      const side: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
+      if (idx < firstOffenseIndex[side]) firstOffenseIndex[side] = idx;
+      const resolved = resolveBatterName(entry.batter, side, entry.order);
+      if (!firstPlateIndex[side].has(resolved)) {
+        firstPlateIndex[side].set(resolved, idx);
+      }
+    }
+
+    const substitution = parseSubstitutionLog(entry.result ?? '');
+    if (!substitution) return;
+    const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
+    const defenseSide: 'home' | 'away' = offenseSide === 'home' ? 'away' : 'home';
+    const fallbackSide = substitution.kind === 'defense' || substitution.kind === 'pitcher' ? defenseSide : offenseSide;
+
+    const outgoingResolved = resolvePlayerName(substitution.outgoing, null, entry.order ?? null);
+    const incomingResolved = resolvePlayerName(substitution.incoming, null, entry.order ?? null);
+    const outgoingSide = inferPlayerSide(outgoingResolved) ?? fallbackSide;
+    const incomingSide = inferPlayerSide(incomingResolved) ?? outgoingSide;
+
+    if (!substitutionOutIndex[outgoingSide].has(outgoingResolved)) {
+      substitutionOutIndex[outgoingSide].set(outgoingResolved, idx);
+    }
+    if (!substitutionInIndex[incomingSide].has(incomingResolved)) {
+      substitutionInIndex[incomingSide].set(incomingResolved, idx);
+    }
+
+    const resolvedOrder = findOrderForPlayer(outgoingSide, outgoingResolved)
+      ?? (typeof entry.order === 'number' && entry.order > 0 ? entry.order : null);
+    if (resolvedOrder) {
+      addToOrderList(incomingSide, resolvedOrder, incomingResolved);
+    }
+  });
+
+  const dnpPlayers: Record<'home' | 'away', Set<string>> = {
+    home: new Set(),
+    away: new Set(),
+  };
+  (['home', 'away'] as const).forEach((side) => {
+    const defenseStartIndex = side === 'home' ? firstOffenseIndex.away : firstOffenseIndex.home;
+    substitutionOutIndex[side].forEach((subIdx, name) => {
+      if (substitutionInIndex[side].has(name)) return;
+      const firstPa = firstPlateIndex[side].get(name);
+      const battedBefore = firstPa !== undefined && firstPa < subIdx;
+      const defendedBefore = defenseStartIndex < subIdx;
+      if (!battedBefore && !defendedBefore) {
+        dnpPlayers[side].add(name);
+      }
+    });
+
+    const removedList = record.removed?.[side] ?? [];
+    removedList.forEach((player) => {
+      const name = getUniqueName(player.name, player.number);
+      if (dnpPlayers[side].has(name)) return;
+      if (substitutionInIndex[side].has(name)) return;
+      if (firstPlateIndex[side].has(name)) return;
+      if (substitutionOutIndex[side].has(name)) return;
+      if (Number.isFinite(firstOffenseIndex[side])) {
+        dnpPlayers[side].add(name);
+      }
+    });
+  });
+
   // [수정] 투수 등판 순서 문제 해결을 위해 두 패스로 분리
   // 첫 번째 패스: 투수 관련 로그만 먼저 처리하여 등판 순서 확립
   chronological.forEach((entry) => {
@@ -1357,7 +1489,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
       const incoming = result.split('→')[1];
       if (incoming) {
         let cleaned = cleanName(incoming);
-        const inferred = inferPitcherSide(cleaned) ?? defenseSide;
+        const inferred = inferPlayerSide(cleaned) ?? defenseSide;
         cleaned = resolvePitcherName(cleaned, inferred);
 
         currentPitcher[inferred] = cleaned;
@@ -1367,7 +1499,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
     } else if (result.includes('투수 (선발)') || result.includes('투수 (') && result.includes('차 계투)')) {
       // 자동 생성된 투수 등판 항목: "홍길동(18) 투수 (선발)" 또는 "홍길동(18) 투수 (1차 계투)"
       let cleaned = cleanName(result.split('투수')[0]);
-      const inferred = inferPitcherSide(cleaned) ?? defenseSide;
+      const inferred = inferPlayerSide(cleaned) ?? defenseSide;
       cleaned = resolvePitcherName(cleaned, inferred);
 
       currentPitcher[inferred] = cleaned;
@@ -1394,14 +1526,14 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
       const incoming = result.split('→')[1];
       if (incoming) {
         let cleaned = cleanName(incoming);
-        const inferred = inferPitcherSide(cleaned) ?? defenseSide;
+        const inferred = inferPlayerSide(cleaned) ?? defenseSide;
         cleaned = resolvePitcherName(cleaned, inferred);
         currentPitcher[inferred] = cleaned;
         markPitcher(inferred, cleaned);
       }
     } else if (result.includes('투수 (선발)') || result.includes('투수 (') && result.includes('차 계투)')) {
       let cleaned = cleanName(result.split('투수')[0]);
-      const inferred = inferPitcherSide(cleaned) ?? defenseSide;
+      const inferred = inferPlayerSide(cleaned) ?? defenseSide;
       cleaned = resolvePitcherName(cleaned, inferred);
       currentPitcher[inferred] = cleaned;
       markPitcher(inferred, cleaned);
@@ -1704,6 +1836,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
     orderKeys.forEach((order) => {
       const players = orderMap.get(order) ?? [];
       players.forEach((playerName, idx) => {
+        if (dnpPlayers[side].has(playerName)) return;
         const meta = roster.get(playerName);
         const stat = store.get(playerName);
         const base = ensurePlayerStat(playerName, meta?.pos);
@@ -1735,6 +1868,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
         ![...orderMap.values()].some((list) => list.includes(s.name))
     );
     remaining.forEach((stat) => {
+      if (dnpPlayers[side].has(stat.name)) return;
       const meta = roster.get(stat.name);
       rows.push({ ...stat, order: null, isElite: meta?.isElite });
     });
@@ -1742,6 +1876,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
   };
 
   const toPitcherArray = (
+    side: 'home' | 'away',
     roster: Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자'; isElite?: boolean }>,
     store: Map<string, PitcherStat>,
     appearance: Map<string, number>
@@ -1752,7 +1887,9 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
     });
     store.forEach((_stat, name) => names.add(name));
 
-    const combined: PitcherStatLine[] = [...names].map((name) => {
+    const combined: PitcherStatLine[] = [...names]
+      .filter((name) => !dnpPlayers[side].has(name))
+      .map((name) => {
       const meta = roster.get(name);
       const base = ensurePitcherStat(name, meta?.pos);
       const stat = store.get(name);
@@ -1786,8 +1923,8 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
       away: toArray('away', rosterAway, statsAway),
     },
     pitchers: {
-      home: toPitcherArray(rosterHome, pitchHome, pitcherAppearance.home),
-      away: toPitcherArray(rosterAway, pitchAway, pitcherAppearance.away),
+      home: toPitcherArray('home', rosterHome, pitchHome, pitcherAppearance.home),
+      away: toPitcherArray('away', rosterAway, pitchAway, pitcherAppearance.away),
     },
   };
 }
