@@ -6,6 +6,7 @@ import RulePage from '../front/pages/RulePage';
 import TeamsPage from '../front/pages/TeamsPage';
 import TeamHubPage from '../front/pages/TeamHubPage';
 import TeamDetailPage from '../front/pages/TeamDetailPage';
+import TeamNoticeDetailPage from '../front/pages/TeamNoticeDetailPage';
 import StandingsPage from './pages/StandingPage';
 import PredictionPage from './pages/PredictionPage';
 import RecordPage from './pages/RecordPage';
@@ -72,6 +73,10 @@ export const router = createBrowserRouter([
       {
         path: 'teams/:teamId',
         element: <TeamDetailPage />,
+      },
+      {
+        path: 'teams/:teamId/notices/:noticeId',
+        element: <TeamNoticeDetailPage />,
       },
       {
         path: 'standings',

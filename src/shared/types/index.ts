@@ -102,6 +102,15 @@ export interface TeamNotice {
   pinned?: boolean;
 }
 
+export interface TeamNoticeComment {
+  id: string;
+  noticeId: string;
+  uid: string;
+  author: string;
+  content: string;
+  createdAt: number;
+}
+
 export interface UserProfile {
   uid: string;
   email?: string | null;

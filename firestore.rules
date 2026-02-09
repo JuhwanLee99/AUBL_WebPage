@@ -139,6 +139,14 @@ service cloud.firestore {
       match /notices/{noticeId} {
         allow read: if true;
         allow write: if isAdmin() || isCoachOfTeam(teamId);
+
+        match /comments/{commentId} {
+          allow read: if true;
+          allow create: if request.auth != null;
+          allow update, delete: if request.auth != null && (
+            isAdmin() || isCoachOfTeam(teamId) || request.auth.uid == resource.data.uid
+          );
+        }
       }
     }
 
