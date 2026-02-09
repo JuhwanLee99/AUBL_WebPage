@@ -109,6 +109,9 @@ export interface TeamNoticeComment {
   author: string;
   content: string;
   createdAt: number;
+  parentId?: string | null;
+  likedBy?: string[];
+  likeCount?: number;
 }
 
 export interface UserProfile {

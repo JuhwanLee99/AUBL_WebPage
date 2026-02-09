@@ -80,6 +80,7 @@ export default function TeamDetailPage() {
   const [teamInfoBusy, setTeamInfoBusy] = useState(false);
   const [notices, setNotices] = useState<TeamNotice[]>([]);
   const [noticesLoading, setNoticesLoading] = useState(true);
+  const [noticesAccessDenied, setNoticesAccessDenied] = useState(false);
   const [noticeTitle, setNoticeTitle] = useState('');
   const [noticeContent, setNoticeContent] = useState('');
   const [noticeCategory, setNoticeCategory] = useState<TeamNoticeCategory>('일반');
@@ -172,10 +173,12 @@ export default function TeamDetailPage() {
         const next = snap.docs.map((docSnap) => ({ ...(docSnap.data() as Omit<TeamNotice, 'id'>), id: docSnap.id }));
         setNotices(next);
         setNoticesLoading(false);
+        setNoticesAccessDenied(false);
       },
       () => {
         setNotices([]);
         setNoticesLoading(false);
+        setNoticesAccessDenied(true);
       },
     );
     return () => unsub();
@@ -909,9 +912,13 @@ export default function TeamDetailPage() {
 
         {noticesLoading ? (
           <div style={{ color: '#94a3b8', fontWeight: 700 }}>팀 공지를 불러오는 중...</div>
+        ) : noticesAccessDenied ? (
+          <div style={{ color: '#fca5a5', fontWeight: 700 }}>
+            팀 공지는 해당 팀 선수/감독 또는 관리자만 열람할 수 있습니다.
+          </div>
         ) : sortedNotices.length ? (
           <div style={{ display: 'grid', gap: '10px' }}>
-          {sortedNotices.map((notice) => {
+            {sortedNotices.map((notice) => {
               const category = notice.category ?? '일반';
               const badgeStyle = NOTICE_CATEGORY_STYLE[category];
               return (
