@@ -6,6 +6,7 @@ type ScoreboardFrameProps = {
   panelStyle?: CSSProperties;
   showFootnote?: boolean;
   showViewerBadge?: boolean;
+  hideBases?: boolean;
 };
 
 const variantStyles: Record<NonNullable<ScoreboardFrameProps['variant']>, CSSProperties> = {
@@ -29,10 +30,16 @@ export default function ScoreboardFrame({
   panelStyle,
   showFootnote = true,
   showViewerBadge = false,
+  hideBases = false,
 }: ScoreboardFrameProps) {
   return (
     <div style={variantStyles[variant]}>
-      <ScoreboardPanel style={panelStyle} showFootnote={showFootnote} showViewerBadge={showViewerBadge} />
+      <ScoreboardPanel
+        style={panelStyle}
+        showFootnote={showFootnote}
+        showViewerBadge={showViewerBadge}
+        hideBases={hideBases}
+      />
     </div>
   );
 }
