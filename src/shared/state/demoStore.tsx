@@ -4556,78 +4556,100 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
 
     writeTimerRef.current = setTimeout(() => {
-            const snapshot = snapshotState(stateRef.current);
-            const { matches: _matches, feed: _feed, events: _events, onlineViewerCount: _onlineViewerCount, ...core } = snapshot;
-            const key = JSON.stringify({ matchId, core });
+      const run = async () => {
+        const snapshot = snapshotState(stateRef.current);
+        const { matches: _matches, feed: _feed, events: _events, onlineViewerCount: _onlineViewerCount, ...core } = snapshot;
+        const key = JSON.stringify({ matchId, core });
 
-            if (key !== lastStateKeyRef.current) {
-              lastStateKeyRef.current = key;
+        if (key !== lastStateKeyRef.current) {
+          lastStateKeyRef.current = key;
 
-              const payload = pruneUndefined({
-                ...core,
-                updatedAt: Date.now()
-              });
+          const payload = pruneUndefined({
+            ...core,
+            updatedAt: Date.now(),
+          });
 
-              void setDoc(
-                doc(firestore, 'matchStates', matchId),
-                payload,
-                { merge: true },
-              ).catch((err) => {
-                console.error("Firestore Save Error:", err); // 에러 확인용 로그 추가
-              });
-            }
+          await setDoc(doc(firestore, 'matchStates', matchId), payload, { merge: true });
+        }
 
-      const newFeedCount = stateRef.current.feed.length - lastFeedLengthRef.current;
-      const newEventCount = stateRef.current.events.length - lastEventsLengthRef.current;
+        const newFeedCount = stateRef.current.feed.length - lastFeedLengthRef.current;
+        const newEventCount = stateRef.current.events.length - lastEventsLengthRef.current;
+        const needsFeedDelete = newFeedCount < 0;
+        const needsEventDelete = newEventCount < 0;
+        const needsFeedAdd = newFeedCount > 0;
+        const needsEventAdd = newEventCount > 0;
 
-      if (newFeedCount <= 0 && newEventCount <= 0) {
-        lastFeedLengthRef.current = stateRef.current.feed.length;
-        lastEventsLengthRef.current = stateRef.current.events.length;
-        return;
-      }
-
-      const batch = writeBatch(firestore);
-      const now = Date.now();
-
-      if (newFeedCount > 0) {
-        // 배열 끝에서부터 새로운 항목 가져오기
-        const newEntries = stateRef.current.feed.slice(-newFeedCount);
-        newEntries.forEach((entry, idx) => {
-          const createdAt =
-            typeof entry.createdAt === 'number' && Number.isFinite(entry.createdAt)
-              ? entry.createdAt
-              : now + idx;
-          batch.set(
-            doc(collection(firestore, 'matchStates', matchId, 'feed')),
-            pruneUndefined({ ...entry, createdAt }),
-          );
-        });
-      }
-
-      if (newEventCount > 0) {
-        // 배열 끝에서부터 새로운 항목 가져오기
-        const newEntries = stateRef.current.events.slice(-newEventCount);
-        newEntries.forEach((entry, idx) => {
-          const createdAt =
-            typeof entry.createdAt === 'number' && Number.isFinite(entry.createdAt)
-              ? entry.createdAt
-              : now + idx;
-          batch.set(
-            doc(collection(firestore, 'matchStates', matchId, 'events')),
-            pruneUndefined({ ...entry, createdAt }),
-          );
-        });
-      }
-
-      void batch
-        .commit()
-        .then(() => {
+        if (!needsFeedDelete && !needsEventDelete && !needsFeedAdd && !needsEventAdd) {
           lastFeedLengthRef.current = stateRef.current.feed.length;
           lastEventsLengthRef.current = stateRef.current.events.length;
-        })
-        .catch(() => {
-          // ignore sync errors; will retry on next state change
-        });
+          return;
+        }
+
+        const deleteLatest = async (collectionName: 'feed' | 'events', count: number) => {
+          if (count <= 0) return;
+          const q = query(
+            collection(firestore, 'matchStates', matchId, collectionName),
+            orderBy('createdAt', 'desc'),
+            limit(count),
+          );
+          const snap = await getDocs(q);
+          if (snap.empty) return;
+          const batch = writeBatch(firestore);
+          snap.docs.forEach((docSnap) => {
+            batch.delete(docSnap.ref);
+          });
+          await batch.commit();
+        };
+
+        if (needsFeedDelete) {
+          await deleteLatest('feed', Math.abs(newFeedCount));
+        }
+        if (needsEventDelete) {
+          await deleteLatest('events', Math.abs(newEventCount));
+        }
+
+        if (needsFeedAdd || needsEventAdd) {
+          const batch = writeBatch(firestore);
+          const now = Date.now();
+
+          if (needsFeedAdd) {
+            const newEntries = stateRef.current.feed.slice(-newFeedCount);
+            newEntries.forEach((entry, idx) => {
+              const createdAt =
+                typeof entry.createdAt === 'number' && Number.isFinite(entry.createdAt)
+                  ? entry.createdAt
+                  : now + idx;
+              batch.set(
+                doc(collection(firestore, 'matchStates', matchId, 'feed')),
+                pruneUndefined({ ...entry, createdAt }),
+              );
+            });
+          }
+
+          if (needsEventAdd) {
+            const newEntries = stateRef.current.events.slice(-newEventCount);
+            newEntries.forEach((entry, idx) => {
+              const createdAt =
+                typeof entry.createdAt === 'number' && Number.isFinite(entry.createdAt)
+                  ? entry.createdAt
+                  : now + idx;
+              batch.set(
+                doc(collection(firestore, 'matchStates', matchId, 'events')),
+                pruneUndefined({ ...entry, createdAt }),
+              );
+            });
+          }
+
+          await batch.commit();
+        }
+
+        lastFeedLengthRef.current = stateRef.current.feed.length;
+        lastEventsLengthRef.current = stateRef.current.events.length;
+      };
+
+      void run().catch(() => {
+        // ignore sync errors; will retry on next state change
+      });
     }, WRITE_DEBOUNCE_MS);
 
     return () => {
