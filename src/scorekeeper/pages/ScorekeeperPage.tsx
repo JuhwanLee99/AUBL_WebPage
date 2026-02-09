@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { TEAMS } from '../../shared/lib/mockData';
 import { buildGameRecord, canPitcherBat, useDemoStore } from '../../shared/state/demoStore';
 import type {
@@ -1641,6 +1642,8 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
 
 export default function ScorekeeperPage() {
   const { state, actions } = useDemoStore();
+  const { matchId } = useParams<{ matchId?: string }>();
+  const navigate = useNavigate();
   const [showMobileWarning, setShowMobileWarning] = useState(false); // 모바일 경고 팝업 상태 관리
 
   useEffect(() => {
@@ -1652,9 +1655,32 @@ export default function ScorekeeperPage() {
     [state.matches, state.activeMatchId],
   );
   const isPracticeMode = (activeMatch?.recordMode ?? 'official') === 'practice';
-  const [selectedMatchId, setSelectedMatchId] = useState(state.activeMatchId ?? '');
+  const [selectedMatchId, setSelectedMatchId] = useState(matchId ?? state.activeMatchId ?? '');
   const homeTeam = useMemo(() => TEAMS.find((t) => t.id === state.homeTeamId), [state.homeTeamId]);
   const awayTeam = useMemo(() => TEAMS.find((t) => t.id === state.awayTeamId), [state.awayTeamId]);
+
+  useEffect(() => {
+    if (matchId) {
+      setSelectedMatchId(matchId);
+    } else if (state.activeMatchId) {
+      setSelectedMatchId(state.activeMatchId);
+    }
+  }, [matchId, state.activeMatchId]);
+
+  useEffect(() => {
+    if (matchId && matchId !== state.activeMatchId) {
+      const matchExists = state.matches.some((m) => m.id === matchId);
+      if (matchExists) {
+        actions.selectMatch(matchId);
+      }
+    }
+  }, [matchId, state.activeMatchId, state.matches, actions]);
+
+  useEffect(() => {
+    if (!matchId && state.activeMatchId) {
+      navigate(`/scorekeeper/${state.activeMatchId}`, { replace: true });
+    }
+  }, [matchId, state.activeMatchId, navigate]);
   const hittingSide: Side = state.half === 'top' ? 'away' : 'home';
   const defenseSide: Side = hittingSide === 'home' ? 'away' : 'home';
   const offenseLineupEntries = state.lineups[hittingSide].map((slot, idx) => ({ slot, idx }));
@@ -2552,7 +2578,11 @@ const handleConfirmHitWizard = () => {
             </select>
             <button
               type="button"
-              onClick={() => actions.selectMatch(selectedMatchId || null)}
+              onClick={() => {
+                if (!selectedMatchId) return;
+                actions.selectMatch(selectedMatchId);
+                navigate(`/scorekeeper/${selectedMatchId}`);
+              }}
               style={{
                 padding: '8px 14px',
                 borderRadius: '999px',

@@ -349,7 +349,7 @@ export default function LandingPage() {
 
   const handleOpenMatch = (matchId: string, path: '/scoreboard' | '/scoreboard-text') => {
     actions.selectMatch(matchId);
-    navigate(path);
+    navigate(`${path}/${matchId}`);
   };
 
   useEffect(() => {

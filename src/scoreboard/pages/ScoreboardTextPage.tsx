@@ -127,6 +127,12 @@ export default function ScoreboardTextPage() {
   }, [matchId, state.activeMatchId, state.matches, actions]);
 
   useEffect(() => {
+    if (!matchId && state.activeMatchId) {
+      navigate(`/scoreboard-text/${state.activeMatchId}`, { replace: true });
+    }
+  }, [matchId, state.activeMatchId, navigate]);
+
+  useEffect(() => {
     setFeedExpanded(false);
     setShowReplay(false);
     replayLoadRef.current = false;
@@ -460,7 +466,9 @@ export default function ScoreboardTextPage() {
               {hasLiveOverlay ? (
                 <button
                   type="button"
-                  onClick={() => navigate('/live-overlay')}
+                  onClick={() =>
+                    navigate(state.activeMatchId ? `/live-overlay/${state.activeMatchId}` : '/live-overlay')
+                  }
                   style={{
                     padding: '6px 10px',
                     borderRadius: '10px',

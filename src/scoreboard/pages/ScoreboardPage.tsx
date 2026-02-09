@@ -1,6 +1,28 @@
+import { useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import ScoreboardFrame from '../components/ScoreboardFrame';
+import { useDemoStore } from '../../shared/state/demoStore';
 
 export default function ScoreboardPage() {
+  const { state, actions } = useDemoStore();
+  const { matchId } = useParams<{ matchId?: string }>();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (matchId && matchId !== state.activeMatchId) {
+      const matchExists = state.matches.some((m) => m.id === matchId);
+      if (matchExists) {
+        actions.selectMatch(matchId);
+      }
+    }
+  }, [matchId, state.activeMatchId, state.matches, actions]);
+
+  useEffect(() => {
+    if (!matchId && state.activeMatchId) {
+      navigate(`/scoreboard/${state.activeMatchId}`, { replace: true });
+    }
+  }, [matchId, state.activeMatchId, navigate]);
+
   const MIN_PANEL_HEIGHT_PX = 640;
   const targetHeight = `max(${MIN_PANEL_HEIGHT_PX}px, min(74vh, calc(100vh - 320px)))`;
 
