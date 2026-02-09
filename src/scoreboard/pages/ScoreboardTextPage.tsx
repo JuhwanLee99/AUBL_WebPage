@@ -1537,6 +1537,7 @@ function computePitcherLine(feed: ReturnType<typeof useDemoStore>['state']['feed
   const current: Record<'home' | 'away', string | null> = { home: null, away: null };
   // [중요] ScorekeeperPage와 동일하게 괄호 제거하지 않음
   const cleanName = (raw: string) => raw.replace(/투수/g, '').replace(/·/g, '').trim();
+  const isPitcherLog = (result: string) => result.includes('투수 (') || /투수\s*$/.test(result);
 
   chronological.forEach((entry) => {
     const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
@@ -1547,8 +1548,9 @@ function computePitcherLine(feed: ReturnType<typeof useDemoStore>['state']['feed
     if (result.includes('투수 교체') || (result.includes('대수비') && result.includes('→'))) {
       const incoming = result.split('→')[1];
       if (incoming) current[defenseSide] = cleanName(incoming);
-    } else if (result.endsWith('투수')) {
-      current[defenseSide] = cleanName(result.replace('투수', ''));
+    } else if (isPitcherLog(result)) {
+      const namePart = result.includes('투수 (') ? result.split('투수')[0] : result.replace(/투수\s*$/, '');
+      current[defenseSide] = cleanName(namePart);
     }
 
     // 투수 교체가 명시되지 않은 경우, 현재 투수(pitcher)를 기본값으로 사용
