@@ -59,24 +59,32 @@ const addRunsToLineScore = (
   return next;
 };
 
-const buildLineScoreFromFeed = (feed: PlayLog[]) =>
-  feed.reduce(
-    (acc, entry) => {
-      const runs = extractRuns(entry.result);
-      if (!runs) return acc;
-      const inningIdx = Math.max(0, entry.inning - 1);
-      const side = entry.half === 'top' ? 'away' : 'home';
-      const target = side === 'home' ? acc.home : acc.away;
-      if (target.length <= inningIdx) {
-        for (let i = target.length; i <= inningIdx; i += 1) {
-          target[i] = 0;
-        }
-      }
-      target[inningIdx] = (target[inningIdx] ?? 0) + runs;
-      return acc;
-    },
-    { home: [] as number[], away: [] as number[] },
-  );
+const buildLineScoreFromFeed = (feed: PlayLog[]) => {
+  const groups = new Map<string, PlayLog[]>();
+  feed.forEach((entry, idx) => {
+    const key = entry.eventId ?? `idx-${idx}`;
+    const bucket = groups.get(key);
+    if (bucket) {
+      bucket.push(entry);
+    } else {
+      groups.set(key, [entry]);
+    }
+  });
+
+  let lineScore = { home: [] as number[], away: [] as number[] };
+
+  groups.forEach((entries) => {
+    const batterEntries = entries.filter((entry) => entry.order > 0);
+    const targetEntries = batterEntries.length ? batterEntries : entries;
+    const runs = targetEntries.reduce((sum, entry) => sum + extractRuns(entry.result), 0);
+    if (!runs) return;
+    const ref = batterEntries[0] ?? entries[0];
+    const side = ref.half === 'top' ? 'away' : 'home';
+    lineScore = addRunsToLineScore(lineScore, side, ref.inning, runs);
+  });
+
+  return lineScore;
+};
 
 const TRASH_RETENTION_MS = 1000 * 60 * 60 * 24 * 30; // 30일 보관
 const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
@@ -92,6 +100,12 @@ const SCORER_LOCK_HEARTBEAT_MS = 60_000; // 60초마다 하트비트 갱신
 const PRESENCE_TTL_MS = 300_000; // 5분 후 동접자 만료
 const PRESENCE_HEARTBEAT_MS = 120_000; // 120초마다 동접자 하트비트 갱신
 const PRESENCE_POLL_INTERVAL_MS = 12_000; // 접속자 집계 폴링 주기
+
+const isCompletedMatch = (match?: MatchSchedule | null) =>
+  match?.status === 'completed' || match?.status === 'canceled';
+
+const getSpectatorFeedLimitForMatch = (match?: MatchSchedule | null, gameOver?: boolean) =>
+  isCompletedMatch(match) || gameOver ? SPECTATOR_EXPANDED_FEED_LIMIT : FEED_LIMIT;
 
 // Firestore는 undefined를 허용하지 않으므로 중첩 객체/배열에서 undefined를 제거한다.
 function pruneUndefined<T>(value: T): T {
@@ -3971,9 +3985,12 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!state.activeMatchId) return;
-    setSpectatorFeedLimit(FEED_LIMIT);
-    spectatorFeedLimitRef.current = FEED_LIMIT;
-  }, [state.activeMatchId]);
+    const activeMatch = state.matches.find((match) => match.id === state.activeMatchId);
+    const nextLimit = getSpectatorFeedLimitForMatch(activeMatch, state.gameOver);
+    if (spectatorFeedLimitRef.current === nextLimit) return;
+    setSpectatorFeedLimit(nextLimit);
+    spectatorFeedLimitRef.current = nextLimit;
+  }, [state.activeMatchId, state.matches, state.gameOver]);
 
   // [수정 1] 상태 변경 시 로컬 스토리지에 저장하던 로직을 주석 처리 또는 삭제
   /*
@@ -4287,18 +4304,30 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     // 기록원이면 구독하지 않음 (로컬 상태가 Firestore 구독으로 덮어써지는 것을 방지)
     if (isScorer && scorerMode) return;
 
+    const activeMatch = stateRef.current.matches.find((m) => m.id === matchId);
+    const completed = isCompletedMatch(activeMatch) || stateRef.current.gameOver;
     const maxEntries = isScorer && scorerMode ? SCORER_FEED_LIMIT : spectatorFeedLimit;
 
-    const feedQuery = query(
-      collection(firestore, 'matchStates', matchId, 'feed'),
-      orderBy('createdAt', 'desc'),
-      limit(maxEntries),
-    );
-    const eventsQuery = query(
-      collection(firestore, 'matchStates', matchId, 'events'),
-      orderBy('createdAt', 'desc'),
-      limit(maxEntries),
-    );
+    const feedQuery = completed
+      ? query(
+          collection(firestore, 'matchStates', matchId, 'feed'),
+          orderBy('createdAt', 'asc'),
+        )
+      : query(
+          collection(firestore, 'matchStates', matchId, 'feed'),
+          orderBy('createdAt', 'desc'),
+          limit(maxEntries),
+        );
+    const eventsQuery = completed
+      ? query(
+          collection(firestore, 'matchStates', matchId, 'events'),
+          orderBy('createdAt', 'asc'),
+        )
+      : query(
+          collection(firestore, 'matchStates', matchId, 'events'),
+          orderBy('createdAt', 'desc'),
+          limit(maxEntries),
+        );
 
     // One-time fetch to prefill feed/events for spectators so 기존 기록이 즉시 보임.
     const prime = async () => {
@@ -4323,6 +4352,10 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       }
     };
     void prime();
+
+    if (completed) {
+      return () => {};
+    }
 
     const unsubFeed = onSnapshot(
       feedQuery,
@@ -5122,22 +5155,36 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
             }
             // Prime feed/events subcollections
             const isScorer = stateRef.current.scorerUid && stateRef.current.scorerUid === (auth.currentUser?.uid ?? null);
-            const maxEntries = isScorer ? SCORER_FEED_LIMIT : spectatorFeedLimitRef.current;
+            const matchForLimit = stateRef.current.matches.find((m) => m.id === matchIdLocal);
+            const completed = isCompletedMatch(matchForLimit) || stateRef.current.gameOver;
+            const maxEntries = isScorer
+              ? SCORER_FEED_LIMIT
+              : getSpectatorFeedLimitForMatch(matchForLimit, stateRef.current.gameOver);
             const fallback = { inning: stateRef.current.inning, half: stateRef.current.half as Half };
             const [feedSnap, eventsSnap] = await Promise.all([
               getDocs(
-                query(
-                  collection(firestore, 'matchStates', matchIdLocal, 'feed'),
-                  orderBy('createdAt', 'desc'),
-                  limit(maxEntries),
-                ),
+                completed
+                  ? query(
+                      collection(firestore, 'matchStates', matchIdLocal, 'feed'),
+                      orderBy('createdAt', 'asc'),
+                    )
+                  : query(
+                      collection(firestore, 'matchStates', matchIdLocal, 'feed'),
+                      orderBy('createdAt', 'desc'),
+                      limit(maxEntries),
+                    ),
               ),
               getDocs(
-                query(
-                  collection(firestore, 'matchStates', matchIdLocal, 'events'),
-                  orderBy('createdAt', 'desc'),
-                  limit(maxEntries),
-                ),
+                completed
+                  ? query(
+                      collection(firestore, 'matchStates', matchIdLocal, 'events'),
+                      orderBy('createdAt', 'asc'),
+                    )
+                  : query(
+                      collection(firestore, 'matchStates', matchIdLocal, 'events'),
+                      orderBy('createdAt', 'desc'),
+                      limit(maxEntries),
+                    ),
               ),
             ]);
             const feedEntries = normalizeFeed(
