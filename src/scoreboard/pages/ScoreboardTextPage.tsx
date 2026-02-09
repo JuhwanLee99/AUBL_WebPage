@@ -1992,6 +1992,8 @@ function ensurePlayerStat(name: string, pos?: string): PlayerStat {
     hbp: 0,
     so: 0,
     sac: 0,
+    r: 0,
+    rbi: 0,
   };
 }
 
@@ -2128,6 +2130,33 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     return null;
   };
 
+  const resolveBatterName = (rawName: string, side: 'home' | 'away', orderNum?: number | null) => {
+    let name = rawName.trim();
+    if (!name) return name;
+    const roster = side === 'home' ? rosterHome : rosterAway;
+    if (!roster.has(name)) {
+      if (orderNum) {
+        const candidates = battingOrders[side].get(orderNum);
+        const match = candidates?.find((uName) => uName.startsWith(`${name}(`) || uName === name);
+        if (match) name = match;
+      }
+      if (!roster.has(name)) {
+        const base = name.replace(/\([^)]*\)/g, '').trim();
+        if (base && roster.has(base)) {
+          name = base;
+        } else {
+          for (const key of roster.keys()) {
+            if (key.startsWith(`${name}(`) || (base && key.startsWith(`${base}(`))) {
+              name = key;
+              break;
+            }
+          }
+        }
+      }
+    }
+    return name;
+  };
+
   // [수정] 투수 등판 순서 문제 해결을 위해 두 패스로 분리
   // 첫 번째 패스: 투수 관련 로그만 먼저 처리하여 등판 순서 확립
   chronological.forEach((entry) => {
@@ -2253,6 +2282,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
         break;
       case 'hr':
         stat.pa += 1; stat.ab += 1; stat.h += 1; stat.hr += 1;
+        stat.r += 1;
         if (pitcherStat) { pitcherStat.bf += 1; pitcherStat.h += 1; pitcherStat.hr += 1; }
         break;
       case 'bb':
@@ -2287,6 +2317,34 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
         stat.pa += 1; stat.sac += 1;
         if (pitcherStat) { pitcherStat.bf += 1; pitcherStat.outs += 1; }
         break;
+    }
+  });
+
+  const extractRunnerName = (summary: string) => {
+    if (!summary.includes('득점')) return null;
+    const parts = summary.split('·').map((part) => part.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      return parts[parts.length - 1];
+    }
+    const match = summary.match(/(.+?)\s*득점/);
+    return match ? match[1].trim() : null;
+  };
+
+  record.events.forEach((event) => {
+    const offenseSide: 'home' | 'away' = event.half === 'top' ? 'away' : 'home';
+    if (event.batter && typeof event.rbi === 'number' && event.rbi > 0) {
+      const batterName = resolveBatterName(event.batter, offenseSide, event.order ?? null);
+      const stat = addStat(offenseSide, batterName);
+      stat.rbi += event.rbi;
+    }
+    if (Array.isArray(event.runners)) {
+      event.runners.forEach((runnerSummary) => {
+        const rawRunner = extractRunnerName(runnerSummary);
+        if (!rawRunner) return;
+        const runnerName = resolveBatterName(rawRunner, offenseSide);
+        const stat = addStat(offenseSide, runnerName);
+        stat.r += 1;
+      });
     }
   });
 

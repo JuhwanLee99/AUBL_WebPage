@@ -9,10 +9,10 @@ import MaintenancePage from '../../app/pages/MaintenancePage';
 // ========================================
 
 // 유지보수 모드 활성화 여부 (true: 활성화, false: 비활성화)
-export const MAINTENANCE_MODE_ENABLED = false;
+export const MAINTENANCE_MODE_ENABLED = true;
 
 // 서비스 재개 예정일
-export const MAINTENANCE_RESUME_DATE = '2026년 2월 7일';
+export const MAINTENANCE_RESUME_DATE = '2026년 2월 11일';
 
 // 유지보수 메시지
 export const MAINTENANCE_MESSAGE = '더 나은 서비스를 위해 시스템 개선 작업을 진행하고 있습니다.\n잠시만 기다려 주세요.\n\n문의: aublcau@gmail.com';

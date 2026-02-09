@@ -17,6 +17,8 @@ export type BatterStatLine = {
   hbp: number;
   so: number;
   sac: number;
+  r: number;
+  rbi: number;
 };
 
 export type PitcherStatLine = {
