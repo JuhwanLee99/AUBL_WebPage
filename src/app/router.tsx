@@ -38,6 +38,7 @@ import AdminLandingPage from './pages/admin/AdminLandingPage';
 import AdminIntroPage from './pages/admin/AdminIntroPage';
 import AdminRulesPage from './pages/admin/AdminRulesPage';
 import AdminTeamsPage from './pages/admin/AdminTeamsPage';
+import AdminRolesPage from './pages/admin/AdminRolesPage';
 
 export const router = createBrowserRouter([
   {
@@ -195,6 +196,7 @@ export const router = createBrowserRouter([
           { path: 'intro', element: <AdminIntroPage /> },
           { path: 'rules', element: <AdminRulesPage /> },
           { path: 'teams', element: <AdminTeamsPage /> },
+          { path: 'roles', element: <AdminRolesPage /> },
         ],
       },
       {
