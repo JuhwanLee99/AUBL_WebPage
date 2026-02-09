@@ -3340,6 +3340,20 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   };
   const addBlank = () => lines.push('');
   const halfLabel = (half: 'top' | 'bottom') => (half === 'top' ? '초' : '말');
+  const halfRank = (half: 'top' | 'bottom') => (half === 'top' ? 0 : 1);
+  const sortChrono = (
+    a: { inning: number; half: 'top' | 'bottom'; createdAt?: number; pitch: number; order: number },
+    b: { inning: number; half: 'top' | 'bottom'; createdAt?: number; pitch: number; order: number },
+  ) => {
+    if (a.inning !== b.inning) return a.inning - b.inning;
+    if (a.half !== b.half) return halfRank(a.half) - halfRank(b.half);
+    if (a.createdAt !== undefined && b.createdAt !== undefined && a.createdAt !== b.createdAt) {
+      return a.createdAt - b.createdAt;
+    }
+    if (a.pitch !== b.pitch) return a.pitch - b.pitch;
+    if (a.order !== b.order) return a.order - b.order;
+    return 0;
+  };
   const innings = Array.from({ length: 9 }, (_, idx) => idx + 1);
   const playerDirectory: Record<
     'home' | 'away',
@@ -3427,6 +3441,32 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
 
   const stats = buildPlayerStats(record);
   const fmt3 = (val: number) => (Number.isFinite(val) ? val.toFixed(3).replace(/^0/, '') : '-');
+  const orderByName: Record<'home' | 'away', Map<string, number>> = {
+    home: new Map(),
+    away: new Map(),
+  };
+  (['home', 'away'] as const).forEach((side) => {
+    stats.hitters[side].forEach((h) => {
+      if (h.order && h.order > 0) {
+        orderByName[side].set(h.name, h.order);
+      }
+    });
+  });
+  const resolveEventOrder = (event: PlayEvent, side: 'home' | 'away') => {
+    if (event.order && event.order > 0) return event.order;
+    const name = (event.batter || '').trim();
+    if (!name) return null;
+    const map = orderByName[side];
+    if (map.has(name)) return map.get(name)!;
+    const base = name.replace(/\([^)]*\)/g, '').trim();
+    if (base && map.has(base)) return map.get(base)!;
+    for (const [key, val] of map.entries()) {
+      if (key.startsWith(`${name}(`) || (base && key.startsWith(`${base}(`))) {
+        return val;
+      }
+    }
+    return null;
+  };
   
   const writePitcherOrder = (side: 'home' | 'away', label: string) => {
     addBlank();
@@ -3477,7 +3517,105 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   writePitcherOrder('home', record.meta.homeTeamName);
   writePitcherOrder('away', record.meta.awayTeamName);
 
-  const eventsChrono = [...record.events].reverse();
+  const eventKey = (event: PlayEvent) => [
+    event.eventId ?? '',
+    event.inning,
+    event.half,
+    event.order,
+    event.pitch,
+    event.type,
+    event.batter ?? '',
+    event.notes ?? '',
+    event.strikeType ?? '',
+    event.rbi ?? '',
+    (event.runners ?? []).join('|'),
+    event.battedBall?.type ?? '',
+    event.battedBall?.zone ?? '',
+    typeof event.error === 'string' ? event.error : event.error ? `${event.error.errorType}|${event.error.fielderPos}|${event.error.context ?? ''}` : '',
+    Array.isArray(event.dpRoute) ? event.dpRoute.join('-') : '',
+  ].join('|');
+
+  const extractRunnerSummaryFromFeed = (text: string) => {
+    const match = text.match(/([123]루\s*주자.*)$/);
+    if (match) return match[1].trim();
+    return text.trim();
+  };
+
+  const inferEventTypeFromResult = (result: string) => {
+    const normalized = result.replace(/\s+/g, '');
+    if (normalized.includes('도루실패') || normalized.includes('도루실패')) return 'steal_fail';
+    if (normalized.includes('도루성공') || normalized.includes('도루성공') || normalized.includes('도루')) return 'steal';
+    if (normalized.includes('주자') && normalized.includes('아웃')) return 'runner_out';
+    if (normalized.includes('주자') && (normalized.includes('득점') || normalized.includes('진루') || normalized.includes('정지'))) return 'runner';
+    if (normalized.includes('타격방해')) return 'ci';
+    if (normalized.includes('희생')) return 'sac';
+    if (normalized.includes('몸에맞는공')) return 'hbp';
+    if (normalized.includes('볼넷') || normalized.includes('고의4구') || normalized.includes('4구')) return 'walk';
+    if (normalized.includes('야수선택') || normalized.toUpperCase().includes('F.C')) return 'fc';
+    if (normalized.includes('실책') || /E[1-6]/i.test(result)) return 'error';
+    if (normalized.includes('삼진') || normalized.includes('아웃')) return 'out';
+    return 'play';
+  };
+
+  const rebuildEventsFromFeed = (feed: ReturnType<typeof buildGameRecord>['feed']) => {
+    const buckets = new Map<string, ReturnType<typeof buildGameRecord>['feed']>();
+    feed.forEach((entry) => {
+      if (!entry.eventId) return;
+      const list = buckets.get(entry.eventId) ?? [];
+      list.push(entry);
+      buckets.set(entry.eventId, list);
+    });
+    const rebuilt: PlayEvent[] = [];
+    buckets.forEach((entries, eventId) => {
+      const sorted = [...entries].sort(sortChrono);
+      const primary = sorted.find((e) => (e.order && e.order > 0) || (e.batter && e.batter.trim())) ?? sorted[0];
+      if (!primary) return;
+      const notes = primary.result ?? '';
+      const type = inferEventTypeFromResult(notes);
+      const runners = sorted
+        .filter((e) => (!e.order || e.order === 0) && (!e.batter || !e.batter.trim()))
+        .map((e) => extractRunnerSummaryFromFeed(e.result ?? ''))
+        .filter(Boolean);
+      rebuilt.push({
+        inning: primary.inning,
+        half: primary.half,
+        order: primary.order ?? 0,
+        batter: primary.batter ?? '',
+        pitch: primary.pitch ?? 0,
+        type,
+        runners,
+        battedBall: null,
+        error: null,
+        notes,
+        createdAt: primary.createdAt,
+        eventId,
+      });
+    });
+    return rebuilt;
+  };
+
+  const dedupeEvents = (items: PlayEvent[]) => {
+    const seen = new Set<string>();
+    return items.filter((event) => {
+      const key = eventKey(event);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+  const batterFeedCount = record.feed.filter((entry) => entry.order > 0 && entry.batter && entry.batter.trim()).length;
+  const minExpectedEvents = batterFeedCount > 0 ? Math.max(1, Math.floor(batterFeedCount * 0.5)) : 0;
+  const needsRebuild = batterFeedCount > 0 && record.events.length < minExpectedEvents;
+  const rebuiltEvents = needsRebuild ? rebuildEventsFromFeed(record.feed) : [];
+  const mergedEvents = needsRebuild
+    ? (() => {
+        const merged = new Map<string, PlayEvent>();
+        rebuiltEvents.forEach((ev) => merged.set(eventKey(ev), ev));
+        record.events.forEach((ev) => merged.set(eventKey(ev), ev));
+        return Array.from(merged.values());
+      })()
+    : record.events;
+  const eventsChrono = dedupeEvents([...mergedEvents].sort(sortChrono));
   addBlank();
   add('상세 플레이 이벤트');
   if (eventsChrono.length) {
@@ -3499,7 +3637,7 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
     add('-', '기록 없음');
   }
 
-  const feed = [...record.feed].reverse();
+  const feed = [...record.feed].sort(sortChrono);
   addBlank();
   add('플레이 로그');
   if (feed.length) {
@@ -3515,14 +3653,16 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
     const targetHalf = side === 'away' ? 'top' : 'bottom';
     const notesByOrder = new Map<number, Map<number, string[]>>();
     eventsChrono
-      .filter((event) => event.half === targetHalf && event.order > 0)
+      .filter((event) => event.half === targetHalf)
       .forEach((event) => {
-        const inningMap = notesByOrder.get(event.order) ?? new Map<number, string[]>();
+        const resolvedOrder = resolveEventOrder(event, side);
+        if (!resolvedOrder || resolvedOrder <= 0) return;
+        const inningMap = notesByOrder.get(resolvedOrder) ?? new Map<number, string[]>();
         const notes = inningMap.get(event.inning) ?? [];
         const note = formatScorebookCell(event);
         notes.push(note || '-');
         inningMap.set(event.inning, notes);
-        notesByOrder.set(event.order, inningMap);
+        notesByOrder.set(resolvedOrder, inningMap);
       });
     return notesByOrder;
   };
