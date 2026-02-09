@@ -272,9 +272,15 @@ type ScoreboardPanelProps = {
   style?: CSSProperties;
   showFootnote?: boolean;
   showViewerBadge?: boolean;
+  hideBases?: boolean;
 };
 
-export default function ScoreboardPanel({ style, showFootnote = true, showViewerBadge = false }: ScoreboardPanelProps) {
+export default function ScoreboardPanel({
+  style,
+  showFootnote = true,
+  showViewerBadge = false,
+  hideBases = false,
+}: ScoreboardPanelProps) {
   const { state } = useDemoStore();
   const { isAdmin } = useAdmin();
   const homeTeam = useMemo(() => TEAMS.find((t) => t.id === state.homeTeamId), [state.homeTeamId]);
@@ -475,7 +481,9 @@ export default function ScoreboardPanel({ style, showFootnote = true, showViewer
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'minmax(0, 0.9fr) minmax(360px, 1.35fr)',
+            gridTemplateColumns: hideBases
+              ? 'minmax(0, 0.55fr) minmax(360px, 1.8fr)'
+              : 'minmax(0, 0.9fr) minmax(360px, 1.35fr)',
             gap: 'clamp(10px, 1.6vw, 14px)',
             alignItems: 'stretch',
           }}
@@ -483,9 +491,10 @@ export default function ScoreboardPanel({ style, showFootnote = true, showViewer
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'auto auto',
+              gridTemplateColumns: hideBases ? 'auto' : 'auto auto',
               gap: '8px',
               alignItems: 'center',
+              justifyContent: hideBases ? 'center' : 'start',
             }}
           >
             <div style={{ display: 'grid', gap: 'clamp(6px, 1.2vw, 10px)' }}>
@@ -493,7 +502,7 @@ export default function ScoreboardPanel({ style, showFootnote = true, showViewer
               <CountBlock label="S" lights={countLights(strike, 2, '#facc15')} />
               <CountBlock label="O" lights={countLights(out, 3, '#ef4444')} />
             </div>
-            <BasePaths bases={bases} />
+            {hideBases ? null : <BasePaths bases={bases} />}
           </div>
 
           <BoxScoreTable data={boxScore} />
@@ -664,6 +673,7 @@ export function BoxScoreTable({
 }) {
   const headers = ['팀', ...data.innings.map(String), 'R', 'H', 'E'];
   const rows = data.rows;
+  const gridColumns = `minmax(96px, 1.6fr) repeat(${Math.max(1, headers.length - 1)}, minmax(24px, 0.7fr))`;
   return (
     <div
       style={{
@@ -681,7 +691,7 @@ export function BoxScoreTable({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: `repeat(${headers.length}, minmax(0, 1fr))`,
+          gridTemplateColumns: gridColumns,
           background: 'rgba(255,255,255,0.03)',
           borderBottom: '1px solid rgba(148,163,184,0.2)',
         }}
@@ -690,7 +700,7 @@ export function BoxScoreTable({
           <div
             key={h}
             style={{
-              padding: '3px 2px',
+              padding: '2px 1px',
               textAlign: 'center',
               fontWeight: 800,
               fontSize: '12px',
@@ -708,17 +718,20 @@ export function BoxScoreTable({
             key={row.name}
             style={{
               display: 'grid',
-              gridTemplateColumns: `repeat(${headers.length}, minmax(0, 1fr))`,
+              gridTemplateColumns: gridColumns,
               borderTop: idx === 0 ? 'none' : '1px solid rgba(148,163,184,0.2)',
             }}
           >
             <div
               style={{
-                padding: '4px',
+                padding: '3px 2px',
                 fontWeight: 900,
                 color: row.color,
                 fontSize: '12px',
                 textAlign: 'center',
+                whiteSpace: 'normal',
+                wordBreak: 'keep-all',
+                lineHeight: 1.15,
               }}
             >
               {row.name}
@@ -727,7 +740,7 @@ export function BoxScoreTable({
               <div
                 key={`${row.name}-${vIdx}`}
                 style={{
-                  padding: '4px 2px',
+                  padding: '3px 1px',
                   textAlign: 'center',
                   color: '#cbd5e1',
                   fontWeight: 800,

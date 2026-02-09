@@ -1214,28 +1214,75 @@ export interface GameRecord {
 
 // [추가] 통계 집계 로직을 demoStore 내부에 추가합니다.
 function calculateGameStats(record: GameRecord) {
-  const stats = new Map<string, {
+  const stats: Record<'home' | 'away', Map<string, {
     pa: number; ab: number; h: number; singles: number; doubles: number;
     triples: number; hr: number; bb: number; hbp: number; so: number;
     sac: number; fc: number; ci: number; rbi: number; r: number;
-  }>();
+  }>> = {
+    home: new Map(),
+    away: new Map(),
+  };
 
-  const ensureStat = (name: string) => {
-    if (!stats.has(name)) {
-      stats.set(name, {
+  const buildRoster = (side: 'home' | 'away') => {
+    const roster = new Map<string, PlayerSlot>();
+    const add = (p: PlayerSlot) => {
+      const name = p.name?.trim();
+      if (!name) return;
+      roster.set(name, p);
+    };
+    record.lineups[side].forEach(add);
+    record.benches[side].forEach(add);
+    record.removed?.[side]?.forEach(add);
+    return roster;
+  };
+
+  const rosters = {
+    home: buildRoster('home'),
+    away: buildRoster('away'),
+  };
+
+  const resolveName = (raw: string, side: 'home' | 'away') => {
+    let name = raw.trim();
+    if (!name) return name;
+    const roster = rosters[side];
+    if (roster.has(name)) return name;
+    const base = name.replace(/\([^)]*\)/g, '').trim();
+    if (base && roster.has(base)) return base;
+    for (const key of roster.keys()) {
+      if (key.startsWith(`${name}(`) || (base && key.startsWith(`${base}(`))) return key;
+    }
+    return name;
+  };
+
+  const ensureStat = (side: 'home' | 'away', name: string) => {
+    const store = stats[side];
+    if (!store.has(name)) {
+      store.set(name, {
         pa: 0, ab: 0, h: 0, singles: 0, doubles: 0, triples: 0,
         hr: 0, bb: 0, hbp: 0, so: 0, sac: 0, fc: 0, ci: 0, rbi: 0, r: 0
       });
     }
-    return stats.get(name)!;
+    return store.get(name)!;
+  };
+
+  const extractRunnerName = (summary: string) => {
+    if (!summary.includes('득점')) return null;
+    const parts = summary.split('·').map((part) => part.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      return parts[parts.length - 1];
+    }
+    const match = summary.match(/(.+?)\s*득점/);
+    return match ? match[1].trim() : null;
   };
 
   // record.feed는 이미 오래된 순(oldest → newest)으로 정렬되어 있음
   const chronological = record.feed;
   
   chronological.forEach((entry) => {
-    const name = entry.batter?.trim();
-    if (!name) return;
+    const side: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
+    const rawName = entry.batter?.trim();
+    if (!rawName) return;
+    const name = resolveName(rawName, side);
     
     // 결과 텍스트 분석 (ScorekeeperPage의 classifyResult 로직과 동일)
     const normalized = entry.result.replace(/\s+/g, '');
@@ -1257,7 +1304,7 @@ function calculateGameStats(record: GameRecord) {
     
     if (!kind) return;
     
-    const s = ensureStat(name);
+    const s = ensureStat(side, name);
     
     switch (kind) {
       case 'single': s.pa++; s.ab++; s.h++; s.singles++; break;
@@ -1275,12 +1322,23 @@ function calculateGameStats(record: GameRecord) {
     }
   });
 
-  // events에서 RBI 집계
+  // events에서 RBI/득점 집계
   if (record.events) {
     record.events.forEach((event) => {
+      const side: 'home' | 'away' = event.half === 'top' ? 'away' : 'home';
       if (event.rbi && event.rbi > 0 && event.batter) {
-        const s = ensureStat(event.batter.trim());
+        const batterName = resolveName(event.batter.trim(), side);
+        const s = ensureStat(side, batterName);
         s.rbi += event.rbi;
+      }
+      if (Array.isArray(event.runners)) {
+        event.runners.forEach((runnerSummary) => {
+          const rawRunner = extractRunnerName(runnerSummary);
+          if (!rawRunner) return;
+          const runnerName = resolveName(rawRunner, side);
+          const s = ensureStat(side, runnerName);
+          s.r += 1;
+        });
       }
     });
   }
@@ -4940,37 +4998,118 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
           // 상세 기록 산출
           const gameRecord = buildGameRecord(snapshot);
           const statsMap = calculateGameStats(gameRecord);
-          
-          // PostGameRecord 형식으로 변환 함수
+
+          const buildRosterMap = (side: 'home' | 'away') => {
+            const roster = new Map<string, PlayerSlot>();
+            const add = (p: PlayerSlot) => {
+              const name = formatUniqueName(p.name, p.number);
+              if (!name) return;
+              roster.set(name, p);
+            };
+            snapshot.lineups[side].forEach(add);
+            snapshot.removed[side].forEach(add);
+            snapshot.benches[side].forEach(add);
+            return roster;
+          };
+
+          const rosterBySide = {
+            home: buildRosterMap('home'),
+            away: buildRosterMap('away'),
+          };
+
+          const buildOrderMap = (side: 'home' | 'away') => {
+            const orderMap = new Map<number, string[]>();
+            const lineup = snapshot.lineups[side];
+            lineup.forEach((p, idx) => {
+              const order = getBattingOrder(lineup, idx, isPractice);
+              if (!order) return;
+              const name = formatUniqueName(p.name, p.number);
+              if (!name) return;
+              const list = orderMap.get(order) ?? [];
+              if (!list.includes(name)) list.push(name);
+              orderMap.set(order, list);
+            });
+
+            // 교체된 선수는 먼저 등장하도록 역순으로 추가
+            [...snapshot.removed[side]].reverse().forEach((p) => {
+              const order = typeof p.order === 'number' && p.order > 0 ? p.order : null;
+              if (!order) return;
+              const name = formatUniqueName(p.name, p.number);
+              if (!name) return;
+              const list = orderMap.get(order) ?? [];
+              if (!list.includes(name)) list.unshift(name);
+              orderMap.set(order, list);
+            });
+
+            return orderMap;
+          };
+
+          // PostGameRecord 형식으로 변환 함수 (교체/대주자/대수비 포함)
           const toBatterLines = (side: 'home' | 'away'): PostGameBatterLine[] => {
-            return snapshot.lineups[side]
-              .filter(p => p.pos.toUpperCase() !== 'P')
-              .map(p => {
-                // 이름(등번호) 형식 맞추기
-                const uniqueName = p.number ? `${p.name}(${p.number})` : p.name;
-                const stat = statsMap.get(uniqueName) ?? statsMap.get(p.name); // uniqueName으로 찾고 없으면 이름으로 시도
-                
-                return {
-                  name: uniqueName, // 저장될 때도 이름(등번호)
-                  pos: p.pos,
-                  order: typeof p.order === 'number' ? p.order : undefined,
-                  // 여기서부터 세부 스탯 매핑
-                  pa: stat?.pa ?? 0,
-                  ab: stat?.ab ?? 0,
-                  h: stat?.h ?? 0,
-                  singles: stat?.singles ?? 0,
-                  doubles: stat?.doubles ?? 0,
-                  triples: stat?.triples ?? 0,
-                  hr: stat?.hr ?? 0,
-                  bb: stat?.bb ?? 0,
-                  hbp: stat?.hbp ?? 0,
-                  so: stat?.so ?? 0,
-                  sac: stat?.sac ?? 0,
-                  fc: stat?.fc ?? 0,
-                  // 득점(R)과 타점(RBI)은 현재 자동 집계가 안되므로 일단 0이나 기존 로직 따름
-                  // 필요하다면 추후 calculateGameStats에서 r, rbi 로직도 추가 가능
-                };
+            const sideStats = statsMap[side];
+            const roster = rosterBySide[side];
+            const orderMap = buildOrderMap(side);
+            const rows: PostGameBatterLine[] = [];
+            const included = new Set<string>();
+            const baseName = (name: string) => name.replace(/\([^)]*\)/g, '').trim();
+
+            const pushLine = (name: string, order?: number | null) => {
+              if (!name || included.has(name)) return;
+              included.add(name);
+              const stat = sideStats.get(name) ?? (baseName(name) ? sideStats.get(baseName(name)) : undefined);
+              const pos = roster.get(name)?.pos;
+              const ab = stat?.ab ?? 0;
+              const h = stat?.h ?? 0;
+              const avg = ab > 0 ? Number((h / ab).toFixed(3)) : undefined;
+
+              rows.push({
+                name,
+                pos,
+                order: order ?? undefined,
+                pa: stat?.pa ?? 0,
+                ab,
+                h,
+                r: stat?.r ?? 0,
+                rbi: stat?.rbi ?? 0,
+                singles: stat?.singles ?? 0,
+                doubles: stat?.doubles ?? 0,
+                triples: stat?.triples ?? 0,
+                hr: stat?.hr ?? 0,
+                bb: stat?.bb ?? 0,
+                hbp: stat?.hbp ?? 0,
+                so: stat?.so ?? 0,
+                sac: stat?.sac ?? 0,
+                fc: stat?.fc ?? 0,
+                avg,
               });
+            };
+
+            const orders = [...orderMap.keys()].sort((a, b) => a - b);
+            orders.forEach((order) => {
+              const players = orderMap.get(order) ?? [];
+              players.forEach((name) => pushLine(name, order));
+            });
+
+            // 타순 정보 없이 집계된 선수도 포함
+            sideStats.forEach((_stat, name) => {
+              if (!included.has(name)) pushLine(name, null);
+            });
+
+            return rows;
+          };
+
+          const summarizeBatters = (side: 'home' | 'away') => {
+            let ab = 0;
+            let h = 0;
+            let r = 0;
+            let rbi = 0;
+            statsMap[side].forEach((stat) => {
+              ab += stat.ab;
+              h += stat.h;
+              r += stat.r;
+              rbi += stat.rbi;
+            });
+            return { ab, h, r, rbi };
           };
 
           const lineScoreBase = snapshot.lineScore ?? { home: [], away: [] };
@@ -4983,6 +5122,10 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
             totals: { // 팀 합계 (간단 계산)
               home: { runs: snapshot.score.home, hits: 0, errors: 0 },
               away: { runs: snapshot.score.away, hits: 0, errors: 0 }
+            },
+            teamBatterSummary: {
+              home: summarizeBatters('home'),
+              away: summarizeBatters('away'),
             },
             batters: {
               home: toBatterLines('home'),

@@ -143,11 +143,11 @@ export default function ScoreboardTextPage() {
       replayLoadRef.current = false;
       return;
     }
-    if (!showReplay) return;
     if (replayLoadRef.current) return;
     replayLoadRef.current = true;
+    setShowReplay(true);
     actions.loadMoreFeed();
-  }, [actions, showReplay, state.gameOver]);
+  }, [actions, state.gameOver]);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -277,6 +277,7 @@ export default function ScoreboardTextPage() {
         <div className={`scoreboard-section ${isMobile ? 'mobile-layout' : ''}`}>
           <ScoreboardFrame
             variant="text"
+            hideBases
             showFootnote={false}
             showViewerBadge
             panelStyle={
@@ -375,22 +376,7 @@ export default function ScoreboardTextPage() {
                     <span style={{ fontWeight: 900, fontSize: '14px', color: '#e2e8f0' }}>문자중계 다시보기</span>
                     <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>경기 종료 후 기록 전체를 확인할 수 있습니다.</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowReplay((v) => !v)}
-                    style={{
-                      padding: '8px 10px',
-                      borderRadius: '10px',
-                      border: '1px solid rgba(148,163,184,0.35)',
-                      background: 'rgba(255,255,255,0.05)',
-                      color: '#e2e8f0',
-                      fontWeight: 800,
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {showReplay ? '접기' : '펼치기'}
-                  </button>
+                  <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 800 }}>항상 펼쳐짐</span>
                 </div>
                 {showReplay ? (
                   <div
