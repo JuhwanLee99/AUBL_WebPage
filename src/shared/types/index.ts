@@ -83,9 +83,13 @@ export interface TeamMember {
   position?: string;
   bats?: string;
   throws?: string;
+  profileImageUrl?: string;
+  profileBio?: string;
   joinedAt?: number;
   status?: 'active' | 'inactive';
 }
+
+export type TeamNoticeCategory = '일반' | '훈련' | '경기' | '긴급';
 
 export interface TeamNotice {
   id: string;
@@ -94,6 +98,7 @@ export interface TeamNotice {
   createdAt: number;
   createdByUid?: string | null;
   createdByName?: string | null;
+  category?: TeamNoticeCategory;
   pinned?: boolean;
 }
 

@@ -10,7 +10,7 @@ import { firestore } from '../../shared/firebase/client';
 import { useTeamRole } from '../../shared/auth/useTeamRole';
 import { useAdmin } from '../../shared/auth/useAdmin';
 import { useAuth } from '../../shared/auth/AuthProvider';
-import type { TeamMember, TeamNotice, UserProfile } from '../../shared/types';
+import type { TeamMember, TeamNotice, TeamNoticeCategory, UserProfile } from '../../shared/types';
 
 const cardBase: CSSProperties = {
   borderRadius: '16px',
@@ -33,6 +33,13 @@ const MEMBER_ROLE_LABELS: Record<TeamMember['role'], string> = {
   player: '선수',
   staff: '스태프',
   coach: '감독',
+};
+const NOTICE_CATEGORIES: TeamNoticeCategory[] = ['일반', '훈련', '경기', '긴급'];
+const NOTICE_CATEGORY_STYLE: Record<TeamNoticeCategory, { color: string; bg: string }> = {
+  일반: { color: '#e2e8f0', bg: 'rgba(148,163,184,0.2)' },
+  훈련: { color: '#38bdf8', bg: 'rgba(56,189,248,0.16)' },
+  경기: { color: '#f97316', bg: 'rgba(249,115,22,0.16)' },
+  긴급: { color: '#f87171', bg: 'rgba(248,113,113,0.16)' },
 };
 
 export default function TeamDetailPage() {
@@ -75,6 +82,8 @@ export default function TeamDetailPage() {
   const [noticesLoading, setNoticesLoading] = useState(true);
   const [noticeTitle, setNoticeTitle] = useState('');
   const [noticeContent, setNoticeContent] = useState('');
+  const [noticeCategory, setNoticeCategory] = useState<TeamNoticeCategory>('일반');
+  const [noticePinned, setNoticePinned] = useState(false);
   const [noticeStatus, setNoticeStatus] = useState<string | null>(null);
   const [noticeError, setNoticeError] = useState<string | null>(null);
   const [noticeBusy, setNoticeBusy] = useState(false);
@@ -93,6 +102,8 @@ export default function TeamDetailPage() {
     setNoticeError(null);
     setNoticeTitle('');
     setNoticeContent('');
+    setNoticeCategory('일반');
+    setNoticePinned(false);
   }, [teamDocId]);
 
   useEffect(() => {
@@ -260,6 +271,8 @@ export default function TeamDetailPage() {
           position: '',
           bats: 'R',
           throws: 'R',
+          profileImageUrl: '',
+          profileBio: '',
           joinedAt: Date.now(),
           status: 'active',
         },
@@ -306,14 +319,17 @@ export default function TeamDetailPage() {
     if (!edits) return;
     setMemberBusy(true);
     try {
+      const payload: Partial<TeamMember> = {};
+      if (Object.prototype.hasOwnProperty.call(edits, 'number')) payload.number = edits.number ?? '';
+      if (Object.prototype.hasOwnProperty.call(edits, 'position')) payload.position = edits.position ?? '';
+      if (Object.prototype.hasOwnProperty.call(edits, 'bats')) payload.bats = edits.bats ?? 'R';
+      if (Object.prototype.hasOwnProperty.call(edits, 'throws')) payload.throws = edits.throws ?? 'R';
+      if (Object.prototype.hasOwnProperty.call(edits, 'profileImageUrl')) payload.profileImageUrl = edits.profileImageUrl ?? '';
+      if (Object.prototype.hasOwnProperty.call(edits, 'profileBio')) payload.profileBio = edits.profileBio ?? '';
+
       await setDoc(
         doc(firestore, 'teams', teamDocId, 'members', uid),
-        {
-          number: edits.number ?? '',
-          position: edits.position ?? '',
-          bats: edits.bats ?? 'R',
-          throws: edits.throws ?? 'R',
-        },
+        payload,
         { merge: true },
       );
       setMemberStatus('팀원 정보를 저장했습니다.');
@@ -383,10 +399,14 @@ export default function TeamDetailPage() {
         createdAt: Date.now(),
         createdByUid: user?.uid ?? null,
         createdByName: user?.displayName ?? user?.email ?? null,
+        category: noticeCategory,
+        pinned: noticePinned,
       });
       setNoticeStatus('팀 공지를 등록했습니다.');
       setNoticeTitle('');
       setNoticeContent('');
+      setNoticeCategory('일반');
+      setNoticePinned(false);
     } catch {
       setNoticeError('공지 등록 중 문제가 발생했습니다.');
     } finally {
@@ -408,6 +428,25 @@ export default function TeamDetailPage() {
       setNoticeStatus('팀 공지를 삭제했습니다.');
     } catch {
       setNoticeError('공지 삭제 중 문제가 발생했습니다.');
+    } finally {
+      setNoticeBusy(false);
+    }
+  };
+
+  const handleTogglePinned = async (noticeId: string, pinned: boolean) => {
+    if (!teamDocId) return;
+    setNoticeError(null);
+    setNoticeStatus(null);
+    if (!canManage) {
+      setNoticeError('팀 공지 수정 권한이 없습니다.');
+      return;
+    }
+    setNoticeBusy(true);
+    try {
+      await setDoc(doc(firestore, 'teams', teamDocId, 'notices', noticeId), { pinned }, { merge: true });
+      setNoticeStatus(pinned ? '공지 고정을 설정했습니다.' : '공지 고정을 해제했습니다.');
+    } catch {
+      setNoticeError('공지 고정 변경 중 문제가 발생했습니다.');
     } finally {
       setNoticeBusy(false);
     }
@@ -442,6 +481,16 @@ export default function TeamDetailPage() {
   const shortIntro = teamInfo?.shortIntro ?? '팀 소개 문구가 준비 중입니다.';
   const longIntro = teamInfo?.longIntro ?? '팀 소개 상세 내용이 준비 중입니다.';
   const historyText = teamInfo?.history ?? '연혁 정보가 아직 등록되지 않았습니다.';
+  const sortedNotices = useMemo(() => {
+    const copy = [...notices];
+    copy.sort((a, b) => {
+      const pinnedA = a.pinned ? 1 : 0;
+      const pinnedB = b.pinned ? 1 : 0;
+      if (pinnedA !== pinnedB) return pinnedB - pinnedA;
+      return (b.createdAt ?? 0) - (a.createdAt ?? 0);
+    });
+    return copy;
+  }, [notices]);
 
   return (
     <div style={{ display: 'grid', gap: '24px' }}>
@@ -733,9 +782,9 @@ export default function TeamDetailPage() {
               border: '1px solid rgba(148,163,184,0.25)',
               background: 'rgba(255,255,255,0.02)',
             }}
-          >
-            <div style={{ display: 'grid', gap: '6px' }}>
-              <label style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>공지 제목</label>
+            >
+              <div style={{ display: 'grid', gap: '6px' }}>
+                <label style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>공지 제목</label>
               <input
                 value={noticeTitle}
                 onChange={(e) => setNoticeTitle(e.target.value)}
@@ -748,9 +797,28 @@ export default function TeamDetailPage() {
                   color: '#e2e8f0',
                 }}
               />
-            </div>
-            <div style={{ display: 'grid', gap: '6px' }}>
-              <label style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>공지 내용</label>
+              </div>
+              <div style={{ display: 'grid', gap: '6px' }}>
+                <label style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>카테고리</label>
+                <select
+                  value={noticeCategory}
+                  onChange={(e) => setNoticeCategory(e.target.value as TeamNoticeCategory)}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(148,163,184,0.35)',
+                    background: 'rgba(15,23,42,0.6)',
+                    color: '#e2e8f0',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {NOTICE_CATEGORIES.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: 'grid', gap: '6px' }}>
+                <label style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>공지 내용</label>
               <textarea
                 value={noticeContent}
                 onChange={(e) => setNoticeContent(e.target.value)}
@@ -765,12 +833,21 @@ export default function TeamDetailPage() {
                   resize: 'vertical',
                 }}
               />
-            </div>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={handleAddNotice}
-                disabled={noticeBusy}
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#cbd5e1', fontWeight: 700, fontSize: '13px' }}>
+                <input
+                  type="checkbox"
+                  checked={noticePinned}
+                  onChange={(e) => setNoticePinned(e.target.checked)}
+                  style={{ width: '16px', height: '16px' }}
+                />
+                상단 고정 공지
+              </label>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={handleAddNotice}
+                  disabled={noticeBusy}
                 style={{
                   padding: '10px 12px',
                   borderRadius: '10px',
@@ -789,9 +866,12 @@ export default function TeamDetailPage() {
 
         {noticesLoading ? (
           <div style={{ color: '#94a3b8', fontWeight: 700 }}>팀 공지를 불러오는 중...</div>
-        ) : notices.length ? (
+        ) : sortedNotices.length ? (
           <div style={{ display: 'grid', gap: '10px' }}>
-            {notices.map((notice) => (
+            {sortedNotices.map((notice) => {
+              const category = notice.category ?? '일반';
+              const badgeStyle = NOTICE_CATEGORY_STYLE[category];
+              return (
               <div
                 key={notice.id}
                 style={{
@@ -804,33 +884,80 @@ export default function TeamDetailPage() {
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-                  <div style={{ fontWeight: 800, color: '#e2e8f0' }}>{notice.title}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    {notice.pinned && (
+                      <span
+                        style={{
+                          padding: '2px 6px',
+                          borderRadius: '999px',
+                          background: 'rgba(249,115,22,0.16)',
+                          color: '#f97316',
+                          fontWeight: 800,
+                          fontSize: '11px',
+                        }}
+                      >
+                        고정
+                      </span>
+                    )}
+                    <span
+                      style={{
+                        padding: '2px 6px',
+                        borderRadius: '999px',
+                        background: badgeStyle.bg,
+                        color: badgeStyle.color,
+                        fontWeight: 800,
+                        fontSize: '11px',
+                      }}
+                    >
+                      {category}
+                    </span>
+                    <div style={{ fontWeight: 800, color: '#e2e8f0' }}>{notice.title}</div>
+                  </div>
                   <div style={{ color: '#94a3b8', fontSize: '12px' }}>
                     {notice.createdAt ? new Date(notice.createdAt).toLocaleString('ko-KR') : '날짜 미정'}
                   </div>
                 </div>
                 <div style={{ color: '#cbd5e1', fontSize: '13px', lineHeight: 1.6 }}>{notice.content}</div>
                 {canManage && (
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteNotice(notice.id)}
-                    disabled={noticeBusy}
-                    style={{
-                      padding: '6px 10px',
-                      borderRadius: '10px',
-                      border: '1px solid rgba(248,113,113,0.5)',
-                      background: 'rgba(248,113,113,0.12)',
-                      color: '#fecdd3',
-                      fontWeight: 800,
-                      cursor: noticeBusy ? 'not-allowed' : 'pointer',
-                      width: 'fit-content',
-                    }}
-                  >
-                    공지 삭제
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleTogglePinned(notice.id, !notice.pinned)}
+                      disabled={noticeBusy}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(148,163,184,0.35)',
+                        background: 'rgba(255,255,255,0.04)',
+                        color: '#e2e8f0',
+                        fontWeight: 800,
+                        cursor: noticeBusy ? 'not-allowed' : 'pointer',
+                        width: 'fit-content',
+                      }}
+                    >
+                      {notice.pinned ? '고정 해제' : '공지 고정'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteNotice(notice.id)}
+                      disabled={noticeBusy}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(248,113,113,0.5)',
+                        background: 'rgba(248,113,113,0.12)',
+                        color: '#fecdd3',
+                        fontWeight: 800,
+                        cursor: noticeBusy ? 'not-allowed' : 'pointer',
+                        width: 'fit-content',
+                      }}
+                    >
+                      공지 삭제
+                    </button>
+                  </div>
                 )}
               </div>
-            ))}
+            )})}
           </div>
         ) : (
           <div style={{ color: '#94a3b8', fontWeight: 700 }}>등록된 팀 공지가 없습니다.</div>
@@ -1089,6 +1216,8 @@ export default function TeamDetailPage() {
               const positionValue = edits.position ?? member.position ?? '';
               const batsValue = edits.bats ?? member.bats ?? 'R';
               const throwsValue = edits.throws ?? member.throws ?? 'R';
+              const profileImageValue = edits.profileImageUrl ?? member.profileImageUrl ?? '';
+              const profileBioValue = edits.profileBio ?? member.profileBio ?? '';
               return (
                 <div
                   key={member.uid}
@@ -1102,9 +1231,42 @@ export default function TeamDetailPage() {
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <div style={{ display: 'grid', gap: '4px' }}>
-                      <div style={{ fontWeight: 800, color: '#e2e8f0' }}>{member.name}</div>
-                      <div style={{ color: '#94a3b8', fontSize: '12px' }}>{MEMBER_ROLE_LABELS[member.role]}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      {profileImageValue ? (
+                        <img
+                          src={profileImageValue}
+                          alt={`${member.name} profile`}
+                          style={{
+                            width: '44px',
+                            height: '44px',
+                            borderRadius: '12px',
+                            objectFit: 'cover',
+                            border: '1px solid rgba(148,163,184,0.35)',
+                            background: 'rgba(15,23,42,0.6)',
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: '44px',
+                            height: '44px',
+                            borderRadius: '12px',
+                            border: '1px solid rgba(148,163,184,0.35)',
+                            background: 'rgba(148,163,184,0.12)',
+                            color: '#e2e8f0',
+                            display: 'grid',
+                            placeItems: 'center',
+                            fontWeight: 800,
+                            fontSize: '14px',
+                          }}
+                        >
+                          {member.name.slice(0, 2)}
+                        </div>
+                      )}
+                      <div style={{ display: 'grid', gap: '4px' }}>
+                        <div style={{ fontWeight: 800, color: '#e2e8f0' }}>{member.name}</div>
+                        <div style={{ color: '#94a3b8', fontSize: '12px' }}>{MEMBER_ROLE_LABELS[member.role]}</div>
+                      </div>
                     </div>
                     {canManage && (
                       <button
@@ -1185,6 +1347,34 @@ export default function TeamDetailPage() {
                           <option value="L">투 L</option>
                         </select>
                       </div>
+                      <div style={{ display: 'grid', gap: '8px' }}>
+                        <input
+                          value={profileImageValue}
+                          onChange={(e) => setMemberEdits((prev) => ({ ...prev, [member.uid]: { ...prev[member.uid], profileImageUrl: e.target.value } }))}
+                          placeholder="프로필 이미지 URL"
+                          style={{
+                            padding: '8px 10px',
+                            borderRadius: '10px',
+                            border: '1px solid rgba(148,163,184,0.35)',
+                            background: 'rgba(15,23,42,0.6)',
+                            color: '#e2e8f0',
+                          }}
+                        />
+                        <textarea
+                          value={profileBioValue}
+                          onChange={(e) => setMemberEdits((prev) => ({ ...prev, [member.uid]: { ...prev[member.uid], profileBio: e.target.value } }))}
+                          placeholder="프로필 한 줄 소개"
+                          rows={2}
+                          style={{
+                            padding: '8px 10px',
+                            borderRadius: '10px',
+                            border: '1px solid rgba(148,163,184,0.35)',
+                            background: 'rgba(15,23,42,0.6)',
+                            color: '#e2e8f0',
+                            resize: 'vertical',
+                          }}
+                        />
+                      </div>
                       <button
                         type="button"
                         onClick={() => handleSaveMember(member.uid)}
@@ -1204,8 +1394,13 @@ export default function TeamDetailPage() {
                       </button>
                     </div>
                   ) : (
-                    <div style={{ color: '#94a3b8', fontSize: '12px' }}>
-                      #{member.number || '-'} · {member.position || '-'} · 타 {member.bats || '-'} / 투 {member.throws || '-'}
+                    <div style={{ display: 'grid', gap: '6px' }}>
+                      {member.profileBio && (
+                        <div style={{ color: '#cbd5e1', fontSize: '13px' }}>{member.profileBio}</div>
+                      )}
+                      <div style={{ color: '#94a3b8', fontSize: '12px' }}>
+                        #{member.number || '-'} · {member.position || '-'} · 타 {member.bats || '-'} / 투 {member.throws || '-'}
+                      </div>
                     </div>
                   )}
                 </div>
