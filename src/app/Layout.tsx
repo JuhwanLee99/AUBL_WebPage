@@ -18,9 +18,11 @@ export default function Layout() {
   const { user, logout, initializing } = useAuth();
   const { isAdmin, roleLabel, roleDetail } = useAdmin();
   const { state } = useDemoStore();
-  const isLiveOverlay = location.pathname === '/live-overlay';
-  const isScoreboardText = location.pathname === '/scoreboard-text';
+  const isLiveOverlay = location.pathname.startsWith('/live-overlay');
+  const isScoreboardText = location.pathname.startsWith('/scoreboard-text');
   const isLanding = location.pathname === '/';
+  const scoreboardTextPath = state.activeMatchId ? `/scoreboard-text/${state.activeMatchId}` : '/scoreboard-text';
+  const liveOverlayPath = state.activeMatchId ? `/live-overlay/${state.activeMatchId}` : '/live-overlay';
   const headerInnerRef = useRef<HTMLDivElement>(null);
   const linkRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>(() =>
@@ -221,6 +223,7 @@ export default function Layout() {
   const activeMatch = useMemo(() => state.matches.find((m) => m.id === state.activeMatchId), [state.matches, state.activeMatchId]);
   const hasLiveOverlay = Boolean((activeMatch?.liveVideoUrl || '').trim());
   const isMobileHeader = previewMode === 'mobile';
+  const scorekeeperPath = state.activeMatchId ? `/scorekeeper/${state.activeMatchId}` : '/scorekeeper';
 
   const navItems = useMemo(
     () => [
@@ -258,7 +261,7 @@ export default function Layout() {
       },
       { path: '/prediction', label: '승부예측' },
       // 기록원: 항상 보이지만 비관리자는 클릭 시 안내 버블만 노출
-      { path: '/scorekeeper', label: '기록원', requiresAdmin: true, showWhenBlocked: true },
+      { path: scorekeeperPath, label: '기록원', requiresAdmin: true, showWhenBlocked: true },
       // 사용설명서: 외부 링크
       {
         path: 'https://docs.google.com/document/d/e/2PACX-1vRYQNkS6wuqoYWokWN_rnPpmZuWLHcNyn_j5K5Vhw3g8voduO20VMJYFH_3FTjW9Whgk7nxywV8ps_9/pub',
@@ -266,7 +269,7 @@ export default function Layout() {
         isExternal: true,
       },
     ],
-    [],
+    [scorekeeperPath],
   );
   const [hoveredMenu, setHoveredMenu] = useState<string | null>(null);
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
@@ -537,7 +540,7 @@ export default function Layout() {
                   }}
                 >
                   <Link
-                    to="/scoreboard-text"
+                    to={scoreboardTextPath}
                     aria-current="page"
                     style={{
                       border: 'none',
@@ -556,7 +559,7 @@ export default function Layout() {
                   </Link>
                   {hasLiveOverlay ? (
                     <Link
-                      to="/live-overlay"
+                      to={liveOverlayPath}
                       style={{
                         border: 'none',
                         background: 'rgba(148,163,184,0.25)',

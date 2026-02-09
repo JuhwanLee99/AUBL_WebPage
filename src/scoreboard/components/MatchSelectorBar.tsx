@@ -1,15 +1,19 @@
 import { useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDemoStore } from '../../shared/state/demoStore';
 
 type Props = {
   summaryTime: string;
   summaryVenue: string;
+  showViewerBadge?: boolean;
+  viewerCount?: number;
 };
 
-export default function MatchSelectorBar({ summaryTime, summaryVenue }: Props) {
+export default function MatchSelectorBar({ summaryTime, summaryVenue, showViewerBadge = false, viewerCount = 0 }: Props) {
   const { state, actions } = useDemoStore();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const filterParam = searchParams.get('filter');
 
   // URL 쿼리 파라미터로 필터링: ?filter=live이면 진행 중인 경기만
@@ -27,6 +31,12 @@ export default function MatchSelectorBar({ summaryTime, summaryVenue }: Props) {
     [state.matches, state.activeMatchId],
   );
   const isPracticeMode = (activeMatch?.recordMode ?? 'official') === 'practice';
+  const basePath = useMemo(() => {
+    if (location.pathname.startsWith('/scoreboard-text')) return '/scoreboard-text';
+    if (location.pathname.startsWith('/live-overlay')) return '/live-overlay';
+    if (location.pathname.startsWith('/scorekeeper')) return '/scorekeeper';
+    return '/scoreboard';
+  }, [location.pathname]);
 
   return (
     <div
@@ -48,7 +58,12 @@ export default function MatchSelectorBar({ summaryTime, summaryVenue }: Props) {
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
         <select
           value={hasActive ? state.activeMatchId ?? '' : ''}
-          onChange={(e) => actions.selectMatch(e.target.value || null)}
+          onChange={(e) => {
+            const nextId = e.target.value || null;
+            actions.selectMatch(nextId);
+            const suffix = nextId ? `/${nextId}` : '';
+            navigate(`${basePath}${suffix}${location.search}`);
+          }}
           style={{
             padding: '8px 10px',
             borderRadius: '10px',
@@ -69,6 +84,26 @@ export default function MatchSelectorBar({ summaryTime, summaryVenue }: Props) {
             </option>
           ))}
         </select>
+        {showViewerBadge ? (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 10px',
+              background: 'rgba(34, 197, 94, 0.08)',
+              borderRadius: '999px',
+              border: '1px solid rgba(34,197,94,0.25)',
+              color: '#22c55e',
+              fontWeight: 700,
+              fontSize: '12px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span style={{ fontSize: '12px' }}>👥</span>
+            현재 {viewerCount}명 시청 중
+          </span>
+        ) : null}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         {isPracticeMode ? (

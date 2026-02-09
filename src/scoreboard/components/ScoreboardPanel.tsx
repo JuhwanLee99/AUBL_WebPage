@@ -4,6 +4,7 @@ import { TEAMS } from '../../shared/lib/mockData';
 import { useDemoStore, buildGameRecord } from '../../shared/state/demoStore';
 import MatchSelectorBar from './MatchSelectorBar';
 import { GameTimerDisplay } from '../../shared/components/GameTimerDisplay';
+import { useAdmin } from '../../shared/auth/useAdmin';
 
 // 타입 정의
 type BatterLine = {
@@ -190,6 +191,7 @@ function computePitcherLine(
   const chronological = [...feed].reverse();
   const current: Record<'home' | 'away', string | null> = { home: null, away: null };
   const cleanName = (raw: string) => raw.replace(/투수/g, '').replace(/·/g, '').trim();
+  const isPitcherLog = (result: string) => result.includes('투수 (') || /투수\s*$/.test(result);
 
   chronological.forEach((entry) => {
     const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
@@ -199,8 +201,9 @@ function computePitcherLine(
     if (result.includes('투수 교체')) {
       const incoming = result.split('→')[1];
       if (incoming) current[defenseSide] = cleanName(incoming);
-    } else if (result.endsWith('투수')) {
-      current[defenseSide] = cleanName(result.replace('투수', ''));
+    } else if (isPitcherLog(result)) {
+      const namePart = result.includes('투수 (') ? result.split('투수')[0] : result.replace(/투수\s*$/, '');
+      current[defenseSide] = cleanName(namePart);
     }
 
     const activePitcher = current[defenseSide] || pitcher;
@@ -265,38 +268,50 @@ const countLights = (filled: number, total: number, color: string) =>
     color,
   }));
 
+type ScoreboardPanelProps = {
+  style?: CSSProperties;
+  showFootnote?: boolean;
+  showViewerBadge?: boolean;
+  hideBases?: boolean;
+};
+
 export default function ScoreboardPanel({
   style,
   showFootnote = true,
-}: {
-  style?: CSSProperties;
-  showFootnote?: boolean;
-}) {
+  showViewerBadge = false,
+  hideBases = false,
+}: ScoreboardPanelProps) {
   const { state } = useDemoStore();
+  const { isAdmin } = useAdmin();
   const homeTeam = useMemo(() => TEAMS.find((t) => t.id === state.homeTeamId), [state.homeTeamId]);
   const awayTeam = useMemo(() => TEAMS.find((t) => t.id === state.awayTeamId), [state.awayTeamId]);
   const activeMatch = useMemo(
     () => state.matches.find((match) => match.id === state.activeMatchId),
     [state.matches, state.activeMatchId],
   );
+  const lineupVisible = isAdmin || state.gameStarted || Boolean(activeMatch?.lineupPublic);
   const hittingSide = state.half === 'top' ? 'away' : 'home';
   const defenseSide = hittingSide === 'home' ? 'away' : 'home';
   const offenseLineup = useMemo(
-    () => state.lineups[hittingSide].filter((slot) => slot.pos.toUpperCase() !== 'P'),
-    [hittingSide, state.lineups],
+    () => (lineupVisible ? state.lineups[hittingSide].filter((slot) => slot.pos.toUpperCase() !== 'P') : []),
+    [hittingSide, state.lineups, lineupVisible],
   );
-  const activeOffense = offenseLineup.length ? offenseLineup : state.lineups[hittingSide];
+  const activeOffense = offenseLineup.length ? offenseLineup : lineupVisible ? state.lineups[hittingSide] : [];
   // [수정됨] 현재 타자 이름 가져오기: 이름 + 등번호 조합 사용
   const currentBatterSlot = activeOffense[state.batterIndex[hittingSide] % Math.max(activeOffense.length, 1)];
-  const currentBatter = currentBatterSlot
-    ? getUniqueName(currentBatterSlot.name, currentBatterSlot.number)
-    : '타자';
+  const currentBatter = lineupVisible
+    ? currentBatterSlot
+      ? getUniqueName(currentBatterSlot.name, currentBatterSlot.number)
+      : '타자'
+    : '라인업 공개 전';
 
   // [수정됨] 현재 투수 이름 가져오기: 이름 + 등번호 조합 사용
-  const currentPitcherSlot = state.lineups[defenseSide].find((slot) => slot.pos.toUpperCase() === 'P');
-  const currentPitcher = currentPitcherSlot
-    ? getUniqueName(currentPitcherSlot.name, currentPitcherSlot.number)
-    : '투수';
+  const currentPitcherSlot = lineupVisible ? state.lineups[defenseSide].find((slot) => slot.pos.toUpperCase() === 'P') : null;
+  const currentPitcher = lineupVisible
+    ? currentPitcherSlot
+      ? getUniqueName(currentPitcherSlot.name, currentPitcherSlot.number)
+      : '투수'
+    : '라인업 공개 전';
 
   const inningHalf = state.half === 'top' ? '▲' : '▼';
   const inning = state.inning;
@@ -381,7 +396,12 @@ export default function ScoreboardPanel({
       }}
     >
       <div style={{ display: 'grid', gap: 'clamp(8px, 1.3vw, 12px)' }}>
-        <MatchSelectorBar summaryTime={summaryTime} summaryVenue={summaryVenue} />
+        <MatchSelectorBar
+          summaryTime={summaryTime}
+          summaryVenue={summaryVenue}
+          showViewerBadge={showViewerBadge}
+          viewerCount={state.onlineViewerCount}
+        />
 
         <GameTimerDisplay
           gameLimitMinutes={state.gameLimitMinutes}
@@ -461,7 +481,9 @@ export default function ScoreboardPanel({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'minmax(0, 0.9fr) minmax(360px, 1.35fr)',
+            gridTemplateColumns: hideBases
+              ? 'minmax(0, 0.55fr) minmax(360px, 1.8fr)'
+              : 'minmax(0, 0.9fr) minmax(360px, 1.35fr)',
             gap: 'clamp(10px, 1.6vw, 14px)',
             alignItems: 'stretch',
           }}
@@ -469,9 +491,10 @@ export default function ScoreboardPanel({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'auto auto',
+              gridTemplateColumns: hideBases ? 'auto' : 'auto auto',
               gap: '8px',
               alignItems: 'center',
+              justifyContent: hideBases ? 'center' : 'start',
             }}
           >
             <div style={{ display: 'grid', gap: 'clamp(6px, 1.2vw, 10px)' }}>
@@ -479,7 +502,7 @@ export default function ScoreboardPanel({
               <CountBlock label="S" lights={countLights(strike, 2, '#facc15')} />
               <CountBlock label="O" lights={countLights(out, 3, '#ef4444')} />
             </div>
-            <BasePaths bases={bases} />
+            {hideBases ? null : <BasePaths bases={bases} />}
           </div>
 
           <BoxScoreTable data={boxScore} />
@@ -650,6 +673,7 @@ export function BoxScoreTable({
 }) {
   const headers = ['팀', ...data.innings.map(String), 'R', 'H', 'E'];
   const rows = data.rows;
+  const gridColumns = `minmax(96px, 1.6fr) repeat(${Math.max(1, headers.length - 1)}, minmax(24px, 0.7fr))`;
   return (
     <div
       style={{
@@ -667,7 +691,7 @@ export function BoxScoreTable({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: `repeat(${headers.length}, minmax(0, 1fr))`,
+          gridTemplateColumns: gridColumns,
           background: 'rgba(255,255,255,0.03)',
           borderBottom: '1px solid rgba(148,163,184,0.2)',
         }}
@@ -676,7 +700,7 @@ export function BoxScoreTable({
           <div
             key={h}
             style={{
-              padding: '3px 2px',
+              padding: '2px 1px',
               textAlign: 'center',
               fontWeight: 800,
               fontSize: '12px',
@@ -694,17 +718,20 @@ export function BoxScoreTable({
             key={row.name}
             style={{
               display: 'grid',
-              gridTemplateColumns: `repeat(${headers.length}, minmax(0, 1fr))`,
+              gridTemplateColumns: gridColumns,
               borderTop: idx === 0 ? 'none' : '1px solid rgba(148,163,184,0.2)',
             }}
           >
             <div
               style={{
-                padding: '4px',
+                padding: '3px 2px',
                 fontWeight: 900,
                 color: row.color,
                 fontSize: '12px',
                 textAlign: 'center',
+                whiteSpace: 'normal',
+                wordBreak: 'keep-all',
+                lineHeight: 1.15,
               }}
             >
               {row.name}
@@ -713,7 +740,7 @@ export function BoxScoreTable({
               <div
                 key={`${row.name}-${vIdx}`}
                 style={{
-                  padding: '4px 2px',
+                  padding: '3px 1px',
                   textAlign: 'center',
                   color: '#cbd5e1',
                   fontWeight: 800,

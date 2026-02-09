@@ -2,12 +2,13 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ScoreboardFrame from '../components/ScoreboardFrame';
 import { useDemoStore, buildGameRecord } from '../../shared/state/demoStore';
-import type { PlayEvent, ErrorDetails, RunnerAdvanceOutcome, BattedBallDetails } from '../../shared/state/demoStore';
+import type { PlayEvent, ErrorDetails, RunnerAdvanceOutcome, BattedBallDetails, PlayerSlot } from '../../shared/state/demoStore';
 import StatsTable from '../../shared/components/StatsTable';
 import RemovedPlayersPanel from '../../shared/components/RemovedPlayersPanel';
 import { GameTimerDisplay } from '../../shared/components/GameTimerDisplay';
 import type { BatterStatLine, PitcherStatLine } from '../../shared/types/scoreStats';
 import type { MatchSchedule } from '../../shared/state/demoStore';
+import { useAdmin } from '../../shared/auth/useAdmin';
 import './ScoreboardTextPage.css';
 
 type Half = 'top' | 'bottom';
@@ -36,6 +37,11 @@ type PitcherLine = {
   pitches: number;
   strikes: number;
   balls: number;
+};
+
+type CsvPreviewSection = {
+  title: string;
+  rows: string[][];
 };
 
 type EventDetail = { label: string; value: string };
@@ -106,9 +112,12 @@ function resolveJersey(jerseyMap: JerseyMap, side: 'home' | 'away', name: string
 
 export default function ScoreboardTextPage() {
   const { state, actions } = useDemoStore();
+  const { isAdmin } = useAdmin();
   const { matchId } = useParams<{ matchId?: string }>();
   const [showReplay, setShowReplay] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [feedExpanded, setFeedExpanded] = useState(false);
+  const replayLoadRef = useRef(false);
   const navigate = useNavigate(); // [수정] 훅 초기화
 
   // URL에서 matchId가 있으면 해당 경기 자동 선택
@@ -123,6 +132,29 @@ export default function ScoreboardTextPage() {
   }, [matchId, state.activeMatchId, state.matches, actions]);
 
   useEffect(() => {
+    if (!matchId && state.activeMatchId) {
+      navigate(`/scoreboard-text/${state.activeMatchId}`, { replace: true });
+    }
+  }, [matchId, state.activeMatchId, navigate]);
+
+  useEffect(() => {
+    setFeedExpanded(false);
+    setShowReplay(false);
+    replayLoadRef.current = false;
+  }, [state.activeMatchId]);
+
+  useEffect(() => {
+    if (!state.gameOver) {
+      replayLoadRef.current = false;
+      return;
+    }
+    if (replayLoadRef.current) return;
+    replayLoadRef.current = true;
+    setShowReplay(true);
+    actions.loadMoreFeed();
+  }, [actions, state.gameOver]);
+
+  useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth <= 900);
     };
@@ -135,6 +167,8 @@ export default function ScoreboardTextPage() {
     () => state.matches.find((m) => m.id === state.activeMatchId) ?? null,
     [state.matches, state.activeMatchId],
   );
+  const isPracticeMode = (activeMatch?.recordMode ?? 'official') === 'practice';
+  const lineupVisible = isAdmin || state.gameStarted || Boolean(activeMatch?.lineupPublic);
   const hasLiveOverlay = useMemo(() => Boolean((activeMatch?.liveVideoUrl || '').trim()), [activeMatch?.liveVideoUrl]);
   const noActiveMatch = !state.activeMatchId;
   const feed = useMemo(() => state.feed, [state.feed]);
@@ -143,27 +177,36 @@ export default function ScoreboardTextPage() {
   const defenseSide = hittingSide === 'home' ? 'away' : 'home';
   
   const defenseAssignments = useMemo(
-    () => getDefenseAssignments(state.lineups[defenseSide] ?? []),
-    [defenseSide, state.lineups],
+    () =>
+      lineupVisible
+        ? getDefenseAssignments(state.lineups[defenseSide] ?? [])
+        : [{ name: '라인업 공개 전', pos: 'P', x: 50, y: 50 }],
+    [defenseSide, state.lineups, lineupVisible],
   );
 
   // [수정] 타자 라인업 계산 시 오타니 룰 등을 고려하여 ScorekeeperPage와 유사하게 처리
   // 다만 텍스트 페이지에서는 단순 표시용이므로 기본 로직 유지하되 이름은 고유하게 처리
-  const offenseLineup = state.lineups[hittingSide];
+  const offenseLineup = lineupVisible ? state.lineups[hittingSide] : [];
   // 1~9번 타순은 무조건 포함, 그 외는 투수가 아니거나 타격 가능할 때 (여기선 단순화하여 전체 표시)
   const activeOffense = offenseLineup; 
   
   const currentBatterEntry = activeOffense[state.batterIndex[hittingSide] % (activeOffense.length || 1)];
   // [수정] currentBatter를 고유 이름으로 생성
-  const currentBatter = currentBatterEntry
-    ? getUniqueName(currentBatterEntry.name, currentBatterEntry.number)
-    : '타자';
+  const currentBatter = lineupVisible
+    ? currentBatterEntry
+      ? getUniqueName(currentBatterEntry.name, currentBatterEntry.number)
+      : '타자'
+    : '라인업 공개 전';
 
-  const currentPitcherEntry = state.lineups[defenseSide].find((slot) => slot.pos.toUpperCase() === 'P');
+  const currentPitcherEntry = lineupVisible
+    ? state.lineups[defenseSide].find((slot) => slot.pos.toUpperCase() === 'P')
+    : null;
   // [수정] currentPitcher를 고유 이름으로 생성
-  const currentPitcher = currentPitcherEntry
-    ? getUniqueName(currentPitcherEntry.name, currentPitcherEntry.number)
-    : '투수';
+  const currentPitcher = lineupVisible
+    ? currentPitcherEntry
+      ? getUniqueName(currentPitcherEntry.name, currentPitcherEntry.number)
+      : '투수'
+    : '라인업 공개 전';
 
   const currentInning = state.inning;
 
@@ -172,9 +215,11 @@ export default function ScoreboardTextPage() {
   const pitcherToday = useMemo(() => computePitcherLine(feed, currentPitcher), [feed, currentPitcher]);
   
   const jerseyMap = useMemo(() => buildJerseyMap(state.lineups, state.benches, state.removed), [state.lineups, state.benches, state.removed]);
-  
+
+  const recordPayload = useMemo(() => buildGameRecord(state), [state]);
+
   // [중요] buildPlayerStats가 이제 고유 키 로직을 따름
-  const playerStats = useMemo(() => buildPlayerStats(buildGameRecord(state)), [state]);
+  const playerStats = useMemo(() => buildPlayerStats(recordPayload, { practiceMode: isPracticeMode }), [recordPayload, isPracticeMode]);
   
   const postSummary = useMemo(
     () => buildPostGameSummary(playerStats.hitters, playerStats.pitchers, state.score),
@@ -207,10 +252,14 @@ export default function ScoreboardTextPage() {
     };
   }, [state.gameOver, state.score.away, state.score.home, state.teamNames.away, state.teamNames.home]);
 
+  const csvPreviewContent = useMemo(
+    () => (state.gameOver ? buildCsvRecord(recordPayload) : null),
+    [recordPayload, state.gameOver],
+  );
+
   // [추가] CSV 다운로드 핸들러
   const handleDownloadCsv = () => {
     if (!state.gameOver) return;
-    const recordPayload = buildGameRecord(state);
     const csvContent = buildCsvRecord(recordPayload);
     const filename = buildDownloadName('scorecard', state.endedAt);
     downloadCsv(csvContent, filename);
@@ -237,27 +286,11 @@ export default function ScoreboardTextPage() {
     <div className="scoreboard-text-page">
       <div className="main-content-grid">
         <div className={`scoreboard-section ${isMobile ? 'mobile-layout' : ''}`}>
-          {/* 동접자 수 표시 */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              marginBottom: '12px',
-              padding: '8px 12px',
-              background: 'rgba(34, 197, 94, 0.08)',
-              borderRadius: '10px',
-              width: 'fit-content',
-            }}
-          >
-            <span style={{ fontSize: '15px' }}>👥</span>
-            <span style={{ fontSize: '13px', color: '#22c55e', fontWeight: 600 }}>
-              현재 {state.onlineViewerCount}명 시청 중
-            </span>
-          </div>
           <ScoreboardFrame
             variant="text"
+            hideBases
             showFootnote={false}
+            showViewerBadge
             panelStyle={
               isMobile
                 ? { width: '100%', height: 'auto', minHeight: '500px' }
@@ -278,35 +311,61 @@ export default function ScoreboardTextPage() {
         <div className={state.gameOver ? 'live-feed-section game-over' : 'live-feed-section'}>
           {state.gameOver ? (
             <>
-              {/* [추가] 기록지 다운로드 버튼 영역 */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
-                <button
-                  type="button"
-                  onClick={handleDownloadCsv}
-                  style={{
-                    padding: '8px 14px',
-                    borderRadius: '10px',
-                    border: '1px solid rgba(59, 130, 246, 0.4)',
-                    background: 'linear-gradient(90deg, #2563eb, #1d4ed8)',
-                    color: '#f8fafc',
-                    fontWeight: 900,
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                  }}
-                >
-                  <span style={{ fontSize: '16px' }}>📥</span>
-                  기록지 다운로드 (CSV)
-                </button>
-              </div>
-
               {postGameDetail ? (
-                <PostGameDetailSection detail={postGameDetail} teams={{ home: state.teamNames.home, away: state.teamNames.away }} />
+                <PostGameDetailSection
+                  detail={postGameDetail}
+                  teams={{ home: state.teamNames.home, away: state.teamNames.away }}
+                  actionSlot={
+                    <button
+                      type="button"
+                      onClick={handleDownloadCsv}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(59, 130, 246, 0.4)',
+                        background: 'linear-gradient(90deg, #2563eb, #1d4ed8)',
+                        color: '#f8fafc',
+                        fontWeight: 800,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        boxShadow: '0 3px 8px rgba(37, 99, 235, 0.2)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0px',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      기록지 다운로드 (CSV)
+                    </button>
+                  }
+                />
               ) : (
-                <PostGameSummary summary={postSummary} />
+                <PostGameSummary
+                  summary={postSummary}
+                  actionSlot={
+                    <button
+                      type="button"
+                      onClick={handleDownloadCsv}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(59, 130, 246, 0.4)',
+                        background: 'linear-gradient(90deg, #2563eb, #1d4ed8)',
+                        color: '#f8fafc',
+                        fontWeight: 800,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        boxShadow: '0 3px 8px rgba(37, 99, 235, 0.2)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0px',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      기록지 다운로드 (CSV)
+                    </button>
+                  }
+                />
               )}
               <div
                 style={{
@@ -315,10 +374,10 @@ export default function ScoreboardTextPage() {
                   padding: '8px 10px',
                   background: 'rgba(255,255,255,0.02)',
                   display: 'grid',
-                  gridTemplateRows: 'auto 1fr',
+                  gridTemplateRows: 'auto minmax(0, 1fr)',
                   gap: '6px',
                   minHeight: 0,
-                  maxHeight: showReplay ? '560px' : '260px',
+                  maxHeight: showReplay ? '1100px' : '240px',
                   transition: 'max-height 180ms ease',
                   overflow: 'hidden',
                 }}
@@ -328,22 +387,7 @@ export default function ScoreboardTextPage() {
                     <span style={{ fontWeight: 900, fontSize: '14px', color: '#e2e8f0' }}>문자중계 다시보기</span>
                     <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>경기 종료 후 기록 전체를 확인할 수 있습니다.</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowReplay((v) => !v)}
-                    style={{
-                      padding: '8px 10px',
-                      borderRadius: '10px',
-                      border: '1px solid rgba(148,163,184,0.35)',
-                      background: 'rgba(255,255,255,0.05)',
-                      color: '#e2e8f0',
-                      fontWeight: 800,
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {showReplay ? '접기' : '펼치기'}
-                  </button>
+                  <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 800 }}>항상 펼쳐짐</span>
                 </div>
                 {showReplay ? (
                   <div
@@ -353,7 +397,8 @@ export default function ScoreboardTextPage() {
                       background: 'rgba(15,23,42,0.55)',
                       padding: '8px',
                       minHeight: 0,
-                      maxHeight: '420px',
+                      height: '100%',
+                      maxHeight: '100%',
                       overflowY: 'auto',
                       alignSelf: 'stretch',
                     }}
@@ -418,7 +463,9 @@ export default function ScoreboardTextPage() {
               {hasLiveOverlay ? (
                 <button
                   type="button"
-                  onClick={() => navigate('/live-overlay')}
+                  onClick={() =>
+                    navigate(state.activeMatchId ? `/live-overlay/${state.activeMatchId}` : '/live-overlay')
+                  }
                   style={{
                     padding: '6px 10px',
                     borderRadius: '10px',
@@ -450,6 +497,29 @@ export default function ScoreboardTextPage() {
                 </span>
               )}
             </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '6px' }}>
+            <button
+              type="button"
+              onClick={() => {
+                actions.loadMoreFeed();
+                setFeedExpanded(true);
+              }}
+              disabled={feedExpanded}
+              style={{
+                padding: '6px 10px',
+                borderRadius: '10px',
+                border: '1px solid rgba(148,163,184,0.5)',
+                background: feedExpanded ? 'rgba(148,163,184,0.12)' : 'rgba(59,130,246,0.12)',
+                color: feedExpanded ? '#94a3b8' : '#93c5fd',
+                fontWeight: 800,
+                fontSize: '12px',
+                cursor: feedExpanded ? 'not-allowed' : 'pointer',
+              }}
+              title={feedExpanded ? '이전 이닝까지 불러왔습니다' : '이전 이닝 더보기'}
+            >
+              {feedExpanded ? '이전 이닝 불러옴' : '이전 이닝 더보기'}
+            </button>
           </div>
           <LiveFeed sections={sections} collapsedMap={collapsedMap} gameOverInfo={gameOverInfo} isMobile={isMobile} />
           <div
@@ -495,8 +565,211 @@ export default function ScoreboardTextPage() {
       </div>
 
       <div className="removed-players-grid">
-        <RemovedPlayersPanel title="교체 out (HOME)" players={state.removed.home} density="compact" />
-        <RemovedPlayersPanel title="교체 out (AWAY)" players={state.removed.away} density="compact" />
+        <RemovedPlayersPanel title={`교체 out (${state.teamNames.away || 'AWAY'})`} players={state.removed.away} density="compact" />
+        <RemovedPlayersPanel title={`교체 out (${state.teamNames.home || 'HOME'})`} players={state.removed.home} density="compact" />
+      </div>
+
+      {state.gameOver && csvPreviewContent ? (
+        <CsvRecordPreview
+          csvContent={csvPreviewContent}
+          awayTeamName={recordPayload.meta.awayTeamName || state.teamNames.away}
+          homeTeamName={recordPayload.meta.homeTeamName || state.teamNames.home}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function parseCsvRows(csvText: string) {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < csvText.length; i += 1) {
+    const char = csvText[i];
+    if (inQuotes) {
+      if (char === '"') {
+        if (csvText[i + 1] === '"') {
+          cell += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cell += char;
+      }
+    } else {
+      if (char === '"') {
+        inQuotes = true;
+      } else if (char === ',') {
+        row.push(cell);
+        cell = '';
+      } else if (char === '\n') {
+        row.push(cell);
+        rows.push(row);
+        row = [];
+        cell = '';
+      } else if (char !== '\r') {
+        cell += char;
+      }
+    }
+  }
+
+  row.push(cell);
+  rows.push(row);
+
+  return rows;
+}
+
+function isBlankCsvRow(row: string[]) {
+  if (!row.length) return true;
+  return row.every((cell) => cell.trim() === '');
+}
+
+function splitCsvSections(rows: string[][]): CsvPreviewSection[] {
+  const sections: CsvPreviewSection[] = [];
+  let current: CsvPreviewSection | null = null;
+
+  rows.forEach((row) => {
+    if (isBlankCsvRow(row)) {
+      if (current && (current.title || current.rows.length)) {
+        sections.push(current);
+      }
+      current = null;
+      return;
+    }
+
+    if (row.length === 1 && row[0].trim()) {
+      if (current && (current.title || current.rows.length)) {
+        sections.push(current);
+      }
+      current = { title: row[0].trim(), rows: [] };
+      return;
+    }
+
+    if (!current) {
+      current = { title: '', rows: [] };
+    }
+    current.rows.push(row);
+  });
+
+  const finalized = current as CsvPreviewSection | null;
+  if (finalized && (finalized.title || finalized.rows.length)) {
+    sections.push(finalized);
+  }
+
+  return sections;
+}
+
+function extractKboSections(sections: CsvPreviewSection[]) {
+  const result: Partial<Record<'away' | 'home', CsvPreviewSection>> = {};
+  sections.forEach((section) => {
+    const title = section.title.trim();
+    if (!title || !title.includes('기록지')) return;
+    if (title.includes('초공')) {
+      result.away = section;
+      return;
+    }
+    if (title.includes('말공')) {
+      result.home = section;
+    }
+  });
+  return result;
+}
+
+function CsvRecordPreview({
+  csvContent,
+  awayTeamName,
+  homeTeamName,
+}: {
+  csvContent: string;
+  awayTeamName?: string;
+  homeTeamName?: string;
+}) {
+  const sections = useMemo(() => splitCsvSections(parseCsvRows(csvContent)), [csvContent]);
+  const kboSections = useMemo(() => extractKboSections(sections), [sections]);
+  const defaultSide = kboSections.away ? 'away' : kboSections.home ? 'home' : null;
+  const [selectedSide, setSelectedSide] = useState<'away' | 'home'>(defaultSide ?? 'away');
+
+  useEffect(() => {
+    if (!defaultSide) return;
+    if (selectedSide === 'away' && !kboSections.away) {
+      setSelectedSide(defaultSide);
+      return;
+    }
+    if (selectedSide === 'home' && !kboSections.home) {
+      setSelectedSide(defaultSide);
+    }
+  }, [defaultSide, kboSections.away, kboSections.home, selectedSide]);
+
+  if (!defaultSide) return null;
+
+  const section = kboSections[selectedSide] ?? (defaultSide === 'away' ? kboSections.away : kboSections.home);
+  if (!section) return null;
+
+  const visibleRows = section.rows.filter((row) => !isBlankCsvRow(row));
+  const header = visibleRows[0] ?? [];
+  const bodyRows = visibleRows.slice(1);
+  const columnCount = header.length || Math.max(0, ...visibleRows.map((row) => row.length));
+
+  const normalizeRow = (row: string[]) => {
+    if (row.length >= columnCount) return row;
+    return [...row, ...Array.from({ length: columnCount - row.length }, () => '')];
+  };
+
+  const awayLabel = awayTeamName?.trim() ? `${awayTeamName} (초공)` : '원정 (초공)';
+  const homeLabel = homeTeamName?.trim() ? `${homeTeamName} (말공)` : '홈 (말공)';
+
+  return (
+    <div className="csv-preview">
+      <div className="csv-preview__header">
+        <div className="csv-preview__titles">
+          <div className="csv-preview__title">기록지</div>
+          <div className="csv-preview__subtitle">{section.title}</div>
+        </div>
+        <div className="csv-preview__tabs">
+          <button
+            type="button"
+            className={`csv-preview__tab ${selectedSide === 'away' ? 'is-active' : ''}`}
+            onClick={() => setSelectedSide('away')}
+            disabled={!kboSections.away}
+          >
+            {awayLabel}
+          </button>
+          <button
+            type="button"
+            className={`csv-preview__tab ${selectedSide === 'home' ? 'is-active' : ''}`}
+            onClick={() => setSelectedSide('home')}
+            disabled={!kboSections.home}
+          >
+            {homeLabel}
+          </button>
+        </div>
+      </div>
+      <div className="csv-preview__table-wrap">
+        <table className="csv-preview__table">
+          {header.length ? (
+            <thead>
+              <tr>
+                {normalizeRow(header).map((cell, idx) => (
+                  <th key={`csv-kbo-head-${idx}`} scope="col">
+                    {cell || '-'}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+          ) : null}
+          <tbody>
+            {bodyRows.map((row, rowIdx) => (
+              <tr key={`csv-kbo-row-${rowIdx}`}>
+                {normalizeRow(row).map((cell, cellIdx) => (
+                  <td key={`csv-kbo-cell-${rowIdx}-${cellIdx}`}>{cell || '-'}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -1487,6 +1760,7 @@ function computePitcherLine(feed: ReturnType<typeof useDemoStore>['state']['feed
   const current: Record<'home' | 'away', string | null> = { home: null, away: null };
   // [중요] ScorekeeperPage와 동일하게 괄호 제거하지 않음
   const cleanName = (raw: string) => raw.replace(/투수/g, '').replace(/·/g, '').trim();
+  const isPitcherLog = (result: string) => result.includes('투수 (') || /투수\s*$/.test(result);
 
   chronological.forEach((entry) => {
     const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
@@ -1497,8 +1771,9 @@ function computePitcherLine(feed: ReturnType<typeof useDemoStore>['state']['feed
     if (result.includes('투수 교체') || (result.includes('대수비') && result.includes('→'))) {
       const incoming = result.split('→')[1];
       if (incoming) current[defenseSide] = cleanName(incoming);
-    } else if (result.endsWith('투수')) {
-      current[defenseSide] = cleanName(result.replace('투수', ''));
+    } else if (isPitcherLog(result)) {
+      const namePart = result.includes('투수 (') ? result.split('투수')[0] : result.replace(/투수\s*$/, '');
+      current[defenseSide] = cleanName(namePart);
     }
 
     // 투수 교체가 명시되지 않은 경우, 현재 투수(pitcher)를 기본값으로 사용
@@ -1940,6 +2215,8 @@ function ensurePlayerStat(name: string, pos?: string): PlayerStat {
     hbp: 0,
     so: 0,
     sac: 0,
+    r: 0,
+    rbi: 0,
   };
 }
 
@@ -1957,33 +2234,83 @@ function ensurePitcherStat(name: string, pos?: string): PitcherStatExt {
     bb: 0,
     hbp: 0,
     so: 0,
+    r: 0,
+    er: 0,
   };
 }
 
 // [수정] buildPlayerStats: ScorekeeperPage.tsx의 로직을 그대로 이식
 // 투수/타자 구분 로직, 고유 이름(uniqueName)을 Key로 사용하는 로직 적용
-function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
-  // 1. Roster Map의 Value 타입 확장 및 데이터 저장
-  // { pos?: string; order: number; substitutionType?: string; isElite?: boolean } 형태로 저장
-  const rosterHome = new Map<string, { pos?: string; order: number; substitutionType?: string; isElite?: boolean }>();
-  const rosterAway = new Map<string, { pos?: string; order: number; substitutionType?: string; isElite?: boolean }>();
+function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: { practiceMode?: boolean }) {
+  const practiceMode = options?.practiceMode === true;
+  const normalizePos = (pos?: string) => (pos ?? '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const isDhPos = (pos?: string) => {
+    const norm = normalizePos(pos);
+    return norm === 'DH' || (pos ?? '').includes('지명');
+  };
+  const hasDhBySide: Record<'home' | 'away', boolean> = {
+    home: record.lineups.home.some((slot) => isDhPos(slot.pos)),
+    away: record.lineups.away.some((slot) => isDhPos(slot.pos)),
+  };
+  const lineupByName: Record<'home' | 'away', Map<string, PlayerSlot>> = {
+    home: new Map(),
+    away: new Map(),
+  };
+  record.lineups.home.forEach((p) => lineupByName.home.set(getUniqueName(p.name, p.number), p));
+  record.lineups.away.forEach((p) => lineupByName.away.set(getUniqueName(p.name, p.number), p));
+  const pitcherCanBat = (side: 'home' | 'away', name: string) => {
+    const slot = lineupByName[side].get(name);
+    if (!slot) return true;
+    const isPitcher = normalizePos(slot.pos) === 'P';
+    if (!isPitcher) return true;
+    if (slot.isOhtaniRule) return true;
+    return !hasDhBySide[side];
+  };
+  // Roster Map의 Key를 uniqueName으로 변경
+  const rosterHome = new Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자'; isElite?: boolean }>();
+  const rosterAway = new Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자'; isElite?: boolean }>();
 
-  // [수정] substitutionType, isElite 저장 추가
-  record.lineups.home.forEach((p, idx) => rosterHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType, isElite: p.isElite }));
-  record.lineups.away.forEach((p, idx) => rosterAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType, isElite: p.isElite }));
+  record.lineups.home.forEach((p, idx) =>
+    rosterHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType, isElite: p.isElite })
+  );
+  record.lineups.away.forEach((p, idx) =>
+    rosterAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: idx, substitutionType: p.substitutionType, isElite: p.isElite })
+  );
 
-  const benchMetaHome = new Map<string, { pos?: string; order: number; substitutionType?: string; isElite?: boolean }>();
-  const benchMetaAway = new Map<string, { pos?: string; order: number; substitutionType?: string; isElite?: boolean }>();
-  // [수정] substitutionType, isElite 저장 추가
-  record.benches.home.forEach((p, idx) => benchMetaHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, substitutionType: p.substitutionType, isElite: p.isElite }));
-  record.benches.away.forEach((p, idx) => benchMetaAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, substitutionType: p.substitutionType, isElite: p.isElite }));
+  const benchMetaHome = new Map<string, { pos?: string; order: number; isElite?: boolean }>();
+  const benchMetaAway = new Map<string, { pos?: string; order: number; isElite?: boolean }>();
+  record.benches.home.forEach((p, idx) => benchMetaHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, isElite: p.isElite }));
+  record.benches.away.forEach((p, idx) => benchMetaAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, isElite: p.isElite }));
+  const removedMetaHome = new Map<string, { pos?: string; order: number; isElite?: boolean }>();
+  const removedMetaAway = new Map<string, { pos?: string; order: number; isElite?: boolean }>();
+  record.removed.home.forEach((p, idx) => removedMetaHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 200 + idx, isElite: p.isElite }));
+  record.removed.away.forEach((p, idx) => removedMetaAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 200 + idx, isElite: p.isElite }));
 
   const extraOrder: Record<'home' | 'away', number> = { home: 100, away: 100 };
   const battingOrders: Record<'home' | 'away', Map<number, string[]>> = { home: new Map(), away: new Map() };
 
   const seedBattingOrders = (side: 'home' | 'away') => {
-    // 투수 타석 허용 (상위 9명)
-    const batting = record.lineups[side].slice(0, 9);
+    let batting: PlayerSlot[] = [];
+    if (practiceMode) {
+      const lineup = record.lineups[side];
+      let pitcherIndex = -1;
+      for (let idx = lineup.length - 1; idx >= 0; idx -= 1) {
+        if (lineup[idx].pos.toUpperCase() === 'P') {
+          pitcherIndex = idx;
+          break;
+        }
+      }
+      batting = lineup.filter((_, idx) => idx !== pitcherIndex);
+    } else {
+      const lineup = record.lineups[side];
+      batting = lineup.filter((slot, idx) => {
+        const isPitcher = normalizePos(slot.pos) === 'P';
+        const allowedPitcher = isPitcher ? pitcherCanBat(side, getUniqueName(slot.name, slot.number)) : true;
+        if (idx >= 9) return false;
+        return allowedPitcher;
+      });
+    }
+    // Batting order map에도 uniqueName 저장
     batting.forEach((slot, idx) => battingOrders[side].set(idx + 1, [getUniqueName(slot.name, slot.number)]));
   };
   seedBattingOrders('home');
@@ -2013,12 +2340,13 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
   const nextAppearance: Record<'home' | 'away', number> = { home: 0, away: 0 };
 
   const ensureRosterEntry = (side: 'home' | 'away', name: string) => {
+    // name은 이미 uniqueName이어야 함
     const roster = side === 'home' ? rosterHome : rosterAway;
     if (roster.has(name)) return roster.get(name)!;
     const benchMeta = side === 'home' ? benchMetaHome : benchMetaAway;
-    const meta = benchMeta.get(name);
-    // [수정] substitutionType, isElite 전달
-    const entry = { pos: meta?.pos, order: meta?.order ?? extraOrder[side], substitutionType: meta?.substitutionType, isElite: meta?.isElite };
+    const removedMeta = side === 'home' ? removedMetaHome : removedMetaAway;
+    const meta = benchMeta.get(name) ?? removedMeta.get(name);
+    const entry = { pos: meta?.pos, order: meta?.order ?? extraOrder[side], isElite: meta?.isElite };
     extraOrder[side] += 1;
     roster.set(name, entry);
     return entry;
@@ -2026,9 +2354,9 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
 
   const addStat = (side: 'home' | 'away', name: string) => {
     ensureRosterEntry(side, name);
-    const store = side === 'home' ? statsHome : statsAway;
     const roster = side === 'home' ? rosterHome : rosterAway;
     const pos = roster.get(name)?.pos;
+    const store = side === 'home' ? statsHome : statsAway;
     if (!store.has(name)) {
       store.set(name, ensurePlayerStat(name, pos));
     }
@@ -2041,26 +2369,170 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
       pitcherAppearance[side].set(name, nextAppearance[side]);
       nextAppearance[side] += 1;
     }
-    const store = side === 'home' ? pitchHome : pitchAway;
     const roster = side === 'home' ? rosterHome : rosterAway;
     const pos = roster.get(name)?.pos;
+    const store = side === 'home' ? pitchHome : pitchAway;
     if (!store.has(name)) {
       store.set(name, ensurePitcherStat(name, pos));
     }
     return store.get(name)!;
   };
 
+  const markPitcher = (side: 'home' | 'away', name: string) => {
+    const roster = side === 'home' ? rosterHome : rosterAway;
+    const entry = ensureRosterEntry(side, name);
+    if (entry.pos?.toUpperCase() !== 'P') {
+      roster.set(name, { ...entry, pos: 'P' });
+    }
+  };
+
   // Feed is already in chronological order (oldest → newest) per pushFeed implementation
   const chronological = record.feed;
   const currentPitcher: Record<'home' | 'away', string | null> = { home: null, away: null };
+  const bases: (string | null)[] = [null, null, null];
+  const runnerResponsibility = new Map<string, string>();
+  let lastHalfKey: string | null = null;
+  let currentHalfOuts = 0;
+
+  const resetHalfState = () => {
+    bases[0] = null;
+    bases[1] = null;
+    bases[2] = null;
+    runnerResponsibility.clear();
+    currentHalfOuts = 0;
+  };
+
+  const syncHalfState = (inning: number, half: Half) => {
+    const key = `${inning}-${half}`;
+    if (key !== lastHalfKey) {
+      resetHalfState();
+      lastHalfKey = key;
+    }
+  };
+
+  const extractRunnerName = (summary: string, options?: { includeNonScoring?: boolean }) => {
+    const includeNonScoring = options?.includeNonScoring === true;
+    if (!includeNonScoring && !summary.includes('득점')) return null;
+    if (includeNonScoring && !summary.includes('주자') && !summary.includes('득점')) return null;
+    const parts = summary.split('·').map((part) => part.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      return parts[parts.length - 1];
+    }
+    const match = summary.match(/(.+?)\s*득점/);
+    return match ? match[1].trim() : null;
+  };
+
+  const parseRunnerMove = (text: string) => {
+    if (!text.includes('주자') || !text.includes('·')) return null;
+    const runnerName = extractRunnerName(text, { includeNonScoring: true });
+    if (!runnerName) return null;
+    const baseMatch = text.match(/([123])루 주자/);
+    const fromBase = baseMatch ? Number(baseMatch[1]) - 1 : null;
+    const arrowMatch = text.match(/([123])루→(홈|[123])루?/);
+    const toBase = arrowMatch ? (arrowMatch[2] === '홈' ? 'home' : Number(arrowMatch[2]) - 1) : null;
+    const scored = text.includes('득점');
+    const out = text.includes('아웃');
+    const hold = text.includes('정지');
+    const isErrorPlay = text.includes('실책');
+    return { runnerName, fromBase, toBase, scored, out, hold, isErrorPlay };
+  };
+
+  const parseRunnerOutGroup = (text: string) => {
+    if (!text.includes('아웃') || !text.includes('·')) return null;
+    if (text.includes('주자')) return null;
+    const outCountMatch = text.match(/(\d+)명\s*아웃/);
+    const outCount = text.includes('더블아웃') ? 2 : outCountMatch ? Number(outCountMatch[1]) : 1;
+    const namePartMatch = text.match(/·\s*(.+)\s+아웃/);
+    const names: string[] = [];
+    if (namePartMatch) {
+      const list = namePartMatch[1].split(',').map((part) => part.trim()).filter(Boolean);
+      list.forEach((item) => {
+        const name = item.replace(/\s*[123]루\s*$/, '').trim();
+        if (name) names.push(name);
+      });
+    }
+    return { names, outCount, isErrorPlay: text.includes('실책') };
+  };
+
+  const creditRunForPitcher = (pitcherName: string | null, defenseSide: 'home' | 'away', earned = true) => {
+    if (!pitcherName) return;
+    const stat = addPitch(defenseSide, pitcherName);
+    stat.r += 1;
+    if (earned) stat.er += 1;
+  };
+
+  const creditRunForRunner = (runnerName: string, defenseSide: 'home' | 'away', earned = true) => {
+    const responsible = runnerResponsibility.get(runnerName) ?? currentPitcher[defenseSide];
+    creditRunForPitcher(responsible ?? null, defenseSide, earned);
+    runnerResponsibility.delete(runnerName);
+  };
+
+  const assignRunnerResponsibility = (runnerName: string, defenseSide: 'home' | 'away') => {
+    const pitcherName = currentPitcher[defenseSide];
+    if (!runnerName || !pitcherName) return;
+    runnerResponsibility.set(runnerName, pitcherName);
+  };
+
+  const placeRunnerOnBase = (runnerName: string, targetBase: number) => {
+    let dest = targetBase;
+    while (dest < 3 && bases[dest]) {
+      dest += 1;
+    }
+    if (dest >= 3) {
+      return { scored: true };
+    }
+    bases[dest] = runnerName;
+    return { scored: false };
+  };
+
+  const applyWalkAdvance = (batterName: string) => {
+    let scoredRunner: string | null = null;
+    if (bases[0]) {
+      if (bases[1] && bases[2]) {
+        scoredRunner = bases[2];
+        bases[2] = null;
+      }
+      if (bases[1]) {
+        bases[2] = bases[1];
+        bases[1] = null;
+      }
+      bases[1] = bases[0];
+      bases[0] = null;
+    }
+    bases[0] = batterName;
+    return scoredRunner;
+  };
+
+  const getActivePitcher = (defenseSide: 'home' | 'away') => {
+    let pitcherName = currentPitcher[defenseSide];
+    const roster = defenseSide === 'home' ? rosterHome : rosterAway;
+    const hasValid =
+      pitcherName &&
+      roster.has(pitcherName) &&
+      roster.get(pitcherName)?.pos?.toUpperCase() === 'P';
+    if (hasValid) return pitcherName;
+    for (const [pName, info] of roster.entries()) {
+      if (info.pos && info.pos.toUpperCase() === 'P') {
+        currentPitcher[defenseSide] = pName;
+        return pName;
+      }
+    }
+    return pitcherName ?? null;
+  };
+  
+  // [수정됨] 이름 파싱 로직 변경: 괄호() 안의 내용(등번호 포함)을 유지해야 함
+  // 기존: raw.replace(/\([^)]*\)/g, '') -> 괄호 전체 삭제
+  // 변경: 등번호가 있는 uniqueName 형태 '홍길동(18)'를 유지하기 위해 괄호 삭제 정규식 제거
+  // 대신 '투수', '·' 같은 불필요한 텍스트만 제거
   const cleanName = (raw: string) => raw.replace(/투수/g, '').replace(/·/g, '').trim();
 
-  // [추가] 투수 이름 해석 헬퍼
+  // [추가] 투수 이름이 로스터의 uniqueName과 일치하지 않을 때(예: "홍길동" vs "홍길동(18)") 찾아주는 헬퍼
   const resolvePitcherName = (rawName: string, side: 'home' | 'away' | null) => {
     const checkSides = side ? [side] : ['home', 'away'];
     for (const s of checkSides as ('home' | 'away')[]) {
         const roster = s === 'home' ? rosterHome : rosterAway;
         if (roster.has(rawName)) return rawName;
+        // 이름 뒤에 (등번호)가 붙은 키가 있는지 확인
         for (const key of roster.keys()) {
             if (key.startsWith(rawName + '(')) return key;
         }
@@ -2068,13 +2540,168 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     return rawName;
   };
 
-  const inferPitcherSide = (name: string): 'home' | 'away' | null => {
-    if (rosterHome.has(name) || benchMetaHome.has(name)) return 'home';
-    if (rosterAway.has(name) || benchMetaAway.has(name)) return 'away';
+  const inferPlayerSide = (name: string): 'home' | 'away' | null => {
+    if (rosterHome.has(name) || benchMetaHome.has(name) || removedMetaHome.has(name)) return 'home';
+    if (rosterAway.has(name) || benchMetaAway.has(name) || removedMetaAway.has(name)) return 'away';
+    // 로스터 키 매칭 시도
     for (const key of rosterHome.keys()) if (key.startsWith(name + '(')) return 'home';
     for (const key of rosterAway.keys()) if (key.startsWith(name + '(')) return 'away';
     return null;
   };
+
+  const resolveBatterName = (rawName: string, side: 'home' | 'away', orderNum?: number | null) => {
+    let name = rawName.trim();
+    if (!name) return name;
+    const roster = side === 'home' ? rosterHome : rosterAway;
+    if (!roster.has(name)) {
+      if (orderNum) {
+        const candidates = battingOrders[side].get(orderNum);
+        const match = candidates?.find((uName) => uName.startsWith(`${name}(`) || uName === name);
+        if (match) name = match;
+      }
+      if (!roster.has(name)) {
+        const base = name.replace(/\([^)]*\)/g, '').trim();
+        if (base && roster.has(base)) {
+          name = base;
+        } else {
+          for (const key of roster.keys()) {
+            if (key.startsWith(`${name}(`) || (base && key.startsWith(`${base}(`))) {
+              name = key;
+              break;
+            }
+          }
+        }
+      }
+    }
+    return name;
+  };
+
+  const parseSubstitutionLog = (text: string) => {
+    const normalized = text.trim();
+    if (!normalized) return null;
+    if (!/교체|대타|대주자|대수비/.test(normalized)) return null;
+    if (normalized.startsWith('포지션 교체')) return null;
+    if (!normalized.includes('→') || !normalized.includes('·')) return null;
+    const [left, right] = normalized.split('→');
+    if (!right) return null;
+    const outgoingPart = left.split('·').pop();
+    if (!outgoingPart) return null;
+    const outgoing = cleanName(outgoingPart);
+    const incoming = cleanName(right);
+    if (!outgoing || !incoming) return null;
+    let kind: 'defense' | 'pinch_hit' | 'pinch_run' | 'pitcher' | 'batter' | 'unknown' = 'unknown';
+    if (normalized.includes('대수비')) kind = 'defense';
+    else if (normalized.includes('대타')) kind = 'pinch_hit';
+    else if (normalized.includes('대주자')) kind = 'pinch_run';
+    else if (normalized.includes('투수 교체')) kind = 'pitcher';
+    else if (normalized.includes('타자 교체')) kind = 'batter';
+    return { outgoing, incoming, kind };
+  };
+
+  const resolvePlayerName = (raw: string, side?: 'home' | 'away' | null, orderNum?: number | null) => {
+    if (!raw) return raw;
+    if (side) return resolveBatterName(raw, side, orderNum);
+    const resolvedHome = resolveBatterName(raw, 'home', orderNum);
+    if (rosterHome.has(resolvedHome) || benchMetaHome.has(resolvedHome) || removedMetaHome.has(resolvedHome)) return resolvedHome;
+    const resolvedAway = resolveBatterName(raw, 'away', orderNum);
+    return resolvedAway;
+  };
+
+  const firstOffenseIndex: Record<'home' | 'away', number> = {
+    home: Number.POSITIVE_INFINITY,
+    away: Number.POSITIVE_INFINITY,
+  };
+  const firstPlateIndex: Record<'home' | 'away', Map<string, number>> = {
+    home: new Map(),
+    away: new Map(),
+  };
+  const substitutionOutIndex: Record<'home' | 'away', Map<string, number>> = {
+    home: new Map(),
+    away: new Map(),
+  };
+  const substitutionInIndex: Record<'home' | 'away', Map<string, number>> = {
+    home: new Map(),
+    away: new Map(),
+  };
+
+  const findOrderForPlayer = (side: 'home' | 'away', name: string) => {
+    for (const [order, list] of battingOrders[side]) {
+      if (list.includes(name)) return order;
+    }
+    return null;
+  };
+
+  const addToOrderList = (side: 'home' | 'away', order: number, name: string) => {
+    const list = battingOrders[side].get(order) ?? [];
+    if (!list.includes(name)) {
+      list.push(name);
+      battingOrders[side].set(order, list);
+    }
+  };
+
+  chronological.forEach((entry, idx) => {
+    if (entry.batter && entry.order > 0) {
+      const side: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
+      if (idx < firstOffenseIndex[side]) firstOffenseIndex[side] = idx;
+      const resolved = resolveBatterName(entry.batter, side, entry.order);
+      if (!firstPlateIndex[side].has(resolved)) {
+        firstPlateIndex[side].set(resolved, idx);
+      }
+    }
+
+    const substitution = parseSubstitutionLog(entry.result ?? '');
+    if (!substitution) return;
+    const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
+    const defenseSide: 'home' | 'away' = offenseSide === 'home' ? 'away' : 'home';
+    const fallbackSide = substitution.kind === 'defense' || substitution.kind === 'pitcher' ? defenseSide : offenseSide;
+
+    const outgoingResolved = resolvePlayerName(substitution.outgoing, null, entry.order ?? null);
+    const incomingResolved = resolvePlayerName(substitution.incoming, null, entry.order ?? null);
+    const outgoingSide = inferPlayerSide(outgoingResolved) ?? fallbackSide;
+    const incomingSide = inferPlayerSide(incomingResolved) ?? outgoingSide;
+
+    if (!substitutionOutIndex[outgoingSide].has(outgoingResolved)) {
+      substitutionOutIndex[outgoingSide].set(outgoingResolved, idx);
+    }
+    if (!substitutionInIndex[incomingSide].has(incomingResolved)) {
+      substitutionInIndex[incomingSide].set(incomingResolved, idx);
+    }
+
+    const resolvedOrder = findOrderForPlayer(outgoingSide, outgoingResolved)
+      ?? (typeof entry.order === 'number' && entry.order > 0 ? entry.order : null);
+    if (resolvedOrder) {
+      addToOrderList(incomingSide, resolvedOrder, incomingResolved);
+    }
+  });
+
+  const dnpPlayers: Record<'home' | 'away', Set<string>> = {
+    home: new Set(),
+    away: new Set(),
+  };
+  (['home', 'away'] as const).forEach((side) => {
+    const defenseStartIndex = side === 'home' ? firstOffenseIndex.away : firstOffenseIndex.home;
+    substitutionOutIndex[side].forEach((subIdx, name) => {
+      if (substitutionInIndex[side].has(name)) return;
+      const firstPa = firstPlateIndex[side].get(name);
+      const battedBefore = firstPa !== undefined && firstPa < subIdx;
+      const defendedBefore = defenseStartIndex < subIdx;
+      if (!battedBefore && !defendedBefore) {
+        dnpPlayers[side].add(name);
+      }
+    });
+
+    const removedList = record.removed?.[side] ?? [];
+    removedList.forEach((player) => {
+      const name = getUniqueName(player.name, player.number);
+      if (dnpPlayers[side].has(name)) return;
+      if (substitutionInIndex[side].has(name)) return;
+      if (firstPlateIndex[side].has(name)) return;
+      if (substitutionOutIndex[side].has(name)) return;
+      if (Number.isFinite(firstOffenseIndex[side])) {
+        dnpPlayers[side].add(name);
+      }
+    });
+  });
 
   // [수정] 투수 등판 순서 문제 해결을 위해 두 패스로 분리
   // 첫 번째 패스: 투수 관련 로그만 먼저 처리하여 등판 순서 확립
@@ -2083,23 +2710,27 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     const defenseSide: 'home' | 'away' = offenseSide === 'home' ? 'away' : 'home';
     const result = entry.result.trim();
 
+    // result 문자열에는 이제 "홍길동(18)" 형태가 들어올 것임
     if (result.includes('투수 교체')) {
       const incoming = result.split('→')[1];
       if (incoming) {
         let cleaned = cleanName(incoming);
-        const inferred = inferPitcherSide(cleaned) ?? defenseSide;
+        const inferred = inferPlayerSide(cleaned) ?? defenseSide;
         cleaned = resolvePitcherName(cleaned, inferred);
+
         currentPitcher[inferred] = cleaned;
         addPitch(inferred, cleaned);
+        markPitcher(inferred, cleaned);
       }
-    } else if (result.includes('투수 (선발)') || (result.includes('투수 (') && result.includes('차 계투)'))) {
+    } else if (result.includes('투수 (선발)') || result.includes('투수 (') && result.includes('차 계투)')) {
       // 자동 생성된 투수 등판 항목: "홍길동(18) 투수 (선발)" 또는 "홍길동(18) 투수 (1차 계투)"
       let cleaned = cleanName(result.split('투수')[0]);
-      const inferred = inferPitcherSide(cleaned) ?? defenseSide;
+      const inferred = inferPlayerSide(cleaned) ?? defenseSide;
       cleaned = resolvePitcherName(cleaned, inferred);
 
       currentPitcher[inferred] = cleaned;
       addPitch(inferred, cleaned);
+      markPitcher(inferred, cleaned);
     }
   });
 
@@ -2114,34 +2745,101 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     const result = entry.result.trim();
     const orderNum = typeof entry.order === 'number' && entry.order > 0 ? entry.order : null;
 
+    syncHalfState(entry.inning, entry.half);
+
     // 투수 관련 로그에서 currentPitcher 업데이트 (등판 순서는 첫 번째 패스에서 이미 처리됨)
     if (result.includes('투수 교체')) {
       const incoming = result.split('→')[1];
       if (incoming) {
         let cleaned = cleanName(incoming);
-        const inferred = inferPitcherSide(cleaned) ?? defenseSide;
+        const inferred = inferPlayerSide(cleaned) ?? defenseSide;
         cleaned = resolvePitcherName(cleaned, inferred);
         currentPitcher[inferred] = cleaned;
+        markPitcher(inferred, cleaned);
       }
-    } else if (result.includes('투수 (선발)') || (result.includes('투수 (') && result.includes('차 계투)'))) {
+    } else if (result.includes('투수 (선발)') || result.includes('투수 (') && result.includes('차 계투)')) {
       let cleaned = cleanName(result.split('투수')[0]);
-      const inferred = inferPitcherSide(cleaned) ?? defenseSide;
+      const inferred = inferPlayerSide(cleaned) ?? defenseSide;
       cleaned = resolvePitcherName(cleaned, inferred);
       currentPitcher[inferred] = cleaned;
+      markPitcher(inferred, cleaned);
     }
 
     let name = entry.batter?.trim();
-    if (!name) return;
+    if (!name) {
+      const runnerMove = parseRunnerMove(result);
+      if (runnerMove) {
+        const { runnerName, fromBase, toBase, scored, out, hold, isErrorPlay } = runnerMove;
+        const resolvedRunner = resolveBatterName(runnerName, offenseSide);
+        let currentIndex = -1;
+        if (fromBase != null && bases[fromBase] === resolvedRunner) {
+          currentIndex = fromBase;
+        } else {
+          currentIndex = bases.findIndex((runner) => runner === resolvedRunner);
+        }
+
+        if (scored) {
+          if (currentIndex >= 0) bases[currentIndex] = null;
+          creditRunForRunner(resolvedRunner, defenseSide, !isErrorPlay);
+        } else if (out) {
+          if (currentIndex >= 0) bases[currentIndex] = null;
+          runnerResponsibility.delete(resolvedRunner);
+          currentHalfOuts += 1;
+          const pitcherName = getActivePitcher(defenseSide);
+          if (pitcherName) {
+            addPitch(defenseSide, pitcherName).outs += 1;
+          }
+        } else if (typeof toBase === 'number') {
+          if (currentIndex >= 0) bases[currentIndex] = null;
+          bases[toBase] = resolvedRunner;
+        } else if (hold && currentIndex === -1 && fromBase != null) {
+          bases[fromBase] = resolvedRunner;
+        }
+      } else {
+        const groupOut = parseRunnerOutGroup(result);
+        if (groupOut) {
+          const outsToAdd = Math.max(groupOut.outCount, groupOut.names.length || 0);
+          const pitcherName = getActivePitcher(defenseSide);
+          if (outsToAdd > 0) {
+            currentHalfOuts += outsToAdd;
+            if (pitcherName) {
+              addPitch(defenseSide, pitcherName).outs += outsToAdd;
+            }
+          }
+          groupOut.names.forEach((raw) => {
+            const resolvedRunner = resolveBatterName(raw, offenseSide);
+            const idx = bases.findIndex((runner) => runner === resolvedRunner);
+            if (idx >= 0) bases[idx] = null;
+            runnerResponsibility.delete(resolvedRunner);
+          });
+        }
+      }
+
+      if (result.includes('종료') && currentHalfOuts < 3) {
+        const missing = 3 - currentHalfOuts;
+        const pitcherName = getActivePitcher(defenseSide);
+        if (pitcherName) {
+          addPitch(defenseSide, pitcherName).outs += missing;
+        }
+        currentHalfOuts = 3;
+      }
+      return;
+    }
     const side = offenseSide;
+    
     const roster = side === 'home' ? rosterHome : rosterAway;
 
-    // 이름 매핑 (고유 이름 찾기)
+    // 만약 roster에 해당 이름(예: "홍길동")이 없다면, "홍길동(18)" 같은 키를 찾아서 매핑
     if (!roster.has(name)) {
+      // 1. 타순(Order) 정보가 있다면 우선적으로 확인
       if (orderNum) {
         const candidates = battingOrders[side].get(orderNum);
+        // 후보군 중 이름이 일치하는(시작하는) 선수 찾기
         const match = candidates?.find(uName => uName.startsWith(`${name}(`) || uName === name);
         if (match) name = match;
       }
+
+      // 2. 타순으로 못 찾았다면, 로스터 전체에서 이름으로 검색 (동명이인이 없을 경우 유효)
       if (!roster.has(name)) {
          for (const key of roster.keys()) {
            if (key.startsWith(`${name}(`)) {
@@ -2163,19 +2861,28 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
 
     const pitchSide = side === 'home' ? 'away' : 'home';
     
-    // 투수 찾기 (fallback 로직 포함)
+    // [수정됨] 투수 기록 집계 안전장치 추가
+    // 1. 피드에서 투수 이름을 찾음
     let pitcherName = currentPitcher[pitchSide];
-    if (!pitcherName) {
-      const roster = pitchSide === 'home' ? rosterHome : rosterAway;
-      for (const [pName, info] of roster.entries()) {
+    const pitchRoster = pitchSide === 'home' ? rosterHome : rosterAway;
+    const hasValidPitcher =
+      pitcherName &&
+      pitchRoster.has(pitcherName) &&
+      pitchRoster.get(pitcherName)?.pos?.toUpperCase() === 'P';
+
+    // 2. 피드에 투수 정보가 없거나(또는 라인업 변경으로 유효하지 않으면) 현재 로스터에서 'P' 포지션인 선수를 찾음
+    if (!hasValidPitcher) {
+      // 로스터 맵을 순회하며 포지션이 P인 선수 찾기
+      for (const [pName, info] of pitchRoster.entries()) {
+        if (!pName || !pName.trim()) continue;
         if (info.pos && info.pos.toUpperCase() === 'P') {
           pitcherName = pName;
-          currentPitcher[pitchSide] = pName; 
+          // 피드 처리의 일관성을 위해 currentPitcher 캐시에도 저장
+          currentPitcher[pitchSide] = pName;
           break;
         }
       }
     }
-
     const pitcherStat = pitcherName ? addPitch(pitchSide, pitcherName) : null;
     const pitchInfo = classifyPitch(result);
     if (pitcherStat && pitchInfo.pitch) {
@@ -2188,105 +2895,245 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
     const stat = addStat(side, name);
     switch (kind) {
       case 'single':
-        stat.pa += 1; stat.ab += 1; stat.h += 1; stat.singles += 1;
-        if (pitcherStat) { pitcherStat.bf += 1; pitcherStat.h += 1; }
+        stat.pa += 1;
+        stat.ab += 1;
+        stat.h += 1;
+        stat.singles += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.h += 1;
+        }
         break;
       case 'double':
-        stat.pa += 1; stat.ab += 1; stat.h += 1; stat.doubles += 1;
-        if (pitcherStat) { pitcherStat.bf += 1; pitcherStat.h += 1; }
+        stat.pa += 1;
+        stat.ab += 1;
+        stat.h += 1;
+        stat.doubles += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.h += 1;
+        }
         break;
       case 'triple':
-        stat.pa += 1; stat.ab += 1; stat.h += 1; stat.triples += 1;
-        if (pitcherStat) { pitcherStat.bf += 1; pitcherStat.h += 1; }
+        stat.pa += 1;
+        stat.ab += 1;
+        stat.h += 1;
+        stat.triples += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.h += 1;
+        }
         break;
       case 'hr':
-        stat.pa += 1; stat.ab += 1; stat.h += 1; stat.hr += 1;
-        if (pitcherStat) { pitcherStat.bf += 1; pitcherStat.h += 1; pitcherStat.hr += 1; }
+        stat.pa += 1;
+        stat.ab += 1;
+        stat.h += 1;
+        stat.hr += 1;
+        stat.r += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.h += 1;
+          pitcherStat.hr += 1;
+        }
         break;
       case 'bb':
-        stat.pa += 1; stat.bb += 1;
-        if (pitcherStat) { pitcherStat.bf += 1; pitcherStat.bb += 1; }
+        stat.pa += 1;
+        stat.bb += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.bb += 1;
+        }
         break;
       case 'ci':
-        stat.pa += 1; stat.ci += 1;
-        if (pitcherStat) { pitcherStat.bf += 1; }
+        stat.pa += 1;
+        stat.bb += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+        }
         break;
       case 'fc':
-        stat.pa += 1; stat.ab += 1; stat.fc += 1;
-        if (pitcherStat) { pitcherStat.bf += 1; }
+        stat.pa += 1;
+        stat.ab += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+        }
         break;
       case 'hbp':
-        stat.pa += 1; stat.hbp += 1;
-        if (pitcherStat) { pitcherStat.bf += 1; pitcherStat.hbp += 1; }
+        stat.pa += 1;
+        stat.hbp += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.hbp += 1;
+        }
         break;
       case 'so':
-        stat.pa += 1; stat.ab += 1; stat.so += 1;
-        if (pitcherStat) { pitcherStat.bf += 1; pitcherStat.outs += 1; pitcherStat.so += 1; }
+        stat.pa += 1;
+        stat.ab += 1;
+        stat.so += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.outs += 1;
+          pitcherStat.so += 1;
+        }
+        currentHalfOuts += 1;
         break;
       case 'so_reach':
-        stat.pa += 1; stat.ab += 1; stat.so += 1;
-        if (pitcherStat) { pitcherStat.bf += 1; pitcherStat.so += 1; }
+        stat.pa += 1;
+        stat.ab += 1;
+        stat.so += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.so += 1;
+        }
         break;
       case 'out':
-        stat.pa += 1; stat.ab += 1;
-        if (pitcherStat) { pitcherStat.bf += 1; pitcherStat.outs += 1; }
+        stat.pa += 1;
+        stat.ab += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.outs += 1;
+        }
+        currentHalfOuts += 1;
         break;
       case 'sac':
-        stat.pa += 1; stat.sac += 1;
-        if (pitcherStat) { pitcherStat.bf += 1; pitcherStat.outs += 1; }
+        stat.pa += 1;
+        stat.sac += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+          pitcherStat.outs += 1;
+        }
+        currentHalfOuts += 1;
         break;
+      default:
+        break;
+    }
+
+    if (kind === 'hr') {
+      creditRunForPitcher(pitcherName ?? null, pitchSide, true);
+      return;
+    }
+
+    if (kind === 'bb' || kind === 'hbp' || kind === 'ci') {
+      const scoredRunner = applyWalkAdvance(name);
+      assignRunnerResponsibility(name, pitchSide);
+      if (scoredRunner) {
+        creditRunForRunner(scoredRunner, pitchSide, true);
+      }
+      return;
+    }
+
+    if (kind === 'single' || kind === 'double' || kind === 'triple' || kind === 'fc' || kind === 'so_reach') {
+      const targetBase = kind === 'double' ? 1 : kind === 'triple' ? 2 : 0;
+      const placed = placeRunnerOnBase(name, targetBase);
+      if (placed.scored) {
+        creditRunForPitcher(pitcherName ?? null, pitchSide, true);
+      } else {
+        assignRunnerResponsibility(name, pitchSide);
+      }
     }
   });
 
-  const toArray = (side: 'home' | 'away', roster: Map<string, { pos?: string; order: number; substitutionType?: string }>, store: Map<string, PlayerStat>) => {
-    const rows: PlayerStat[] = [];
+  record.events.forEach((event) => {
+    const offenseSide: 'home' | 'away' = event.half === 'top' ? 'away' : 'home';
+    if (event.batter && typeof event.rbi === 'number' && event.rbi > 0) {
+      const batterName = resolveBatterName(event.batter, offenseSide, event.order ?? null);
+      const stat = addStat(offenseSide, batterName);
+      stat.rbi += event.rbi;
+    }
+    if (Array.isArray(event.runners)) {
+      event.runners.forEach((runnerSummary) => {
+        const rawRunner = extractRunnerName(runnerSummary);
+        if (!rawRunner) return;
+        const runnerName = resolveBatterName(rawRunner, offenseSide);
+        const stat = addStat(offenseSide, runnerName);
+        stat.r += 1;
+      });
+    }
+  });
+
+  const toArray = (
+    side: 'home' | 'away',
+    roster: Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자'; isElite?: boolean }>,
+    store: Map<string, PlayerStat>
+  ) => {
+    const rows: (PlayerStat & { isElite?: boolean })[] = [];
     const orderMap = battingOrders[side];
     const orderKeys = [...orderMap.keys()].sort((a, b) => a - b);
     orderKeys.forEach((order) => {
       const players = orderMap.get(order) ?? [];
       players.forEach((playerName, idx) => {
+        if (dnpPlayers[side].has(playerName)) return;
         const meta = roster.get(playerName);
         const stat = store.get(playerName);
         const base = ensurePlayerStat(playerName, meta?.pos);
         const row = stat ? { ...base, ...stat, pos: stat.pos ?? base.pos } : base;
-        
-        // [수정] status 결정 로직: 교체 아웃된 경우 'out', 아니면 교체 유형(대타/대주자 등) 표시
-        let status: 'out' | '대타' | '대주자' | '대수비' | undefined = undefined;
+        const slot = lineupByName[side].get(playerName);
+        const isPitcher = normalizePos(slot?.pos ?? meta?.pos) === 'P';
+        if (isPitcher && !pitcherCanBat(side, playerName) && (row.pa ?? 0) === 0) {
+          return;
+        }
+
+        if (meta?.substitutionType) {
+          // console.log(`[통계 생성] ${playerName}:`, {
+          //   meta,
+          //   hasSubstitutionType: !!meta.substitutionType,
+          //   substitutionType: meta.substitutionType,
+          // });
+        }
+
+        // 교체된 선수는 'out', 교체로 들어온 선수는 substitutionType을 status로 설정
+        let status: 'out' | '대수비' | '대타' | '대주자' | undefined;
         if (idx < players.length - 1) {
           status = 'out';
         } else if (meta?.substitutionType) {
-          // as casting을 통해 타입 호환성 확보
-          status = meta.substitutionType as 'out' | '대타' | '대주자' | '대수비';
+          status = meta.substitutionType;
+          // console.log(`✓ ${playerName} - substitutionType: ${meta.substitutionType} -> status: ${status}`);
         }
 
-        rows.push({ ...row, order, status });
+        rows.push({ ...row, order, status, isElite: meta?.isElite });
       });
     });
     const remaining = [...store.values()].filter(
       (s) =>
         !rows.some((r) => r.name === s.name) &&
-        ![...orderMap.values()].some((list) => list.includes(s.name)),
+        ![...orderMap.values()].some((list) => list.includes(s.name))
     );
-    remaining.forEach((stat) => rows.push({ ...stat, order: null }));
+    remaining.forEach((stat) => {
+      if (dnpPlayers[side].has(stat.name)) return;
+      const meta = roster.get(stat.name);
+      const slot = lineupByName[side].get(stat.name);
+      const isPitcher = normalizePos(slot?.pos ?? meta?.pos) === 'P';
+      if (isPitcher && !pitcherCanBat(side, stat.name) && (stat.pa ?? 0) === 0) {
+        return;
+      }
+      rows.push({ ...stat, order: null, isElite: meta?.isElite });
+    });
     return rows;
   };
 
   const toPitcherArray = (
-    roster: Map<string, { pos?: string; order: number }>,
+    side: 'home' | 'away',
+    roster: Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자'; isElite?: boolean }>,
     store: Map<string, PitcherStatExt>,
-    appearance: Map<string, number>,
-  ) => {
+    appearance: Map<string, number>
+  ): PitcherStatLine[] => {
     const names = new Set<string>();
     roster.forEach((meta, name) => {
       if ((meta.pos ?? '').toUpperCase() === 'P') names.add(name);
     });
     store.forEach((_stat, name) => names.add(name));
 
-    const combined = [...names].map((name) => {
+    const combined: PitcherStatLine[] = [...names]
+      .filter((name) => !dnpPlayers[side].has(name))
+      .map((name) => {
       const meta = roster.get(name);
       const base = ensurePitcherStat(name, meta?.pos);
       const stat = store.get(name);
       const appearanceOrder = appearance.get(name);
+
+      // 투수의 경우 대수비만 해당 (교체로 들어온 투수)
+      const status: 'out' | '대수비' | undefined = meta?.substitutionType === '대수비' ? '대수비' : undefined;
+
       return {
         ...(stat ? { ...base, ...stat, pos: stat.pos ?? base.pos } : base),
         appearanceOrder,
@@ -2296,6 +3143,8 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
             : Number.isFinite(appearanceOrder)
               ? `계투(${appearanceOrder})`
               : undefined,
+        status,
+        isElite: meta?.isElite,
       };
     });
 
@@ -2310,8 +3159,8 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>) {
       away: toArray('away', rosterAway, statsAway),
     },
     pitchers: {
-      home: toPitcherArray(rosterHome, pitchHome, pitcherAppearance.home),
-      away: toPitcherArray(rosterAway, pitchAway, pitcherAppearance.away),
+      home: toPitcherArray('home', rosterHome, pitchHome, pitcherAppearance.home),
+      away: toPitcherArray('away', rosterAway, pitchAway, pitcherAppearance.away),
     },
   };
 }
@@ -2352,7 +3201,7 @@ function buildPostGameSummary(
   };
 }
 
-function PostGameSummary({ summary }: { summary: PostGameSummary }) {
+function PostGameSummary({ summary, actionSlot }: { summary: PostGameSummary; actionSlot?: React.ReactNode }) {
   const pill = (label: string, value: string, color: string) => (
     <span
       style={{
@@ -2439,9 +3288,10 @@ function PostGameSummary({ summary }: { summary: PostGameSummary }) {
           {pill('원정 득점', String(summary.totals.away.runs), '#60a5fa')}
           {pill('원정 안타', String(summary.totals.away.hits), '#60a5fa')}
         </div>
-        <div style={{ color: '#94a3b8', fontSize: 12 }}>
-          경기 종료 후 상세보기 · 문자중계 기록은 좌측 “문자 중계” 탭으로 이동
-        </div>
+        {actionSlot ? <div style={{ display: 'flex', justifyContent: 'flex-end' }}>{actionSlot}</div> : null}
+      </div>
+      <div style={{ color: '#94a3b8', fontSize: 12 }}>
+        경기 종료 후 상세보기 · 문자중계 기록은 좌측 “문자 중계” 탭으로 이동
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
         {renderLeaders('타자 TOP3 (양 팀)', summary.topHitters)}
@@ -2455,7 +3305,15 @@ function PostGameSummary({ summary }: { summary: PostGameSummary }) {
 
 type PostGameDetailData = NonNullable<MatchSchedule['postGame']>;
 
-function PostGameDetailSection({ detail, teams }: { detail: PostGameDetailData; teams: { home: string; away: string } }) {
+function PostGameDetailSection({
+  detail,
+  teams,
+  actionSlot,
+}: {
+  detail: PostGameDetailData;
+  teams: { home: string; away: string };
+  actionSlot?: React.ReactNode;
+}) {
   return (
     <div style={{ display: 'grid', gap: 12, overflow: 'auto', paddingRight: 4 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -2463,7 +3321,12 @@ function PostGameDetailSection({ detail, teams }: { detail: PostGameDetailData; 
           <span style={{ fontWeight: 900, fontSize: 18 }}>경기 종료 · 상세 기록</span>
           <span style={{ color: '#94a3b8', fontSize: 12 }}>문자중계 대신 박스스코어를 표시합니다.</span>
         </div>
-        {detail.note && <span style={{ color: '#94a3b8', fontSize: 12 }}>{detail.note}</span>}
+        {detail.note || actionSlot ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {detail.note && <span style={{ color: '#94a3b8', fontSize: 12 }}>{detail.note}</span>}
+            {actionSlot}
+          </div>
+        ) : null}
       </div>
 
       <LineScoreTable teams={teams} lineScore={detail.lineScore} totals={detail.totals} />
@@ -2828,6 +3691,20 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   };
   const addBlank = () => lines.push('');
   const halfLabel = (half: 'top' | 'bottom') => (half === 'top' ? '초' : '말');
+  const halfRank = (half: 'top' | 'bottom') => (half === 'top' ? 0 : 1);
+  const sortChrono = (
+    a: { inning: number; half: 'top' | 'bottom'; createdAt?: number; pitch: number; order: number },
+    b: { inning: number; half: 'top' | 'bottom'; createdAt?: number; pitch: number; order: number },
+  ) => {
+    if (a.inning !== b.inning) return a.inning - b.inning;
+    if (a.half !== b.half) return halfRank(a.half) - halfRank(b.half);
+    if (a.createdAt !== undefined && b.createdAt !== undefined && a.createdAt !== b.createdAt) {
+      return a.createdAt - b.createdAt;
+    }
+    if (a.pitch !== b.pitch) return a.pitch - b.pitch;
+    if (a.order !== b.order) return a.order - b.order;
+    return 0;
+  };
   const innings = Array.from({ length: 9 }, (_, idx) => idx + 1);
   const playerDirectory: Record<
     'home' | 'away',
@@ -2872,12 +3749,12 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   add('기록원', record.meta.scorerName || record.meta.scorerEmail || record.meta.scorerUid || '-');
   add('기록원 이메일', record.meta.scorerEmail || '-');
   add('기록원 권한', record.meta.scorerRole || '-');
-  add('기록 기준', 'KBO 기록지 기입법 기준');
+  add('기록 기준', '기록지 기입법 기준');
   add('주자 상황', record.bases.map((runner, idx) => `${idx + 1}루:${runner ?? '-'}`).join(' | '));
 
   const writeLineup = (side: 'home' | 'away', label: string) => {
     addBlank();
-    add(`라인업 - ${label} (KBO 표준: 등번호·수비번호)`);
+    add(`라인업 - ${label} (표준: 등번호·수비번호)`);
     add('타순', '등번호', '선수', '수비번호', '포지션', '투', '타');
     const batting = record.lineups[side].filter((slot) => slot.pos.toUpperCase() !== 'P');
     batting.forEach((slot, idx) => {
@@ -2915,6 +3792,114 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
 
   const stats = buildPlayerStats(record);
   const fmt3 = (val: number) => (Number.isFinite(val) ? val.toFixed(3).replace(/^0/, '') : '-');
+  const orderByName: Record<'home' | 'away', Map<string, number>> = {
+    home: new Map(),
+    away: new Map(),
+  };
+  (['home', 'away'] as const).forEach((side) => {
+    stats.hitters[side].forEach((h) => {
+      if (h.order && h.order > 0) {
+        orderByName[side].set(h.name, h.order);
+      }
+    });
+  });
+  const resolveEventOrder = (event: PlayEvent, side: 'home' | 'away') => {
+    if (event.order && event.order > 0) return event.order;
+    const name = (event.batter || '').trim();
+    if (!name) return null;
+    const map = orderByName[side];
+    if (map.has(name)) return map.get(name)!;
+    const base = name.replace(/\([^)]*\)/g, '').trim();
+    if (base && map.has(base)) return map.get(base)!;
+    for (const [key, val] of map.entries()) {
+      if (key.startsWith(`${name}(`) || (base && key.startsWith(`${base}(`))) {
+        return val;
+      }
+    }
+    return null;
+  };
+
+  const resolveEventBatter = (event: PlayEvent, side: 'home' | 'away') => {
+    const name = (event.batter || '').trim();
+    if (!name) return null;
+    const map = orderByName[side];
+    if (map.has(name)) return name;
+    const base = name.replace(/\([^)]*\)/g, '').trim();
+    if (base && map.has(base)) return base;
+    for (const key of map.keys()) {
+      if (key.startsWith(`${name}(`) || (base && key.startsWith(`${base}(`))) {
+        return key;
+      }
+    }
+    return name || null;
+  };
+
+  const parseSubstitutionLog = (text: string) => {
+    const normalized = text.trim();
+    if (!normalized) return null;
+    if (!/교체|대타|대주자|대수비/.test(normalized)) return null;
+    if (normalized.startsWith('포지션 교체')) return null;
+    if (!normalized.includes('→') || !normalized.includes('·')) return null;
+    const [left, right] = normalized.split('→');
+    if (!right) return null;
+    const outgoingPart = left.split('·').pop();
+    if (!outgoingPart) return null;
+    const outgoing = outgoingPart.trim();
+    const incoming = right.trim();
+    if (!outgoing || !incoming) return null;
+    let kind: 'defense' | 'pinch_hit' | 'pinch_run' | 'pitcher' | 'batter' | 'unknown' = 'unknown';
+    if (normalized.includes('대수비')) kind = 'defense';
+    else if (normalized.includes('대타')) kind = 'pinch_hit';
+    else if (normalized.includes('대주자')) kind = 'pinch_run';
+    else if (normalized.includes('투수 교체')) kind = 'pitcher';
+    else if (normalized.includes('타자 교체')) kind = 'batter';
+    return { outgoing, incoming, kind };
+  };
+
+  const resolveNameKey = (raw: string, side: 'home' | 'away') => {
+    const map = orderByName[side];
+    if (map.has(raw)) return raw;
+    const base = raw.replace(/\([^)]*\)/g, '').trim();
+    if (base && map.has(base)) return base;
+    for (const key of map.keys()) {
+      if (key.startsWith(`${raw}(`) || (base && key.startsWith(`${base}(`))) {
+        return key;
+      }
+    }
+    return raw;
+  };
+
+  const substitutionNotesBySide: Record<'home' | 'away', Map<number, Map<string, Map<number, string[]>>>> = {
+    home: new Map(),
+    away: new Map(),
+  };
+
+  const addSubNote = (side: 'home' | 'away', order: number, nameKey: string, inning: number, note: string) => {
+    const orderMap = substitutionNotesBySide[side].get(order) ?? new Map<string, Map<number, string[]>>();
+    const nameMap = orderMap.get(nameKey) ?? new Map<number, string[]>();
+    const notes = nameMap.get(inning) ?? [];
+    notes.push(note);
+    nameMap.set(inning, notes);
+    orderMap.set(nameKey, nameMap);
+    substitutionNotesBySide[side].set(order, orderMap);
+  };
+
+  record.feed.forEach((entry) => {
+    const substitution = parseSubstitutionLog(entry.result ?? '');
+    if (!substitution) return;
+    if (!['defense', 'pinch_hit', 'pinch_run'].includes(substitution.kind)) return;
+    const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
+    const defenseSide: 'home' | 'away' = offenseSide === 'home' ? 'away' : 'home';
+    const fallbackSide = substitution.kind === 'defense' ? defenseSide : offenseSide;
+    const incomingRaw = substitution.incoming.replace(/투수/g, '').replace(/·/g, '').trim();
+    if (!incomingRaw) return;
+    const side = fallbackSide;
+    const nameKey = resolveNameKey(incomingRaw, side);
+    const order = orderByName[side].get(nameKey) ?? (entry.order > 0 ? entry.order : null);
+    if (!order) return;
+    const label = substitution.kind === 'defense' ? '대수비' : substitution.kind === 'pinch_hit' ? '대타' : '대주자';
+    addSubNote(side, order, nameKey, entry.inning, label);
+  });
   
   const writePitcherOrder = (side: 'home' | 'away', label: string) => {
     addBlank();
@@ -2965,7 +3950,105 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   writePitcherOrder('home', record.meta.homeTeamName);
   writePitcherOrder('away', record.meta.awayTeamName);
 
-  const eventsChrono = [...record.events].reverse();
+  const eventKey = (event: PlayEvent) => [
+    event.eventId ?? '',
+    event.inning,
+    event.half,
+    event.order,
+    event.pitch,
+    event.type,
+    event.batter ?? '',
+    event.notes ?? '',
+    event.strikeType ?? '',
+    event.rbi ?? '',
+    (event.runners ?? []).join('|'),
+    event.battedBall?.type ?? '',
+    event.battedBall?.zone ?? '',
+    typeof event.error === 'string' ? event.error : event.error ? `${event.error.errorType}|${event.error.fielderPos}|${event.error.context ?? ''}` : '',
+    Array.isArray(event.dpRoute) ? event.dpRoute.join('-') : '',
+  ].join('|');
+
+  const extractRunnerSummaryFromFeed = (text: string) => {
+    const match = text.match(/([123]루\s*주자.*)$/);
+    if (match) return match[1].trim();
+    return text.trim();
+  };
+
+  const inferEventTypeFromResult = (result: string) => {
+    const normalized = result.replace(/\s+/g, '');
+    if (normalized.includes('도루실패') || normalized.includes('도루실패')) return 'steal_fail';
+    if (normalized.includes('도루성공') || normalized.includes('도루성공') || normalized.includes('도루')) return 'steal';
+    if (normalized.includes('주자') && normalized.includes('아웃')) return 'runner_out';
+    if (normalized.includes('주자') && (normalized.includes('득점') || normalized.includes('진루') || normalized.includes('정지'))) return 'runner';
+    if (normalized.includes('타격방해')) return 'ci';
+    if (normalized.includes('희생')) return 'sac';
+    if (normalized.includes('몸에맞는공')) return 'hbp';
+    if (normalized.includes('볼넷') || normalized.includes('고의4구') || normalized.includes('4구')) return 'walk';
+    if (normalized.includes('야수선택') || normalized.toUpperCase().includes('F.C')) return 'fc';
+    if (normalized.includes('실책') || /E[1-6]/i.test(result)) return 'error';
+    if (normalized.includes('삼진') || normalized.includes('아웃')) return 'out';
+    return 'play';
+  };
+
+  const rebuildEventsFromFeed = (feed: ReturnType<typeof buildGameRecord>['feed']) => {
+    const buckets = new Map<string, ReturnType<typeof buildGameRecord>['feed']>();
+    feed.forEach((entry) => {
+      if (!entry.eventId) return;
+      const list = buckets.get(entry.eventId) ?? [];
+      list.push(entry);
+      buckets.set(entry.eventId, list);
+    });
+    const rebuilt: PlayEvent[] = [];
+    buckets.forEach((entries, eventId) => {
+      const sorted = [...entries].sort(sortChrono);
+      const primary = sorted.find((e) => (e.order && e.order > 0) || (e.batter && e.batter.trim())) ?? sorted[0];
+      if (!primary) return;
+      const notes = primary.result ?? '';
+      const type = inferEventTypeFromResult(notes);
+      const runners = sorted
+        .filter((e) => (!e.order || e.order === 0) && (!e.batter || !e.batter.trim()))
+        .map((e) => extractRunnerSummaryFromFeed(e.result ?? ''))
+        .filter(Boolean);
+      rebuilt.push({
+        inning: primary.inning,
+        half: primary.half,
+        order: primary.order ?? 0,
+        batter: primary.batter ?? '',
+        pitch: primary.pitch ?? 0,
+        type,
+        runners,
+        battedBall: null,
+        error: null,
+        notes,
+        createdAt: primary.createdAt,
+        eventId,
+      });
+    });
+    return rebuilt;
+  };
+
+  const dedupeEvents = (items: PlayEvent[]) => {
+    const seen = new Set<string>();
+    return items.filter((event) => {
+      const key = eventKey(event);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+  const batterFeedCount = record.feed.filter((entry) => entry.order > 0 && entry.batter && entry.batter.trim()).length;
+  const minExpectedEvents = batterFeedCount > 0 ? Math.max(1, Math.floor(batterFeedCount * 0.5)) : 0;
+  const needsRebuild = batterFeedCount > 0 && record.events.length < minExpectedEvents;
+  const rebuiltEvents = needsRebuild ? rebuildEventsFromFeed(record.feed) : [];
+  const mergedEvents = needsRebuild
+    ? (() => {
+        const merged = new Map<string, PlayEvent>();
+        rebuiltEvents.forEach((ev) => merged.set(eventKey(ev), ev));
+        record.events.forEach((ev) => merged.set(eventKey(ev), ev));
+        return Array.from(merged.values());
+      })()
+    : record.events;
+  const eventsChrono = dedupeEvents([...mergedEvents].sort(sortChrono));
   addBlank();
   add('상세 플레이 이벤트');
   if (eventsChrono.length) {
@@ -2987,7 +4070,7 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
     add('-', '기록 없음');
   }
 
-  const feed = [...record.feed].reverse();
+  const feed = [...record.feed].sort(sortChrono);
   addBlank();
   add('플레이 로그');
   if (feed.length) {
@@ -3001,42 +4084,72 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
 
   const scorebookEventsBySide = (side: 'home' | 'away') => {
     const targetHalf = side === 'away' ? 'top' : 'bottom';
-    const notesByOrder = new Map<number, Map<number, string[]>>();
+    const notesByOrder = new Map<number, Map<string, Map<number, string[]>>>();
     eventsChrono
-      .filter((event) => event.half === targetHalf && event.order > 0)
+      .filter((event) => event.half === targetHalf)
       .forEach((event) => {
-        const inningMap = notesByOrder.get(event.order) ?? new Map<number, string[]>();
+        const resolvedOrder = resolveEventOrder(event, side);
+        if (!resolvedOrder || resolvedOrder <= 0) return;
+        const batterKey = resolveEventBatter(event, side) ?? '__order__';
+        const orderMap = notesByOrder.get(resolvedOrder) ?? new Map<string, Map<number, string[]>>();
+        const inningMap = orderMap.get(batterKey) ?? new Map<number, string[]>();
         const notes = inningMap.get(event.inning) ?? [];
         const note = formatScorebookCell(event);
         notes.push(note || '-');
         inningMap.set(event.inning, notes);
-        notesByOrder.set(event.order, inningMap);
+        orderMap.set(batterKey, inningMap);
+        notesByOrder.set(resolvedOrder, orderMap);
       });
     return notesByOrder;
   };
 
   const writeScorebook = (side: 'home' | 'away', label: string) => {
     addBlank();
-    add(`${label} 팀 KBO 기록지 (타석별 기록)`);
-    add('타순', '등번호', '선수', '수비번호', '포지션', ...innings.map((inning) => `${inning}회 타석(기록)`), '타석', '타수', '안타', '1루타', '2루타', '3루타', '홈런', '볼넷', '사구', '삼진', '희생');
-    const hitters = record.lineups[side].filter((slot) => slot.pos.toUpperCase() !== 'P');
-    while (hitters.length < 9) {
-      hitters.push({ name: '-', pos: '-', number: '-', throws: 'R', bats: 'R' });
-    }
+    add(`${label} 팀 기록지 (타석별 기록)`);
+    add('타순', '등번호', '선수', '포지션', ...innings.map((inning) => `${inning}회 타석(기록)`), '타석', '타수', '안타', '1루타', '2루타', '3루타', '홈런', '볼넷', '사구', '삼진', '희생');
     const notesByOrder = scorebookEventsBySide(side);
-    const statsByName = new Map(stats.hitters[side].map((stat) => [stat.name, stat]));
-    
-    hitters.slice(0, 9).forEach((slot, idx) => {
-      const order = idx + 1;
+
+    const hittersByOrder = new Map<number, BatterStatLine[]>();
+    stats.hitters[side].forEach((stat) => {
+      if (!stat.order || stat.order <= 0 || stat.order > 9) return;
+      const list = hittersByOrder.get(stat.order) ?? [];
+      list.push(stat);
+      hittersByOrder.set(stat.order, list);
+    });
+
+    const scorebookRows: { order: number; stat?: BatterStatLine }[] = [];
+    innings.forEach((order) => {
+      const list = hittersByOrder.get(order);
+      if (list && list.length) {
+        list.forEach((stat) => scorebookRows.push({ order, stat }));
+      } else {
+        scorebookRows.push({ order });
+      }
+    });
+
+    scorebookRows.forEach((row) => {
+      const order = row.order;
+      const stat = row.stat;
+      const uniqueName = stat?.name ?? '';
+      const meta = uniqueName ? getPlayerMeta(side, uniqueName) : { number: '-', pos: '-', posNumber: '-', throws: '-', bats: '-' };
+      const displayName = uniqueName ? (parsePlayerName(uniqueName).base || uniqueName) : '-';
+      const posLabel = stat?.pos ?? meta.pos ?? '-';
+      const orderNotes = notesByOrder.get(order);
+      const batterNotes = uniqueName && orderNotes ? orderNotes.get(uniqueName) ?? orderNotes.get('__order__') : orderNotes?.get('__order__');
+      const subOrderNotes = substitutionNotesBySide[side].get(order);
+      const subBatterNotes =
+        uniqueName && subOrderNotes ? subOrderNotes.get(uniqueName) ?? subOrderNotes.get('__order__') : subOrderNotes?.get('__order__');
       const inningNotes = innings.map((inning) => {
-        const notes = notesByOrder.get(order)?.get(inning);
-        return notes?.length ? notes.join(' | ') : '-';
+        const notes: string[] = [];
+        const subNotes = subBatterNotes?.get(inning);
+        if (subNotes?.length) notes.push(...subNotes);
+        const playNotes = batterNotes?.get(inning);
+        if (playNotes?.length) notes.push(...playNotes);
+        return notes.length ? notes.join(' | ') : '-';
       });
-      const uniqueName = getUniqueName(slot.name, slot.number);
-      const stat = statsByName.get(uniqueName);
-      const meta = getPlayerMeta(side, uniqueName);
+
       add(
-        order, meta.number, slot.name || '-', meta.posNumber, slot.pos || '-',
+        order, meta.number, displayName || '-', posLabel,
         ...inningNotes,
         stat?.pa ?? '-', stat?.ab ?? '-', stat?.h ?? '-', stat?.singles ?? '-', stat?.doubles ?? '-', stat?.triples ?? '-', stat?.hr ?? '-', stat?.bb ?? '-', stat?.hbp ?? '-', stat?.so ?? '-', stat?.sac ?? '-',
       );
