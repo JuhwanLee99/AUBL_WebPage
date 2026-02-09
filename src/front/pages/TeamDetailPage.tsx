@@ -530,12 +530,12 @@ export default function TeamDetailPage() {
           >
             {team.group}조
           </span>
-          <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '13px' }}>TEAM PROFILE</span>
+          <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '13px' }}>TEAM HOME</span>
         </div>
         <div style={{ display: 'grid', gap: '8px' }}>
           <h1 style={{ margin: 0, fontSize: 'clamp(26px, 6vw, 36px)', fontWeight: 900 }}>{team.name}</h1>
           <p style={{ margin: 0, color: '#cbd5e1', fontWeight: 600 }}>
-            최근 경기, 팀 성적, 시즌 정보 요약을 확인할 수 있는 팀 페이지입니다.
+            팀 공지, 로스터, 경기 일정/결과를 한눈에 확인할 수 있는 팀 전용 페이지입니다.
           </p>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
@@ -914,7 +914,7 @@ export default function TeamDetailPage() {
           <div style={{ color: '#94a3b8', fontWeight: 700 }}>팀 공지를 불러오는 중...</div>
         ) : noticesAccessDenied ? (
           <div style={{ color: '#fca5a5', fontWeight: 700 }}>
-            팀 공지는 해당 팀 선수/감독 또는 관리자만 열람할 수 있습니다.
+            팀 공지는 해당 팀 선수/감독만 열람할 수 있습니다.
           </div>
         ) : sortedNotices.length ? (
           <div style={{ display: 'grid', gap: '10px' }}>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, runTransaction } from 'firebase/firestore';
 import { firestore } from '../../shared/firebase/client';
@@ -38,6 +38,17 @@ export default function TeamNoticeDetailPage() {
   const [commentStatus, setCommentStatus] = useState<string | null>(null);
   const [commentError, setCommentError] = useState<string | null>(null);
   const [commentBusy, setCommentBusy] = useState(false);
+  const [liveAlert, setLiveAlert] = useState<string | null>(null);
+  const [collapsedReplies, setCollapsedReplies] = useState<Record<string, boolean>>({});
+  const prevCommentsRef = useRef<Map<string, TeamNoticeComment>>(new Map());
+  const hasInitializedCommentsRef = useRef(false);
+  const alertTimerRef = useRef<number | null>(null);
+
+  const pushLiveAlert = useCallback((message: string) => {
+    setLiveAlert(message);
+    if (alertTimerRef.current) window.clearTimeout(alertTimerRef.current);
+    alertTimerRef.current = window.setTimeout(() => setLiveAlert(null), 3500);
+  }, []);
 
   useEffect(() => {
     if (!teamDocId || !noticeId) return;
@@ -60,7 +71,7 @@ export default function TeamNoticeDetailPage() {
       },
     );
     return () => unsub();
-  }, [teamDocId, noticeId]);
+  }, [teamDocId, noticeId, pushLiveAlert]);
 
   useEffect(() => {
     if (!teamDocId || !noticeId) return;
@@ -69,6 +80,29 @@ export default function TeamNoticeDetailPage() {
       q,
       (snap) => {
         const next = snap.docs.map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as Omit<TeamNoticeComment, 'id'>) }));
+        if (hasInitializedCommentsRef.current) {
+          let newCount = 0;
+          let likeDelta = 0;
+          next.forEach((comment) => {
+            const prev = prevCommentsRef.current.get(comment.id);
+            if (!prev) {
+              newCount += 1;
+              return;
+            }
+            const prevLikes = typeof prev.likeCount === 'number' ? prev.likeCount : prev.likedBy?.length ?? 0;
+            const nextLikes = typeof comment.likeCount === 'number' ? comment.likeCount : comment.likedBy?.length ?? 0;
+            if (nextLikes > prevLikes) likeDelta += nextLikes - prevLikes;
+          });
+          if (newCount || likeDelta) {
+            const parts: string[] = [];
+            if (newCount) parts.push(`새 댓글 ${newCount}개`);
+            if (likeDelta) parts.push(`좋아요 ${likeDelta}개`);
+            pushLiveAlert(parts.join(' · '));
+          }
+        } else {
+          hasInitializedCommentsRef.current = true;
+        }
+        prevCommentsRef.current = new Map(next.map((comment) => [comment.id, comment]));
         setComments(next);
         setCommentsAccessDenied(false);
         setLoadingComments(false);
@@ -135,6 +169,7 @@ export default function TeamNoticeDetailPage() {
       });
       setReplyInput('');
       setReplyTo(null);
+      setCollapsedReplies((prev) => ({ ...prev, [parentId]: false }));
       setCommentStatus('답글을 등록했습니다.');
     } catch {
       setCommentError('답글 등록 중 문제가 발생했습니다.');
@@ -235,7 +270,7 @@ export default function TeamNoticeDetailPage() {
           <div style={{ color: '#94a3b8', fontWeight: 700 }}>공지 내용을 불러오는 중...</div>
         ) : noticeAccessDenied ? (
           <div style={{ color: '#fca5a5', fontWeight: 700 }}>
-            팀 공지는 해당 팀 선수/감독 또는 관리자만 열람할 수 있습니다.
+            팀 공지는 해당 팀 선수/감독만 열람할 수 있습니다.
           </div>
         ) : notice ? (
           <div style={{ display: 'grid', gap: '8px' }}>
@@ -267,6 +302,12 @@ export default function TeamNoticeDetailPage() {
           <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900 }}>댓글</h2>
           <span style={{ color: '#94a3b8', fontSize: '12px' }}>{comments.length}개</span>
         </div>
+
+        {liveAlert && (
+          <div style={{ color: '#f97316', fontWeight: 800, background: 'rgba(249,115,22,0.12)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(249,115,22,0.35)' }}>
+            {liveAlert}
+          </div>
+        )}
 
         {commentStatus && (
           <div style={{ color: '#bbf7d0', fontWeight: 800, background: 'rgba(34,197,94,0.1)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(34,197,94,0.35)' }}>
@@ -327,6 +368,7 @@ export default function TeamNoticeDetailPage() {
               const likeCount = comment.likeCount ?? comment.likedBy?.length ?? 0;
               const hasLiked = Boolean(user && comment.likedBy?.includes(user.uid));
               const replies = groupedComments.repliesMap.get(comment.id) ?? [];
+              const isCollapsed = collapsedReplies[comment.id] ?? false;
               return (
                 <div
                   key={comment.id}
@@ -367,6 +409,7 @@ export default function TeamNoticeDetailPage() {
                         onClick={() => {
                           setReplyTo(comment.id);
                           setReplyInput('');
+                          setCollapsedReplies((prev) => ({ ...prev, [comment.id]: false }));
                         }}
                         disabled={commentBusy}
                         style={{
@@ -401,6 +444,24 @@ export default function TeamNoticeDetailPage() {
                       </button>
                     )}
                   </div>
+
+                  {replies.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setCollapsedReplies((prev) => ({ ...prev, [comment.id]: !isCollapsed }))}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(148,163,184,0.35)',
+                        background: 'rgba(255,255,255,0.03)',
+                        color: '#94a3b8',
+                        fontWeight: 800,
+                        width: 'fit-content',
+                      }}
+                    >
+                      {isCollapsed ? `답글 ${replies.length}개 보기` : `답글 ${replies.length}개 접기`}
+                    </button>
+                  )}
 
                   {replyTo === comment.id && user && (
                     <div style={{ display: 'grid', gap: '8px', marginTop: '6px' }}>
@@ -456,7 +517,7 @@ export default function TeamNoticeDetailPage() {
                     </div>
                   )}
 
-                  {replies.length > 0 && (
+                  {replies.length > 0 && !isCollapsed && (
                     <div style={{ display: 'grid', gap: '8px', marginLeft: '18px' }}>
                       {replies.map((reply) => {
                         const replyLikeCount = reply.likeCount ?? reply.likedBy?.length ?? 0;
