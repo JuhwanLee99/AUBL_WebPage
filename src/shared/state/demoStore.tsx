@@ -2021,6 +2021,7 @@ function reducer(state: DemoState, action: Action): DemoState {
       const selected = state.matches.find((match) => match.id === action.matchId);
       if (!selected) return state;
       if (selected.status === 'completed') {
+        const resetState = resetGameForMatch(state, selected);
         const postLine = selected.postGame?.lineScore;
         const normalizedHome = postLine && typeof postLine === 'object'
           ? normalizeRunArray((postLine as { home?: unknown }).home)
@@ -2033,17 +2034,17 @@ function reducer(state: DemoState, action: Action): DemoState {
             ? { home: normalizedHome, away: normalizedAway }
             : { home: [], away: [] };
         nextState = {
-          ...state,
+          ...resetState,
           activeMatchId: selected.id,
           followCurrent: typeof action.followCurrent === 'boolean' ? action.followCurrent : state.followCurrent,
           liveVideoUrl: selected.liveVideoUrl ?? '',
           liveDelaySeconds: selected.liveDelaySeconds ?? 0,
           teamNames: { home: selected.homeTeamName, away: selected.awayTeamName },
-          homeTeamId: selected.homeTeamId ?? state.homeTeamId,
-          awayTeamId: selected.awayTeamId ?? state.awayTeamId,
+          homeTeamId: selected.homeTeamId ?? resetState.homeTeamId,
+          awayTeamId: selected.awayTeamId ?? resetState.awayTeamId,
           score: {
-            home: typeof selected.homeScore === 'number' ? selected.homeScore : state.score.home,
-            away: typeof selected.awayScore === 'number' ? selected.awayScore : state.score.away,
+            home: typeof selected.homeScore === 'number' ? selected.homeScore : resetState.score.home,
+            away: typeof selected.awayScore === 'number' ? selected.awayScore : resetState.score.away,
           },
           lineScore,
           gameStarted: true,
@@ -4314,6 +4315,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     void getDoc(stateDoc)
       .then((snap) => {
         if (!snap.exists()) return;
+        if (stateRef.current.activeMatchId !== matchId) return;
         if (shouldSkipSnapshotForScorer()) return;
         const raw = snap.data() as SharedGameState;
         const merged = mergeOwnerLineups(raw, matchId, stateRef.current);
@@ -4337,6 +4339,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       stateDoc,
       (snap) => {
         if (!snap.exists()) return;
+        if (stateRef.current.activeMatchId !== matchId) return;
         if (shouldSkipSnapshotForScorer()) return;
         const raw = snap.data() as SharedGameState;
         const merged = mergeOwnerLineups(raw, matchId, stateRef.current);
@@ -4405,6 +4408,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
           eventsSnap.docs.map((d) => d.data()),
           fallback,
         );
+        if (stateRef.current.activeMatchId !== matchId) return;
         skipFirestoreWriteRef.current = true;
         lastFeedLengthRef.current = feedEntries.length;
         lastEventsLengthRef.current = eventEntries.length;
@@ -4428,6 +4432,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
           snap.docs.map((d) => d.data()),
           fallback,
         );
+        if (stateRef.current.activeMatchId !== matchId) return;
         skipFirestoreWriteRef.current = true;
         lastFeedLengthRef.current = feedEntries.length;
         dispatch({ type: 'setFeed', feed: feedEntries });
@@ -4445,6 +4450,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
           snap.docs.map((d) => d.data()),
           fallback,
         );
+        if (stateRef.current.activeMatchId !== matchId) return;
         skipFirestoreWriteRef.current = true;
         lastEventsLengthRef.current = eventsEntries.length;
         dispatch({ type: 'setEvents', events: eventsEntries });
