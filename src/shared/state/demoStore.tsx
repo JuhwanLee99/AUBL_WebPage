@@ -32,9 +32,51 @@ const extractRuns = (result: string): number => {
     const n = Number(match[1]);
     return Number.isFinite(n) && n > 0 ? n : 1;
   }
-  if (result.includes('득점')) return 1;
-  return 0;
+  if (!result.includes('득점')) return 0;
+  const mentions = result.match(/득점/g);
+  return mentions?.length ? mentions.length : 1;
 };
+
+const addRunsToLineScore = (
+  lineScore: { home: number[]; away: number[] } | undefined,
+  side: Side,
+  inning: number,
+  runs: number,
+) => {
+  if (!runs) return lineScore ?? { home: [], away: [] };
+  const next = {
+    home: [...(lineScore?.home ?? [])],
+    away: [...(lineScore?.away ?? [])],
+  };
+  const idx = Math.max(0, inning - 1);
+  const target = side === 'home' ? next.home : next.away;
+  if (target.length <= idx) {
+    for (let i = target.length; i <= idx; i += 1) {
+      target[i] = 0;
+    }
+  }
+  target[idx] = Math.max(0, (target[idx] ?? 0) + runs);
+  return next;
+};
+
+const buildLineScoreFromFeed = (feed: PlayLog[]) =>
+  feed.reduce(
+    (acc, entry) => {
+      const runs = extractRuns(entry.result);
+      if (!runs) return acc;
+      const inningIdx = Math.max(0, entry.inning - 1);
+      const side = entry.half === 'top' ? 'away' : 'home';
+      const target = side === 'home' ? acc.home : acc.away;
+      if (target.length <= inningIdx) {
+        for (let i = target.length; i <= inningIdx; i += 1) {
+          target[i] = 0;
+        }
+      }
+      target[inningIdx] = (target[inningIdx] ?? 0) + runs;
+      return acc;
+    },
+    { home: [] as number[], away: [] as number[] },
+  );
 
 const TRASH_RETENTION_MS = 1000 * 60 * 60 * 24 * 30; // 30일 보관
 const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
@@ -245,6 +287,7 @@ interface DemoSnapshot {
   // 주자별 책임 투수 기록 (주자가 출루할 때의 투수, 득점 시 해당 투수에게 실점 부과)
   runnerResponsiblePitcher: { 0: string | null; 1: string | null; 2: string | null };
   score: { home: number; away: number };
+  lineScore: { home: number[]; away: number[] };
   lastPlay: string;
   feed: PlayLog[];
   events: PlayEvent[];
@@ -290,6 +333,7 @@ type SharedGameState = Pick<
   | 'pitchCount'
   | 'bases'
   | 'score'
+  | 'lineScore'
   | 'lastPlay'
   | 'homeTeamId'
   | 'awayTeamId'
@@ -627,6 +671,7 @@ const initialState: DemoState = {
   bases: [null, null, null],
   runnerResponsiblePitcher: { 0: null, 1: null, 2: null },
   score: { home: 0, away: 0 },
+  lineScore: { home: [], away: [] },
   lastPlay: '경기 대기 중',
   feed: [],
   events: [],
@@ -827,6 +872,11 @@ const asNumber = (value: unknown) => {
   }
   return undefined;
 };
+
+const normalizeRunArray = (value: unknown): number[] =>
+  Array.isArray(value)
+    ? Array.from({ length: value.length }, (_v, i) => asNumber((value as unknown[])[i]) ?? 0)
+    : [];
 
 function normalizeLineScore(lineScore: unknown): PostGameLineScore | undefined {
   if (!lineScore || typeof lineScore !== 'object') return undefined;
@@ -1044,6 +1094,14 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
   const feed = normalizeFeed(merged.feed, { inning: merged.inning, half: merged.half });
   const events = normalizeEvents(merged.events, { inning: merged.inning, half: merged.half });
   const matches = normalizeMatches(merged.matches ?? base.matches);
+  const hasIncomingLineScore = Object.prototype.hasOwnProperty.call(incoming, 'lineScore');
+  const lineScore =
+    hasIncomingLineScore && merged.lineScore && typeof merged.lineScore === 'object'
+      ? {
+          home: normalizeRunArray((merged.lineScore as { home?: unknown }).home),
+          away: normalizeRunArray((merged.lineScore as { away?: unknown }).away),
+        }
+      : buildLineScoreFromFeed(feed);
   // [수정] 라인업이 완전히 비어있는 경우 자동 채움을 하지 않음
   // 실제 선수가 있는지 확인 (name이 비어있지 않은 슬롯)
   const hasActualPlayers = (lineup: PlayerSlot[]) =>
@@ -1082,6 +1140,7 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
     feed,
     events,
     matches,
+    lineScore,
     history,
     lineups: safeLineups,
     gameOver: Boolean(merged.gameOver),
@@ -1246,33 +1305,13 @@ export function buildGameRecord(state: DemoState): GameRecord {
     { home: 0, away: 0 },
   );
 
-  const liveLine = chronologicalFeed.reduce(
-    (acc, entry) => {
-      const runs = extractRuns(entry.result);
-      if (!runs) return acc;
-      const inningIdx = Math.max(0, entry.inning - 1);
-      const side = entry.half === 'top' ? 'away' : 'home';
-      const target = side === 'home' ? acc.home : acc.away;
-      if (target.length <= inningIdx) target.length = inningIdx + 1;
-      target[inningIdx] = (target[inningIdx] ?? 0) + runs;
-      acc.maxInning = Math.max(acc.maxInning, entry.inning);
-      return acc;
-    },
-    { home: [] as number[], away: [] as number[], maxInning: state.inning },
-  );
-
-  const reconcileRuns = (arr: number[], side: 'home' | 'away') => {
-    const filled = Array.from({ length: arr.length }, (_, i) => arr[i] ?? 0);
-    const sum = filled.reduce((s, v) => s + v, 0);
-    const diff = state.score[side] - sum;
-    if (diff === 0) return filled;
-    const idx = Math.max(0, (liveLine.maxInning || state.inning) - 1);
-    if (filled.length <= idx) {
-      for (let k = filled.length; k <= idx; k++) filled[k] = 0;
-    }
-    filled[idx] = Math.max(0, filled[idx] + diff);
-    return filled;
-  };
+  const baseLineScore =
+    (state.lineScore?.home?.length || state.lineScore?.away?.length)
+      ? state.lineScore
+      : buildLineScoreFromFeed(chronologicalFeed);
+  const maxInning = Math.max(state.inning, baseLineScore.home.length, baseLineScore.away.length);
+  const padLine = (arr: number[]) => Array.from({ length: maxInning }, (_, i) => arr[i] ?? 0);
+  const liveLine = { home: padLine(baseLineScore.home), away: padLine(baseLineScore.away) };
 
   return {
     meta: {
@@ -1333,7 +1372,7 @@ export function buildGameRecord(state: DemoState): GameRecord {
     })),
     lastPlay: state.lastPlay,
     liveStats: {
-      lineScore: { home: reconcileRuns(liveLine.home, 'home'), away: reconcileRuns(liveLine.away, 'away') },
+      lineScore: liveLine,
       hits: liveHits,
       errors: liveErrors,
     },
@@ -1668,6 +1707,7 @@ function reducer(state: DemoState, action: Action): DemoState {
         pitchCount: 0,
         bases: [null, null, null],
         score: { home: 0, away: 0 },
+        lineScore: { home: [], away: [] },
         batterIndex: { home: 0, away: 0 },
         lastPlay: startLabel,
         gameStarted: true,
@@ -1904,6 +1944,17 @@ function reducer(state: DemoState, action: Action): DemoState {
       const selected = state.matches.find((match) => match.id === action.matchId);
       if (!selected) return state;
       if (selected.status === 'completed') {
+        const postLine = selected.postGame?.lineScore;
+        const normalizedHome = postLine && typeof postLine === 'object'
+          ? normalizeRunArray((postLine as { home?: unknown }).home)
+          : [];
+        const normalizedAway = postLine && typeof postLine === 'object'
+          ? normalizeRunArray((postLine as { away?: unknown }).away)
+          : [];
+        const lineScore =
+          normalizedHome.length || normalizedAway.length
+            ? { home: normalizedHome, away: normalizedAway }
+            : { home: [], away: [] };
         nextState = {
           ...state,
           activeMatchId: selected.id,
@@ -1917,6 +1968,7 @@ function reducer(state: DemoState, action: Action): DemoState {
             home: typeof selected.homeScore === 'number' ? selected.homeScore : state.score.home,
             away: typeof selected.awayScore === 'number' ? selected.awayScore : state.score.away,
           },
+          lineScore,
           gameStarted: true,
           gameOver: true,
           lastPlay: '경기 기록 불러오는 중...',
@@ -2345,6 +2397,7 @@ function applyHitWithAdvances(
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
+  const lineScore = addRunsToLineScore(state.lineScore, side, state.inning, runs);
   // 안타의 경우 득점 수가 곧 타점(RBI)
   const rbi = runs;
   const eventEntry = createPlayEvent(
@@ -2372,6 +2425,7 @@ function applyHitWithAdvances(
     ...state,
     bases,
     score,
+    lineScore,
     balls: 0,
     strikes: 0,
     pitchCount: 0,
@@ -2448,6 +2502,7 @@ function applyFielderChoice(
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
+  const lineScore = addRunsToLineScore(state.lineScore, side, state.inning, runs);
 
   const contextNote = context?.trim() ? ` (${context.trim()})` : '';
   const fcZoneNote = battedBall?.zone && battedBall.zone !== '선택 안 함' ? ` · ${battedBall.zone}` : '';
@@ -2477,6 +2532,7 @@ function applyFielderChoice(
     ...state,
     bases,
     score,
+    lineScore,
     balls: 0,
     strikes: 0,
     pitchCount: 0,
@@ -2502,6 +2558,7 @@ function applyWalk(state: DemoState, message: string, pitchNumber: number): Demo
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
+  const lineScore = addRunsToLineScore(state.lineScore, side, state.inning, runs);
   const eventEntry = createPlayEvent(
     state,
     {
@@ -2515,6 +2572,7 @@ function applyWalk(state: DemoState, message: string, pitchNumber: number): Demo
     ...state,
     bases,
     score,
+    lineScore,
     balls: 0,
     strikes: 0,
     pitchCount: 0,
@@ -2537,6 +2595,7 @@ function applyDroppedThirdStrike(state: DemoState, strikeType?: 'swinging' | 'lo
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
+  const lineScore = addRunsToLineScore(state.lineScore, side, state.inning, runs);
   const message = strikeType === 'looking' ? '삼진 낫아웃(루킹)' : '삼진 낫아웃';
   const eventEntry = createPlayEvent(
     state,
@@ -2552,6 +2611,7 @@ function applyDroppedThirdStrike(state: DemoState, strikeType?: 'swinging' | 'lo
     ...state,
     bases,
     score,
+    lineScore,
     balls: 0,
     strikes: 0,
     pitchCount: 0,
@@ -2589,10 +2649,11 @@ function applySacrifice(
       side === 'home'
         ? { ...state.score, home: state.score.home + runs }
         : { ...state.score, away: state.score.away + runs };
+    const lineScore = addRunsToLineScore(state.lineScore, side, state.inning, runs);
     // 희생번트로 인한 득점은 타점(RBI)
     const buntZoneNote = battedBall?.zone && battedBall.zone !== '선택 안 함' ? ` · ${battedBall.zone}` : '';
     return applyOut(
-      { ...state, bases, score },
+      { ...state, bases, score, lineScore },
       runs ? `희생번트${buntZoneNote} · ${runs}득점` : `희생번트${buntZoneNote}`,
       { pitchNumber, eventType: 'sac', runners: getRunnerNames(bases), notes: '희생번트', battedBall, rbi: runs },
     );
@@ -2609,10 +2670,11 @@ function applySacrifice(
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
+  const lineScore = addRunsToLineScore(state.lineScore, side, state.inning, runs);
   // 희생플라이로 인한 득점은 타점(RBI)
   const flyZoneNote = battedBall?.zone && battedBall.zone !== '선택 안 함' ? ` · ${battedBall.zone}` : '';
   return applyOut(
-    { ...state, bases, score },
+    { ...state, bases, score, lineScore },
     runs ? `희생플라이${flyZoneNote} · ${runs}득점` : `희생플라이${flyZoneNote}`,
     { pitchNumber, eventType: 'sac', runners: getRunnerNames(bases), notes: '희생플라이', battedBall, rbi: runs },
   );
@@ -2681,6 +2743,7 @@ function applyError(state: DemoState, details: ErrorDetails): DemoState {
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
+  const lineScore = addRunsToLineScore(state.lineScore, side, state.inning, runs);
 
   const errorContext = details.context.trim();
   const summary = `실책 · ${details.errorType} · ${details.fielderPos}${errorContext ? ` · ${errorContext}` : ''}`;
@@ -2714,6 +2777,7 @@ function applyError(state: DemoState, details: ErrorDetails): DemoState {
     ...state,
     bases,
     score,
+    lineScore,
     balls: 0,
     strikes: 0,
     pitchCount: isBatterHold ? state.pitchCount : 0,
@@ -2786,6 +2850,7 @@ function applySteal(state: DemoState, success: boolean): DemoState {
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
+  const lineScore = addRunsToLineScore(state.lineScore, side, state.inning, runs);
   const detail = moved
     ? formatRunnerMove({
         runner: moved.name,
@@ -2811,6 +2876,7 @@ function applySteal(state: DemoState, success: boolean): DemoState {
     ...state,
     bases,
     score,
+    lineScore,
     balls: 0,
     strikes: 0,
     pitchCount: 0,
@@ -2846,6 +2912,7 @@ function applyRunnerAdvance(state: DemoState, baseIndex: 0 | 1 | 2, steps: numbe
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
+  const lineScore = addRunsToLineScore(state.lineScore, side, state.inning, runs);
   const detail = formatRunnerMove({
     runner,
     from: baseIndex,
@@ -2862,6 +2929,7 @@ function applyRunnerAdvance(state: DemoState, baseIndex: 0 | 1 | 2, steps: numbe
     ...state,
     bases,
     score,
+    lineScore,
     lastPlay: detail.lastPlay,
     feed: pushFeed(state.feed, createLogEntry(state, detail.feedText, 0, eventEntry.eventId)),
     events: pushEvent(state.events, eventEntry),
@@ -3073,6 +3141,7 @@ function applyRunnerAdvancements(
     side === 'home'
       ? { ...state.score, home: state.score.home + runs }
       : { ...state.score, away: state.score.away + runs };
+  const lineScore = addRunsToLineScore(state.lineScore, side, state.inning, runs);
 
   const eventEntry = createPlayEventForBaserunning(
     state,
@@ -3092,6 +3161,7 @@ function applyRunnerAdvancements(
     ...state,
     bases,
     score,
+    lineScore,
     outs,
     lastPlay,
     feed,
@@ -3198,6 +3268,7 @@ function applyDoublePlay(
       updatedScore.home = (updatedScore.home || 0) + runsScored;
     }
   }
+  const lineScore = addRunsToLineScore(state.lineScore, hittingSide(state), state.inning, runsScored);
 
   const nextState = {
     ...state,
@@ -3209,6 +3280,7 @@ function applyDoublePlay(
     batterIndex,
     lastPlay,
     score: updatedScore,
+    lineScore,
     feed: pushPlayFeed(
       state,
       createLogEntry(state, feedText, Math.max(1, state.pitchCount + 1), eventEntry.eventId),
@@ -3270,6 +3342,7 @@ function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
     bases: [null, null, null],
     runnerResponsiblePitcher: { 0: null, 1: null, 2: null },
     score: { home: 0, away: 0 },
+    lineScore: { home: [], away: [] },
     lastPlay: '경기 대기 중',
     feed: [],
     events: [],
@@ -3317,6 +3390,7 @@ function createNewGame(state: DemoState): DemoState {
     bases: [null, null, null],
     runnerResponsiblePitcher: { 0: null, 1: null, 2: null },
     score: { home: 0, away: 0 },
+    lineScore: { home: [], away: [] },
     lastPlay: '경기 대기 중',
     feed: [],
     events: [],
@@ -4793,8 +4867,13 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
               });
           };
 
+          const lineScoreBase = snapshot.lineScore ?? { home: [], away: [] };
+          const maxInning = Math.max(lineScoreBase.home.length, lineScoreBase.away.length);
+          const innings = Array.from({ length: maxInning }, (_v, idx) => idx + 1);
+          const fillLine = (arr: number[]) => Array.from({ length: maxInning }, (_v, idx) => arr[idx] ?? 0);
+
           const postGame: PostGameRecord = {
-            lineScore: { innings: [], home: [], away: [] }, // 라인스코어는 별도 로직이 있거나 비워둠
+            lineScore: { innings, home: fillLine(lineScoreBase.home), away: fillLine(lineScoreBase.away) },
             totals: { // 팀 합계 (간단 계산)
               home: { runs: snapshot.score.home, hits: 0, errors: 0 },
               away: { runs: snapshot.score.away, hits: 0, errors: 0 }
