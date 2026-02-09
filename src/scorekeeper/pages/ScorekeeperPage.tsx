@@ -1007,6 +1007,14 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
     return store.get(name)!;
   };
 
+  const markPitcher = (side: 'home' | 'away', name: string) => {
+    const roster = side === 'home' ? rosterHome : rosterAway;
+    const entry = ensureRosterEntry(side, name);
+    if (entry.pos?.toUpperCase() !== 'P') {
+      roster.set(name, { ...entry, pos: 'P' });
+    }
+  };
+
   // Feed is already in chronological order (oldest → newest) per pushFeed implementation
   const chronological = record.feed;
   const currentPitcher: Record<'home' | 'away', string | null> = { home: null, away: null };
@@ -1214,6 +1222,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
 
         currentPitcher[inferred] = cleaned;
         addPitch(inferred, cleaned);
+        markPitcher(inferred, cleaned);
       }
     } else if (result.includes('투수 (선발)') || result.includes('투수 (') && result.includes('차 계투)')) {
       // 자동 생성된 투수 등판 항목: "홍길동(18) 투수 (선발)" 또는 "홍길동(18) 투수 (1차 계투)"
@@ -1223,6 +1232,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
 
       currentPitcher[inferred] = cleaned;
       addPitch(inferred, cleaned);
+      markPitcher(inferred, cleaned);
     }
   });
 
@@ -1247,12 +1257,14 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
         const inferred = inferPitcherSide(cleaned) ?? defenseSide;
         cleaned = resolvePitcherName(cleaned, inferred);
         currentPitcher[inferred] = cleaned;
+        markPitcher(inferred, cleaned);
       }
     } else if (result.includes('투수 (선발)') || result.includes('투수 (') && result.includes('차 계투)')) {
       let cleaned = cleanName(result.split('투수')[0]);
       const inferred = inferPitcherSide(cleaned) ?? defenseSide;
       cleaned = resolvePitcherName(cleaned, inferred);
       currentPitcher[inferred] = cleaned;
+      markPitcher(inferred, cleaned);
     }
 
     let name = entry.batter?.trim();
