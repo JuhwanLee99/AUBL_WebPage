@@ -623,7 +623,11 @@ export const canPitcherBat = (player: PlayerSlot, lineup: PlayerSlot[]): boolean
   // 오타니룰 플래그가 설정된 경우
   if (player.isOhtaniRule) return true;
   // DH가 없는 리그인 경우 투수도 타석에 들어감
-  const hasDH = lineup.some((slot) => slot.pos.toUpperCase() === 'DH');
+  const normalizePosToken = (value: string) => value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const hasDH = lineup.some((slot) => {
+    const norm = normalizePosToken(slot.pos ?? '');
+    return norm === 'DH' || (slot.pos ?? '').includes('지명');
+  });
   return !hasDH;
 };
 
@@ -669,9 +673,10 @@ function getBattingEntriesForLineup(
     return lineup.filter((_, idx) => idx !== pitcherIndex);
   }
   return lineup.filter((slot, idx) => {
-    if (idx < 9) return true;
-    if (slot.pos.toUpperCase() !== 'P') return true;
-    return canPitcherBat(slot, lineup);
+    if (idx >= 9) return false;
+    const isPitcher = slot.pos.toUpperCase() === 'P';
+    const pitcherAllowed = isPitcher ? canPitcherBat(slot, lineup) : true;
+    return pitcherAllowed;
   });
 }
 
