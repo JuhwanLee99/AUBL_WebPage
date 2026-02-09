@@ -84,6 +84,7 @@ export default function TeamDetailPage() {
   const [noticeContent, setNoticeContent] = useState('');
   const [noticeCategory, setNoticeCategory] = useState<TeamNoticeCategory>('일반');
   const [noticePinned, setNoticePinned] = useState(false);
+  const [noticeFilter, setNoticeFilter] = useState<'ALL' | TeamNoticeCategory>('ALL');
   const [noticeStatus, setNoticeStatus] = useState<string | null>(null);
   const [noticeError, setNoticeError] = useState<string | null>(null);
   const [noticeBusy, setNoticeBusy] = useState(false);
@@ -104,6 +105,7 @@ export default function TeamDetailPage() {
     setNoticeContent('');
     setNoticeCategory('일반');
     setNoticePinned(false);
+    setNoticeFilter('ALL');
   }, [teamDocId]);
 
   useEffect(() => {
@@ -452,6 +454,18 @@ export default function TeamDetailPage() {
     }
   };
 
+  const sortedNotices = useMemo(() => {
+    const filtered = noticeFilter === 'ALL' ? notices : notices.filter((notice) => (notice.category ?? '일반') === noticeFilter);
+    const copy = [...filtered];
+    copy.sort((a, b) => {
+      const pinnedA = a.pinned ? 1 : 0;
+      const pinnedB = b.pinned ? 1 : 0;
+      if (pinnedA !== pinnedB) return pinnedB - pinnedA;
+      return (b.createdAt ?? 0) - (a.createdAt ?? 0);
+    });
+    return copy;
+  }, [notices, noticeFilter]);
+
   if (!team) {
     return (
       <section style={{ ...cardBase, maxWidth: '640px' }}>
@@ -476,21 +490,12 @@ export default function TeamDetailPage() {
     );
   }
 
+  const resolvedTeamDocId = teamDocId ?? '';
   const totalGames = record.wins + record.losses + record.draws;
   const emblemUrl = teamInfo?.emblemUrl ?? '';
   const shortIntro = teamInfo?.shortIntro ?? '팀 소개 문구가 준비 중입니다.';
   const longIntro = teamInfo?.longIntro ?? '팀 소개 상세 내용이 준비 중입니다.';
   const historyText = teamInfo?.history ?? '연혁 정보가 아직 등록되지 않았습니다.';
-  const sortedNotices = useMemo(() => {
-    const copy = [...notices];
-    copy.sort((a, b) => {
-      const pinnedA = a.pinned ? 1 : 0;
-      const pinnedB = b.pinned ? 1 : 0;
-      if (pinnedA !== pinnedB) return pinnedB - pinnedA;
-      return (b.createdAt ?? 0) - (a.createdAt ?? 0);
-    });
-    return copy;
-  }, [notices]);
 
   return (
     <div style={{ display: 'grid', gap: '24px' }}>
@@ -761,6 +766,44 @@ export default function TeamDetailPage() {
           )}
         </div>
 
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setNoticeFilter('ALL')}
+            style={{
+              padding: '6px 10px',
+              borderRadius: '10px',
+              border: noticeFilter === 'ALL' ? '1px solid #f97316' : '1px solid rgba(148,163,184,0.35)',
+              background: noticeFilter === 'ALL' ? 'rgba(249,115,22,0.15)' : 'rgba(255,255,255,0.03)',
+              color: noticeFilter === 'ALL' ? '#f97316' : '#94a3b8',
+              fontWeight: 800,
+              fontSize: '12px',
+              cursor: 'pointer',
+            }}
+          >
+            전체
+          </button>
+          {NOTICE_CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setNoticeFilter(cat)}
+              style={{
+                padding: '6px 10px',
+                borderRadius: '10px',
+                border: noticeFilter === cat ? `1px solid ${NOTICE_CATEGORY_STYLE[cat].color}` : '1px solid rgba(148,163,184,0.35)',
+                background: noticeFilter === cat ? NOTICE_CATEGORY_STYLE[cat].bg : 'rgba(255,255,255,0.03)',
+                color: noticeFilter === cat ? NOTICE_CATEGORY_STYLE[cat].color : '#94a3b8',
+                fontWeight: 800,
+                fontSize: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
         {noticeStatus && (
           <div style={{ color: '#bbf7d0', fontWeight: 800, background: 'rgba(34,197,94,0.1)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(34,197,94,0.35)' }}>
             {noticeStatus}
@@ -868,7 +911,7 @@ export default function TeamDetailPage() {
           <div style={{ color: '#94a3b8', fontWeight: 700 }}>팀 공지를 불러오는 중...</div>
         ) : sortedNotices.length ? (
           <div style={{ display: 'grid', gap: '10px' }}>
-            {sortedNotices.map((notice) => {
+          {sortedNotices.map((notice) => {
               const category = notice.category ?? '일반';
               const badgeStyle = NOTICE_CATEGORY_STYLE[category];
               return (
@@ -911,14 +954,19 @@ export default function TeamDetailPage() {
                     >
                       {category}
                     </span>
-                    <div style={{ fontWeight: 800, color: '#e2e8f0' }}>{notice.title}</div>
+                    <Link
+                      to={`/teams/${resolvedTeamDocId}/notices/${notice.id}`}
+                      style={{ fontWeight: 800, color: '#e2e8f0', textDecoration: 'none' }}
+                    >
+                      {notice.title}
+                    </Link>
                   </div>
                   <div style={{ color: '#94a3b8', fontSize: '12px' }}>
                     {notice.createdAt ? new Date(notice.createdAt).toLocaleString('ko-KR') : '날짜 미정'}
                   </div>
                 </div>
                 <div style={{ color: '#cbd5e1', fontSize: '13px', lineHeight: 1.6 }}>{notice.content}</div>
-                {canManage && (
+                {canManage ? (
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     <button
                       type="button"
@@ -955,6 +1003,23 @@ export default function TeamDetailPage() {
                       공지 삭제
                     </button>
                   </div>
+                ) : (
+                  <Link
+                    to={`/teams/${resolvedTeamDocId}/notices/${notice.id}`}
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(148,163,184,0.35)',
+                      background: 'rgba(255,255,255,0.04)',
+                      color: '#e2e8f0',
+                      fontWeight: 800,
+                      textDecoration: 'none',
+                      fontSize: '12px',
+                      width: 'fit-content',
+                    }}
+                  >
+                    상세 보기
+                  </Link>
                 )}
               </div>
             )})}

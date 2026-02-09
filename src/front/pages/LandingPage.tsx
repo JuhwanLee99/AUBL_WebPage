@@ -204,10 +204,8 @@ export default function LandingPage() {
   const [liveMatchesRealtime, setLiveMatchesRealtime] = useState<MatchSchedule[]>([]);
   const [liveScores, setLiveScores] = useState<Record<string, LiveSnapshot>>({});
   const [nowTs, setNowTs] = useState<number>(() => Date.now());
-  const [myTeamId, setMyTeamId] = useState<string | null>(null);
-  const [myTeamName, setMyTeamName] = useState<string | null>(null);
+  const [memberTeamId, setMemberTeamId] = useState<string | null>(null);
   const [teamNotices, setTeamNotices] = useState<TeamNotice[]>([]);
-  const [teamNoticesLoading, setTeamNoticesLoading] = useState(false);
   const activeMatch = useMemo(
     () => state.matches.find((match) => match.id === state.activeMatchId) ?? null,
     [state.matches, state.activeMatchId],
@@ -225,56 +223,45 @@ export default function LandingPage() {
   }, [teamNotices]);
 
   useEffect(() => {
-    if (isCoach && coachTeamId) {
-      setMyTeamId(coachTeamId);
-      setMyTeamName(decodeTeamId(coachTeamId));
-      return;
-    }
-    if (!user) {
-      setMyTeamId(null);
-      setMyTeamName(null);
-      return;
-    }
+    if (!user || isCoach) return;
+    let cancelled = false;
     const run = async () => {
       try {
         const q = query(collectionGroup(firestore, 'members'), where('uid', '==', user.uid), limit(1));
         const snap = await getDocs(q);
+        if (cancelled) return;
         if (snap.empty) {
-          setMyTeamId(null);
-          setMyTeamName(null);
+          setMemberTeamId(null);
           return;
         }
         const docSnap = snap.docs[0];
         const teamRef = docSnap.ref.parent.parent;
         const teamId = teamRef?.id ?? null;
-        setMyTeamId(teamId);
-        setMyTeamName(teamId ? decodeTeamId(teamId) : null);
+        setMemberTeamId(teamId);
       } catch {
-        setMyTeamId(null);
-        setMyTeamName(null);
+        if (!cancelled) setMemberTeamId(null);
       }
     };
     void run();
-  }, [user, isCoach, coachTeamId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [user, isCoach]);
+
+  const myTeamId = user ? (coachTeamId ?? memberTeamId) : null;
+  const myTeamName = useMemo(() => (myTeamId ? decodeTeamId(myTeamId) : null), [myTeamId]);
 
   useEffect(() => {
-    if (!myTeamId) {
-      setTeamNotices([]);
-      setTeamNoticesLoading(false);
-      return;
-    }
-    setTeamNoticesLoading(true);
+    if (!myTeamId) return;
     const q = query(collection(firestore, 'teams', myTeamId, 'notices'), orderBy('createdAt', 'desc'), limit(5));
     const unsub = onSnapshot(
       q,
       (snap) => {
         const next = snap.docs.map((docSnap) => ({ ...(docSnap.data() as Omit<TeamNotice, 'id'>), id: docSnap.id }));
         setTeamNotices(next);
-        setTeamNoticesLoading(false);
       },
       () => {
         setTeamNotices([]);
-        setTeamNoticesLoading(false);
       },
     );
     return () => unsub();
@@ -634,9 +621,7 @@ export default function LandingPage() {
         ) : (
           <div style={{ display: 'grid', gap: '10px' }}>
             <div style={{ color: '#e2e8f0', fontWeight: 800 }}>{myTeamName ?? '소속팀'}</div>
-            {teamNoticesLoading ? (
-              <div style={{ color: '#94a3b8', fontWeight: 700 }}>팀 공지를 불러오는 중...</div>
-            ) : sortedTeamNotices.length ? (
+            {sortedTeamNotices.length ? (
               <div style={{ display: 'grid', gap: '8px' }}>
                 {sortedTeamNotices.slice(0, 3).map((notice) => (
                   <div
@@ -661,7 +646,12 @@ export default function LandingPage() {
                           {notice.category}
                         </span>
                       )}
-                      <span style={{ fontWeight: 800, color: '#e2e8f0' }}>{notice.title}</span>
+                      <Link
+                        to={`/teams/${myTeamId}/notices/${notice.id}`}
+                        style={{ fontWeight: 800, color: '#e2e8f0', textDecoration: 'none' }}
+                      >
+                        {notice.title}
+                      </Link>
                     </div>
                     <div style={{ color: '#cbd5e1', fontSize: '12px' }}>{notice.content}</div>
                   </div>

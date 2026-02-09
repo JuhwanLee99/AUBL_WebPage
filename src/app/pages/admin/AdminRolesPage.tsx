@@ -52,6 +52,7 @@ export default function AdminRolesPage() {
   );
 
   const [selectedTeamId, setSelectedTeamId] = useState<string>(teamOptions[0]?.id ?? '');
+  const effectiveTeamId = selectedTeamId || teamOptions[0]?.id || '';
   const [emailInput, setEmailInput] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -66,10 +67,6 @@ export default function AdminRolesPage() {
     return () => unsub();
   }, []);
 
-  useEffect(() => {
-    if (!selectedTeamId && teamOptions[0]?.id) setSelectedTeamId(teamOptions[0].id);
-  }, [teamOptions, selectedTeamId]);
-
   const handleGrant = async () => {
     setError(null);
     setStatus(null);
@@ -78,7 +75,7 @@ export default function AdminRolesPage() {
       setError('감독 계정 이메일을 입력해주세요.');
       return;
     }
-    if (!selectedTeamId) {
+    if (!effectiveTeamId) {
       setError('팀을 선택해주세요.');
       return;
     }
@@ -92,13 +89,13 @@ export default function AdminRolesPage() {
 
     const userDoc = userSnap.docs[0];
     const userData = userDoc.data() as UserProfile;
-    const teamName = teamOptions.find((t) => t.id === selectedTeamId)?.name ?? selectedTeamId;
+    const teamName = teamOptions.find((t) => t.id === effectiveTeamId)?.name ?? effectiveTeamId;
 
     await setDoc(
       doc(firestore, 'roles', userDoc.id),
       {
         role: 'coach',
-        teamId: selectedTeamId,
+        teamId: effectiveTeamId,
         teamName,
         email: userData.email ?? emailLower,
         emailLower: userData.emailLower ?? emailLower,
@@ -130,7 +127,7 @@ export default function AdminRolesPage() {
             <label style={labelStyle}>팀 선택</label>
             <select
               style={{ ...inputStyle, cursor: 'pointer' }}
-              value={selectedTeamId}
+              value={effectiveTeamId}
               onChange={(e) => setSelectedTeamId(e.target.value)}
             >
               {teamOptions.map((team) => (
