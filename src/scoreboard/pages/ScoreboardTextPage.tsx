@@ -1,8 +1,8 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ScoreboardFrame from '../components/ScoreboardFrame';
-import { useDemoStore, buildGameRecord } from '../../shared/state/demoStore';
-import type { PlayEvent, ErrorDetails, RunnerAdvanceOutcome, BattedBallDetails } from '../../shared/state/demoStore';
+import { useDemoStore, buildGameRecord, canPitcherBat } from '../../shared/state/demoStore';
+import type { PlayEvent, ErrorDetails, RunnerAdvanceOutcome, BattedBallDetails, PlayerSlot } from '../../shared/state/demoStore';
 import StatsTable from '../../shared/components/StatsTable';
 import RemovedPlayersPanel from '../../shared/components/RemovedPlayersPanel';
 import { GameTimerDisplay } from '../../shared/components/GameTimerDisplay';
@@ -2043,6 +2043,29 @@ function ensurePitcherStat(name: string, pos?: string): PitcherStatExt {
 // 투수/타자 구분 로직, 고유 이름(uniqueName)을 Key로 사용하는 로직 적용
 function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: { practiceMode?: boolean }) {
   const practiceMode = options?.practiceMode === true;
+  const normalizePos = (pos?: string) => (pos ?? '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const isDhPos = (pos?: string) => {
+    const norm = normalizePos(pos);
+    return norm === 'DH' || (pos ?? '').includes('지명');
+  };
+  const hasDhBySide: Record<'home' | 'away', boolean> = {
+    home: record.lineups.home.some((slot) => isDhPos(slot.pos)),
+    away: record.lineups.away.some((slot) => isDhPos(slot.pos)),
+  };
+  const lineupByName: Record<'home' | 'away', Map<string, PlayerSlot>> = {
+    home: new Map(),
+    away: new Map(),
+  };
+  record.lineups.home.forEach((p) => lineupByName.home.set(getUniqueName(p.name, p.number), p));
+  record.lineups.away.forEach((p) => lineupByName.away.set(getUniqueName(p.name, p.number), p));
+  const pitcherCanBat = (side: 'home' | 'away', name: string) => {
+    const slot = lineupByName[side].get(name);
+    if (!slot) return true;
+    const isPitcher = normalizePos(slot.pos) === 'P';
+    if (!isPitcher) return true;
+    if (slot.isOhtaniRule) return true;
+    return !hasDhBySide[side];
+  };
   // Roster Map의 Key를 uniqueName으로 변경
   const rosterHome = new Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자'; isElite?: boolean }>();
   const rosterAway = new Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자'; isElite?: boolean }>();
@@ -2063,7 +2086,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
   const battingOrders: Record<'home' | 'away', Map<number, string[]>> = { home: new Map(), away: new Map() };
 
   const seedBattingOrders = (side: 'home' | 'away') => {
-    let batting = record.lineups[side].slice(0, 9);
+    let batting: PlayerSlot[] = [];
     if (practiceMode) {
       const lineup = record.lineups[side];
       let pitcherIndex = -1;
@@ -2074,6 +2097,14 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
         }
       }
       batting = lineup.filter((_, idx) => idx !== pitcherIndex);
+    } else {
+      const lineup = record.lineups[side];
+      batting = lineup.filter((slot, idx) => {
+        const isPitcher = normalizePos(slot.pos) === 'P';
+        const allowedPitcher = isPitcher ? pitcherCanBat(side, getUniqueName(slot.name, slot.number)) : true;
+        if (idx >= 9) return false;
+        return allowedPitcher;
+      });
     }
     // Batting order map에도 uniqueName 저장
     batting.forEach((slot, idx) => battingOrders[side].set(idx + 1, [getUniqueName(slot.name, slot.number)]));
@@ -2691,6 +2722,11 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
         const stat = store.get(playerName);
         const base = ensurePlayerStat(playerName, meta?.pos);
         const row = stat ? { ...base, ...stat, pos: stat.pos ?? base.pos } : base;
+        const slot = lineupByName[side].get(playerName);
+        const isPitcher = normalizePos(slot?.pos ?? meta?.pos) === 'P';
+        if (isPitcher && !pitcherCanBat(side, playerName) && (row.pa ?? 0) === 0) {
+          return;
+        }
 
         if (meta?.substitutionType) {
           // console.log(`[통계 생성] ${playerName}:`, {
@@ -2719,6 +2755,11 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
     );
     remaining.forEach((stat) => {
       const meta = roster.get(stat.name);
+      const slot = lineupByName[side].get(stat.name);
+      const isPitcher = normalizePos(slot?.pos ?? meta?.pos) === 'P';
+      if (isPitcher && !pitcherCanBat(side, stat.name) && (stat.pa ?? 0) === 0) {
+        return;
+      }
       rows.push({ ...stat, order: null, isElite: meta?.isElite });
     });
     return rows;
