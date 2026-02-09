@@ -3520,6 +3520,21 @@ function nextBatter(state: DemoState) {
   return { batterName, batterIndex };
 }
 
+const normalizePositionCode = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  const upper = trimmed.toUpperCase();
+  if (upper === '1') return '1B';
+  if (upper === '2') return '2B';
+  if (upper === '3') return '3B';
+  return upper;
+};
+
+const hasBatterLog = (feed: PlayLog[]) => feed.some((entry) => entry.order > 0);
+
+const shouldLogLineupChange = (state: DemoState) =>
+  state.gameStarted && !state.gameOver && hasBatterLog(state.feed);
+
 function updateLineup(state: DemoState, side: Side, index: number, updates: Partial<PlayerSlot>): DemoState {
   const lineup = [...state.lineups[side]];
 
@@ -3530,13 +3545,19 @@ function updateLineup(state: DemoState, side: Side, index: number, updates: Part
   }
 
   const original = lineup[index];
-  lineup[index] = { ...lineup[index], ...updates };
+  const normalizedUpdates = { ...updates };
+  let normalizedPos: string | undefined;
+  if (typeof updates.pos === 'string') {
+    normalizedPos = normalizePositionCode(updates.pos);
+    normalizedUpdates.pos = normalizedPos;
+  }
+  lineup[index] = { ...lineup[index], ...normalizedUpdates };
 
   // 포지션 변경 시 feed에 기록
   let feed = state.feed;
   let lastPlay = state.lastPlay;
 
-  if (state.gameStarted) {
+  if (shouldLogLineupChange(state)) {
     const prevPitcher = state.lineups[side].find((slot) => slot.pos?.toUpperCase() === 'P');
     const nextPitcher = lineup.find((slot) => slot.pos?.toUpperCase() === 'P');
     const prevKey = formatUniqueName(prevPitcher?.name ?? '', prevPitcher?.number);
@@ -3562,12 +3583,16 @@ function updateLineup(state: DemoState, side: Side, index: number, updates: Part
   }
 
   // [수정] 경기가 시작된 상태(state.gameStarted)일 때만 포지션 변경 로그를 남기도록 조건 추가
-  if (state.gameStarted && updates.pos && original?.pos && updates.pos !== original.pos) {
+  if (shouldLogLineupChange(state) && normalizedPos && original?.pos) {
+    const prevPos = normalizePositionCode(original.pos);
+    const nextPos = normalizedPos;
+    if (prevPos && nextPos !== prevPos) {
     const playerName = original.name || '선수';
     const playerNum = original.number ? `(${original.number})` : '';
-    const changeText = `포지션 변경 · ${playerName}${playerNum}: ${original.pos} → ${updates.pos}`;
-    feed = pushFeed(feed, createLogEntryForBaserunning(state, changeText, 0));
-    lastPlay = changeText;
+      const changeText = `포지션 변경 · ${playerName}${playerNum}: ${prevPos} → ${nextPos}`;
+      feed = pushFeed(feed, createLogEntryForBaserunning(state, changeText, 0));
+      lastPlay = changeText;
+    }
   }
 
   return { ...state, lineups: { ...state.lineups, [side]: lineup }, feed, lastPlay };
@@ -3633,11 +3658,12 @@ function swapPositions(
   for (const { index, newPos } of swaps) {
     if (index >= 0 && index < lineup.length) {
       const original = lineup[index];
-      const normalizedNewPos = newPos.toUpperCase();
-      if (original && original.pos.toUpperCase() !== normalizedNewPos) {
+      const normalizedNewPos = normalizePositionCode(newPos);
+      const prevPos = original ? normalizePositionCode(original.pos) : '';
+      if (original && prevPos && prevPos !== normalizedNewPos) {
         const playerName = original.name || '선수';
         const playerNum = original.number ? `(${original.number})` : '';
-        changes.push(`${playerName}${playerNum}: ${original.pos} → ${normalizedNewPos}`);
+        changes.push(`${playerName}${playerNum}: ${prevPos} → ${normalizedNewPos}`);
         lineup[index] = { ...original, pos: normalizedNewPos };
       }
     }
@@ -3648,11 +3674,12 @@ function swapPositions(
     for (const { index, newPos } of benchSwaps) {
       if (index >= 0 && index < bench.length) {
         const original = bench[index];
-        const normalizedNewPos = newPos.toUpperCase();
-        if (original && original.pos.toUpperCase() !== normalizedNewPos) {
+        const normalizedNewPos = normalizePositionCode(newPos);
+        const prevPos = original ? normalizePositionCode(original.pos) : '';
+        if (original && prevPos && prevPos !== normalizedNewPos) {
           const playerName = original.name || '선수';
           const playerNum = original.number ? `(${original.number})` : '';
-          changes.push(`${playerName}${playerNum}: ${original.pos} → ${normalizedNewPos}`);
+          changes.push(`${playerName}${playerNum}: ${prevPos} → ${normalizedNewPos}`);
           bench[index] = { ...original, pos: normalizedNewPos };
         }
       }
@@ -3666,7 +3693,7 @@ function swapPositions(
   let feed = state.feed;
   let lastPlay = state.lastPlay;
 
-  if (state.gameStarted) {
+  if (shouldLogLineupChange(state)) {
     const changeText = `포지션 교체 · ${changes.join(', ')}`;
     feed = pushFeed(state.feed, createLogEntryForBaserunning(state, changeText, 0));
     lastPlay = changeText;
@@ -3675,7 +3702,7 @@ function swapPositions(
     for (const { index, newPos } of swaps) {
       if (index >= 0 && index < lineup.length) {
         const player = lineup[index];
-        const normalizedNewPos = newPos.toUpperCase();
+        const normalizedNewPos = normalizePositionCode(newPos);
         const originalPos = state.lineups[side][index]?.pos?.toUpperCase();
         // 기존 포지션이 투수가 아니고 새 포지션이 투수인 경우
         if (player && originalPos !== 'P' && normalizedNewPos === 'P') {
@@ -3765,10 +3792,15 @@ function substitutePlayer(
   }
 
   const changeText = `${changeLabel} · ${formatPlayer(outgoing)} → ${formatPlayer(benchPlayer)}`;
-  let feed = pushFeed(state.feed, createLogEntryForBaserunning(state, changeText, 0));
+  let feed = state.feed;
+  let lastPlay = state.lastPlay;
+  if (shouldLogLineupChange(state)) {
+    feed = pushFeed(state.feed, createLogEntryForBaserunning(state, changeText, 0));
+    lastPlay = changeText;
+  }
 
   // 투수 교체 시 새로운 투수 로그 즉시 추가 (ensureHalfPitcherLogged가 나중에 중복 추가하는 것 방지)
-  if (isPitcherChange && incomingIsP) {
+  if (shouldLogLineupChange(state) && isPitcherChange && incomingIsP) {
     // 투수 등판 순서 계산
     const pitcherAppearanceCount = calculatePitcherAppearanceCount(state.feed, side);
     const appearanceLabel = pitcherAppearanceCount === 0 ? '선발' : `${pitcherAppearanceCount}차 계투`;
@@ -3789,7 +3821,7 @@ function substitutePlayer(
     lineups: { ...state.lineups, [side]: lineup },
     benches: { ...state.benches, [side]: bench },
     removed,
-    lastPlay: changeText,
+    lastPlay,
     feed,
     bases,
   };
