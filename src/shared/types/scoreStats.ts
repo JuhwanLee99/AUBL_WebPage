@@ -36,6 +36,8 @@ export type PitcherStatLine = {
   bb: number;
   hbp: number;
   so: number;
+  r: number;
+  er: number;
   appearanceOrder?: number | null;
   appearanceLabel?: string;
 };
