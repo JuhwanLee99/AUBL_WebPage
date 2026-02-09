@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { TEAMS } from '../../shared/lib/mockData';
 import { buildGameRecord, canPitcherBat, useDemoStore } from '../../shared/state/demoStore';
@@ -1700,6 +1700,7 @@ export default function ScorekeeperPage() {
   });
   const [hitWizard, setHitWizard] = useState<HitWizardState | null>(null);
   const [manualBroadcast, setManualBroadcast] = useState('');
+  const isManualComposingRef = useRef(false);
   const [liveVideoUrlInput, setLiveVideoUrlInput] = useState('');
   const [liveDelayInput, setLiveDelayInput] = useState('');
   const [lockRemainingMs, setLockRemainingMs] = useState(0);
@@ -1724,7 +1725,7 @@ export default function ScorekeeperPage() {
     runners: { runner: string; baseIndex: 0 | 1 | 2 }[];
   }>(null);
   const [runnerAdvanceModal, setRunnerAdvanceModal] = useState<null | {
-    mode: 'ground_out' | 'pickoff';
+    mode: 'ground_out' | 'pickoff' | 'sac_fly';
     title: string;
     description: string;
     outMessage: string;
@@ -2027,6 +2028,30 @@ const handleSelectBattedBallType = (type: string) =>
     });
   };
 
+  const openSacFlyAdvanceModal = (outMessage: string, battedBall?: BattedBallDetails | null) => {
+    const runners = state.bases
+      .map((runner, idx) => (runner ? { runner, baseIndex: idx as 0 | 1 | 2 } : null))
+      .filter(Boolean) as { runner: string; baseIndex: 0 | 1 | 2 }[];
+    const eligible = runners.filter((entry) => entry.baseIndex !== 2);
+    if (!eligible.length || state.outs >= 2) {
+      actions.sacFly(battedBall);
+      return;
+    }
+    const initialSelections = eligible.reduce<RunnerAdvanceSelections>((acc, entry) => {
+      acc[entry.baseIndex] = 'hold';
+      return acc;
+    }, {});
+    setRunnerAdvanceSelections(initialSelections);
+    setRunnerAdvanceModal({
+      mode: 'sac_fly',
+      title: '희생플라이 주자 진루',
+      description: '희생플라이 이후 1·2루 주자 진루 여부를 선택하세요.',
+      outMessage,
+      battedBall,
+      runners: eligible,
+    });
+  };
+
   const isHitResult = (result: BattedBallResultAction): result is HitResultAction =>
     ['single', 'single_infield', 'single_bunt', 'double', 'double_ground', 'triple', 'hr'].includes(
       result as HitResultAction,
@@ -2088,7 +2113,7 @@ const handleConfirmHitWizard = () => {
         actions.catcherInterference();
         break;
       case 'sac_fly':
-        actions.sacFly(details);
+        openSacFlyAdvanceModal(`희생플라이${zoneNote}${fielderNote}`, details);
         break;
       case 'sac_bunt':
         actions.sacBunt(details);
@@ -2236,7 +2261,7 @@ const handleConfirmHitWizard = () => {
         actions.addOutWithMessage('기타 아웃', battedBallDetails);
         break;
       case 'sac':
-        actions.sacFly(battedBallDetails);
+        openSacFlyAdvanceModal('희생플라이', battedBallDetails);
         break;
       case 'resetCount':
         actions.resetCount();
@@ -2375,6 +2400,7 @@ const handleConfirmHitWizard = () => {
   };
 
   const handleManualSubmit = () => {
+    if (isManualComposingRef.current) return;
     const text = manualBroadcast.trim();
     if (!text) return;
     actions.addManualLog(text);
@@ -3049,9 +3075,16 @@ const handleConfirmHitWizard = () => {
               <textarea
                 value={manualBroadcast}
                 onChange={(e) => setManualBroadcast(e.target.value)}
+                onCompositionStart={() => {
+                  isManualComposingRef.current = true;
+                }}
+                onCompositionEnd={() => {
+                  isManualComposingRef.current = false;
+                }}
                 onKeyDown={(e) => {
                   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') return;
                   if (e.key === 'Enter') {
+                    if (e.nativeEvent.isComposing || isManualComposingRef.current) return;
                     e.preventDefault();
                     handleManualSubmit();
                   }
@@ -3556,6 +3589,8 @@ const handleConfirmHitWizard = () => {
               actions.addOutWithMessage(runnerAdvanceModal.outMessage, runnerAdvanceModal.battedBall);
             } else if (runnerAdvanceModal.mode === 'pickoff' && typeof runnerAdvanceModal.pickoffBase === 'number') {
               actions.runnerPickoff(runnerAdvanceModal.pickoffBase);
+            } else if (runnerAdvanceModal.mode === 'sac_fly') {
+              actions.sacFly(runnerAdvanceModal.battedBall);
             }
             setRunnerAdvanceModal(null);
             setRunnerAdvanceSelections({});
@@ -3566,6 +3601,9 @@ const handleConfirmHitWizard = () => {
               actions.advanceRunners(runnerAdvanceSelections, runnerAdvanceModal.outMessage, true);
             } else if (runnerAdvanceModal.mode === 'pickoff' && typeof runnerAdvanceModal.pickoffBase === 'number') {
               actions.runnerPickoff(runnerAdvanceModal.pickoffBase);
+              actions.advanceRunners(runnerAdvanceSelections, runnerAdvanceModal.outMessage, true);
+            } else if (runnerAdvanceModal.mode === 'sac_fly') {
+              actions.sacFly(runnerAdvanceModal.battedBall);
               actions.advanceRunners(runnerAdvanceSelections, runnerAdvanceModal.outMessage, true);
             }
             setRunnerAdvanceModal(null);
