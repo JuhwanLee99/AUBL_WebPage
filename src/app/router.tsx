@@ -4,6 +4,8 @@ import LandingPage from '../front/pages/LandingPage';
 import IntroPage from '../front/pages/IntroPage';
 import RulePage from '../front/pages/RulePage';
 import TeamsPage from '../front/pages/TeamsPage';
+import TeamHubPage from '../front/pages/TeamHubPage';
+import TeamDetailPage from '../front/pages/TeamDetailPage';
 import StandingsPage from './pages/StandingPage';
 import PredictionPage from './pages/PredictionPage';
 import RecordPage from './pages/RecordPage';
@@ -61,6 +63,14 @@ export const router = createBrowserRouter([
       {
         path: 'intro/teams',
         element: <TeamsPage />,
+      },
+      {
+        path: 'teams',
+        element: <TeamHubPage />,
+      },
+      {
+        path: 'teams/:teamId',
+        element: <TeamDetailPage />,
       },
       {
         path: 'standings',
