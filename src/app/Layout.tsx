@@ -236,6 +236,10 @@ export default function Layout() {
         ],
       },
       {
+        path: '/teams',
+        label: '팀',
+      },
+      {
         path: '/schedule',
         label: '경기 일정',
         children: [
