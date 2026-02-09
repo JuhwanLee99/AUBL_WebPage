@@ -483,7 +483,7 @@ export default function MatchSchedulePage() {
     const textButtonLabel = match.status === 'completed' ? '경기 결과' : match.status === 'canceled' ? '취소됨' : '문자중계';
     const goTo = (path: string) => {
       actions.selectMatch(match.id);
-      navigate(path);
+      navigate(`${path}/${match.id}`);
     };
     const goToScorekeeper = (buttonEl: HTMLButtonElement | null) => {
       if (!isAdmin) {
@@ -1314,7 +1314,7 @@ export default function MatchSchedulePage() {
                               type="button"
                               onClick={() => {
                                 actions.selectMatch(match.id);
-                                navigate('/scorekeeper');
+                                navigate(`/scorekeeper/${match.id}`);
                               }}
                               style={{
                                 textAlign: 'left',

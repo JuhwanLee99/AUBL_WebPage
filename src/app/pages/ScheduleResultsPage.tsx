@@ -83,7 +83,15 @@ export default function ScheduleResultsPage() {
           </button>
           <button
             type="button"
-            onClick={() => actions.selectMatch(results[0]?.id ?? null) || navigate('/scoreboard')}
+            onClick={() => {
+              const targetId = results[0]?.id ?? null;
+              actions.selectMatch(targetId);
+              if (targetId) {
+                navigate(`/scoreboard/${targetId}`);
+              } else {
+                navigate('/scoreboard');
+              }
+            }}
             style={{
               padding: '10px 14px',
               borderRadius: '12px',
@@ -184,7 +192,7 @@ export default function ScheduleResultsPage() {
                       type="button"
                       onClick={() => {
                         actions.selectMatch(match.id);
-                        navigate('/scoreboard');
+                        navigate(`/scoreboard/${match.id}`);
                       }}
                       style={{
                         padding: '6px 10px',
