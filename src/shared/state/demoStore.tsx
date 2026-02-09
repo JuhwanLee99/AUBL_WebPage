@@ -2014,13 +2014,20 @@ function pushEvent(events: PlayEvent[], entry: PlayEvent) {
   return [entry, ...events];
 }
 
+const isPitcherLogEntry = (result: string) => {
+  const text = result.trim();
+  if (!text) return false;
+  if (text.includes('투수 교체')) return false;
+  return text.includes('투수 (') || /투수\s*$/.test(text);
+};
+
 function ensureHalfPitcherLogged(state: DemoState, feed: PlayLog[]) {
   // 투수 로그 형식: "이름(번호) 투수 (선발)" 또는 "이름(번호) 투수 (N차 계투)"
   const exists = feed.some(
     (entry) =>
       entry.inning === state.inning &&
       entry.half === state.half &&
-      (entry.result.includes('투수 (선발)') || entry.result.includes('차 계투)')),
+      isPitcherLogEntry(entry.result),
   );
   if (exists) return feed;
   const defenseSide: Side = state.half === 'top' ? 'home' : 'away';
@@ -3704,8 +3711,8 @@ function calculatePitcherAppearanceCount(feed: PlayLog[], side: Side): number {
     // 수비팀(투수팀)만 카운트
     if (defenseSide !== side) continue;
 
-    // "투수 교체" 또는 "투수"로 끝나는 로그
-    if (result.includes('투수 교체') || result.endsWith('투수')) {
+    // 투수 등판 로그만 카운트 (교체 알림은 제외)
+    if (isPitcherLogEntry(result)) {
       count++;
     }
   }

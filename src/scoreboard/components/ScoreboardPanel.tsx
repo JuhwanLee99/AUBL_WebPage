@@ -191,6 +191,7 @@ function computePitcherLine(
   const chronological = [...feed].reverse();
   const current: Record<'home' | 'away', string | null> = { home: null, away: null };
   const cleanName = (raw: string) => raw.replace(/투수/g, '').replace(/·/g, '').trim();
+  const isPitcherLog = (result: string) => result.includes('투수 (') || /투수\s*$/.test(result);
 
   chronological.forEach((entry) => {
     const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
@@ -200,8 +201,9 @@ function computePitcherLine(
     if (result.includes('투수 교체')) {
       const incoming = result.split('→')[1];
       if (incoming) current[defenseSide] = cleanName(incoming);
-    } else if (result.endsWith('투수')) {
-      current[defenseSide] = cleanName(result.replace('투수', ''));
+    } else if (isPitcherLog(result)) {
+      const namePart = result.includes('투수 (') ? result.split('투수')[0] : result.replace(/투수\s*$/, '');
+      current[defenseSide] = cleanName(namePart);
     }
 
     const activePitcher = current[defenseSide] || pitcher;
