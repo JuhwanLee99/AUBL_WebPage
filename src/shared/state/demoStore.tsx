@@ -1153,6 +1153,14 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
       })
     : [];
   const gameStarted = typeof incoming.gameStarted === 'boolean' ? incoming.gameStarted : feed.length > 0;
+  const gameLimitMinutes =
+    typeof merged.gameLimitMinutes === 'number' ? merged.gameLimitMinutes : merged.gameLimitMinutes === null ? null : null;
+  const gameStartTimestamp =
+    typeof merged.gameStartTimestamp === 'number'
+      ? merged.gameStartTimestamp
+      : gameStarted && gameLimitMinutes !== null
+        ? Date.now()
+        : null;
   return {
     ...merged,
     pitchCount: merged.pitchCount ?? 0,
@@ -1166,6 +1174,8 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
     endedAt: typeof merged.endedAt === 'string' ? merged.endedAt : null,
     removed: merged.removed ?? base.removed,
     gameStarted,
+    gameLimitMinutes,
+    gameStartTimestamp,
     liveVideoUrl: typeof merged.liveVideoUrl === 'string' ? merged.liveVideoUrl : base.liveVideoUrl,
     liveDelaySeconds: typeof merged.liveDelaySeconds === 'number' ? merged.liveDelaySeconds : base.liveDelaySeconds,
     activeMatchId: typeof merged.activeMatchId === 'string' ? merged.activeMatchId : merged.activeMatchId === null ? null : base.activeMatchId,
