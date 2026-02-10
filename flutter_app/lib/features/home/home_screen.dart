@@ -11,6 +11,7 @@ import '../../core/models/match.dart';
 import '../../core/models/match_state.dart';
 import '../../core/models/team_notice.dart';
 import '../../core/services/firestore_service.dart';
+import '../../core/services/notification_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../app/shell_controller.dart';
 import '../../core/webview/app_webview_screen.dart';
@@ -48,6 +49,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadUserTeam();
     _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (user == null) {
+        NotificationService.instance.updateTeamSubscriptions(null);
         if (mounted) {
           setState(() {
             _userTeamId = null;
@@ -138,6 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       if (teamId != null) {
+        await NotificationService.instance.updateTeamSubscriptions(teamId);
         final notices = await _fs.watchTeamNotices(teamId).first;
         if (mounted) {
           setState(() {
@@ -151,6 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
           });
         }
       } else {
+        await NotificationService.instance.updateTeamSubscriptions(null);
         if (mounted) setState(() => _loadingNotices = false);
       }
     } catch (_) {
