@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/models/notice.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/background_logo.dart';
 import 'notice_detail_screen.dart';
 
 class CommunityScreen extends StatefulWidget {
@@ -58,16 +59,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
       appBar: AppBar(title: const Text('커뮤니티')),
       body: Stack(
         children: [
-          Center(
-            child: Opacity(
-              opacity: 0.5,
-              child: Image.asset(
-                'assets/images/aubl_clean.png',
-                width: 400,
-                fit: BoxFit.contain,
-              ),
-            ),
-          ),
+          const BackgroundLogo(saturation: 0.85),
           _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(

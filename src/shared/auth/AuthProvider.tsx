@@ -76,8 +76,18 @@ export function AuthProvider({ children }: PropsWithChildren) {
         console.error('[FlutterBridge] Auth inject failed:', e);
       }
     };
+    (window as any).__flutterGetIdToken = async () => {
+      try {
+        if (!auth.currentUser) return null;
+        return await getIdToken(auth.currentUser, true);
+      } catch (e) {
+        console.error('[FlutterBridge] Get idToken failed:', e);
+        return null;
+      }
+    };
     return () => {
       delete (window as any).__flutterAuthInject;
+      delete (window as any).__flutterGetIdToken;
     };
   }, []);
 

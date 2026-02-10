@@ -32,10 +32,25 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> with WidgetsBin
     systemNavigationBarIconBrightness: Brightness.light,
     systemNavigationBarDividerColor: _chromeColor,
   );
+  static const String _webTokenProbeScript = '''
+(async () => {
+  try {
+    const getter = window.__flutterGetIdToken;
+    const bridge = window.FlutterBridge;
+    if (!getter || !bridge) return;
+    const token = await getter();
+    if (token) {
+      bridge.postMessage(JSON.stringify({ type: 'TOKEN_REFRESH', idToken: token }));
+    }
+  } catch (_) {}
+})();
+''';
 
   final AuthBridgeService _authBridgeService = AuthBridgeService();
   final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: const ['email']);
   late final WebViewController _controller;
+  StreamSubscription<User?>? _authSub;
+  bool _loginCompleted = false;
 
   bool _pageLoading = true;
   bool _authenticating = false;
@@ -48,6 +63,13 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> with WidgetsBin
       overlays: SystemUiOverlay.values,
     ));
     SystemChrome.setSystemUIOverlayStyle(_overlayStyle);
+  }
+
+  void _finishLogin() {
+    if (_loginCompleted) return;
+    _loginCompleted = true;
+    if (!mounted) return;
+    Navigator.of(context).pop(true);
   }
 
   bool _isGoogleOAuthRequest(Uri uri) {
@@ -69,6 +91,15 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> with WidgetsBin
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _applySystemUiChrome();
+
+    if (FirebaseAuth.instance.currentUser != null) {
+      // 이미 로그인 상태면 바로 닫기
+      WidgetsBinding.instance.addPostFrameCallback((_) => _finishLogin());
+    } else {
+      _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+        if (user != null) _finishLogin();
+      });
+    }
 
     _controller = WebViewController()
       ..setBackgroundColor(_chromeColor)
@@ -104,6 +135,7 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> with WidgetsBin
             setState(() {
               _pageLoading = false;
             });
+            unawaited(_requestWebIdTokenIfNeeded());
           },
           onWebResourceError: (error) {
             if (!mounted) return;
@@ -120,6 +152,7 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> with WidgetsBin
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _authSub?.cancel();
     _authBridgeService.dispose();
     super.dispose();
   }
@@ -140,6 +173,14 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> with WidgetsBin
       query['next'] = widget.nextPath!;
     }
     return AppConfig.webUri('/login', queryParameters: query);
+  }
+
+  Future<void> _requestWebIdTokenIfNeeded() async {
+    if (_authenticating) return;
+    if (FirebaseAuth.instance.currentUser != null) return;
+    try {
+      await _controller.runJavaScript(_webTokenProbeScript);
+    } catch (_) {}
   }
 
   Future<void> _onBridgeMessage(String raw) async {
@@ -175,6 +216,7 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> with WidgetsBin
     try {
       final customToken = await _authBridgeService.exchangeWebIdToken(webIdToken);
       await FirebaseAuth.instance.signInWithCustomToken(customToken);
+      _finishLogin();
       if (!mounted) return;
       setState(() {
         _error = null;
@@ -217,6 +259,7 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> with WidgetsBin
         accessToken: authData.accessToken,
       );
       await FirebaseAuth.instance.signInWithCredential(credential);
+      _finishLogin();
     } catch (e) {
       if (!mounted) return;
       setState(() {

@@ -2,7 +2,11 @@ import type * as React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../shared/auth/AuthProvider';
-import { requestNativeGoogleSignInFromFlutter, sendLoginSuccessToFlutter } from '../../shared/bridge/flutterBridge';
+import {
+  hasFlutterBridge,
+  requestNativeGoogleSignInFromFlutter,
+  sendLoginSuccessToFlutter,
+} from '../../shared/bridge/flutterBridge';
 import { auth } from '../../shared/firebase/client';
 
 type LocationState = {
@@ -10,7 +14,7 @@ type LocationState = {
 };
 
 export default function LoginPage() {
-  const { loginWithEmail, registerWithEmail, loginWithGoogle, error } = useAuth();
+  const { loginWithEmail, registerWithEmail, loginWithGoogle, error, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
@@ -30,10 +34,10 @@ export default function LoginPage() {
   const [showPrivacy, setShowPrivacy] = useState(false);
 
   useEffect(() => {
-    if (!embedded || !auth.currentUser) return;
-    void sendLoginSuccessToFlutter(auth.currentUser);
+    if (!embedded || !user) return;
+    void sendLoginSuccessToFlutter(user);
     navigate(redirectTo, { replace: true });
-  }, [embedded, navigate, redirectTo]);
+  }, [embedded, navigate, redirectTo, user]);
 
   const handleSubmit = async (evt: React.FormEvent<HTMLFormElement>) => {
     evt.preventDefault();
@@ -65,8 +69,7 @@ export default function LoginPage() {
     setSubmitting(true);
     setMessage(null);
     try {
-      const hasFlutterBridge = typeof window !== 'undefined' && Boolean(window.FlutterBridge);
-      if (embedded && (nativeGoogleEnabled || hasFlutterBridge)) {
+      if (embedded && (nativeGoogleEnabled || hasFlutterBridge())) {
         const sent = requestNativeGoogleSignInFromFlutter();
         if (!sent) {
           setMessage('앱 브리지 연결을 찾지 못했습니다. 앱을 다시 실행해 주세요.');

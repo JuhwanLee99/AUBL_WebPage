@@ -5,5 +5,12 @@ declare global {
     FlutterBridge?: {
       postMessage: (message: string) => void;
     };
+    webkit?: {
+      messageHandlers?: {
+        FlutterBridge?: {
+          postMessage: (message: string) => void;
+        };
+      };
+    };
   }
 }

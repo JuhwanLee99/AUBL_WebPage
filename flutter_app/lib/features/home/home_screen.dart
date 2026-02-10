@@ -12,6 +12,7 @@ import '../../core/services/firestore_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../app/shell_controller.dart';
 import '../../core/webview/app_webview_screen.dart';
+import '../../core/widgets/background_logo.dart';
 import '../../core/widgets/match_status_badge.dart';
 import '../intro/intro_screen.dart';
 import '../teams/team_detail_screen.dart';
@@ -129,16 +130,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: Stack(
         children: [
           // 화면 중앙 배경 로고
-          Center(
-            child: Opacity(
-              opacity: 0.5,
-              child: Image.asset(
-                'assets/images/aubl_clean.png',
-                width: 400,
-                fit: BoxFit.contain,
-              ),
-            ),
-          ),
+          const BackgroundLogo(verticalOffset: kToolbarHeight / 2 + 25),
           // 메인 콘텐츠
           RefreshIndicator(
             onRefresh: _onRefresh,
@@ -737,6 +729,75 @@ class _StatCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────
+// 라이브 경기 캐러셀 (좌우 스크롤 + 도트 인디케이터)
+// ────────────────────────────────────────────
+class _LiveMatchCarousel extends StatefulWidget {
+  const _LiveMatchCarousel({required this.matches, required this.fs});
+
+  final List<Match> matches;
+  final FirestoreService fs;
+
+  @override
+  State<_LiveMatchCarousel> createState() => _LiveMatchCarouselState();
+}
+
+class _LiveMatchCarouselState extends State<_LiveMatchCarousel> {
+  final PageController _pageCtrl = PageController();
+  int _currentPage = 0;
+
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        SizedBox(
+          // 카드 높이를 충분히 확보 (BSO + 투수/타자 + 버튼 포함)
+          height: 280,
+          child: PageView.builder(
+            controller: _pageCtrl,
+            itemCount: widget.matches.length,
+            onPageChanged: (i) => setState(() => _currentPage = i),
+            itemBuilder: (context, i) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: _LiveMatchCard(
+                  match: widget.matches[i],
+                  fs: widget.fs,
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+        // 도트 인디케이터
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(widget.matches.length, (i) {
+            final isActive = i == _currentPage;
+            return Container(
+              width: 8,
+              height: 8,
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isActive
+                    ? AppTheme.red500
+                    : AppTheme.slate600.withValues(alpha: 0.4),
+              ),
+            );
+          }),
+        ),
+      ],
     );
   }
 }

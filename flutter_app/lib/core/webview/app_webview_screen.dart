@@ -34,6 +34,21 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
   final AuthBridgeService _authBridgeService = AuthBridgeService();
   final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: const ['email']);
   late final WebViewController _controller;
+  StreamSubscription<User?>? _authSub;
+  String? _lastInjectedUid;
+  static const String _webTokenProbeScript = '''
+(async () => {
+  try {
+    const getter = window.__flutterGetIdToken;
+    const bridge = window.FlutterBridge;
+    if (!getter || !bridge) return;
+    const token = await getter();
+    if (token) {
+      bridge.postMessage(JSON.stringify({ type: 'TOKEN_REFRESH', idToken: token }));
+    }
+  } catch (_) {}
+})();
+''';
 
   bool _loading = true;
   bool _authenticating = false;
@@ -63,7 +78,10 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
   }
 
   Uri get _pageUri =>
-      AppConfig.webUri(widget.path, queryParameters: const {'embedded': 'flutter'});
+      AppConfig.webUri(widget.path, queryParameters: const {
+        'embedded': 'flutter',
+        'nativeGoogle': '1',
+      });
 
   Uri _loginFallbackUri({String? nextPath}) {
     final query = <String, String>{
@@ -100,6 +118,7 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
             if (!mounted) return;
             setState(() => _loading = false);
             unawaited(_injectAuthIfNeeded());
+            unawaited(_requestWebIdTokenIfNeeded());
           },
           onWebResourceError: (error) {
             if (!mounted) return;
@@ -111,10 +130,23 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
         ),
       )
       ..loadRequest(_pageUri);
+
+    final current = FirebaseAuth.instance.currentUser;
+    if (current != null) {
+      _lastInjectedUid = current.uid;
+      unawaited(_injectAuthIfNeeded());
+    }
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user == null) return;
+      if (_lastInjectedUid == user.uid) return;
+      _lastInjectedUid = user.uid;
+      unawaited(_injectAuthIfNeeded());
+    });
   }
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _authBridgeService.dispose();
     super.dispose();
   }
@@ -181,11 +213,37 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
       final customToken =
           await _authBridgeService.exchangeWebIdToken(idToken);
       final escaped = customToken.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
-      await _controller.runJavaScript(
-        "if(window.__flutterAuthInject) window.__flutterAuthInject('$escaped');",
-      );
+      await _controller.runJavaScript('''
+(function() {
+  const token = '$escaped';
+  const inject = () => {
+    if (window.__flutterAuthInject) {
+      window.__flutterAuthInject(token);
+      return true;
+    }
+    return false;
+  };
+  if (inject()) return;
+  let tries = 0;
+  const timer = setInterval(() => {
+    tries += 1;
+    if (inject() || tries >= 20) {
+      clearInterval(timer);
+    }
+  }, 300);
+})();
+''');
     } catch (_) {
       // 인증 주입 실패 시 무시 (웹에서 별도 로그인 가능)
+    }
+  }
+
+  Future<void> _requestWebIdTokenIfNeeded() async {
+    if (FirebaseAuth.instance.currentUser != null) return;
+    try {
+      await _controller.runJavaScript(_webTokenProbeScript);
+    } catch (_) {
+      // 토큰 조회 실패 시 무시
     }
   }
 
@@ -209,6 +267,10 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
 
   Future<void> _signInWithNativeGoogle() async {
     if (_googleSigningIn || _authenticating) return;
+    if (FirebaseAuth.instance.currentUser != null) {
+      unawaited(_injectAuthIfNeeded());
+      return;
+    }
     setState(() {
       _googleSigningIn = true;
       _error = null;
