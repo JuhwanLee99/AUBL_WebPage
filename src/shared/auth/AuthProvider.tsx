@@ -15,6 +15,7 @@ import type { PropsWithChildren } from 'react';
 import { auth } from '../firebase/client';
 import { doc, setDoc } from 'firebase/firestore';
 import { firestore } from '../firebase/client';
+import { sendLogoutToFlutter, sendTokenRefreshToFlutter } from '../bridge/flutterBridge';
 
 // -----------------------------------------------------------
 // [로컬 테스트용 설정]
@@ -73,6 +74,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setUser(nextUser);
       if (!nextUser) {
         setIdToken(null);
+        sendLogoutToFlutter();
         setInitializing(false);
         return;
       }
@@ -80,6 +82,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       try {
         const token = await getIdToken(nextUser, true);
         setIdToken(token);
+        await sendTokenRefreshToFlutter(nextUser, token);
       } catch (err) {
         setError(err instanceof Error ? err.message : '토큰을 불러오지 못했습니다.');
       } finally {
@@ -148,6 +151,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
     setError(null);
     await signOut(auth);
+    sendLogoutToFlutter();
   }, []);
 
   const refreshIdToken = useCallback(async () => {
@@ -155,6 +159,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (!auth.currentUser) return null;
     const token = await getIdToken(auth.currentUser, true);
     setIdToken(token);
+    await sendTokenRefreshToFlutter(auth.currentUser, token);
     return token;
   }, []);
 
