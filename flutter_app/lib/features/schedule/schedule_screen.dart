@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -27,7 +29,7 @@ class _ScheduleScreenState extends State<ScheduleScreen>
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 5, vsync: this);
+    _tabCtrl = TabController(length: 6, vsync: this);
     _loadMatches();
   }
 
@@ -81,11 +83,24 @@ class _ScheduleScreenState extends State<ScheduleScreen>
             Tab(text: '라이브'),
             Tab(text: '결과'),
             Tab(text: '조별'),
+            Tab(text: '순위'),
             Tab(text: '연습경기'),
           ],
         ),
       ),
-      body: _loading
+      body: Stack(
+        children: [
+          Center(
+            child: Opacity(
+              opacity: 0.5,
+              child: Image.asset(
+                'assets/images/aubl_clean.png',
+                width: 400,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+          _loading
           ? const Center(child: CircularProgressIndicator())
           : TabBarView(
               controller: _tabCtrl,
@@ -122,6 +137,8 @@ class _ScheduleScreenState extends State<ScheduleScreen>
                 ),
                 // 조별
                 _buildGroupTab(),
+                // 순위
+                const _StandingsTab(),
                 _MatchList(
                   matches: _practiceMatches,
                   emptyMessage: '연습경기가 없습니다.',
@@ -129,6 +146,8 @@ class _ScheduleScreenState extends State<ScheduleScreen>
                 ),
               ],
             ),
+        ],
+      ),
     );
   }
 
@@ -239,7 +258,7 @@ class _MatchCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: AppTheme.slate800,
+          color: AppTheme.slate800.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: match.isLive
@@ -340,6 +359,176 @@ class _MatchCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── 순위 탭 (Elo 기반) ──
+
+class _TeamRank {
+  _TeamRank({required this.name, required this.colorHex});
+  final String name;
+  final String colorHex;
+  int wins = 0, losses = 0, draws = 0;
+  double elo = 1500;
+
+  int get games => wins + losses + draws;
+  double get winRate => games > 0 ? wins / games : 0;
+
+  Color get color {
+    final hex = colorHex.replaceFirst('#', '');
+    return Color(int.parse('FF$hex', radix: 16));
+  }
+}
+
+List<_TeamRank> _calculateRankings() {
+  final teams = [
+    _TeamRank(name: '한양대 불새', colorHex: '#4f46e5'),
+    _TeamRank(name: '연세대 EAGLES', colorHex: '#8b5cf6'),
+    _TeamRank(name: '고려대 백구회', colorHex: '#f59e0b'),
+    _TeamRank(name: '중앙대 랑데뷰', colorHex: '#ef4444'),
+    _TeamRank(name: '성균관대 킹고야구반', colorHex: '#10b981'),
+    _TeamRank(name: '서강대 알바트로스', colorHex: '#3b82f6'),
+    _TeamRank(name: '한국외대 야구부', colorHex: '#f97316'),
+  ];
+
+  final matches = [
+    ('한양대 불새', '연세대 EAGLES', 3, 2),
+    ('연세대 EAGLES', '고려대 백구회', 1, 1),
+    ('고려대 백구회', '한양대 불새', 0, 2),
+    ('중앙대 랑데뷰', '성균관대 킹고야구반', 5, 4),
+    ('한양대 불새', '성균관대 킹고야구반', 2, 6),
+    ('서강대 알바트로스', '중앙대 랑데뷰', 3, 3),
+    ('한국외대 야구부', '서강대 알바트로스', 4, 1),
+  ];
+
+  const kFactor = 32.0;
+
+  for (final (homeName, awayName, hs, as_) in matches) {
+    final home = teams.firstWhere((t) => t.name == homeName);
+    final away = teams.firstWhere((t) => t.name == awayName);
+
+    final ratingDiff = away.elo - home.elo;
+    final expectedHome = 1.0 / (1.0 + pow(10, ratingDiff / 400));
+    final double actual;
+    if (hs > as_) {
+      home.wins++;
+      away.losses++;
+      actual = 1.0;
+    } else if (hs < as_) {
+      home.losses++;
+      away.wins++;
+      actual = 0.0;
+    } else {
+      home.draws++;
+      away.draws++;
+      actual = 0.5;
+    }
+
+    final mov = log((hs - as_).abs() + 1);
+    final delta = (kFactor * mov * (actual - expectedHome)).round();
+    home.elo += delta;
+    away.elo -= delta;
+  }
+
+  teams.sort((a, b) => b.elo.compareTo(a.elo));
+  return teams;
+}
+
+class _StandingsTab extends StatelessWidget {
+  const _StandingsTab();
+
+  @override
+  Widget build(BuildContext context) {
+    final rankings = _calculateRankings();
+
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        ...List.generate(rankings.length, (i) {
+          final t = rankings[i];
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.slate800.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: i == 0
+                    ? t.color.withValues(alpha: 0.4)
+                    : AppTheme.slate700.withValues(alpha: 0.5),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: i < 3
+                        ? t.color.withValues(alpha: 0.15)
+                        : AppTheme.slate700.withValues(alpha: 0.5),
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '${i + 1}',
+                    style: TextStyle(
+                      color: i < 3 ? t.color : AppTheme.slate300,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: t.color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    t.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${t.wins}승 ${t.draws}무 ${t.losses}패',
+                  style: const TextStyle(
+                    color: AppTheme.slate400,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  '${t.elo.round()}',
+                  style: const TextStyle(
+                    color: AppTheme.blue400,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+        const SizedBox(height: 8),
+        const Center(
+          child: Text(
+            'Elo 레이팅 기반 · 데모 데이터',
+            style: TextStyle(color: AppTheme.slate500, fontSize: 11),
+          ),
+        ),
+      ],
     );
   }
 }

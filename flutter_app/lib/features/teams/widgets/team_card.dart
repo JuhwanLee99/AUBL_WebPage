@@ -23,7 +23,7 @@ class TeamCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppTheme.slate800,
+          color: AppTheme.slate800.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: AppTheme.slate700, width: 0.5),
         ),
