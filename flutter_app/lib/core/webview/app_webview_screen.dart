@@ -54,6 +54,16 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
   bool _authenticating = false;
   bool _googleSigningIn = false;
   String? _error;
+  bool _loginBypassInFlight = false;
+  String? _pendingLoginRedirect;
+
+  bool _shouldIgnoreWebError(WebResourceError error) {
+    final desc = error.description.toLowerCase();
+    if (desc.contains('err_failed') || desc.contains('err_aborted')) {
+      return _googleSigningIn || _loginBypassInFlight || _pendingLoginRedirect != null;
+    }
+    return false;
+  }
 
   void _applySystemUiChrome() {
     unawaited(SystemChrome.setEnabledSystemUIMode(
@@ -77,11 +87,12 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
     return false;
   }
 
-  Uri get _pageUri =>
-      AppConfig.webUri(widget.path, queryParameters: const {
+  Uri get _pageUri => AppConfig.webUri(widget.path, queryParameters: const {
         'embedded': 'flutter',
         'nativeGoogle': '1',
       });
+
+  String get _pageUrl => _pageUri.toString();
 
   Uri _loginFallbackUri({String? nextPath}) {
     final query = <String, String>{
@@ -119,8 +130,17 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
             setState(() => _loading = false);
             unawaited(_injectAuthIfNeeded());
             unawaited(_requestWebIdTokenIfNeeded());
+            if (_pendingLoginRedirect != null && !_loginBypassInFlight) {
+              final redirect = _pendingLoginRedirect!;
+              _pendingLoginRedirect = null;
+              _loginBypassInFlight = true;
+              unawaited(_injectAuthIfNeeded(redirectUrl: redirect).whenComplete(() {
+                _loginBypassInFlight = false;
+              }));
+            }
           },
           onWebResourceError: (error) {
+            if (_shouldIgnoreWebError(error)) return;
             if (!mounted) return;
             setState(() {
               _loading = false;
@@ -163,16 +183,28 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
       return NavigationDecision.prevent;
     }
 
-    // Login redirect → add embedded params
+    // Login redirect → add embedded params or bypass if already logged in.
     final webHost = Uri.parse(AppConfig.webBaseUrl).host;
     final isSameHost = uri.host.isEmpty || uri.host == webHost;
     if (isSameHost && uri.path == '/login') {
       final alreadyEmbedded = uri.queryParameters['embedded'] == 'flutter';
-      if (!alreadyEmbedded) {
+      final nativeGoogleEnabled = uri.queryParameters['nativeGoogle'] == '1';
+      if (!alreadyEmbedded || !nativeGoogleEnabled) {
         _controller.loadRequest(
           _loginFallbackUri(nextPath: uri.queryParameters['next']),
         );
         return NavigationDecision.prevent;
+      }
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final next = uri.queryParameters['next'] ?? widget.path;
+        _pendingLoginRedirect = AppConfig.webUri(
+          next,
+          queryParameters: const {
+            'embedded': 'flutter',
+            'nativeGoogle': '1',
+          },
+        ).toString();
       }
     }
 
@@ -204,21 +236,29 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
   }
 
   /// Flutter 로그인 상태를 WebView에 주입
-  Future<void> _injectAuthIfNeeded() async {
+  Future<void> _injectAuthIfNeeded({String? redirectUrl}) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     try {
-      final idToken = await user.getIdToken();
+      final idToken = await user.getIdToken(true);
       if (idToken == null || idToken.isEmpty) return;
       final customToken =
           await _authBridgeService.exchangeWebIdToken(idToken);
       final escaped = customToken.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
+      final escapedRedirect =
+          redirectUrl?.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
       await _controller.runJavaScript('''
 (function() {
   const token = '$escaped';
+  const redirect = ${escapedRedirect == null ? 'null' : "'$escapedRedirect'"};
   const inject = () => {
     if (window.__flutterAuthInject) {
-      window.__flutterAuthInject(token);
+      const result = window.__flutterAuthInject(token);
+      if (redirect) {
+        Promise.resolve(result)
+          .then(() => window.location.replace(redirect))
+          .catch(() => {});
+      }
       return true;
     }
     return false;
@@ -233,8 +273,9 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
   }, 300);
 })();
 ''');
-    } catch (_) {
-      // 인증 주입 실패 시 무시 (웹에서 별도 로그인 가능)
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = '인증 주입 실패: $e');
     }
   }
 
@@ -268,7 +309,7 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
   Future<void> _signInWithNativeGoogle() async {
     if (_googleSigningIn || _authenticating) return;
     if (FirebaseAuth.instance.currentUser != null) {
-      unawaited(_injectAuthIfNeeded());
+      unawaited(_injectAuthIfNeeded(redirectUrl: _pageUrl));
       return;
     }
     setState(() {
@@ -288,6 +329,7 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
         accessToken: authData.accessToken,
       );
       await FirebaseAuth.instance.signInWithCredential(credential);
+      unawaited(_injectAuthIfNeeded(redirectUrl: _pageUrl));
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = 'Google 로그인 실패: $e');

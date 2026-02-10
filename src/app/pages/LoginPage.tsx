@@ -73,7 +73,11 @@ export default function LoginPage() {
         const sent = requestNativeGoogleSignInFromFlutter();
         if (!sent) {
           setMessage('앱 브리지 연결을 찾지 못했습니다. 앱을 다시 실행해 주세요.');
+          setSubmitting(false);
+          return;
         }
+        setMessage('앱에서 Google 로그인을 진행 중입니다.');
+        setSubmitting(false);
         return;
       }
       await loginWithGoogle();
