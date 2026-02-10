@@ -5,8 +5,8 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../core/theme/app_theme.dart';
 import '../core/webview/app_webview_screen.dart';
+import '../features/account/account_screen.dart';
 import '../features/auth/login_webview_screen.dart';
-import '../features/community/community_screen.dart';
 import '../features/intro/intro_screen.dart';
 import '../features/intro/rules_screen.dart';
 import '../features/prediction/prediction_screen.dart';
@@ -95,9 +95,9 @@ class _MoreScreenState extends State<MoreScreen> {
             onTap: () => _push(const StandingsScreen()),
           ),
           _MenuTile(
-            icon: Icons.forum,
-            label: '커뮤니티',
-            onTap: () => _push(const CommunityScreen()),
+            icon: Icons.person,
+            label: '계정',
+            onTap: () => _push(const AccountScreen()),
           ),
           const Divider(height: 32),
           const _SectionTitle('리그 정보'),
