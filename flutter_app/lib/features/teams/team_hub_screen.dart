@@ -50,7 +50,19 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('팀')),
-      body: Column(
+      body: Stack(
+        children: [
+          Center(
+            child: Opacity(
+              opacity: 0.5,
+              child: Image.asset(
+                'assets/images/aubl_clean.png',
+                width: 400,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+          Column(
         children: [
           // ── 검색바 ──
           Padding(
@@ -166,6 +178,8 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
               },
             ),
           ),
+        ],
+      ),
         ],
       ),
     );

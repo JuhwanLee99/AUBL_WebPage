@@ -92,9 +92,16 @@ class _RulesScreenState extends State<RulesScreen> {
               children: articles.map((article) {
                 if (article is Map<String, dynamic>) {
                   final aTitle = article['title'] as String? ?? '';
-                  final aBody = article['body'] as String? ?? '';
+                  final rawBody = article['body'];
+                  // body가 List<String> 또는 String일 수 있음
+                  final bodyLines = <String>[];
+                  if (rawBody is List) {
+                    bodyLines.addAll(rawBody.map((e) => e.toString()));
+                  } else if (rawBody is String && rawBody.isNotEmpty) {
+                    bodyLines.add(rawBody);
+                  }
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.only(bottom: 10),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -103,14 +110,20 @@ class _RulesScreenState extends State<RulesScreen> {
                               style: const TextStyle(
                                   color: AppTheme.blue400,
                                   fontSize: 13,
-                                  fontWeight: FontWeight.w500)),
-                        if (aBody.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text(aBody,
+                                  fontWeight: FontWeight.w600)),
+                        ...bodyLines.map((line) {
+                          if (line.isEmpty) {
+                            return const SizedBox(height: 6);
+                          }
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(line,
                                 style: const TextStyle(
-                                    color: AppTheme.slate300, fontSize: 13)),
-                          ),
+                                    color: AppTheme.slate300,
+                                    fontSize: 13,
+                                    height: 1.5)),
+                          );
+                        }),
                       ],
                     ),
                   );

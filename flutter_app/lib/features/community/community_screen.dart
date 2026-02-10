@@ -56,7 +56,19 @@ class _CommunityScreenState extends State<CommunityScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('커뮤니티')),
-      body: _loading
+      body: Stack(
+        children: [
+          Center(
+            child: Opacity(
+              opacity: 0.5,
+              child: Image.asset(
+                'assets/images/aubl_clean.png',
+                width: 400,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+          _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _loadNotices,
@@ -127,7 +139,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          tileColor: AppTheme.slate800,
+                          tileColor: AppTheme.slate800.withValues(alpha: 0.5),
                           onTap: () {
                             Navigator.of(context).push(
                               MaterialPageRoute<void>(
@@ -174,6 +186,8 @@ class _CommunityScreenState extends State<CommunityScreen> {
                 ],
               ),
             ),
+        ],
+      ),
     );
   }
 
@@ -193,7 +207,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
           gradient: LinearGradient(
             colors: [
               AppTheme.blue500.withValues(alpha: 0.15),
-              AppTheme.slate800,
+              AppTheme.slate800.withValues(alpha: 0.5),
             ],
           ),
           borderRadius: BorderRadius.circular(12),

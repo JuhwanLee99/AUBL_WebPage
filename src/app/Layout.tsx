@@ -20,6 +20,8 @@ export default function Layout() {
   const { state } = useDemoStore();
   const isLiveOverlay = location.pathname.startsWith('/live-overlay');
   const isScoreboardText = location.pathname.startsWith('/scoreboard-text');
+  const isEmbedded = new URLSearchParams(location.search).get('embedded') === 'flutter';
+  const hideChrome = isLiveOverlay || isEmbedded;
   const isLanding = location.pathname === '/';
   const scoreboardTextPath = state.activeMatchId ? `/scoreboard-text/${state.activeMatchId}` : '/scoreboard-text';
   const liveOverlayPath = state.activeMatchId ? `/live-overlay/${state.activeMatchId}` : '/live-overlay';
@@ -338,7 +340,7 @@ export default function Layout() {
   return (
     <ContentProvider>
       <div className="app-shell">
-      {!isLiveOverlay && (
+      {!hideChrome && (
         <header className="app-header">
           <div
             className="app-header__inner"
@@ -783,8 +785,8 @@ export default function Layout() {
         </header>
       )}
 
-      <main className="app-main" style={isLiveOverlay ? { maxWidth: '100%', margin: 0, padding: 0 } : undefined}>
-        {!isLiveOverlay && showMobileNotice && (
+      <main className="app-main" style={hideChrome ? { maxWidth: '100%', margin: 0, padding: 0 } : undefined}>
+        {!hideChrome && showMobileNotice && (
           <div
             role="alertdialog"
             aria-live="polite"
@@ -862,7 +864,7 @@ export default function Layout() {
           </div>
         )}
 
-        {!isLiveOverlay && showNotificationPrompt && typeof Notification !== 'undefined' && (
+        {!hideChrome && showNotificationPrompt && typeof Notification !== 'undefined' && (
           <div
             style={{
               display: 'flex',
@@ -952,7 +954,7 @@ export default function Layout() {
           </div>
         )}
 
-        {!isLiveOverlay && notificationBlocked && (
+        {!hideChrome && notificationBlocked && (
           <div
             style={{
               display: 'flex',
@@ -1012,7 +1014,7 @@ export default function Layout() {
         <Outlet />
       </main>
 
-      {!isLiveOverlay && (
+      {!hideChrome && (
         <footer
           style={{
             marginTop: 'auto',
