@@ -18,11 +18,14 @@ class EmbeddedWebViewPanel extends StatefulWidget {
     required this.path,
     required this.title,
     required this.onClose,
+    this.fullscreen = false,
   });
 
   final String path;
   final String title;
   final VoidCallback onClose;
+  /// true이면 상단바를 자동 숨기고 제스처로 토글.
+  final bool fullscreen;
 
   @override
   State<EmbeddedWebViewPanel> createState() => _EmbeddedWebViewPanelState();
@@ -55,6 +58,10 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
   bool _loginBypassInFlight = false;
   String? _pendingLoginRedirect;
   bool _retriedErrFailed = false;
+
+  // fullscreen 모드: 상단바 자동 숨김
+  bool _barsVisible = true;
+  Timer? _autoHideTimer;
 
   bool _shouldIgnoreWebError(WebResourceError error) {
     final desc = error.description.toLowerCase();
@@ -169,10 +176,33 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
       _lastInjectedUid = user.uid;
       unawaited(_injectAuthIfNeeded());
     });
+
+    // fullscreen 모드: 3초 후 상단바 자동 숨김
+    if (widget.fullscreen) {
+      _scheduleAutoHide();
+    }
+  }
+
+  void _scheduleAutoHide() {
+    _autoHideTimer?.cancel();
+    _autoHideTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted && _barsVisible) {
+        setState(() => _barsVisible = false);
+      }
+    });
+  }
+
+  void _toggleBars() {
+    if (!widget.fullscreen) return;
+    setState(() => _barsVisible = !_barsVisible);
+    if (_barsVisible) {
+      _scheduleAutoHide();
+    }
   }
 
   @override
   void dispose() {
+    _autoHideTimer?.cancel();
     _authSub?.cancel();
     _authBridgeService.dispose();
     super.dispose();
@@ -349,93 +379,118 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
   @override
   Widget build(BuildContext context) {
     final matchId = _matchId;
+    final topPadding = MediaQuery.of(context).padding.top;
+    final isFullscreen = widget.fullscreen;
+    final showBars = !isFullscreen || _barsVisible;
 
-    return Column(
-      children: [
-        // 헤더 바
-        Container(
-          color: AppTheme.slate900,
-          padding: EdgeInsets.only(
-            top: MediaQuery.of(context).padding.top,
-          ),
-          child: Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: widget.onClose,
-              ),
-              Expanded(
-                child: Text(
-                  widget.title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+    return GestureDetector(
+      onTap: isFullscreen ? _toggleBars : null,
+      behavior: HitTestBehavior.translucent,
+      child: Column(
+        children: [
+          // 헤더 바 (fullscreen일 때 AnimatedSlide로 숨김)
+          if (showBars)
+            Container(
+              color: AppTheme.slate900,
+              padding: EdgeInsets.only(top: topPadding),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    onPressed: widget.onClose,
                   ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        // WebView
-        Expanded(
-          child: Stack(
-            children: [
-              WebViewWidget(controller: _controller),
-              if (_loading || _authenticating || _googleSigningIn)
-                const Center(child: CircularProgressIndicator()),
-              if (_error != null)
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.all(12),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade700,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(_error!,
-                              style: const TextStyle(color: Colors.white)),
-                        ),
-                        GestureDetector(
-                          onTap: () => setState(() => _error = null),
-                          child: const Icon(Icons.close,
-                              color: Colors.white, size: 18),
-                        ),
-                      ],
+                  Expanded(
+                    child: Text(
+                      widget.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
-              // 문자중계일 때 라이브 오버레이 FAB
-              if (matchId != null)
-                Positioned(
-                  right: 16,
-                  bottom: 16,
-                  child: FloatingActionButton.extended(
-                    onPressed: () {
-                      Navigator.of(context).push(MaterialPageRoute<void>(
-                        builder: (_) => AppWebViewScreen(
-                          path: '/live-overlay/$matchId',
-                          title: '라이브 오버레이',
-                        ),
-                      ));
-                    },
-                    backgroundColor: AppTheme.red500,
-                    icon: const Icon(Icons.live_tv, color: Colors.white),
-                    label: const Text('라이브',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          // WebView
+          Expanded(
+            child: Stack(
+              children: [
+                WebViewWidget(controller: _controller),
+                if (_loading || _authenticating || _googleSigningIn)
+                  const Center(child: CircularProgressIndicator()),
+                if (_error != null)
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade700,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(_error!,
+                                style: const TextStyle(color: Colors.white)),
+                          ),
+                          GestureDetector(
+                            onTap: () => setState(() => _error = null),
+                            child: const Icon(Icons.close,
+                                color: Colors.white, size: 18),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-            ],
+                // fullscreen에서 바 숨겨졌을 때 플로팅 뒤로가기 버튼
+                if (isFullscreen && !_barsVisible)
+                  Positioned(
+                    left: 8,
+                    top: topPadding + 4,
+                    child: GestureDetector(
+                      onTap: widget.onClose,
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.45),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.arrow_back,
+                            color: Colors.white, size: 20),
+                      ),
+                    ),
+                  ),
+                // 문자중계일 때 라이브 오버레이 FAB
+                if (matchId != null)
+                  Positioned(
+                    right: 16,
+                    bottom: 16,
+                    child: FloatingActionButton.extended(
+                      onPressed: () {
+                        Navigator.of(context).push(MaterialPageRoute<void>(
+                          builder: (_) => AppWebViewScreen(
+                            path: '/live-overlay/$matchId',
+                            title: '라이브 오버레이',
+                          ),
+                        ));
+                      },
+                      backgroundColor: AppTheme.red500,
+                      icon: const Icon(Icons.live_tv, color: Colors.white),
+                      label: const Text('라이브',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

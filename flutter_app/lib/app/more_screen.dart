@@ -184,7 +184,7 @@ class _MoreScreenState extends State<MoreScreen> {
               onTap: () {
                 final shell = ShellController.of(context);
                 if (shell != null) {
-                  shell.openEmbeddedWebView('/scorekeeper', '기록원');
+                  shell.openEmbeddedWebView('/scorekeeper', '기록원', fullscreen: true);
                 } else {
                   _push(const AppWebViewScreen(
                     path: '/scorekeeper',

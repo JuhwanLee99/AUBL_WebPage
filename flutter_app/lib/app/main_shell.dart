@@ -27,6 +27,7 @@ class _MainShellState extends State<MainShell> {
   // 임베디드 웹뷰 오버레이 상태
   String? _overlayPath;
   String? _overlayTitle;
+  bool _overlayFullscreen = false;
 
   final _screens = const [
     HomeScreen(),
@@ -52,10 +53,11 @@ class _MainShellState extends State<MainShell> {
     super.dispose();
   }
 
-  void _openEmbeddedWebView(String path, String title) {
+  void _openEmbeddedWebView(String path, String title, {bool fullscreen = false}) {
     setState(() {
       _overlayPath = path;
       _overlayTitle = title;
+      _overlayFullscreen = fullscreen;
     });
   }
 
@@ -63,6 +65,7 @@ class _MainShellState extends State<MainShell> {
     setState(() {
       _overlayPath = null;
       _overlayTitle = null;
+      _overlayFullscreen = false;
     });
   }
 
@@ -103,11 +106,12 @@ class _MainShellState extends State<MainShell> {
                   key: ValueKey(_overlayPath),
                   path: _overlayPath!,
                   title: _overlayTitle!,
+                  fullscreen: _overlayFullscreen,
                   onClose: _closeEmbeddedWebView,
                 ),
             ],
           ),
-          bottomNavigationBar: BottomNavigationBar(
+          bottomNavigationBar: (hasOverlay && _overlayFullscreen) ? null : BottomNavigationBar(
             currentIndex: _currentIndex,
             onTap: (i) {
               if (hasOverlay) _closeEmbeddedWebView();

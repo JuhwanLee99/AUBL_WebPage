@@ -9,7 +9,7 @@ class ShellController extends InheritedWidget {
     required super.child,
   });
 
-  final void Function(String path, String title) openEmbeddedWebView;
+  final void Function(String path, String title, {bool fullscreen}) openEmbeddedWebView;
   final VoidCallback closeEmbeddedWebView;
   final void Function(int index) switchTab;
 
