@@ -18,6 +18,7 @@ class AppWebViewScreen extends StatefulWidget {
     super.key,
     required this.path,
     required this.title,
+    this.minimalHeader = false,
   });
 
   /// 웹 앱 경로 (e.g. '/scorekeeper', '/admin')
@@ -25,6 +26,9 @@ class AppWebViewScreen extends StatefulWidget {
 
   /// AppBar 타이틀
   final String title;
+
+  /// 라이브 오버레이 등 상단 바를 숨기고 뒤로가기만 표시
+  final bool minimalHeader;
 
   @override
   State<AppWebViewScreen> createState() => _AppWebViewScreenState();
@@ -350,12 +354,26 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: widget.minimalHeader ? null : AppBar(title: Text(widget.title)),
       body: Stack(
         children: [
           WebViewWidget(controller: _controller),
           if (_loading || _authenticating || _googleSigningIn)
             const Center(child: CircularProgressIndicator()),
+          if (widget.minimalHeader)
+            SafeArea(
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: IconButton(
+                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    tooltip: '뒤로가기',
+                  ),
+                ),
+              ),
+            ),
           if (_error != null)
             Align(
               alignment: Alignment.bottomCenter,
