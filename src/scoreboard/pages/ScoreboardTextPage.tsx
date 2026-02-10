@@ -1952,6 +1952,17 @@ function buildDisplayItems(
 
   const items: DisplayItem[] = [];
 
+  const eventIdsWithRunnerDetails = new Set<string>();
+  chronological.forEach((entry) => {
+    if (!entry.eventId) return;
+    if (!entry.batter?.trim() || !entry.order || entry.order <= 0) return;
+    const matched = eventsById.get(entry.eventId);
+    if (!matched) return;
+    if (Array.isArray(matched.runners) && matched.runners.length > 0) {
+      eventIdsWithRunnerDetails.add(entry.eventId);
+    }
+  });
+
   const markerText = (inning: number, half: Half, type: 'start' | 'end') => {
     const halfLabel = half === 'top' ? '초' : '말';
     return `${inning}회${halfLabel} ${type === 'start' ? '시작' : '종료'}`;
@@ -2001,6 +2012,17 @@ function buildDisplayItems(
         half: entry.half,
       });
       prevBatter = null;
+    }
+
+    const shouldCollapseRunnerLog =
+      entry.eventId &&
+      eventIdsWithRunnerDetails.has(entry.eventId) &&
+      (!entry.batter?.trim() || !entry.order || entry.order === 0);
+
+    if (shouldCollapseRunnerLog) {
+      prevHalf = entry.half;
+      prevInning = entry.inning;
+      return;
     }
 
     let isSubstitute = false;
