@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -27,6 +29,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _fs = FirestoreService();
+  StreamSubscription<User?>? _authSub;
   List<Match> _todayMatches = [];
   List<Match> _tomorrowMatches = [];
   List<Match> _completedMatches = [];
@@ -43,6 +46,26 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadSchedule();
     _loadUserTeam();
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user == null) {
+        if (mounted) {
+          setState(() {
+            _userTeamId = null;
+            _userTeamName = null;
+            _teamNotices = [];
+            _loadingNotices = false;
+          });
+        }
+        return;
+      }
+      _loadUserTeam();
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadSchedule() async {

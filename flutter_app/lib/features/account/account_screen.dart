@@ -22,6 +22,20 @@ class _AccountScreenState extends State<AccountScreen> {
   String _roleLabel = '일반';
   String _roleDetail = '사용자';
 
+  Color _roleAccent() {
+    if (_isAdmin) return AppTheme.blue500;
+    switch (_roleLabel) {
+      case '감독':
+        return const Color(0xFFF97316);
+      case '스태프':
+        return const Color(0xFF22C55E);
+      case '선수':
+        return const Color(0xFF38BDF8);
+      default:
+        return AppTheme.slate600;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -145,9 +159,7 @@ class _AccountScreenState extends State<AccountScreen> {
                         children: [
                           CircleAvatar(
                             radius: 32,
-                            backgroundColor: _isAdmin
-                                ? AppTheme.blue500
-                                : AppTheme.slate600,
+                            backgroundColor: _roleAccent(),
                             child: Text(
                               (user.email ?? '?')[0].toUpperCase(),
                               style: const TextStyle(
@@ -173,8 +185,10 @@ class _AccountScreenState extends State<AccountScreen> {
                                       Color(0xFF8B5CF6),
                                     ])
                                   : null,
-                              color: _isAdmin ? null : AppTheme.slate700,
+                              color: _isAdmin ? null : _roleAccent().withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                  color: _roleAccent().withValues(alpha: 0.5)),
                             ),
                             child: Text(
                               _roleLabel,
