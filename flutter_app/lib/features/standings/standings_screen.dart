@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
+import 'power_ranking_screen.dart';
 
 // ── Mock 데이터 (웹의 mockData.ts + rankingEngine.ts 기반) ──
 class _TeamRank {
@@ -89,122 +90,230 @@ class StandingsScreen extends StatelessWidget {
     final top = rankings.first;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('순위')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // ── 1위 하이라이트 ──
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  top.color.withValues(alpha: 0.3),
-                  AppTheme.slate800,
-                ],
-              ),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: top.color.withValues(alpha: 0.4)),
-            ),
-            child: Column(
-              children: [
-                const Text('현재 1위',
-                    style: TextStyle(color: AppTheme.slate400, fontSize: 12)),
-                const SizedBox(height: 4),
-                Text(top.name,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text('Elo ${top.elo.round()}',
-                        style: TextStyle(color: top.color, fontSize: 14)),
-                    const SizedBox(width: 16),
-                    Text(
-                        '승률 ${(top.winRate * 100).toStringAsFixed(1)}%',
-                        style:
-                            const TextStyle(color: AppTheme.slate300, fontSize: 14)),
+      body: CustomScrollView(
+        slivers: [
+          // ── 히어로 ──
+          SliverToBoxAdapter(
+            child: Container(
+              width: double.infinity,
+              padding: EdgeInsets.fromLTRB(
+                  20, MediaQuery.of(context).padding.top + 16, 20, 24),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF0a1a3f),
+                    Color(0xFF0f2f8f),
+                    Color(0xFF0a1a3f),
                   ],
                 ),
-              ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => Navigator.of(context).pop(),
+                        child: const Icon(Icons.arrow_back, color: Colors.white),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text('순위',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Elo 레이팅 기반 실시간 팀 순위',
+                    style: TextStyle(color: AppTheme.slate400, fontSize: 13),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 16),
 
-          // ── 요약 통계 ──
-          Row(
-            children: [
-              _summaryCard(
-                'AVG Elo',
-                '${(rankings.fold<double>(0, (sum, t) => sum + t.elo) / rankings.length).round()}',
-                AppTheme.blue400,
-              ),
-              const SizedBox(width: 10),
-              _summaryCard(
-                '참가 팀',
-                '${rankings.length}',
-                AppTheme.green500,
-              ),
-              const SizedBox(width: 10),
-              _summaryCard(
-                '총 경기',
-                '${rankings.fold<int>(0, (sum, t) => sum + t.games) ~/ 2}',
-                AppTheme.orange500,
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          // ── 순위 테이블 ──
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              headingRowColor: WidgetStateProperty.all(AppTheme.slate800),
-              columnSpacing: 16,
-              columns: const [
-                DataColumn(label: Text('#', style: _h)),
-                DataColumn(label: Text('팀', style: _h)),
-                DataColumn(label: Text('경기', style: _h), numeric: true),
-                DataColumn(label: Text('승', style: _h), numeric: true),
-                DataColumn(label: Text('무', style: _h), numeric: true),
-                DataColumn(label: Text('패', style: _h), numeric: true),
-                DataColumn(label: Text('승률', style: _h), numeric: true),
-                DataColumn(label: Text('Elo', style: _h), numeric: true),
-              ],
-              rows: List.generate(rankings.length, (i) {
-                final t = rankings[i];
-                return DataRow(cells: [
-                  DataCell(Text('${i + 1}', style: _c)),
-                  DataCell(Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        margin: const EdgeInsets.only(right: 8),
-                        decoration: BoxDecoration(
-                          color: t.color,
-                          shape: BoxShape.circle,
-                        ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  // ── 1위 하이라이트 ──
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          top.color.withValues(alpha: 0.3),
+                          AppTheme.slate800,
+                        ],
                       ),
-                      Text(t.name,
-                          style: _c.copyWith(fontWeight: FontWeight.w500)),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                          color: top.color.withValues(alpha: 0.4)),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text('현재 1위',
+                            style: TextStyle(
+                                color: AppTheme.slate400, fontSize: 12)),
+                        const SizedBox(height: 4),
+                        Text(top.name,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: top.winRate,
+                            backgroundColor:
+                                AppTheme.slate700.withValues(alpha: 0.5),
+                            color: top.color,
+                            minHeight: 6,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text('Elo ${top.elo.round()}',
+                                style: TextStyle(
+                                    color: top.color, fontSize: 14)),
+                            const SizedBox(width: 16),
+                            Text(
+                                '승률 ${(top.winRate * 100).toStringAsFixed(1)}%',
+                                style: const TextStyle(
+                                    color: AppTheme.slate300,
+                                    fontSize: 14)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // ── 요약 통계 ──
+                  Row(
+                    children: [
+                      _summaryCard(
+                        'AVG Elo',
+                        '${(rankings.fold<double>(0, (sum, t) => sum + t.elo) / rankings.length).round()}',
+                        AppTheme.blue400,
+                      ),
+                      const SizedBox(width: 10),
+                      _summaryCard(
+                        '참가 팀',
+                        '${rankings.length}',
+                        AppTheme.green500,
+                      ),
+                      const SizedBox(width: 10),
+                      _summaryCard(
+                        '총 경기',
+                        '${rankings.fold<int>(0, (sum, t) => sum + t.games) ~/ 2}',
+                        AppTheme.orange500,
+                      ),
                     ],
-                  )),
-                  DataCell(Text('${t.games}', style: _n)),
-                  DataCell(Text('${t.wins}', style: _n)),
-                  DataCell(Text('${t.draws}', style: _n)),
-                  DataCell(Text('${t.losses}', style: _n)),
-                  DataCell(Text(
-                      '${(t.winRate * 100).toStringAsFixed(1)}%',
-                      style: _n)),
-                  DataCell(Text('${t.elo.round()}',
-                      style: _n.copyWith(color: AppTheme.blue400))),
-                ]);
-              }),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // ── 순위 테이블 ──
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      headingRowColor:
+                          WidgetStateProperty.all(AppTheme.slate800),
+                      columnSpacing: 16,
+                      columns: const [
+                        DataColumn(label: Text('#', style: _h)),
+                        DataColumn(label: Text('팀', style: _h)),
+                        DataColumn(
+                            label: Text('경기', style: _h), numeric: true),
+                        DataColumn(
+                            label: Text('승', style: _h), numeric: true),
+                        DataColumn(
+                            label: Text('무', style: _h), numeric: true),
+                        DataColumn(
+                            label: Text('패', style: _h), numeric: true),
+                        DataColumn(
+                            label: Text('승률', style: _h), numeric: true),
+                        DataColumn(
+                            label: Text('Elo', style: _h), numeric: true),
+                      ],
+                      rows: List.generate(rankings.length, (i) {
+                        final t = rankings[i];
+                        return DataRow(cells: [
+                          DataCell(Text('${i + 1}', style: _c)),
+                          DataCell(Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                margin: const EdgeInsets.only(right: 8),
+                                decoration: BoxDecoration(
+                                  color: t.color,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              Text(t.name,
+                                  style: _c.copyWith(
+                                      fontWeight: FontWeight.w500)),
+                            ],
+                          )),
+                          DataCell(Text('${t.games}', style: _n)),
+                          DataCell(Text('${t.wins}', style: _n)),
+                          DataCell(Text('${t.draws}', style: _n)),
+                          DataCell(Text('${t.losses}', style: _n)),
+                          DataCell(Text(
+                              '${(t.winRate * 100).toStringAsFixed(1)}%',
+                              style: _n)),
+                          DataCell(Text('${t.elo.round()}',
+                              style:
+                                  _n.copyWith(color: AppTheme.blue400))),
+                        ]);
+                      }),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // ── CTA: 파워 랭킹 ──
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.of(context).push(MaterialPageRoute<void>(
+                        builder: (_) => const PowerRankingScreen(),
+                      ));
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [AppTheme.orange500, AppTheme.purple500],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.bolt, color: Colors.white, size: 18),
+                          SizedBox(width: 6),
+                          Text('파워 랭킹 보기',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                ],
+              ),
             ),
           ),
         ],

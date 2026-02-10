@@ -23,6 +23,8 @@ class AppTheme {
   static const Color orange500 = Color(0xFFF97316);
   static const Color yellow500 = Color(0xFFEAB308);
   static const Color amber400 = Color(0xFFFBBF24);
+  static const Color purple500 = Color(0xFFA855F7);
+  static const Color indigo500 = Color(0xFF6366F1);
 
   // ── System UI chrome ──
   static const SystemUiOverlayStyle systemUiStyle = SystemUiOverlayStyle(

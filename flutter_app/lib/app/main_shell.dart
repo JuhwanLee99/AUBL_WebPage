@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../features/account/account_screen.dart';
+import '../features/community/community_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/records/records_screen.dart';
 import '../features/schedule/schedule_screen.dart';
@@ -22,7 +22,7 @@ class _MainShellState extends State<MainShell> {
     TeamHubScreen(),
     ScheduleScreen(),
     RecordsScreen(),
-    AccountScreen(),
+    CommunityScreen(),
     MoreScreen(),
   ];
 
@@ -51,7 +51,7 @@ class _MainShellState extends State<MainShell> {
             BottomNavigationBarItem(
                 icon: Icon(Icons.leaderboard), label: '기록'),
             BottomNavigationBarItem(
-                icon: Icon(Icons.person), label: '계정'),
+                icon: Icon(Icons.forum), label: '커뮤니티'),
             BottomNavigationBarItem(icon: Icon(Icons.menu), label: '더보기'),
           ],
         ),

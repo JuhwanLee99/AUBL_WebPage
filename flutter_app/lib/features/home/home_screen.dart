@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/data/team_groups.dart';
 import '../../core/models/match.dart';
@@ -122,66 +123,190 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('AUBL'),
-        centerTitle: false,
-        titleTextStyle: const TextStyle(
-          fontSize: 22,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
-        ),
-      ),
       body: RefreshIndicator(
         onRefresh: _onRefresh,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+          padding: EdgeInsets.zero,
           children: [
-            // ── 라이브 경기 ──
-            _buildSectionTitle('라이브 경기', Icons.circle, AppTheme.red500),
-            const SizedBox(height: 8),
-            _buildLiveMatches(),
-            const SizedBox(height: 24),
+            // ── 히어로 섹션 ──
+            _buildHero(),
 
-            // ── 오늘 일정 ──
-            _buildSectionTitle(
-                '오늘 일정', Icons.calendar_today, AppTheme.blue400),
-            const SizedBox(height: 8),
-            _buildHorizontalSchedule(_todayMatches, '오늘 예정된 경기가 없습니다.'),
-            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── 라이브 경기 ──
+                  _buildSectionTitle(
+                      '라이브 경기', Icons.circle, AppTheme.red500),
+                  const SizedBox(height: 8),
+                  _buildLiveMatches(),
+                  const SizedBox(height: 24),
 
-            // ── 내일 일정 ──
-            _buildSectionTitle('내일 일정', Icons.event, AppTheme.green500),
-            const SizedBox(height: 8),
-            _buildHorizontalSchedule(_tomorrowMatches, '내일 예정된 경기가 없습니다.'),
-            const SizedBox(height: 24),
+                  // ── 오늘 일정 ──
+                  _buildSectionTitle(
+                      '오늘 일정', Icons.calendar_today, AppTheme.blue400),
+                  const SizedBox(height: 8),
+                  _buildHorizontalSchedule(
+                      _todayMatches, '오늘 예정된 경기가 없습니다.'),
+                  const SizedBox(height: 24),
 
-            // ── 최근 경기 결과 ──
-            _buildSectionTitle(
-                '최근 경기 결과', Icons.scoreboard, AppTheme.orange500),
-            const SizedBox(height: 8),
-            _buildRecentResults(),
-            const SizedBox(height: 24),
+                  // ── 내일 일정 ──
+                  _buildSectionTitle(
+                      '내일 일정', Icons.event, AppTheme.green500),
+                  const SizedBox(height: 8),
+                  _buildHorizontalSchedule(
+                      _tomorrowMatches, '내일 예정된 경기가 없습니다.'),
+                  const SizedBox(height: 24),
 
-            // ── 팀 공지 ──
-            if (_userTeamId != null) ...[
-              _buildSectionTitle(
-                '$_userTeamName 공지',
-                Icons.campaign,
-                AppTheme.amber400,
+                  // ── 최근 경기 결과 ──
+                  _buildSectionTitle(
+                      '최근 경기 결과', Icons.scoreboard, AppTheme.orange500),
+                  const SizedBox(height: 8),
+                  _buildRecentResults(),
+                  const SizedBox(height: 24),
+
+                  // ── 팀 공지 ──
+                  if (_userTeamId != null) ...[
+                    _buildSectionTitle(
+                      '$_userTeamName 공지',
+                      Icons.campaign,
+                      AppTheme.amber400,
+                    ),
+                    const SizedBox(height: 8),
+                    _buildTeamNotices(),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // ── KEY VALUES ──
+                  _buildKeyValues(),
+                  const SizedBox(height: 24),
+
+                  // ── 시즌 요약 ──
+                  _buildSectionTitle(
+                      '2026 시즌', Icons.sports_baseball, AppTheme.blue500),
+                  const SizedBox(height: 8),
+                  _buildSeasonSnapshot(),
+                  const SizedBox(height: 24),
+
+                  // ── 시즌 하이라이트 ──
+                  _buildSeasonHighlights(),
+                  const SizedBox(height: 24),
+
+                  // ── 소셜 CTA ──
+                  _buildSocialCta(),
+                  const SizedBox(height: 16),
+                ],
               ),
-              const SizedBox(height: 8),
-              _buildTeamNotices(),
-              const SizedBox(height: 24),
-            ],
-
-            // ── 시즌 요약 ──
-            _buildSectionTitle(
-                '2026 시즌', Icons.sports_baseball, AppTheme.blue500),
-            const SizedBox(height: 8),
-            _buildSeasonSnapshot(),
-            const SizedBox(height: 16),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ── 히어로 영역 ──
+  Widget _buildHero() {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(
+          20, MediaQuery.of(context).padding.top + 24, 20, 28),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF0a1a3f), Color(0xFF0f2f8f), Color(0xFF0a1a3f)],
+        ),
+      ),
+      child: Stack(
+        children: [
+          // 라디얼 글로우
+          Positioned(
+            top: -40,
+            left: -40,
+            child: Container(
+              width: 160,
+              height: 160,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppTheme.blue500.withValues(alpha: 0.16),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -20,
+            right: -20,
+            child: Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppTheme.purple500.withValues(alpha: 0.10),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [AppTheme.orange500, AppTheme.purple500],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  '2026 SEASON',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'AUBL',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Amateur University Baseball League',
+                style: TextStyle(
+                  color: AppTheme.slate400,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '대학 아마추어 야구의 모든 것',
+                style: TextStyle(
+                  color: AppTheme.blue400.withValues(alpha: 0.9),
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -426,6 +551,173 @@ class _HomeScreenState extends State<HomeScreen> {
           color: AppTheme.green500,
         ),
       ],
+    );
+  }
+
+  // ── KEY VALUES ──
+  Widget _buildKeyValues() {
+    const values = [
+      (Icons.school, 'UNIVERSITY', '대학생 중심의 리그 운영', AppTheme.blue400),
+      (Icons.sports_baseball, 'FAIR PLAY', '공정한 경쟁과 스포츠맨십', AppTheme.green500),
+      (Icons.people, 'COMMUNITY', '야구를 사랑하는 커뮤니티', AppTheme.orange500),
+      (Icons.trending_up, 'GROWTH', '선수 개개인의 성장 지원', AppTheme.purple500),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle('AUBL KEY VALUES', Icons.star, AppTheme.amber400),
+        const SizedBox(height: 10),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 1.5,
+          children: values.map((v) {
+            final (icon, title, desc, color) = v;
+            return Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppTheme.slate800,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: color.withValues(alpha: 0.2)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, color: color, size: 22),
+                  const SizedBox(height: 8),
+                  Text(title,
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      )),
+                  const SizedBox(height: 3),
+                  Text(desc,
+                      style: const TextStyle(
+                          color: AppTheme.slate400, fontSize: 12)),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  // ── 시즌 하이라이트 ──
+  Widget _buildSeasonHighlights() {
+    const highlights = [
+      (Icons.groups, '팀', '참가 팀 목록 및 상세 정보'),
+      (Icons.calendar_month, '일정', '전체 경기 일정 확인'),
+      (Icons.leaderboard, '기록', '타자·투수 시즌 기록'),
+      (Icons.emoji_events, '순위', 'Elo 기반 팀 순위'),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(
+            '바로가기', Icons.bolt, AppTheme.amber400),
+        const SizedBox(height: 10),
+        Row(
+          children: highlights.map((h) {
+            final (icon, label, _) = h;
+            return Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  // 바로가기 탭 인덱스: 팀=1, 일정=2, 기록=3, 순위=더보기
+                  final idx = {
+                    '팀': 1,
+                    '일정': 2,
+                    '기록': 3,
+                  };
+                  final tabIdx = idx[label];
+                  if (tabIdx != null) {
+                    // MainShell의 BottomNav 탭 전환은 직접 접근이 어려우므로 스킵
+                  }
+                },
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: AppTheme.slate800,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: AppTheme.slate700.withValues(alpha: 0.5)),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(icon, color: AppTheme.blue400, size: 22),
+                      const SizedBox(height: 6),
+                      Text(label,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  // ── 소셜 CTA ──
+  Widget _buildSocialCta() {
+    return GestureDetector(
+      onTap: () async {
+        final uri = Uri.parse('https://instagram.com/aubl_1981');
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppTheme.purple500.withValues(alpha: 0.15),
+              AppTheme.orange500.withValues(alpha: 0.10),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+              color: AppTheme.purple500.withValues(alpha: 0.25)),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.camera_alt, color: AppTheme.purple500, size: 28),
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('AUBL 인스타그램',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600)),
+                  SizedBox(height: 2),
+                  Text('@aubl_1981 · 소식과 하이라이트',
+                      style:
+                          TextStyle(color: AppTheme.slate400, fontSize: 12)),
+                ],
+              ),
+            ),
+            Icon(Icons.open_in_new, color: AppTheme.slate500, size: 18),
+          ],
+        ),
+      ),
     );
   }
 }
