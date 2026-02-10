@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../core/theme/app_theme.dart';
@@ -10,7 +11,6 @@ import 'shell_controller.dart';
 import '../features/auth/login_webview_screen.dart';
 import '../features/intro/intro_screen.dart';
 import '../features/intro/rules_screen.dart';
-import '../features/prediction/prediction_screen.dart';
 import '../features/standings/standings_screen.dart';
 import '../core/services/notification_service.dart';
 
@@ -308,11 +308,12 @@ class _MoreScreenState extends State<MoreScreen> {
             label: '회칙',
             onTap: () => _push(const RulesScreen()),
           ),
-          _MenuTile(
-            icon: Icons.analytics,
-            label: '승부예측',
-            onTap: () => _push(const PredictionScreen()),
-          ),
+          // TODO: 승부예측 기능 구현 후 활성화
+          // _MenuTile(
+          //   icon: Icons.analytics,
+          //   label: '승부예측',
+          //   onTap: () => _push(const PredictionScreen()),
+          // ),
 
           if (!_checking && _loggedIn && _isAdmin) ...[
             const Divider(height: 32),
@@ -358,6 +359,24 @@ class _MoreScreenState extends State<MoreScreen> {
             ),
           ],
 
+          const Divider(height: 32),
+          const _SectionTitle('앱 정보'),
+          _MenuTile(
+            icon: Icons.privacy_tip_outlined,
+            label: '개인정보 처리방침',
+            onTap: () => launchUrl(
+              Uri.parse('https://aubl-backup.web.app/privacy'),
+              mode: LaunchMode.externalApplication,
+            ),
+          ),
+          _MenuTile(
+            icon: Icons.description_outlined,
+            label: '이용약관',
+            onTap: () => launchUrl(
+              Uri.parse('https://aubl-backup.web.app/terms'),
+              mode: LaunchMode.externalApplication,
+            ),
+          ),
           const Divider(height: 32),
           if (_loggedIn)
             _MenuTile(

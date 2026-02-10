@@ -3,6 +3,8 @@ import Layout from './Layout';
 import LandingPage from '../front/pages/LandingPage';
 import IntroPage from '../front/pages/IntroPage';
 import RulePage from '../front/pages/RulePage';
+import PrivacyPage from '../front/pages/PrivacyPage';
+import TermsPage from '../front/pages/TermsPage';
 import TeamsPage from '../front/pages/TeamsPage';
 import TeamHubPage from '../front/pages/TeamHubPage';
 import TeamDetailPage from '../front/pages/TeamDetailPage';
@@ -61,6 +63,14 @@ export const router = createBrowserRouter([
       {
         path: 'rules',
         element: <RulePage />,
+      },
+      {
+        path: 'privacy',
+        element: <PrivacyPage />,
+      },
+      {
+        path: 'terms',
+        element: <TermsPage />,
       },
       {
         path: 'intro/teams',
