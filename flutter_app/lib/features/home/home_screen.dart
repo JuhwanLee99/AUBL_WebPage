@@ -16,6 +16,7 @@ import '../../core/widgets/background_logo.dart';
 import '../../core/widgets/match_status_badge.dart';
 import '../intro/intro_screen.dart';
 import '../teams/team_detail_screen.dart';
+import '../standings/standings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -603,7 +604,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (tabIdx != null && tabIdx < 5) {
                     shell.switchTab(tabIdx);
                   } else if (label == '순위') {
-                    shell.switchTab(5); // 더보기 탭으로 이동
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const StandingsScreen(),
+                      ),
+                    );
                   }
                 },
                 child: Container(
