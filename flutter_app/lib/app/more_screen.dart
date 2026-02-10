@@ -12,6 +12,7 @@ import '../features/intro/intro_screen.dart';
 import '../features/intro/rules_screen.dart';
 import '../features/prediction/prediction_screen.dart';
 import '../features/standings/standings_screen.dart';
+import '../core/services/notification_service.dart';
 
 class MoreScreen extends StatefulWidget {
   const MoreScreen({super.key});
@@ -24,11 +25,14 @@ class _MoreScreenState extends State<MoreScreen> {
   bool _isAdmin = false;
   bool _checking = true;
   bool _loggedIn = false;
+  bool _loadingNotif = true;
+  MatchNotifyPreference _matchPref = MatchNotifyPreference.team;
 
   @override
   void initState() {
     super.initState();
     _checkAuth();
+    _loadNotificationPrefs();
   }
 
   Future<void> _checkAuth() async {
@@ -53,6 +57,88 @@ class _MoreScreenState extends State<MoreScreen> {
     } catch (_) {
       if (mounted) setState(() => _checking = false);
     }
+  }
+
+  Future<void> _loadNotificationPrefs() async {
+    final pref = await NotificationService.instance.getMatchPreference();
+    if (!mounted) return;
+    setState(() {
+      _matchPref = pref;
+      _loadingNotif = false;
+    });
+  }
+
+  String _matchPrefLabel(MatchNotifyPreference pref) {
+    return switch (pref) {
+      MatchNotifyPreference.all => '전체 경기',
+      MatchNotifyPreference.team => '소속팀 경기',
+      MatchNotifyPreference.off => '받지 않음',
+    };
+  }
+
+  void _openNotificationSettings() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppTheme.slate900,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        var temp = _matchPref;
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '경기 알림 설정',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '커뮤니티 긴급 공지는 항상 알림이 전송됩니다.',
+                    style: TextStyle(color: AppTheme.slate400, fontSize: 12),
+                  ),
+                  const SizedBox(height: 12),
+                  RadioGroup<MatchNotifyPreference>(
+                    groupValue: temp,
+                    onChanged: (value) async {
+                      if (value == null) return;
+                      setSheetState(() => temp = value);
+                      await NotificationService.instance
+                          .setMatchPreference(value);
+                      if (mounted) {
+                        setState(() => _matchPref = value);
+                      }
+                    },
+                    child: Column(
+                      children: [
+                        for (final pref in MatchNotifyPreference.values)
+                          RadioListTile<MatchNotifyPreference>(
+                            value: pref,
+                            activeColor: AppTheme.blue400,
+                            title: Text(
+                              _matchPrefLabel(pref),
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   void _push(Widget screen) {
@@ -156,6 +242,14 @@ class _MoreScreenState extends State<MoreScreen> {
             icon: Icons.person,
             label: '계정',
             onTap: () => _push(const AccountScreen()),
+          ),
+          const Divider(height: 32),
+          const _SectionTitle('알림'),
+          _MenuTile(
+            icon: Icons.notifications_active,
+            label: '경기 알림',
+            value: _loadingNotif ? '확인 중...' : _matchPrefLabel(_matchPref),
+            onTap: _openNotificationSettings,
           ),
           const Divider(height: 32),
           const _SectionTitle('리그 정보'),
@@ -268,18 +362,26 @@ class _MenuTile extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.color,
+    this.value,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final Color? color;
+  final String? value;
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
       leading: Icon(icon, color: color ?? AppTheme.slate300),
       title: Text(label, style: TextStyle(color: color ?? Colors.white)),
+      subtitle: value == null
+          ? null
+          : Text(
+              value!,
+              style: const TextStyle(color: AppTheme.slate500, fontSize: 12),
+            ),
       trailing: Icon(Icons.chevron_right, color: color ?? AppTheme.slate500),
       onTap: onTap,
     );
