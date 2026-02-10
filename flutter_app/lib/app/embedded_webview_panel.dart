@@ -54,11 +54,13 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
   String? _error;
   bool _loginBypassInFlight = false;
   String? _pendingLoginRedirect;
+  bool _retriedErrFailed = false;
 
   bool _shouldIgnoreWebError(WebResourceError error) {
     final desc = error.description.toLowerCase();
     if (desc.contains('err_failed') || desc.contains('err_aborted')) {
-      return _googleSigningIn || _loginBypassInFlight || _pendingLoginRedirect != null;
+      // WebView에서 내부 리다이렉트/중단 시 자주 발생하는 오류라 배너를 띄우지 않음
+      return true;
     }
     return false;
   }
@@ -139,6 +141,12 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
             }
           },
           onWebResourceError: (error) {
+            final desc = error.description.toLowerCase();
+            if (desc.contains('err_failed') && !_retriedErrFailed) {
+              _retriedErrFailed = true;
+              unawaited(_controller.reload());
+              return;
+            }
             if (_shouldIgnoreWebError(error)) return;
             if (!mounted) return;
             setState(() {
@@ -289,6 +297,7 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
 
   Future<void> _signInWithCustomToken(String webIdToken) async {
     if (_authenticating) return;
+    if (!mounted) return;
     setState(() {
       _authenticating = true;
       _error = null;
