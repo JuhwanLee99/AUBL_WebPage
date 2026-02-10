@@ -293,7 +293,7 @@ export default function ScoreboardTextPage() {
             showViewerBadge
             panelStyle={
               isMobile
-                ? { width: '100%', height: 'auto', minHeight: '500px' }
+                ? { width: '100%', maxWidth: '100%', height: 'auto', minHeight: '500px', overflow: 'hidden' }
                 : { width: '100%', aspectRatio: '4 / 3' }
             }
           />
@@ -811,8 +811,8 @@ function NowPlayingCard({
         gap: '10px',
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontWeight: 900, color: '#e2e8f0' }}>현재 타석 · {batter}</span>
           <span
             style={{
@@ -835,7 +835,7 @@ function NowPlayingCard({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))',
           gap: '10px',
         }}
       >
