@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../core/data/team_groups.dart';
 import '../../core/theme/app_theme.dart';
@@ -19,6 +20,7 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
   String _searchQuery = '';
   String? _selectedGroup;
   _SortMode _sortMode = _SortMode.group;
+  Map<String, String> _emblemByTeamId = {};
 
   List<TeamGroupEntry> get _filteredTeams {
     var teams = teamGroups.toList();
@@ -44,6 +46,29 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
 
   /// Firestore doc ID와 동일하게 팀명을 인코딩
   String _encodeTeamId(String name) => Uri.encodeComponent(name);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEmblems();
+  }
+
+  Future<void> _loadEmblems() async {
+    try {
+      final snap = await FirebaseFirestore.instance.collection('teams').get();
+      final map = <String, String>{};
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final url = data['emblemUrl'];
+        if (url is String && url.isNotEmpty) {
+          map[doc.id] = url;
+        }
+      }
+      if (mounted) setState(() => _emblemByTeamId = map);
+    } catch (_) {
+      // 실패 시 로고 없이 표시
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -152,15 +177,17 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
               itemCount: filtered.length,
               itemBuilder: (context, i) {
                 final entry = filtered[i];
+                final teamId = _encodeTeamId(entry.name);
                 return TeamCard(
                   name: entry.name,
                   group: entry.group,
                   color: groupColors[entry.group] ?? AppTheme.blue400,
+                  emblemUrl: _emblemByTeamId[teamId],
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => TeamDetailScreen(
-                          teamId: _encodeTeamId(entry.name),
+                          teamId: teamId,
                           teamName: entry.name,
                         ),
                       ),
