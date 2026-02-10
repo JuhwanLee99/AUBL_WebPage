@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -30,6 +31,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _fs = FirestoreService();
+  final PageController _noticeController =
+      PageController(viewportFraction: 0.92);
+  int _noticePage = 0;
   StreamSubscription<User?>? _authSub;
   List<Match> _todayMatches = [];
   List<Match> _tomorrowMatches = [];
@@ -67,6 +71,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _authSub?.cancel();
+    _noticeController.dispose();
     super.dispose();
   }
 
@@ -150,8 +155,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ...notices.where((n) => n.pinned),
               ...notices.where((n) => !n.pinned),
             ].take(5).toList();
+            _noticePage = 0;
             _loadingNotices = false;
           });
+        }
+        if (_noticeController.hasClients) {
+          _noticeController.jumpToPage(0);
         }
       } else {
         await NotificationService.instance.updateTeamSubscriptions(null);
@@ -453,6 +462,68 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ── 팀 공지 ──
+  Widget _buildNoticeCard(TeamNotice n, {EdgeInsets? margin}) {
+    final ago = timeago.format(
+      DateTime.fromMillisecondsSinceEpoch(n.createdAt),
+      locale: 'ko',
+    );
+    return Container(
+      width: double.infinity,
+      margin: margin ?? const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.slate800.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: n.pinned
+              ? AppTheme.amber400.withValues(alpha: 0.3)
+              : AppTheme.slate700.withValues(alpha: 0.5),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (n.pinned) ...[
+                const Icon(Icons.push_pin,
+                    size: 13, color: AppTheme.amber400),
+                const SizedBox(width: 4),
+              ],
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: AppTheme.blue500.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  n.category,
+                  style: const TextStyle(
+                    color: AppTheme.blue400,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              Text(ago,
+                  style:
+                      const TextStyle(color: AppTheme.slate500, fontSize: 11)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            n.title,
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTeamNotices() {
     if (_loadingNotices) {
       return const _PlaceholderCard(text: '공지를 불러오는 중...');
@@ -460,68 +531,55 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_teamNotices.isEmpty) {
       return const _PlaceholderCard(text: '등록된 팀 공지가 없습니다.');
     }
+    if (_teamNotices.length == 1) {
+      return _buildNoticeCard(_teamNotices.first);
+    }
+    final maxIndex = _teamNotices.length - 1;
+    final current = math.min(_noticePage, maxIndex);
     return Column(
-      children: _teamNotices.map((n) {
-        final ago = timeago.format(
-          DateTime.fromMillisecondsSinceEpoch(n.createdAt),
-          locale: 'ko',
-        );
-        return Container(
-          width: double.infinity,
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppTheme.slate800.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: n.pinned
-                  ? AppTheme.amber400.withValues(alpha: 0.3)
-                  : AppTheme.slate700.withValues(alpha: 0.5),
-            ),
+      children: [
+        SizedBox(
+          height: 96,
+          child: PageView.builder(
+            controller: _noticeController,
+            itemCount: _teamNotices.length,
+            onPageChanged: (idx) {
+              if (!mounted) return;
+              setState(() => _noticePage = idx);
+            },
+            itemBuilder: (context, index) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: _buildNoticeCard(
+                  _teamNotices[index],
+                  margin: EdgeInsets.zero,
+                ),
+              );
+            },
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  if (n.pinned) ...[
-                    const Icon(Icons.push_pin,
-                        size: 13, color: AppTheme.amber400),
-                    const SizedBox(width: 4),
-                  ],
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: AppTheme.blue500.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      n.category,
-                      style: const TextStyle(
-                        color: AppTheme.blue400,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(ago,
-                      style: const TextStyle(
-                          color: AppTheme.slate500, fontSize: 11)),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                n.title,
-                style: const TextStyle(color: Colors.white, fontSize: 14),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(
+            _teamNotices.length,
+            (index) {
+              final active = index == current;
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: active ? 10 : 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color:
+                      active ? AppTheme.blue400 : AppTheme.slate600,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              );
+            },
           ),
-        );
-      }).toList(),
+        ),
+      ],
     );
   }
 

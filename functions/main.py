@@ -121,15 +121,21 @@ def notify_match_live(event: firestore_fn.Event[firestore_fn.Change[firestore_fn
 @firestore_fn.on_document_created(document="notices/{noticeId}", region="asia-northeast3")
 def notify_community_urgent(event: firestore_fn.Event[firestore_fn.DocumentSnapshot]) -> None:
     data = event.data.to_dict() if event.data else {}
-    if data.get("category") != "긴급":
-        return
     title = (data.get("title") or "긴급 공지").strip()
     content = (data.get("content") or "긴급 공지가 등록되었습니다.").strip()
     body = content if len(content) <= 120 else f"{content[:117]}..."
     notice_id = event.params.get("noticeId")
+    if data.get("category") == "긴급":
+        _send_topic_notification(
+            "community_urgent",
+            title,
+            body,
+            {"noticeId": str(notice_id or ""), "category": "긴급"},
+        )
+        return
     _send_topic_notification(
-        "community_urgent",
+        "community_notices",
         title,
         body,
-        {"noticeId": str(notice_id or ""), "category": "긴급"},
+        {"noticeId": str(notice_id or ""), "category": str(data.get("category") or "")},
     )

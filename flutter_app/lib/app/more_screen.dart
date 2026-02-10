@@ -27,6 +27,8 @@ class _MoreScreenState extends State<MoreScreen> {
   bool _loggedIn = false;
   bool _loadingNotif = true;
   MatchNotifyPreference _matchPref = MatchNotifyPreference.team;
+  bool _communityNoticeOn = true;
+  bool _teamNoticeOn = true;
 
   @override
   void initState() {
@@ -61,9 +63,13 @@ class _MoreScreenState extends State<MoreScreen> {
 
   Future<void> _loadNotificationPrefs() async {
     final pref = await NotificationService.instance.getMatchPreference();
+    final community = await NotificationService.instance.getCommunityNoticeEnabled();
+    final teamNotice = await NotificationService.instance.getTeamNoticeEnabled();
     if (!mounted) return;
     setState(() {
       _matchPref = pref;
+      _communityNoticeOn = community;
+      _teamNoticeOn = teamNotice;
       _loadingNotif = false;
     });
   }
@@ -74,6 +80,12 @@ class _MoreScreenState extends State<MoreScreen> {
       MatchNotifyPreference.team => '소속팀 경기',
       MatchNotifyPreference.off => '받지 않음',
     };
+  }
+
+  String _noticePrefLabel() {
+    final community = _communityNoticeOn ? '커뮤니티' : '커뮤니티 off';
+    final team = _teamNoticeOn ? '홈팀' : '홈팀 off';
+    return '$community · $team';
   }
 
   void _openNotificationSettings() {
@@ -107,6 +119,37 @@ class _MoreScreenState extends State<MoreScreen> {
                     style: TextStyle(color: AppTheme.slate400, fontSize: 12),
                   ),
                   const SizedBox(height: 12),
+                    SwitchListTile(
+                      value: _communityNoticeOn,
+                      onChanged: (value) async {
+                        await NotificationService.instance
+                            .setCommunityNoticeEnabled(value);
+                      if (mounted) {
+                        setState(() => _communityNoticeOn = value);
+                      }
+                    },
+                      activeThumbColor: AppTheme.blue400,
+                      title: const Text('커뮤니티 공지',
+                          style: TextStyle(color: Colors.white)),
+                      subtitle: const Text('긴급 제외 공지 알림 (ON/OFF)',
+                          style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
+                    ),
+                  SwitchListTile(
+                    value: _teamNoticeOn,
+                    onChanged: (value) async {
+                      await NotificationService.instance
+                          .setTeamNoticeEnabled(value);
+                      if (mounted) {
+                        setState(() => _teamNoticeOn = value);
+                      }
+                    },
+                    activeThumbColor: AppTheme.blue400,
+                    title: const Text('홈팀 공지',
+                        style: TextStyle(color: Colors.white)),
+                    subtitle: const Text('소속 팀 공지 알림',
+                        style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
+                  ),
+                  const SizedBox(height: 8),
                   RadioGroup<MatchNotifyPreference>(
                     groupValue: temp,
                     onChanged: (value) async {
@@ -247,8 +290,10 @@ class _MoreScreenState extends State<MoreScreen> {
           const _SectionTitle('알림'),
           _MenuTile(
             icon: Icons.notifications_active,
-            label: '경기 알림',
-            value: _loadingNotif ? '확인 중...' : _matchPrefLabel(_matchPref),
+            label: '알림 설정',
+            value: _loadingNotif
+                ? '확인 중...'
+                : '경기 ${_matchPrefLabel(_matchPref)} · ${_noticePrefLabel()}',
             onTap: _openNotificationSettings,
           ),
           const Divider(height: 32),
