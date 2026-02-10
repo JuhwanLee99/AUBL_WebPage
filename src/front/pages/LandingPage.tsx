@@ -4,9 +4,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import { useDemoStore } from '../../shared/state/demoStore';
 import type { MatchSchedule } from '../../shared/state/demoStore';
-import { collection, onSnapshot, query, where, doc, getDoc } from 'firebase/firestore';
+import { collection, collectionGroup, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { firestore } from '../../shared/firebase/client';
 import { useContent } from '../../shared/state/contentProvider';
+import { useAdmin } from '../../shared/auth/useAdmin';
+import { useAuth } from '../../shared/auth/AuthProvider';
+import { useTeamRole } from '../../shared/auth/useTeamRole';
+import { decodeTeamId } from '../../shared/lib/teamDirectory';
+import type { TeamNotice } from '../../shared/types';
 
 const formatLiveTime = (value: string) => {
   const date = new Date(value);
@@ -63,7 +68,8 @@ const normalizeBases = (value: unknown): (string | null)[] | undefined => {
   return trimmed as (string | null)[];
 };
 
-const currentBatterName = (state: ReturnType<typeof useDemoStore>['state']) => {
+const currentBatterName = (state: ReturnType<typeof useDemoStore>['state'], lineupVisible: boolean) => {
+  if (!lineupVisible) return '라인업 공개 전';
   const side = state.half === 'top' ? 'away' : 'home';
   const lineup = state.lineups[side];
   const battingLineup = lineup.filter((slot) => slot.pos.toUpperCase() !== 'P');
@@ -74,7 +80,8 @@ const currentBatterName = (state: ReturnType<typeof useDemoStore>['state']) => {
   return batter?.name || '타자 대기 중';
 };
 
-const currentPitcherName = (state: ReturnType<typeof useDemoStore>['state']) => {
+const currentPitcherName = (state: ReturnType<typeof useDemoStore>['state'], lineupVisible: boolean) => {
+  if (!lineupVisible) return '라인업 공개 전';
   const defenseSide = state.half === 'top' ? 'home' : 'away';
   const pitcher = state.lineups[defenseSide].find((slot) => slot.pos.toUpperCase() === 'P');
   return pitcher?.name || '투수 대기 중';
@@ -185,6 +192,9 @@ function MiniBases({ bases }: { bases?: (string | null | undefined)[] }) {
 
 export default function LandingPage() {
   const { state, actions } = useDemoStore();
+  const { isAdmin } = useAdmin();
+  const { user } = useAuth();
+  const { isCoach, coachTeamId } = useTeamRole();
   const { content } = useContent();
   const landing = content.landing;
   const navigate = useNavigate();
@@ -194,6 +204,68 @@ export default function LandingPage() {
   const [liveMatchesRealtime, setLiveMatchesRealtime] = useState<MatchSchedule[]>([]);
   const [liveScores, setLiveScores] = useState<Record<string, LiveSnapshot>>({});
   const [nowTs, setNowTs] = useState<number>(() => Date.now());
+  const [memberTeamId, setMemberTeamId] = useState<string | null>(null);
+  const [teamNotices, setTeamNotices] = useState<TeamNotice[]>([]);
+  const activeMatch = useMemo(
+    () => state.matches.find((match) => match.id === state.activeMatchId) ?? null,
+    [state.matches, state.activeMatchId],
+  );
+  const lineupVisible = isAdmin || state.gameStarted || Boolean(activeMatch?.lineupPublic);
+  const sortedTeamNotices = useMemo(() => {
+    const copy = [...teamNotices];
+    copy.sort((a, b) => {
+      const pinnedA = a.pinned ? 1 : 0;
+      const pinnedB = b.pinned ? 1 : 0;
+      if (pinnedA !== pinnedB) return pinnedB - pinnedA;
+      return (b.createdAt ?? 0) - (a.createdAt ?? 0);
+    });
+    return copy;
+  }, [teamNotices]);
+
+  useEffect(() => {
+    if (!user || isCoach) return;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const q = query(collectionGroup(firestore, 'members'), where('uid', '==', user.uid), limit(1));
+        const snap = await getDocs(q);
+        if (cancelled) return;
+        if (snap.empty) {
+          setMemberTeamId(null);
+          return;
+        }
+        const docSnap = snap.docs[0];
+        const teamRef = docSnap.ref.parent.parent;
+        const teamId = teamRef?.id ?? null;
+        setMemberTeamId(teamId);
+      } catch {
+        if (!cancelled) setMemberTeamId(null);
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, isCoach]);
+
+  const myTeamId = user ? (coachTeamId ?? memberTeamId) : null;
+  const myTeamName = useMemo(() => (myTeamId ? decodeTeamId(myTeamId) : null), [myTeamId]);
+
+  useEffect(() => {
+    if (!myTeamId) return;
+    const q = query(collection(firestore, 'teams', myTeamId, 'notices'), orderBy('createdAt', 'desc'), limit(5));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const next = snap.docs.map((docSnap) => ({ ...(docSnap.data() as Omit<TeamNotice, 'id'>), id: docSnap.id }));
+        setTeamNotices(next);
+      },
+      () => {
+        setTeamNotices([]);
+      },
+    );
+    return () => unsub();
+  }, [myTeamId]);
 
   // 1. 오늘 경기 계산
   const todaysScheduled = useMemo(() => {
@@ -340,7 +412,7 @@ export default function LandingPage() {
 
   const handleOpenMatch = (matchId: string, path: '/scoreboard' | '/scoreboard-text') => {
     actions.selectMatch(matchId);
-    navigate(path);
+    navigate(`${path}/${matchId}`);
   };
 
   useEffect(() => {
@@ -491,6 +563,105 @@ export default function LandingPage() {
             pointerEvents: 'none',
           }}
         />
+      </section>
+
+      {/* Team Notice Spotlight */}
+      <section
+        style={{
+          borderRadius: 'var(--surface-radius-md)',
+          padding: '16px',
+          border: '1px solid rgba(148, 163, 184, 0.24)',
+          background: 'linear-gradient(135deg, rgba(15,23,42,0.85), rgba(30,41,59,0.75))',
+          boxShadow: '0 14px 36px rgba(0, 0, 0, 0.3)',
+          display: 'grid',
+          gap: '12px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span
+              style={{
+                padding: '6px 10px',
+                borderRadius: '999px',
+                background: 'rgba(249,115,22,0.18)',
+                color: '#f97316',
+                fontWeight: 900,
+                fontSize: '11px',
+                letterSpacing: '0.06em',
+                border: '1px solid rgba(249,115,22,0.4)',
+              }}
+            >
+              TEAM NOTICE
+            </span>
+            <span style={{ color: '#cbd5e1', fontWeight: 700, fontSize: '13px' }}>내 팀 소식</span>
+          </div>
+          {myTeamId && (
+            <Link
+              to={`/teams/${myTeamId}`}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '10px',
+                border: '1px solid rgba(148,163,184,0.35)',
+                background: 'rgba(255,255,255,0.04)',
+                color: '#e2e8f0',
+                fontWeight: 800,
+                fontSize: '12px',
+                textDecoration: 'none',
+              }}
+            >
+              팀 페이지 바로가기 →
+            </Link>
+          )}
+        </div>
+
+        {!user ? (
+          <div style={{ color: '#94a3b8', fontWeight: 700 }}>로그인하면 내 팀 공지를 확인할 수 있습니다.</div>
+        ) : !myTeamId ? (
+          <div style={{ color: '#94a3b8', fontWeight: 700 }}>아직 팀에 소속되지 않았습니다. 감독에게 팀원 등록을 요청해주세요.</div>
+        ) : (
+          <div style={{ display: 'grid', gap: '10px' }}>
+            <div style={{ color: '#e2e8f0', fontWeight: 800 }}>{myTeamName ?? '소속팀'}</div>
+            {sortedTeamNotices.length ? (
+              <div style={{ display: 'grid', gap: '8px' }}>
+                {sortedTeamNotices.slice(0, 3).map((notice) => (
+                  <div
+                    key={notice.id}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(148,163,184,0.25)',
+                      background: 'rgba(255,255,255,0.02)',
+                      display: 'grid',
+                      gap: '6px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      {notice.pinned && (
+                        <span style={{ padding: '2px 6px', borderRadius: '999px', background: 'rgba(249,115,22,0.16)', color: '#f97316', fontWeight: 800, fontSize: '11px' }}>
+                          고정
+                        </span>
+                      )}
+                      {notice.category && (
+                        <span style={{ padding: '2px 6px', borderRadius: '999px', background: 'rgba(148,163,184,0.2)', color: '#e2e8f0', fontWeight: 800, fontSize: '11px' }}>
+                          {notice.category}
+                        </span>
+                      )}
+                      <Link
+                        to={`/teams/${myTeamId}/notices/${notice.id}`}
+                        style={{ fontWeight: 800, color: '#e2e8f0', textDecoration: 'none' }}
+                      >
+                        {notice.title}
+                      </Link>
+                    </div>
+                    <div style={{ color: '#cbd5e1', fontSize: '12px' }}>{notice.content}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ color: '#94a3b8', fontWeight: 700 }}>등록된 팀 공지가 없습니다.</div>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Live Info Ticker */}
@@ -728,8 +899,8 @@ export default function LandingPage() {
                     : snapshot?.inning
                       ? `${snapshot.inning}회${snapshot.half === 'top' ? '초' : '말'}`
                       : '이닝 정보 없음';
-                  const batter = isActive ? currentBatterName(state) : '실시간 선택 시 표시';
-                  const pitcher = isActive ? currentPitcherName(state) : '투수 정보 없음';
+                  const batter = isActive ? currentBatterName(state, lineupVisible) : '실시간 선택 시 표시';
+                  const pitcher = isActive ? currentPitcherName(state, lineupVisible) : '투수 정보 없음';
                   const bDots = countDots(balls ?? 0, 3, '#22c55e');
                   const sDots = countDots(strikes ?? 0, 2, '#facc15');
                   const oDots = countDots(outs ?? 0, 3, '#ef4444');

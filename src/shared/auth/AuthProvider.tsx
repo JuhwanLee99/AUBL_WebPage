@@ -13,6 +13,8 @@ import type { User } from 'firebase/auth';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { PropsWithChildren } from 'react';
 import { auth } from '../firebase/client';
+import { doc, setDoc } from 'firebase/firestore';
+import { firestore } from '../firebase/client';
 import { sendLogoutToFlutter, sendTokenRefreshToFlutter } from '../bridge/flutterBridge';
 
 // -----------------------------------------------------------
@@ -90,6 +92,22 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (IS_TEST_MODE) return;
+    if (!user) return;
+    const email = user.email ?? null;
+    const payload = {
+      uid: user.uid,
+      email,
+      emailLower: email ? email.toLowerCase() : null,
+      displayName: user.displayName ?? null,
+      createdAt: user.metadata?.creationTime ?? null,
+      lastSignInAt: user.metadata?.lastSignInTime ?? null,
+      updatedAt: Date.now(),
+    };
+    setDoc(doc(firestore, 'users', user.uid), payload, { merge: true }).catch(() => {});
+  }, [user]);
 
   const loginWithEmail = useCallback(
     async (email: string, password: string) => {

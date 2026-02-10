@@ -17,6 +17,8 @@ export type BatterStatLine = {
   hbp: number;
   so: number;
   sac: number;
+  r: number;
+  rbi: number;
 };
 
 export type PitcherStatLine = {
@@ -34,6 +36,8 @@ export type PitcherStatLine = {
   bb: number;
   hbp: number;
   so: number;
+  r: number;
+  er: number;
   appearanceOrder?: number | null;
   appearanceLabel?: string;
 };

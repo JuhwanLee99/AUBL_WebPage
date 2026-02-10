@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { TEAMS } from '../../shared/lib/mockData';
 import { buildGameRecord, canPitcherBat, useDemoStore } from '../../shared/state/demoStore';
 import type {
@@ -30,6 +31,7 @@ const getUniqueName = (name: string, number: string | number | undefined | null)
 };
 
 type Side = 'home' | 'away';
+type Half = 'top' | 'bottom';
 
 const mainButtons = [
   { label: '볼', color: '#22c55e', action: 'ball' },
@@ -62,8 +64,8 @@ const battedBallResultOptions = [
   { label: '인정 2루타', color: '#3b82f6', value: 'double_ground' as const, helper: '2루타 · 규정', group: 'hit' as const },
   { label: '3루타', color: '#3b82f6', value: 'triple' as const, helper: '타자·주자 3루', group: 'hit' as const },
   { label: '홈런', color: '#f97316', value: 'hr' as const, helper: '전원 득점', group: 'hit' as const },
-  { label: '땅볼 아웃', color: '#ef4444', value: 'out_ground' as const, helper: '타자만 아웃', group: 'out' as const },
-  { label: '뜬공 아웃', color: '#ef4444', value: 'out_fly' as const, helper: '타자만 아웃', group: 'out' as const },
+  { label: '땅볼 아웃', color: '#ef4444', value: 'out_ground' as const, helper: '타자 아웃 및 주자 선택', group: 'out' as const },
+  { label: '뜬공 아웃', color: '#ef4444', value: 'out_fly' as const, helper: '타자 아웃 및 주자 선택', group: 'out' as const },
   { label: '라인드라이브', color: '#ef4444', value: 'out_line' as const, helper: '직선타 아웃', group: 'out' as const },
   { label: '병살타(2아웃)', color: '#ef4444', value: 'out_dp2' as const, helper: '타자+주자 아웃', group: 'out' as const },
   { label: '삼중살(3아웃)', color: '#ef4444', value: 'out_tp3' as const, helper: '모두 아웃', group: 'out' as const },
@@ -430,6 +432,20 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   };
   const addBlank = () => lines.push('');
   const halfLabel = (half: 'top' | 'bottom') => (half === 'top' ? '초' : '말');
+  const halfRank = (half: 'top' | 'bottom') => (half === 'top' ? 0 : 1);
+  const sortChrono = (
+    a: { inning: number; half: 'top' | 'bottom'; createdAt?: number; pitch: number; order: number },
+    b: { inning: number; half: 'top' | 'bottom'; createdAt?: number; pitch: number; order: number },
+  ) => {
+    if (a.inning !== b.inning) return a.inning - b.inning;
+    if (a.half !== b.half) return halfRank(a.half) - halfRank(b.half);
+    if (a.createdAt !== undefined && b.createdAt !== undefined && a.createdAt !== b.createdAt) {
+      return a.createdAt - b.createdAt;
+    }
+    if (a.pitch !== b.pitch) return a.pitch - b.pitch;
+    if (a.order !== b.order) return a.order - b.order;
+    return 0;
+  };
   const innings = Array.from({ length: 9 }, (_, idx) => idx + 1);
   const playerDirectory: Record<
     'home' | 'away',
@@ -587,6 +603,32 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
 
   const stats = buildPlayerStats(record);
   const fmt3 = (val: number) => (Number.isFinite(val) ? val.toFixed(3).replace(/^0/, '') : '-');
+  const orderByName: Record<'home' | 'away', Map<string, number>> = {
+    home: new Map(),
+    away: new Map(),
+  };
+  (['home', 'away'] as const).forEach((side) => {
+    stats.hitters[side].forEach((h) => {
+      if (h.order && h.order > 0) {
+        orderByName[side].set(h.name, h.order);
+      }
+    });
+  });
+  const resolveEventOrder = (event: PlayEvent, side: 'home' | 'away') => {
+    if (event.order && event.order > 0) return event.order;
+    const name = (event.batter || '').trim();
+    if (!name) return null;
+    const map = orderByName[side];
+    if (map.has(name)) return map.get(name)!;
+    const base = name.replace(/\([^)]*\)/g, '').trim();
+    if (base && map.has(base)) return map.get(base)!;
+    for (const [key, val] of map.entries()) {
+      if (key.startsWith(`${name}(`) || (base && key.startsWith(`${base}(`))) {
+        return val;
+      }
+    }
+    return null;
+  };
   const writePitcherOrder = (side: 'home' | 'away', label: string) => {
     addBlank();
     add(`투수 등판 순서 - ${label}`);
@@ -668,7 +710,105 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   writePitcherOrder('home', record.meta.homeTeamName);
   writePitcherOrder('away', record.meta.awayTeamName);
 
-  const eventsChrono = [...record.events].reverse();
+  const eventKey = (event: PlayEvent) => [
+    event.eventId ?? '',
+    event.inning,
+    event.half,
+    event.order,
+    event.pitch,
+    event.type,
+    event.batter ?? '',
+    event.notes ?? '',
+    event.strikeType ?? '',
+    event.rbi ?? '',
+    (event.runners ?? []).join('|'),
+    event.battedBall?.type ?? '',
+    event.battedBall?.zone ?? '',
+    typeof event.error === 'string' ? event.error : event.error ? `${event.error.errorType}|${event.error.fielderPos}|${event.error.context ?? ''}` : '',
+    Array.isArray(event.dpRoute) ? event.dpRoute.join('-') : '',
+  ].join('|');
+
+  const extractRunnerSummaryFromFeed = (text: string) => {
+    const match = text.match(/([123]루\s*주자.*)$/);
+    if (match) return match[1].trim();
+    return text.trim();
+  };
+
+  const inferEventTypeFromResult = (result: string) => {
+    const normalized = result.replace(/\s+/g, '');
+    if (normalized.includes('도루실패') || normalized.includes('도루실패')) return 'steal_fail';
+    if (normalized.includes('도루성공') || normalized.includes('도루성공') || normalized.includes('도루')) return 'steal';
+    if (normalized.includes('주자') && normalized.includes('아웃')) return 'runner_out';
+    if (normalized.includes('주자') && (normalized.includes('득점') || normalized.includes('진루') || normalized.includes('정지'))) return 'runner';
+    if (normalized.includes('타격방해')) return 'ci';
+    if (normalized.includes('희생')) return 'sac';
+    if (normalized.includes('몸에맞는공')) return 'hbp';
+    if (normalized.includes('볼넷') || normalized.includes('고의4구') || normalized.includes('4구')) return 'walk';
+    if (normalized.includes('야수선택') || normalized.toUpperCase().includes('F.C')) return 'fc';
+    if (normalized.includes('실책') || /E[1-6]/i.test(result)) return 'error';
+    if (normalized.includes('삼진') || normalized.includes('아웃')) return 'out';
+    return 'play';
+  };
+
+  const rebuildEventsFromFeed = (feed: ReturnType<typeof buildGameRecord>['feed']) => {
+    const buckets = new Map<string, ReturnType<typeof buildGameRecord>['feed']>();
+    feed.forEach((entry) => {
+      if (!entry.eventId) return;
+      const list = buckets.get(entry.eventId) ?? [];
+      list.push(entry);
+      buckets.set(entry.eventId, list);
+    });
+    const rebuilt: PlayEvent[] = [];
+    buckets.forEach((entries, eventId) => {
+      const sorted = [...entries].sort(sortChrono);
+      const primary = sorted.find((e) => (e.order && e.order > 0) || (e.batter && e.batter.trim())) ?? sorted[0];
+      if (!primary) return;
+      const notes = primary.result ?? '';
+      const type = inferEventTypeFromResult(notes);
+      const runners = sorted
+        .filter((e) => (!e.order || e.order === 0) && (!e.batter || !e.batter.trim()))
+        .map((e) => extractRunnerSummaryFromFeed(e.result ?? ''))
+        .filter(Boolean);
+      rebuilt.push({
+        inning: primary.inning,
+        half: primary.half,
+        order: primary.order ?? 0,
+        batter: primary.batter ?? '',
+        pitch: primary.pitch ?? 0,
+        type,
+        runners,
+        battedBall: null,
+        error: null,
+        notes,
+        createdAt: primary.createdAt,
+        eventId,
+      });
+    });
+    return rebuilt;
+  };
+
+  const dedupeEvents = (items: PlayEvent[]) => {
+    const seen = new Set<string>();
+    return items.filter((event) => {
+      const key = eventKey(event);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+  const batterFeedCount = record.feed.filter((entry) => entry.order > 0 && entry.batter && entry.batter.trim()).length;
+  const minExpectedEvents = batterFeedCount > 0 ? Math.max(1, Math.floor(batterFeedCount * 0.5)) : 0;
+  const needsRebuild = batterFeedCount > 0 && record.events.length < minExpectedEvents;
+  const rebuiltEvents = needsRebuild ? rebuildEventsFromFeed(record.feed) : [];
+  const mergedEvents = needsRebuild
+    ? (() => {
+        const merged = new Map<string, PlayEvent>();
+        rebuiltEvents.forEach((ev) => merged.set(eventKey(ev), ev));
+        record.events.forEach((ev) => merged.set(eventKey(ev), ev));
+        return Array.from(merged.values());
+      })()
+    : record.events;
+  const eventsChrono = dedupeEvents([...mergedEvents].sort(sortChrono));
   addBlank();
   add('상세 플레이 이벤트');
   if (eventsChrono.length) {
@@ -710,7 +850,7 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
     add('-', '기록 없음');
   }
 
-  const feed = [...record.feed].reverse();
+  const feed = [...record.feed].sort(sortChrono);
   addBlank();
   add('플레이 로그');
   if (feed.length) {
@@ -726,14 +866,16 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
     const targetHalf = side === 'away' ? 'top' : 'bottom';
     const notesByOrder = new Map<number, Map<number, string[]>>();
     eventsChrono
-      .filter((event) => event.half === targetHalf && event.order > 0)
+      .filter((event) => event.half === targetHalf)
       .forEach((event) => {
-        const inningMap = notesByOrder.get(event.order) ?? new Map<number, string[]>();
+        const resolvedOrder = resolveEventOrder(event, side);
+        if (!resolvedOrder || resolvedOrder <= 0) return;
+        const inningMap = notesByOrder.get(resolvedOrder) ?? new Map<number, string[]>();
         const notes = inningMap.get(event.inning) ?? [];
         const note = formatScorebookCell(event);
         notes.push(note || '-');
         inningMap.set(event.inning, notes);
-        notesByOrder.set(event.order, inningMap);
+        notesByOrder.set(resolvedOrder, inningMap);
       });
     return notesByOrder;
   };
@@ -836,6 +978,8 @@ function ensurePlayerStat(name: string, pos?: string): PlayerStat {
     hbp: 0,
     so: 0,
     sac: 0,
+    r: 0,
+    rbi: 0,
   };
 }
 
@@ -851,6 +995,7 @@ function classifyResult(result: string) {
   if (normalized.includes('타격방해')) return 'ci' as const;
   if (normalized.includes('야수선택') || normalized.toUpperCase().includes('F.C')) return 'fc' as const;
   if (normalized.includes('희생플라이')) return 'sac' as const;
+  if (normalized.includes('희생번트')) return 'sac' as const;
   if (normalized.includes('낫아웃')) return 'so_reach' as const;
   if (normalized.includes('삼진')) return 'so' as const;
   if (normalized.includes('아웃') && !normalized.includes('도루')) return 'out' as const;
@@ -873,6 +1018,8 @@ function ensurePitcherStat(name: string, pos?: string): PitcherStat {
     bb: 0,
     hbp: 0,
     so: 0,
+    r: 0,
+    er: 0,
   };
 }
 
@@ -916,6 +1063,10 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
   const benchMetaAway = new Map<string, { pos?: string; order: number; isElite?: boolean }>();
   record.benches.home.forEach((p, idx) => benchMetaHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, isElite: p.isElite }));
   record.benches.away.forEach((p, idx) => benchMetaAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 100 + idx, isElite: p.isElite }));
+  const removedMetaHome = new Map<string, { pos?: string; order: number; isElite?: boolean }>();
+  const removedMetaAway = new Map<string, { pos?: string; order: number; isElite?: boolean }>();
+  record.removed.home.forEach((p, idx) => removedMetaHome.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 200 + idx, isElite: p.isElite }));
+  record.removed.away.forEach((p, idx) => removedMetaAway.set(getUniqueName(p.name, p.number), { pos: p.pos, order: 200 + idx, isElite: p.isElite }));
 
   const extraOrder: Record<'home' | 'away', number> = { home: 100, away: 100 };
   const battingOrders: Record<'home' | 'away', Map<number, string[]>> = { home: new Map(), away: new Map() };
@@ -967,7 +1118,8 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
     const roster = side === 'home' ? rosterHome : rosterAway;
     if (roster.has(name)) return roster.get(name)!;
     const benchMeta = side === 'home' ? benchMetaHome : benchMetaAway;
-    const meta = benchMeta.get(name);
+    const removedMeta = side === 'home' ? removedMetaHome : removedMetaAway;
+    const meta = benchMeta.get(name) ?? removedMeta.get(name);
     const entry = { pos: meta?.pos, order: meta?.order ?? extraOrder[side], isElite: meta?.isElite };
     extraOrder[side] += 1;
     roster.set(name, entry);
@@ -1000,9 +1152,147 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
     return store.get(name)!;
   };
 
+  const markPitcher = (side: 'home' | 'away', name: string) => {
+    const roster = side === 'home' ? rosterHome : rosterAway;
+    const entry = ensureRosterEntry(side, name);
+    if (entry.pos?.toUpperCase() !== 'P') {
+      roster.set(name, { ...entry, pos: 'P' });
+    }
+  };
+
   // Feed is already in chronological order (oldest → newest) per pushFeed implementation
   const chronological = record.feed;
   const currentPitcher: Record<'home' | 'away', string | null> = { home: null, away: null };
+  const bases: (string | null)[] = [null, null, null];
+  const runnerResponsibility = new Map<string, string>();
+  let lastHalfKey: string | null = null;
+  let currentHalfOuts = 0;
+
+  const resetHalfState = () => {
+    bases[0] = null;
+    bases[1] = null;
+    bases[2] = null;
+    runnerResponsibility.clear();
+    currentHalfOuts = 0;
+  };
+
+  const syncHalfState = (inning: number, half: Half) => {
+    const key = `${inning}-${half}`;
+    if (key !== lastHalfKey) {
+      resetHalfState();
+      lastHalfKey = key;
+    }
+  };
+
+  const extractRunnerName = (summary: string, options?: { includeNonScoring?: boolean }) => {
+    const includeNonScoring = options?.includeNonScoring === true;
+    if (!includeNonScoring && !summary.includes('득점')) return null;
+    if (includeNonScoring && !summary.includes('주자') && !summary.includes('득점')) return null;
+    const parts = summary.split('·').map((part) => part.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      return parts[parts.length - 1];
+    }
+    const match = summary.match(/(.+?)\s*득점/);
+    return match ? match[1].trim() : null;
+  };
+
+  const parseRunnerMove = (text: string) => {
+    if (!text.includes('주자') || !text.includes('·')) return null;
+    const runnerName = extractRunnerName(text, { includeNonScoring: true });
+    if (!runnerName) return null;
+    const baseMatch = text.match(/([123])루 주자/);
+    const fromBase = baseMatch ? Number(baseMatch[1]) - 1 : null;
+    const arrowMatch = text.match(/([123])루→(홈|[123])루?/);
+    const toBase = arrowMatch ? (arrowMatch[2] === '홈' ? 'home' : Number(arrowMatch[2]) - 1) : null;
+    const scored = text.includes('득점');
+    const out = text.includes('아웃');
+    const hold = text.includes('정지');
+    const isErrorPlay = text.includes('실책');
+    return { runnerName, fromBase, toBase, scored, out, hold, isErrorPlay };
+  };
+
+  const parseRunnerOutGroup = (text: string) => {
+    if (!text.includes('아웃') || !text.includes('·')) return null;
+    if (text.includes('주자')) return null;
+    const outCountMatch = text.match(/(\d+)명\s*아웃/);
+    const outCount = text.includes('더블아웃') ? 2 : outCountMatch ? Number(outCountMatch[1]) : 1;
+    const namePartMatch = text.match(/·\s*(.+)\s+아웃/);
+    const names: string[] = [];
+    if (namePartMatch) {
+      const list = namePartMatch[1].split(',').map((part) => part.trim()).filter(Boolean);
+      list.forEach((item) => {
+        const name = item.replace(/\s*[123]루\s*$/, '').trim();
+        if (name) names.push(name);
+      });
+    }
+    return { names, outCount, isErrorPlay: text.includes('실책') };
+  };
+
+  const creditRunForPitcher = (pitcherName: string | null, defenseSide: 'home' | 'away', earned = true) => {
+    if (!pitcherName) return;
+    const stat = addPitch(defenseSide, pitcherName);
+    stat.r += 1;
+    if (earned) stat.er += 1;
+  };
+
+  const creditRunForRunner = (runnerName: string, defenseSide: 'home' | 'away', earned = true) => {
+    const responsible = runnerResponsibility.get(runnerName) ?? currentPitcher[defenseSide];
+    creditRunForPitcher(responsible ?? null, defenseSide, earned);
+    runnerResponsibility.delete(runnerName);
+  };
+
+  const assignRunnerResponsibility = (runnerName: string, defenseSide: 'home' | 'away') => {
+    const pitcherName = currentPitcher[defenseSide];
+    if (!runnerName || !pitcherName) return;
+    runnerResponsibility.set(runnerName, pitcherName);
+  };
+
+  const placeRunnerOnBase = (runnerName: string, targetBase: number) => {
+    let dest = targetBase;
+    while (dest < 3 && bases[dest]) {
+      dest += 1;
+    }
+    if (dest >= 3) {
+      return { scored: true };
+    }
+    bases[dest] = runnerName;
+    return { scored: false };
+  };
+
+  const applyWalkAdvance = (batterName: string) => {
+    let scoredRunner: string | null = null;
+    if (bases[0]) {
+      if (bases[1] && bases[2]) {
+        scoredRunner = bases[2];
+        bases[2] = null;
+      }
+      if (bases[1]) {
+        bases[2] = bases[1];
+        bases[1] = null;
+      }
+      bases[1] = bases[0];
+      bases[0] = null;
+    }
+    bases[0] = batterName;
+    return scoredRunner;
+  };
+
+  const getActivePitcher = (defenseSide: 'home' | 'away') => {
+    let pitcherName = currentPitcher[defenseSide];
+    const roster = defenseSide === 'home' ? rosterHome : rosterAway;
+    const hasValid =
+      pitcherName &&
+      roster.has(pitcherName) &&
+      roster.get(pitcherName)?.pos?.toUpperCase() === 'P';
+    if (hasValid) return pitcherName;
+    for (const [pName, info] of roster.entries()) {
+      if (info.pos && info.pos.toUpperCase() === 'P') {
+        currentPitcher[defenseSide] = pName;
+        return pName;
+      }
+    }
+    return pitcherName ?? null;
+  };
   
   // [수정됨] 이름 파싱 로직 변경: 괄호() 안의 내용(등번호 포함)을 유지해야 함
   // 기존: raw.replace(/\([^)]*\)/g, '') -> 괄호 전체 삭제
@@ -1024,14 +1314,168 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
     return rawName;
   };
 
-  const inferPitcherSide = (name: string): 'home' | 'away' | null => {
-    if (rosterHome.has(name) || benchMetaHome.has(name)) return 'home';
-    if (rosterAway.has(name) || benchMetaAway.has(name)) return 'away';
+  const inferPlayerSide = (name: string): 'home' | 'away' | null => {
+    if (rosterHome.has(name) || benchMetaHome.has(name) || removedMetaHome.has(name)) return 'home';
+    if (rosterAway.has(name) || benchMetaAway.has(name) || removedMetaAway.has(name)) return 'away';
     // 로스터 키 매칭 시도
     for (const key of rosterHome.keys()) if (key.startsWith(name + '(')) return 'home';
     for (const key of rosterAway.keys()) if (key.startsWith(name + '(')) return 'away';
     return null;
   };
+
+  const resolveBatterName = (rawName: string, side: 'home' | 'away', orderNum?: number | null) => {
+    let name = rawName.trim();
+    if (!name) return name;
+    const roster = side === 'home' ? rosterHome : rosterAway;
+    if (!roster.has(name)) {
+      if (orderNum) {
+        const candidates = battingOrders[side].get(orderNum);
+        const match = candidates?.find((uName) => uName.startsWith(`${name}(`) || uName === name);
+        if (match) name = match;
+      }
+      if (!roster.has(name)) {
+        const base = name.replace(/\([^)]*\)/g, '').trim();
+        if (base && roster.has(base)) {
+          name = base;
+        } else {
+          for (const key of roster.keys()) {
+            if (key.startsWith(`${name}(`) || (base && key.startsWith(`${base}(`))) {
+              name = key;
+              break;
+            }
+          }
+        }
+      }
+    }
+    return name;
+  };
+
+  const parseSubstitutionLog = (text: string) => {
+    const normalized = text.trim();
+    if (!normalized) return null;
+    if (!/교체|대타|대주자|대수비/.test(normalized)) return null;
+    if (normalized.startsWith('포지션 교체')) return null;
+    if (!normalized.includes('→') || !normalized.includes('·')) return null;
+    const [left, right] = normalized.split('→');
+    if (!right) return null;
+    const outgoingPart = left.split('·').pop();
+    if (!outgoingPart) return null;
+    const outgoing = cleanName(outgoingPart);
+    const incoming = cleanName(right);
+    if (!outgoing || !incoming) return null;
+    let kind: 'defense' | 'pinch_hit' | 'pinch_run' | 'pitcher' | 'batter' | 'unknown' = 'unknown';
+    if (normalized.includes('대수비')) kind = 'defense';
+    else if (normalized.includes('대타')) kind = 'pinch_hit';
+    else if (normalized.includes('대주자')) kind = 'pinch_run';
+    else if (normalized.includes('투수 교체')) kind = 'pitcher';
+    else if (normalized.includes('타자 교체')) kind = 'batter';
+    return { outgoing, incoming, kind };
+  };
+
+  const resolvePlayerName = (raw: string, side?: 'home' | 'away' | null, orderNum?: number | null) => {
+    if (!raw) return raw;
+    if (side) return resolveBatterName(raw, side, orderNum);
+    const resolvedHome = resolveBatterName(raw, 'home', orderNum);
+    if (rosterHome.has(resolvedHome) || benchMetaHome.has(resolvedHome) || removedMetaHome.has(resolvedHome)) return resolvedHome;
+    const resolvedAway = resolveBatterName(raw, 'away', orderNum);
+    return resolvedAway;
+  };
+
+  const firstOffenseIndex: Record<'home' | 'away', number> = {
+    home: Number.POSITIVE_INFINITY,
+    away: Number.POSITIVE_INFINITY,
+  };
+  const firstPlateIndex: Record<'home' | 'away', Map<string, number>> = {
+    home: new Map(),
+    away: new Map(),
+  };
+  const substitutionOutIndex: Record<'home' | 'away', Map<string, number>> = {
+    home: new Map(),
+    away: new Map(),
+  };
+  const substitutionInIndex: Record<'home' | 'away', Map<string, number>> = {
+    home: new Map(),
+    away: new Map(),
+  };
+
+  const findOrderForPlayer = (side: 'home' | 'away', name: string) => {
+    for (const [order, list] of battingOrders[side]) {
+      if (list.includes(name)) return order;
+    }
+    return null;
+  };
+
+  const addToOrderList = (side: 'home' | 'away', order: number, name: string) => {
+    const list = battingOrders[side].get(order) ?? [];
+    if (!list.includes(name)) {
+      list.push(name);
+      battingOrders[side].set(order, list);
+    }
+  };
+
+  chronological.forEach((entry, idx) => {
+    if (entry.batter && entry.order > 0) {
+      const side: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
+      if (idx < firstOffenseIndex[side]) firstOffenseIndex[side] = idx;
+      const resolved = resolveBatterName(entry.batter, side, entry.order);
+      if (!firstPlateIndex[side].has(resolved)) {
+        firstPlateIndex[side].set(resolved, idx);
+      }
+    }
+
+    const substitution = parseSubstitutionLog(entry.result ?? '');
+    if (!substitution) return;
+    const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
+    const defenseSide: 'home' | 'away' = offenseSide === 'home' ? 'away' : 'home';
+    const fallbackSide = substitution.kind === 'defense' || substitution.kind === 'pitcher' ? defenseSide : offenseSide;
+
+    const outgoingResolved = resolvePlayerName(substitution.outgoing, null, entry.order ?? null);
+    const incomingResolved = resolvePlayerName(substitution.incoming, null, entry.order ?? null);
+    const outgoingSide = inferPlayerSide(outgoingResolved) ?? fallbackSide;
+    const incomingSide = inferPlayerSide(incomingResolved) ?? outgoingSide;
+
+    if (!substitutionOutIndex[outgoingSide].has(outgoingResolved)) {
+      substitutionOutIndex[outgoingSide].set(outgoingResolved, idx);
+    }
+    if (!substitutionInIndex[incomingSide].has(incomingResolved)) {
+      substitutionInIndex[incomingSide].set(incomingResolved, idx);
+    }
+
+    const resolvedOrder = findOrderForPlayer(outgoingSide, outgoingResolved)
+      ?? (typeof entry.order === 'number' && entry.order > 0 ? entry.order : null);
+    if (resolvedOrder) {
+      addToOrderList(incomingSide, resolvedOrder, incomingResolved);
+    }
+  });
+
+  const dnpPlayers: Record<'home' | 'away', Set<string>> = {
+    home: new Set(),
+    away: new Set(),
+  };
+  (['home', 'away'] as const).forEach((side) => {
+    const defenseStartIndex = side === 'home' ? firstOffenseIndex.away : firstOffenseIndex.home;
+    substitutionOutIndex[side].forEach((subIdx, name) => {
+      if (substitutionInIndex[side].has(name)) return;
+      const firstPa = firstPlateIndex[side].get(name);
+      const battedBefore = firstPa !== undefined && firstPa < subIdx;
+      const defendedBefore = defenseStartIndex < subIdx;
+      if (!battedBefore && !defendedBefore) {
+        dnpPlayers[side].add(name);
+      }
+    });
+
+    const removedList = record.removed?.[side] ?? [];
+    removedList.forEach((player) => {
+      const name = getUniqueName(player.name, player.number);
+      if (dnpPlayers[side].has(name)) return;
+      if (substitutionInIndex[side].has(name)) return;
+      if (firstPlateIndex[side].has(name)) return;
+      if (substitutionOutIndex[side].has(name)) return;
+      if (Number.isFinite(firstOffenseIndex[side])) {
+        dnpPlayers[side].add(name);
+      }
+    });
+  });
 
   // [수정] 투수 등판 순서 문제 해결을 위해 두 패스로 분리
   // 첫 번째 패스: 투수 관련 로그만 먼저 처리하여 등판 순서 확립
@@ -1045,20 +1489,22 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
       const incoming = result.split('→')[1];
       if (incoming) {
         let cleaned = cleanName(incoming);
-        const inferred = inferPitcherSide(cleaned) ?? defenseSide;
+        const inferred = inferPlayerSide(cleaned) ?? defenseSide;
         cleaned = resolvePitcherName(cleaned, inferred);
 
         currentPitcher[inferred] = cleaned;
         addPitch(inferred, cleaned);
+        markPitcher(inferred, cleaned);
       }
     } else if (result.includes('투수 (선발)') || result.includes('투수 (') && result.includes('차 계투)')) {
       // 자동 생성된 투수 등판 항목: "홍길동(18) 투수 (선발)" 또는 "홍길동(18) 투수 (1차 계투)"
       let cleaned = cleanName(result.split('투수')[0]);
-      const inferred = inferPitcherSide(cleaned) ?? defenseSide;
+      const inferred = inferPlayerSide(cleaned) ?? defenseSide;
       cleaned = resolvePitcherName(cleaned, inferred);
 
       currentPitcher[inferred] = cleaned;
       addPitch(inferred, cleaned);
+      markPitcher(inferred, cleaned);
     }
   });
 
@@ -1073,24 +1519,86 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
     const result = entry.result.trim();
     const orderNum = typeof entry.order === 'number' && entry.order > 0 ? entry.order : null;
 
+    syncHalfState(entry.inning, entry.half);
+
     // 투수 관련 로그에서 currentPitcher 업데이트 (등판 순서는 첫 번째 패스에서 이미 처리됨)
     if (result.includes('투수 교체')) {
       const incoming = result.split('→')[1];
       if (incoming) {
         let cleaned = cleanName(incoming);
-        const inferred = inferPitcherSide(cleaned) ?? defenseSide;
+        const inferred = inferPlayerSide(cleaned) ?? defenseSide;
         cleaned = resolvePitcherName(cleaned, inferred);
         currentPitcher[inferred] = cleaned;
+        markPitcher(inferred, cleaned);
       }
     } else if (result.includes('투수 (선발)') || result.includes('투수 (') && result.includes('차 계투)')) {
       let cleaned = cleanName(result.split('투수')[0]);
-      const inferred = inferPitcherSide(cleaned) ?? defenseSide;
+      const inferred = inferPlayerSide(cleaned) ?? defenseSide;
       cleaned = resolvePitcherName(cleaned, inferred);
       currentPitcher[inferred] = cleaned;
+      markPitcher(inferred, cleaned);
     }
 
     let name = entry.batter?.trim();
-    if (!name) return;
+    if (!name) {
+      const runnerMove = parseRunnerMove(result);
+      if (runnerMove) {
+        const { runnerName, fromBase, toBase, scored, out, hold, isErrorPlay } = runnerMove;
+        const resolvedRunner = resolveBatterName(runnerName, offenseSide);
+        let currentIndex = -1;
+        if (fromBase != null && bases[fromBase] === resolvedRunner) {
+          currentIndex = fromBase;
+        } else {
+          currentIndex = bases.findIndex((runner) => runner === resolvedRunner);
+        }
+
+        if (scored) {
+          if (currentIndex >= 0) bases[currentIndex] = null;
+          creditRunForRunner(resolvedRunner, defenseSide, !isErrorPlay);
+        } else if (out) {
+          if (currentIndex >= 0) bases[currentIndex] = null;
+          runnerResponsibility.delete(resolvedRunner);
+          currentHalfOuts += 1;
+          const pitcherName = getActivePitcher(defenseSide);
+          if (pitcherName) {
+            addPitch(defenseSide, pitcherName).outs += 1;
+          }
+        } else if (typeof toBase === 'number') {
+          if (currentIndex >= 0) bases[currentIndex] = null;
+          bases[toBase] = resolvedRunner;
+        } else if (hold && currentIndex === -1 && fromBase != null) {
+          bases[fromBase] = resolvedRunner;
+        }
+      } else {
+        const groupOut = parseRunnerOutGroup(result);
+        if (groupOut) {
+          const outsToAdd = Math.max(groupOut.outCount, groupOut.names.length || 0);
+          const pitcherName = getActivePitcher(defenseSide);
+          if (outsToAdd > 0) {
+            currentHalfOuts += outsToAdd;
+            if (pitcherName) {
+              addPitch(defenseSide, pitcherName).outs += outsToAdd;
+            }
+          }
+          groupOut.names.forEach((raw) => {
+            const resolvedRunner = resolveBatterName(raw, offenseSide);
+            const idx = bases.findIndex((runner) => runner === resolvedRunner);
+            if (idx >= 0) bases[idx] = null;
+            runnerResponsibility.delete(resolvedRunner);
+          });
+        }
+      }
+
+      if (result.includes('종료') && currentHalfOuts < 3) {
+        const missing = 3 - currentHalfOuts;
+        const pitcherName = getActivePitcher(defenseSide);
+        if (pitcherName) {
+          addPitch(defenseSide, pitcherName).outs += missing;
+        }
+        currentHalfOuts = 3;
+      }
+      return;
+    }
     const side = offenseSide;
     
     const roster = side === 'home' ? rosterHome : rosterAway;
@@ -1130,16 +1638,21 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
     // [수정됨] 투수 기록 집계 안전장치 추가
     // 1. 피드에서 투수 이름을 찾음
     let pitcherName = currentPitcher[pitchSide];
-    
-    // 2. 피드에 투수 정보가 없다면(null), 현재 로스터에서 'P' 포지션인 선수를 찾음 (Fallback)
-    if (!pitcherName) {
-      const roster = pitchSide === 'home' ? rosterHome : rosterAway;
+    const pitchRoster = pitchSide === 'home' ? rosterHome : rosterAway;
+    const hasValidPitcher =
+      pitcherName &&
+      pitchRoster.has(pitcherName) &&
+      pitchRoster.get(pitcherName)?.pos?.toUpperCase() === 'P';
+
+    // 2. 피드에 투수 정보가 없거나(또는 라인업 변경으로 유효하지 않으면) 현재 로스터에서 'P' 포지션인 선수를 찾음
+    if (!hasValidPitcher) {
       // 로스터 맵을 순회하며 포지션이 P인 선수 찾기
-      for (const [pName, info] of roster.entries()) {
+      for (const [pName, info] of pitchRoster.entries()) {
+        if (!pName || !pName.trim()) continue;
         if (info.pos && info.pos.toUpperCase() === 'P') {
           pitcherName = pName;
           // 피드 처리의 일관성을 위해 currentPitcher 캐시에도 저장
-          currentPitcher[pitchSide] = pName; 
+          currentPitcher[pitchSide] = pName;
           break;
         }
       }
@@ -1190,6 +1703,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
         stat.ab += 1;
         stat.h += 1;
         stat.hr += 1;
+        stat.r += 1;
         if (pitcherStat) {
           pitcherStat.bf += 1;
           pitcherStat.h += 1;
@@ -1235,6 +1749,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
           pitcherStat.outs += 1;
           pitcherStat.so += 1;
         }
+        currentHalfOuts += 1;
         break;
       case 'so_reach':
         stat.pa += 1;
@@ -1252,6 +1767,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
           pitcherStat.bf += 1;
           pitcherStat.outs += 1;
         }
+        currentHalfOuts += 1;
         break;
       case 'sac':
         stat.pa += 1;
@@ -1260,9 +1776,52 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
           pitcherStat.bf += 1;
           pitcherStat.outs += 1;
         }
+        currentHalfOuts += 1;
         break;
       default:
         break;
+    }
+
+    if (kind === 'hr') {
+      creditRunForPitcher(pitcherName ?? null, pitchSide, true);
+      return;
+    }
+
+    if (kind === 'bb' || kind === 'hbp' || kind === 'ci') {
+      const scoredRunner = applyWalkAdvance(name);
+      assignRunnerResponsibility(name, pitchSide);
+      if (scoredRunner) {
+        creditRunForRunner(scoredRunner, pitchSide, true);
+      }
+      return;
+    }
+
+    if (kind === 'single' || kind === 'double' || kind === 'triple' || kind === 'fc' || kind === 'so_reach') {
+      const targetBase = kind === 'double' ? 1 : kind === 'triple' ? 2 : 0;
+      const placed = placeRunnerOnBase(name, targetBase);
+      if (placed.scored) {
+        creditRunForPitcher(pitcherName ?? null, pitchSide, true);
+      } else {
+        assignRunnerResponsibility(name, pitchSide);
+      }
+    }
+  });
+
+  record.events.forEach((event) => {
+    const offenseSide: 'home' | 'away' = event.half === 'top' ? 'away' : 'home';
+    if (event.batter && typeof event.rbi === 'number' && event.rbi > 0) {
+      const batterName = resolveBatterName(event.batter, offenseSide, event.order ?? null);
+      const stat = addStat(offenseSide, batterName);
+      stat.rbi += event.rbi;
+    }
+    if (Array.isArray(event.runners)) {
+      event.runners.forEach((runnerSummary) => {
+        const rawRunner = extractRunnerName(runnerSummary);
+        if (!rawRunner) return;
+        const runnerName = resolveBatterName(rawRunner, offenseSide);
+        const stat = addStat(offenseSide, runnerName);
+        stat.r += 1;
+      });
     }
   });
 
@@ -1277,6 +1836,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
     orderKeys.forEach((order) => {
       const players = orderMap.get(order) ?? [];
       players.forEach((playerName, idx) => {
+        if (dnpPlayers[side].has(playerName)) return;
         const meta = roster.get(playerName);
         const stat = store.get(playerName);
         const base = ensurePlayerStat(playerName, meta?.pos);
@@ -1308,6 +1868,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
         ![...orderMap.values()].some((list) => list.includes(s.name))
     );
     remaining.forEach((stat) => {
+      if (dnpPlayers[side].has(stat.name)) return;
       const meta = roster.get(stat.name);
       rows.push({ ...stat, order: null, isElite: meta?.isElite });
     });
@@ -1315,6 +1876,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
   };
 
   const toPitcherArray = (
+    side: 'home' | 'away',
     roster: Map<string, { pos?: string; order: number; substitutionType?: '대수비' | '대타' | '대주자'; isElite?: boolean }>,
     store: Map<string, PitcherStat>,
     appearance: Map<string, number>
@@ -1325,7 +1887,9 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
     });
     store.forEach((_stat, name) => names.add(name));
 
-    const combined: PitcherStatLine[] = [...names].map((name) => {
+    const combined: PitcherStatLine[] = [...names]
+      .filter((name) => !dnpPlayers[side].has(name))
+      .map((name) => {
       const meta = roster.get(name);
       const base = ensurePitcherStat(name, meta?.pos);
       const stat = store.get(name);
@@ -1359,23 +1923,53 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
       away: toArray('away', rosterAway, statsAway),
     },
     pitchers: {
-      home: toPitcherArray(rosterHome, pitchHome, pitcherAppearance.home),
-      away: toPitcherArray(rosterAway, pitchAway, pitcherAppearance.away),
+      home: toPitcherArray('home', rosterHome, pitchHome, pitcherAppearance.home),
+      away: toPitcherArray('away', rosterAway, pitchAway, pitcherAppearance.away),
     },
   };
 }
 
 export default function ScorekeeperPage() {
   const { state, actions } = useDemoStore();
+  const { matchId } = useParams<{ matchId?: string }>();
+  const navigate = useNavigate();
   const [showMobileWarning, setShowMobileWarning] = useState(false); // 모바일 경고 팝업 상태 관리
+
+  useEffect(() => {
+    actions.setScorerMode(true);
+    return () => actions.setScorerMode(false);
+  }, [actions]);
   const activeMatch = useMemo(
     () => state.matches.find((match) => match.id === state.activeMatchId) ?? null,
     [state.matches, state.activeMatchId],
   );
   const isPracticeMode = (activeMatch?.recordMode ?? 'official') === 'practice';
-  const [selectedMatchId, setSelectedMatchId] = useState(state.activeMatchId ?? '');
+  const [selectedMatchId, setSelectedMatchId] = useState(matchId ?? state.activeMatchId ?? '');
   const homeTeam = useMemo(() => TEAMS.find((t) => t.id === state.homeTeamId), [state.homeTeamId]);
   const awayTeam = useMemo(() => TEAMS.find((t) => t.id === state.awayTeamId), [state.awayTeamId]);
+
+  useEffect(() => {
+    if (matchId) {
+      setSelectedMatchId(matchId);
+    } else if (state.activeMatchId) {
+      setSelectedMatchId(state.activeMatchId);
+    }
+  }, [matchId, state.activeMatchId]);
+
+  useEffect(() => {
+    if (matchId && matchId !== state.activeMatchId) {
+      const matchExists = state.matches.some((m) => m.id === matchId);
+      if (matchExists) {
+        actions.selectMatch(matchId);
+      }
+    }
+  }, [matchId, state.activeMatchId, state.matches, actions]);
+
+  useEffect(() => {
+    if (!matchId && state.activeMatchId) {
+      navigate(`/scorekeeper/${state.activeMatchId}`, { replace: true });
+    }
+  }, [matchId, state.activeMatchId, navigate]);
   const hittingSide: Side = state.half === 'top' ? 'away' : 'home';
   const defenseSide: Side = hittingSide === 'home' ? 'away' : 'home';
   const offenseLineupEntries = state.lineups[hittingSide].map((slot, idx) => ({ slot, idx }));
@@ -1421,6 +2015,7 @@ export default function ScorekeeperPage() {
   });
   const [hitWizard, setHitWizard] = useState<HitWizardState | null>(null);
   const [manualBroadcast, setManualBroadcast] = useState('');
+  const isManualComposingRef = useRef(false);
   const [liveVideoUrlInput, setLiveVideoUrlInput] = useState('');
   const [liveDelayInput, setLiveDelayInput] = useState('');
   const [lockRemainingMs, setLockRemainingMs] = useState(0);
@@ -1439,6 +2034,21 @@ export default function ScorekeeperPage() {
     outsCount: 2 | 3;
     battedBall?: BattedBallDetails | null;
   }>(null);
+  const [droppedThirdStrikeRunnerOutModal, setDroppedThirdStrikeRunnerOutModal] = useState<null | {
+    variant: 'strikeout' | 'reach' | 'tag_out' | 'force_out';
+    strikeType?: 'swinging' | 'looking';
+    runners: { runner: string; baseIndex: 0 | 1 | 2 }[];
+  }>(null);
+  const [runnerAdvanceModal, setRunnerAdvanceModal] = useState<null | {
+    mode: 'ground_out' | 'pickoff' | 'sac_fly';
+    title: string;
+    description: string;
+    outMessage: string;
+    battedBall?: BattedBallDetails | null;
+    pickoffBase?: 0 | 1 | 2;
+    runners: { runner: string; baseIndex: 0 | 1 | 2 }[];
+  }>(null);
+  const [runnerAdvanceSelections, setRunnerAdvanceSelections] = useState<RunnerAdvanceSelections>({});
   const [multipleRunnersOutModal, setMultipleRunnersOutModal] = useState(false);
   const [lastHitWizard, setLastHitWizard] = useState<HitWizardState | null>(null);
   const [errorOnPlayModal, setErrorOnPlayModal] = useState<null | { selections: RunnerAdvanceSelections; batterResult: 'out' | 'hold' | 1 | 2 | 3 | 4; errorType: string; context: string; fielder: string }>(null);
@@ -1456,6 +2066,8 @@ export default function ScorekeeperPage() {
   const isGameStarted = state.gameStarted;
   const isGameOver = state.gameOver;
   const hasActiveMatch = Boolean(state.activeMatchId);
+  const lineupPublic = Boolean(activeMatch?.lineupPublic);
+  const canToggleLineup = hasActiveMatch && !isGameStarted && !isGameOver;
   const LOCK_TTL_MS = 300_000; // UI-side TTL (demoStore와 동일)
   const formatMs = useCallback((ms: number) => {
     const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -1689,6 +2301,72 @@ const handleSelectBattedBallType = (type: string) =>
   const handleSelectFielder = (fielder: string) =>
     setHitWizard((prev) => (prev ? { ...prev, fielder } : prev));
 
+  const openRunnerAdvanceModal = ({
+    mode,
+    outMessage,
+    battedBall,
+    pickoffBase,
+  }: {
+    mode: 'ground_out' | 'pickoff';
+    outMessage: string;
+    battedBall?: BattedBallDetails | null;
+    pickoffBase?: 0 | 1 | 2;
+  }) => {
+    const runners = state.bases
+      .map((runner, idx) => (runner ? { runner, baseIndex: idx as 0 | 1 | 2 } : null))
+      .filter(Boolean) as { runner: string; baseIndex: 0 | 1 | 2 }[];
+    const filtered =
+      mode === 'pickoff' && typeof pickoffBase === 'number'
+        ? runners.filter((entry) => entry.baseIndex !== pickoffBase)
+        : runners;
+    if (!filtered.length || state.outs >= 2) {
+      if (mode === 'ground_out') {
+        actions.addOutWithMessage(outMessage, battedBall);
+      } else if (mode === 'pickoff' && typeof pickoffBase === 'number') {
+        actions.runnerPickoff(pickoffBase);
+      }
+      return;
+    }
+    const initialSelections = filtered.reduce<RunnerAdvanceSelections>((acc, entry) => {
+      acc[entry.baseIndex] = 'hold';
+      return acc;
+    }, {});
+    setRunnerAdvanceSelections(initialSelections);
+    setRunnerAdvanceModal({
+      mode,
+      title: mode === 'ground_out' ? '땅볼 아웃 주자 진루' : '견제사 주자 진루',
+      description: mode === 'ground_out' ? '타자 아웃 후 주자 진루 여부를 선택하세요.' : '견제사 발생 시 다른 주자들의 진루를 선택하세요.',
+      outMessage,
+      battedBall,
+      pickoffBase,
+      runners: filtered,
+    });
+  };
+
+  const openSacFlyAdvanceModal = (outMessage: string, battedBall?: BattedBallDetails | null) => {
+    const runners = state.bases
+      .map((runner, idx) => (runner ? { runner, baseIndex: idx as 0 | 1 | 2 } : null))
+      .filter(Boolean) as { runner: string; baseIndex: 0 | 1 | 2 }[];
+    const eligible = runners.filter((entry) => entry.baseIndex !== 2);
+    if (!eligible.length || state.outs >= 2) {
+      actions.sacFly(battedBall);
+      return;
+    }
+    const initialSelections = eligible.reduce<RunnerAdvanceSelections>((acc, entry) => {
+      acc[entry.baseIndex] = 'hold';
+      return acc;
+    }, {});
+    setRunnerAdvanceSelections(initialSelections);
+    setRunnerAdvanceModal({
+      mode: 'sac_fly',
+      title: '희생플라이 주자 진루',
+      description: '희생플라이 이후 1·2루 주자 진루 여부를 선택하세요.',
+      outMessage,
+      battedBall,
+      runners: eligible,
+    });
+  };
+
   const isHitResult = (result: BattedBallResultAction): result is HitResultAction =>
     ['single', 'single_infield', 'single_bunt', 'double', 'double_ground', 'triple', 'hr'].includes(
       result as HitResultAction,
@@ -1750,13 +2428,17 @@ const handleConfirmHitWizard = () => {
         actions.catcherInterference();
         break;
       case 'sac_fly':
-        actions.sacFly(details);
+        openSacFlyAdvanceModal(`희생플라이${zoneNote}${fielderNote}`, details);
         break;
       case 'sac_bunt':
         actions.sacBunt(details);
         break;
       case 'out_ground':
-        actions.addOutWithMessage(`땅볼 아웃${zoneNote}${fielderNote}`, details);
+        openRunnerAdvanceModal({
+          mode: 'ground_out',
+          outMessage: `땅볼 아웃${zoneNote}${fielderNote}`,
+          battedBall: details,
+        });
         break;
       case 'out_fly':
         actions.addOutWithMessage(`뜬공 아웃${zoneNote}${fielderNote}`, details);
@@ -1818,18 +2500,13 @@ const handleConfirmHitWizard = () => {
       return;
     }
 
-    if (action === 'strike' && state.strikes >= 2) {
-      setShowStrikeOutTypeModal(true);
-      setHitWizard(null);
-      return;
-    }
-
     switch (action) {
       case 'ball':
         actions.addBall();
         break;
       case 'strike':
-        actions.addStrike();
+        setShowStrikeOutTypeModal(true);
+        setHitWizard(null);
         break;
       case 'foul':
         setShowFoulTypeModal(true);
@@ -1859,7 +2536,11 @@ const handleConfirmHitWizard = () => {
         actions.catcherInterference();
         break;
       case 'out_ground':
-        actions.addOutWithMessage('땅볼 아웃', battedBallDetails);
+        openRunnerAdvanceModal({
+          mode: 'ground_out',
+          outMessage: '땅볼 아웃',
+          battedBall: battedBallDetails,
+        });
         break;
       case 'out_fly':
         actions.addOutWithMessage('뜬공 아웃', battedBallDetails);
@@ -1895,7 +2576,7 @@ const handleConfirmHitWizard = () => {
         actions.addOutWithMessage('기타 아웃', battedBallDetails);
         break;
       case 'sac':
-        actions.sacFly(battedBallDetails);
+        openSacFlyAdvanceModal('희생플라이', battedBallDetails);
         break;
       case 'resetCount':
         actions.resetCount();
@@ -1936,6 +2617,8 @@ const handleConfirmHitWizard = () => {
         showStrikeOutTypeModal ||
         showFoulTypeModal ||
         showDroppedThirdStrike ||
+        runnerAdvanceModal ||
+        droppedThirdStrikeRunnerOutModal ||
         errorOnPlayModal ||
         doublePlayModal ||
         positionSwapModal
@@ -1965,12 +2648,8 @@ const handleConfirmHitWizard = () => {
           break;
         case '2':
           e.preventDefault();
-          if (state.strikes >= 2) {
-            setShowStrikeOutTypeModal(true);
-            setHitWizard(null);
-          } else {
-            actions.addStrike();
-          }
+          setShowStrikeOutTypeModal(true);
+          setHitWizard(null);
           break;
         case '3':
           e.preventDefault();
@@ -1983,6 +2662,10 @@ const handleConfirmHitWizard = () => {
         case '5':
           e.preventDefault();
           setShowFoulTypeModal(true);
+          break;
+        case 'Escape':
+          e.preventDefault();
+          if (canUndo) actions.undo();
           break;
       }
     };
@@ -1998,10 +2681,13 @@ const handleConfirmHitWizard = () => {
     showStrikeOutTypeModal,
     showFoulTypeModal,
     showDroppedThirdStrike,
+    droppedThirdStrikeRunnerOutModal,
+    runnerAdvanceModal,
     errorOnPlayModal,
     doublePlayModal,
     positionSwapModal,
     actions,
+    canUndo,
     state.strikes,
     openHitWizardFlow,
   ]);
@@ -2029,6 +2715,7 @@ const handleConfirmHitWizard = () => {
   };
 
   const handleManualSubmit = () => {
+    if (isManualComposingRef.current) return;
     const text = manualBroadcast.trim();
     if (!text) return;
     actions.addManualLog(text);
@@ -2056,6 +2743,16 @@ const handleConfirmHitWizard = () => {
     }
   };
 
+  const handleToggleLineupPublic = () => {
+    if (!activeMatch || lockedByOther) return;
+    actions.updateMatch(activeMatch.id, { lineupPublic: !lineupPublic });
+  };
+
+  const handleSaveLineups = () => {
+    if (!activeMatch || lockedByOther) return;
+    actions.saveMatchLineups(activeMatch.id, state.lineups, state.benches);
+  };
+
   const handleStartGame = () => {
     if (!hasActiveMatch || isGameStarted || isGameOver || lockedByOther) return;
     setHitWizard(null);
@@ -2063,16 +2760,27 @@ const handleConfirmHitWizard = () => {
     actions.startGame();
   };
 
-  const handleStrikeOutType = (type: 'swinging' | 'looking') => {
+  const handleStrikeTypeSelect = (type: 'swinging' | 'looking') => {
     setShowStrikeOutTypeModal(false);
-    setPendingStrikeType(type);
-    setShowDroppedThirdStrike(true);
+    if (state.strikes >= 2) {
+      setPendingStrikeType(type);
+      setShowDroppedThirdStrike(true);
+    } else {
+      actions.addStrike(type);
+    }
   };
 
-  const handleDroppedThirdStrike = (variant: 'strikeout' | 'reach' | 'tag_out') => {
+  const handleDroppedThirdStrike = (variant: 'strikeout' | 'reach' | 'tag_out' | 'force_out') => {
     setShowDroppedThirdStrike(false);
     const strikeType = pendingStrikeType ?? undefined;
     setPendingStrikeType(null);
+    const runners = state.bases
+      .map((runner, idx) => (runner ? { runner, baseIndex: idx as 0 | 1 | 2 } : null))
+      .filter(Boolean) as { runner: string; baseIndex: 0 | 1 | 2 }[];
+    if (runners.length) {
+      setDroppedThirdStrikeRunnerOutModal({ variant, strikeType, runners });
+      return;
+    }
     actions.droppedThirdStrike(variant, strikeType);
   };
 
@@ -2159,7 +2867,11 @@ const handleConfirmHitWizard = () => {
             </select>
             <button
               type="button"
-              onClick={() => actions.selectMatch(selectedMatchId || null)}
+              onClick={() => {
+                if (!selectedMatchId) return;
+                actions.selectMatch(selectedMatchId);
+                navigate(`/scorekeeper/${selectedMatchId}`);
+              }}
               style={{
                 padding: '8px 14px',
                 borderRadius: '999px',
@@ -2181,6 +2893,7 @@ const handleConfirmHitWizard = () => {
             <span>선택된 경기: {activeMatch.awayTeamName} vs {activeMatch.homeTeamName}</span>
             <span>일시: {formatDateTimeLabel(activeMatch.startTime)}</span>
             <span>라인업: {activeMatch.lineups ? '사전 저장됨' : '미저장'}</span>
+            <span>라인업 공개: {activeMatch.lineupPublic ? '공개됨' : '비공개'}</span>
           </div>
         ) : (
           <span style={{ color: '#fbbf24', fontSize: '13px' }}>현재 선택된 경기가 없습니다.</span>
@@ -2428,27 +3141,93 @@ const handleConfirmHitWizard = () => {
                       </>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleStartGame}
-                    disabled={isGameOver || isGameStarted || lockedByOther}
-                    style={{
-                      padding: '10px 12px',
-                      borderRadius: '10px',
-                      border: '1px solid rgba(16,185,129,0.5)',
-                      background: isGameStarted
-                        ? 'rgba(148,163,184,0.16)'
-                        : 'linear-gradient(90deg, #10b981, #0ea5e9)',
-                      color: isGameStarted ? '#cbd5e1' : '#0b0f1a',
-                      fontWeight: 900,
-                      fontSize: '13px',
-                      cursor: isGameOver || isGameStarted ? 'not-allowed' : 'pointer',
-                      opacity: isGameOver ? 0.6 : 1,
-                      boxShadow: isGameStarted ? 'none' : '0 10px 20px rgba(16,185,129,0.22)',
-                    }}
-                  >
-                    {isGameStarted ? '경기 진행 중' : '경기 시작'}
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {hasActiveMatch && (
+                      <span
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: '999px',
+                          border: lineupPublic ? '1px solid rgba(34,197,94,0.5)' : '1px solid rgba(148,163,184,0.5)',
+                          background: lineupPublic ? 'rgba(34,197,94,0.12)' : 'rgba(148,163,184,0.12)',
+                          color: lineupPublic ? '#86efac' : '#cbd5e1',
+                          fontWeight: 900,
+                          fontSize: '12px',
+                        }}
+                      >
+                        {lineupPublic ? '라인업 공개됨' : '라인업 비공개'}
+                      </span>
+                    )}
+                    {!isGameStarted && (
+                      <button
+                        type="button"
+                        onClick={handleToggleLineupPublic}
+                        disabled={!canToggleLineup || lockedByOther}
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: '10px',
+                          border: lineupPublic ? '1px solid rgba(248,113,113,0.5)' : '1px solid rgba(59,130,246,0.5)',
+                          background: lineupPublic
+                            ? 'linear-gradient(90deg, #f97316, #ef4444)'
+                            : 'linear-gradient(90deg, #38bdf8, #6366f1)',
+                          color: '#0b0f1a',
+                          fontWeight: 900,
+                          fontSize: '13px',
+                          cursor: !canToggleLineup || lockedByOther ? 'not-allowed' : 'pointer',
+                          opacity: !canToggleLineup || lockedByOther ? 0.6 : 1,
+                          boxShadow: lineupPublic ? '0 10px 20px rgba(239,68,68,0.22)' : '0 10px 20px rgba(59,130,246,0.22)',
+                        }}
+                        title={
+                          !canToggleLineup
+                            ? '경기 시작 전까지만 전환할 수 있습니다'
+                            : lineupPublic
+                              ? '라인업 비공개로 전환'
+                              : '라인업 공개'
+                        }
+                      >
+                        {lineupPublic ? '라인업 비공개' : '라인업 공개'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleSaveLineups}
+                      disabled={!hasActiveMatch || lockedByOther}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(16,185,129,0.45)',
+                        background: 'rgba(16,185,129,0.14)',
+                        color: '#34d399',
+                        fontWeight: 900,
+                        fontSize: '13px',
+                        cursor: !hasActiveMatch || lockedByOther ? 'not-allowed' : 'pointer',
+                        opacity: !hasActiveMatch || lockedByOther ? 0.6 : 1,
+                      }}
+                      title="라인업을 경기 일정에 저장"
+                    >
+                      라인업 저장
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleStartGame}
+                      disabled={isGameOver || isGameStarted || lockedByOther}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(16,185,129,0.5)',
+                        background: isGameStarted
+                          ? 'rgba(148,163,184,0.16)'
+                          : 'linear-gradient(90deg, #10b981, #0ea5e9)',
+                        color: isGameStarted ? '#cbd5e1' : '#0b0f1a',
+                        fontWeight: 900,
+                        fontSize: '13px',
+                        cursor: isGameOver || isGameStarted ? 'not-allowed' : 'pointer',
+                        opacity: isGameOver ? 0.6 : 1,
+                        boxShadow: isGameStarted ? 'none' : '0 10px 20px rgba(16,185,129,0.22)',
+                      }}
+                    >
+                      {isGameStarted ? '경기 진행 중' : '경기 시작'}
+                    </button>
+                  </div>
                 </div>
 
                 {/* 하단: 락 설명 + 카운트다운 + 잠금 해제 한 줄 배치 */}
@@ -2615,9 +3394,16 @@ const handleConfirmHitWizard = () => {
               <textarea
                 value={manualBroadcast}
                 onChange={(e) => setManualBroadcast(e.target.value)}
+                onCompositionStart={() => {
+                  isManualComposingRef.current = true;
+                }}
+                onCompositionEnd={() => {
+                  isManualComposingRef.current = false;
+                }}
                 onKeyDown={(e) => {
                   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') return;
                   if (e.key === 'Enter') {
+                    if (e.nativeEvent.isComposing || isManualComposingRef.current) return;
                     e.preventDefault();
                     handleManualSubmit();
                   }
@@ -2962,8 +3748,8 @@ const handleConfirmHitWizard = () => {
           gap: '12px',
         }}
       >
-        <RemovedPlayersPanel title="교체 out (AWAY)" players={state.removed.away} density="regular" />
-        <RemovedPlayersPanel title="교체 out (HOME)" players={state.removed.home} density="regular" />
+        <RemovedPlayersPanel title={`교체 out (${state.teamNames.away || 'AWAY'})`} players={state.removed.away} density="regular" />
+        <RemovedPlayersPanel title={`교체 out (${state.teamNames.home || 'HOME'})`} players={state.removed.home} density="regular" />
       </div>
 
       {hitWizard && (
@@ -2985,6 +3771,13 @@ const handleConfirmHitWizard = () => {
           onClose={() => setActionModal(null)}
           actions={actions}
           bases={state.bases}
+          onRunnerPickoffWithAdvance={(baseIndex) =>
+            openRunnerAdvanceModal({
+              mode: 'pickoff',
+              outMessage: '견제사',
+              pickoffBase: baseIndex,
+            })
+          }
           bench={actionModal.role === 'fielder' ? state.benches[defenseSide] : state.benches[hittingSide]}
           lineup={actionModal.role === 'fielder' ? state.lineups[defenseSide] : state.lineups[hittingSide]}
         />
@@ -3099,11 +3892,50 @@ const handleConfirmHitWizard = () => {
           }}
         />
       )}
+      {runnerAdvanceModal && (
+        <RunnerAdvanceModal
+          title={runnerAdvanceModal.title}
+          description={runnerAdvanceModal.description}
+          runners={runnerAdvanceModal.runners}
+          selections={runnerAdvanceSelections}
+          onChangeSelections={setRunnerAdvanceSelections}
+          onClose={() => {
+            setRunnerAdvanceModal(null);
+            setRunnerAdvanceSelections({});
+          }}
+          onSkip={() => {
+            if (runnerAdvanceModal.mode === 'ground_out') {
+              actions.addOutWithMessage(runnerAdvanceModal.outMessage, runnerAdvanceModal.battedBall);
+            } else if (runnerAdvanceModal.mode === 'pickoff' && typeof runnerAdvanceModal.pickoffBase === 'number') {
+              actions.runnerPickoff(runnerAdvanceModal.pickoffBase);
+            } else if (runnerAdvanceModal.mode === 'sac_fly') {
+              actions.sacFly(runnerAdvanceModal.battedBall);
+            }
+            setRunnerAdvanceModal(null);
+            setRunnerAdvanceSelections({});
+          }}
+          onConfirm={() => {
+            if (runnerAdvanceModal.mode === 'ground_out') {
+              actions.addOutWithMessage(runnerAdvanceModal.outMessage, runnerAdvanceModal.battedBall);
+              actions.advanceRunners(runnerAdvanceSelections, runnerAdvanceModal.outMessage, true);
+            } else if (runnerAdvanceModal.mode === 'pickoff' && typeof runnerAdvanceModal.pickoffBase === 'number') {
+              actions.runnerPickoff(runnerAdvanceModal.pickoffBase);
+              actions.advanceRunners(runnerAdvanceSelections, runnerAdvanceModal.outMessage, true);
+            } else if (runnerAdvanceModal.mode === 'sac_fly') {
+              actions.sacFly(runnerAdvanceModal.battedBall);
+              actions.advanceRunners(runnerAdvanceSelections, runnerAdvanceModal.outMessage, true);
+            }
+            setRunnerAdvanceModal(null);
+            setRunnerAdvanceSelections({});
+          }}
+        />
+      )}
       {showStrikeOutTypeModal && (
         <StrikeOutTypeModal
           batterName={currentBatter}
+          isThirdStrike={state.strikes >= 2}
           onClose={() => setShowStrikeOutTypeModal(false)}
-          onSelect={handleStrikeOutType}
+          onSelect={handleStrikeTypeSelect}
         />
       )}
       {showFoulTypeModal && (
@@ -3125,6 +3957,26 @@ const handleConfirmHitWizard = () => {
             setPendingStrikeType(null);
           }}
           onSelect={(variant) => handleDroppedThirdStrike(variant)}
+        />
+      )}
+      {droppedThirdStrikeRunnerOutModal && (
+        <DroppedThirdStrikeRunnerOutModal
+          runners={droppedThirdStrikeRunnerOutModal.runners}
+          onClose={() => {
+            actions.droppedThirdStrike(
+              droppedThirdStrikeRunnerOutModal.variant,
+              droppedThirdStrikeRunnerOutModal.strikeType,
+            );
+            setDroppedThirdStrikeRunnerOutModal(null);
+          }}
+          onConfirm={(selectedRunners) => {
+            actions.droppedThirdStrike(
+              droppedThirdStrikeRunnerOutModal.variant,
+              droppedThirdStrikeRunnerOutModal.strikeType,
+              selectedRunners,
+            );
+            setDroppedThirdStrikeRunnerOutModal(null);
+          }}
         />
       )}
 
@@ -4244,6 +5096,169 @@ function MultipleRunnersOutModal({
   );
 }
 
+function RunnerAdvanceModal({
+  title,
+  description,
+  runners,
+  selections,
+  onChangeSelections,
+  onConfirm,
+  onSkip,
+  onClose,
+}: {
+  title: string;
+  description: string;
+  runners: { runner: string; baseIndex: 0 | 1 | 2 }[];
+  selections: RunnerAdvanceSelections;
+  onChangeSelections: (next: RunnerAdvanceSelections) => void;
+  onConfirm: () => void;
+  onSkip: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'grid',
+        placeItems: 'center',
+        zIndex: 1000,
+        padding: '20px',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: '#1e293b',
+          borderRadius: '20px',
+          border: '1px solid rgba(148,163,184,0.25)',
+          maxWidth: '540px',
+          width: '100%',
+          maxHeight: '90vh',
+          overflow: 'auto',
+        }}
+      >
+        <div
+          style={{
+            padding: '20px 24px',
+            borderBottom: '1px solid rgba(148,163,184,0.2)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <h3 style={{ fontSize: '18px', fontWeight: 900, color: '#f8fafc', margin: 0 }}>
+            {title}
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: 'rgba(148,163,184,0.2)',
+              border: 'none',
+              color: '#e2e8f0',
+              borderRadius: '8px',
+              padding: '6px 10px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: 700,
+            }}
+          >
+            취소
+          </button>
+        </div>
+        <div style={{ padding: '24px' }}>
+          <p style={{ color: '#cbd5e1', fontSize: '14px', marginBottom: '16px', marginTop: 0 }}>
+            {description}
+          </p>
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {runners.map((entry) => (
+              <div
+                key={`${entry.baseIndex}-${entry.runner}`}
+                style={{
+                  padding: '12px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(148,163,184,0.25)',
+                  background: 'rgba(15,23,42,0.6)',
+                  display: 'grid',
+                  gap: '10px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 900 }}>
+                    {baseLabelForIndex(entry.baseIndex)} 주자 · {entry.runner}
+                  </span>
+                  <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>기본: 정지</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
+                  {buildRunnerOutcomeOptions(entry.baseIndex).map((option) => {
+                    const isSelected = selections[entry.baseIndex] === option.value;
+                    return (
+                      <button
+                        key={`${entry.baseIndex}-${option.value}`}
+                        type="button"
+                        onClick={() => onChangeSelections({ ...selections, [entry.baseIndex]: option.value })}
+                        style={{
+                          padding: '8px 10px',
+                          borderRadius: '10px',
+                          border: isSelected ? `1px solid ${option.color}` : '1px solid rgba(148,163,184,0.25)',
+                          background: isSelected ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)',
+                          color: option.color,
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'grid', gap: '8px', marginTop: '16px' }}>
+            <button
+              type="button"
+              onClick={onSkip}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '10px',
+                border: '1px solid rgba(148,163,184,0.35)',
+                background: 'transparent',
+                color: '#cbd5e1',
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              진루 없음
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '10px',
+                border: 'none',
+                background: 'linear-gradient(90deg, #2563eb, #1d4ed8)',
+                color: '#fff',
+                fontWeight: 900,
+                cursor: 'pointer',
+              }}
+            >
+              확인
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HitAdvanceModal({
   bases,
   basesState,
@@ -4904,13 +5919,45 @@ function ErrorOnPlayModal({
 
 function StrikeOutTypeModal({
   batterName,
+  isThirdStrike,
   onClose,
   onSelect,
 }: {
   batterName: string;
+  isThirdStrike: boolean;
   onClose: () => void;
   onSelect: (type: 'swinging' | 'looking') => void;
 }) {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      const activeElement = document.activeElement;
+      if (
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement ||
+        activeElement instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key === '1') {
+        event.preventDefault();
+        onSelect('swinging');
+        return;
+      }
+      if (event.key === '2') {
+        event.preventDefault();
+        onSelect('looking');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, onSelect]);
+
   return (
     <div
       style={{
@@ -4939,9 +5986,12 @@ function StrikeOutTypeModal({
         }}
       >
         <div style={{ display: 'grid', gap: '4px' }}>
-          <span style={{ fontWeight: 900 }}>삼진 유형 선택</span>
+          <span style={{ fontWeight: 900 }}>{isThirdStrike ? '삼진 유형 선택' : '스트라이크 유형 선택'}</span>
           <span style={{ color: '#94a3b8', fontWeight: 700 }}>
-            {batterName} · 삼진 유형을 선택하세요.
+            {batterName} · {isThirdStrike ? '삼진 유형을 선택하세요.' : '헛스윙/루킹을 선택하세요.'}
+          </span>
+          <span style={{ color: '#64748b', fontWeight: 700, fontSize: '12px' }}>
+            단축키: 1=헛스윙 · 2=루킹 · Esc=취소
           </span>
         </div>
         <div style={{ display: 'grid', gap: '10px' }}>
@@ -4960,7 +6010,10 @@ function StrikeOutTypeModal({
               textAlign: 'left',
             }}
           >
-            <div>헛스윙 삼진 (K)</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <span>{isThirdStrike ? '헛스윙 삼진 (K)' : '헛스윙 스트라이크'}</span>
+              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>(1)</span>
+            </div>
             <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>배트를 휘둘러 스트라이크</div>
           </button>
           <button
@@ -4978,7 +6031,10 @@ function StrikeOutTypeModal({
               textAlign: 'left',
             }}
           >
-            <div>루킹 삼진 (Kc)</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <span>{isThirdStrike ? '루킹 삼진 (Kc)' : '루킹 스트라이크'}</span>
+              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>(2)</span>
+            </div>
             <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>배트를 휘두르지 않고 스트라이크</div>
           </button>
           <button
@@ -4995,7 +6051,10 @@ function StrikeOutTypeModal({
               cursor: 'pointer',
             }}
           >
-            취소
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <span>취소</span>
+              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>(Esc)</span>
+            </span>
           </button>
         </div>
       </div>
@@ -5015,6 +6074,36 @@ function FoulTypeModal({
   onSelect: (isBunt: boolean) => void;
 }) {
   const isTwoStrikes = strikes >= 2;
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      const activeElement = document.activeElement;
+      if (
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement ||
+        activeElement instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key === '1') {
+        event.preventDefault();
+        onSelect(false);
+        return;
+      }
+      if (event.key === '2') {
+        event.preventDefault();
+        onSelect(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, onSelect]);
+
   return (
     <div
       style={{
@@ -5047,6 +6136,9 @@ function FoulTypeModal({
           <span style={{ color: '#94a3b8', fontWeight: 700 }}>
             {batterName} · 파울 유형을 선택하세요.
           </span>
+          <span style={{ color: '#64748b', fontWeight: 700, fontSize: '12px' }}>
+            단축키: 1=타격 파울 · 2=번트 파울 · Esc=취소
+          </span>
         </div>
         <div style={{ display: 'grid', gap: '10px' }}>
           <button
@@ -5064,7 +6156,10 @@ function FoulTypeModal({
               textAlign: 'left',
             }}
           >
-            <div>타격 파울</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <span>타격 파울</span>
+              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>(1)</span>
+            </div>
             <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>
               {isTwoStrikes ? '2스트라이크 이후 파울 (카운트 유지)' : '스트라이크 카운트 +1'}
             </div>
@@ -5084,7 +6179,10 @@ function FoulTypeModal({
               textAlign: 'left',
             }}
           >
-            <div>번트 파울{isTwoStrikes && ' (쓰리번트 아웃)'}</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <span>번트 파울{isTwoStrikes && ' (쓰리번트 아웃)'}</span>
+              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>(2)</span>
+            </div>
             <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>
               {isTwoStrikes ? '2스트라이크 이후 번트 파울 → 삼진 아웃' : '스트라이크 카운트 +1'}
             </div>
@@ -5103,7 +6201,10 @@ function FoulTypeModal({
               cursor: 'pointer',
             }}
           >
-            취소
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <span>취소</span>
+              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>(Esc)</span>
+            </span>
           </button>
         </div>
       </div>
@@ -5118,7 +6219,7 @@ function DroppedThirdStrikeModal({
 }: {
   batterName: string;
   onClose: () => void;
-  onSelect: (variant: 'strikeout' | 'reach' | 'tag_out') => void;
+  onSelect: (variant: 'strikeout' | 'reach' | 'tag_out' | 'force_out') => void;
 }) {
   return (
     <div
@@ -5204,6 +6305,22 @@ function DroppedThirdStrikeModal({
           </button>
           <button
             type="button"
+            onClick={() => onSelect('force_out')}
+            style={{
+              width: '100%',
+              borderRadius: '12px',
+              border: '1px solid rgba(148,163,184,0.5)',
+              background: 'rgba(148,163,184,0.15)',
+              color: '#e2e8f0',
+              fontWeight: 800,
+              padding: '10px 12px',
+              cursor: 'pointer',
+            }}
+          >
+            낫아웃 실패(1루 포스)
+          </button>
+          <button
+            type="button"
             onClick={onClose}
             style={{
               width: '100%',
@@ -5218,6 +6335,173 @@ function DroppedThirdStrikeModal({
           >
             취소
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DroppedThirdStrikeRunnerOutModal({
+  runners,
+  onClose,
+  onConfirm,
+}: {
+  runners: { runner: string; baseIndex: 0 | 1 | 2 }[];
+  onClose: () => void;
+  onConfirm: (selectedRunners: string[]) => void;
+}) {
+  const [selected, setSelected] = useState<string[]>([]);
+
+  const toggleRunner = (name: string) => {
+    if (selected.includes(name)) {
+      setSelected(selected.filter((entry) => entry !== name));
+    } else {
+      setSelected([...selected, name]);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'grid',
+        placeItems: 'center',
+        zIndex: 1000,
+        padding: '20px',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: '#1e293b',
+          borderRadius: '20px',
+          border: '1px solid rgba(148,163,184,0.25)',
+          maxWidth: '520px',
+          width: '100%',
+          maxHeight: '90vh',
+          overflow: 'auto',
+        }}
+      >
+        <div
+          style={{
+            padding: '20px 24px',
+            borderBottom: '1px solid rgba(148,163,184,0.2)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <h3 style={{ fontSize: '18px', fontWeight: 900, color: '#f8fafc', margin: 0 }}>
+            낫아웃 주자 아웃 선택
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: 'rgba(148,163,184,0.2)',
+              border: 'none',
+              color: '#e2e8f0',
+              borderRadius: '8px',
+              padding: '6px 10px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: 700,
+            }}
+          >
+            닫기
+          </button>
+        </div>
+        <div style={{ padding: '24px' }}>
+          <p style={{ color: '#cbd5e1', fontSize: '14px', marginBottom: '16px', marginTop: 0 }}>
+            아웃된 주자가 있으면 선택하세요. 없으면 '없음'으로 진행됩니다.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+            {runners.map((entry) => {
+              const isSelected = selected.includes(entry.runner);
+              return (
+                <button
+                  key={`${entry.baseIndex}-${entry.runner}`}
+                  type="button"
+                  onClick={() => toggleRunner(entry.runner)}
+                  style={{
+                    padding: '16px',
+                    borderRadius: '12px',
+                    border: isSelected ? '2px solid #ef4444' : '1px solid rgba(148,163,184,0.3)',
+                    background: isSelected ? 'rgba(239,68,68,0.15)' : 'rgba(15,23,42,0.6)',
+                    color: isSelected ? '#fca5a5' : '#e2e8f0',
+                    fontWeight: 700,
+                    fontSize: '15px',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      border: isSelected ? '2px solid #ef4444' : '2px solid rgba(148,163,184,0.4)',
+                      background: isSelected ? '#ef4444' : 'transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '12px',
+                    }}
+                  >
+                    {isSelected && '✓'}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '4px' }}>
+                      {baseLabelForIndex(entry.baseIndex)} 주자
+                    </div>
+                    <div style={{ fontSize: '16px', fontWeight: 900 }}>{entry.runner}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ display: 'grid', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={() => onConfirm([])}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '10px',
+                border: '1px solid rgba(148,163,184,0.35)',
+                background: 'transparent',
+                color: '#cbd5e1',
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              없음
+            </button>
+            <button
+              type="button"
+              onClick={() => onConfirm(selected)}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '10px',
+                border: 'none',
+                background: 'linear-gradient(90deg, #ef4444, #dc2626)',
+                color: '#fff',
+                fontWeight: 900,
+                cursor: 'pointer',
+                opacity: selected.length ? 1 : 0.8,
+              }}
+            >
+              {selected.length ? `주자 ${selected.length}명 아웃 기록` : '확인'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -5271,6 +6555,129 @@ function HitWizardModal({
 
   const primaryLabel = isZoneStep ? (isFinalStep ? '기록하기' : '다음') : isFinalStep ? '기록하기' : '다음';
   const primaryAction = isZoneStep ? onConfirm : isFinalStep ? onConfirm : onNext;
+  const formatShortcutHint = (index?: number | null) => {
+    if (index == null || index < 0 || index > 9) return null;
+    return index === 9 ? '0' : String(index + 1);
+  };
+  const resultOptionsOrdered = (() => {
+    const ordered: BattedBallResultAction[] = [];
+    battedBallResultGroups.forEach((group) => {
+      battedBallResultOptions
+        .filter((option) => option.group === group.key)
+        .forEach((option) => ordered.push(option.value));
+    });
+    return ordered;
+  })();
+  const outFlyStartIndex = resultOptionsOrdered.findIndex((option) => option === 'out_fly');
+  const letterKeys = ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'];
+  const resultShortcutMap = (() => {
+    const map = new Map<BattedBallResultAction, string | null>();
+    resultOptionsOrdered.forEach((option, idx) => {
+      if (outFlyStartIndex !== -1 && idx >= outFlyStartIndex) {
+        const key = letterKeys[idx - outFlyStartIndex];
+        map.set(option, key ? key.toUpperCase() : null);
+      } else {
+        map.set(option, formatShortcutHint(idx));
+      }
+    });
+    return map;
+  })();
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      const activeElement = document.activeElement;
+      if (
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement ||
+        activeElement instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key === 'Backspace' || event.key === 'ArrowLeft') {
+        if (state.step !== 'result') {
+          event.preventDefault();
+          onBack();
+        }
+        return;
+      }
+      if (event.key === 'Enter') {
+        if (!primaryDisabled) {
+          event.preventDefault();
+          primaryAction();
+        }
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (state.step === 'result') {
+        const actionMap = new Map<string, () => void>();
+        resultOptionsOrdered.forEach((option, idx) => {
+          const numKey = formatShortcutHint(idx);
+          if (numKey) {
+            actionMap.set(numKey, () => onSelectResult(option));
+          }
+          if (outFlyStartIndex !== -1 && idx >= outFlyStartIndex) {
+            const letterKey = letterKeys[idx - outFlyStartIndex];
+            if (letterKey) {
+              actionMap.set(letterKey, () => onSelectResult(option));
+            }
+          }
+        });
+        const action = actionMap.get(key);
+        if (action) {
+          event.preventDefault();
+          action();
+        }
+        return;
+      }
+
+      if (!/^[0-9]$/.test(key)) return;
+      const index = key === '0' ? 9 : Number(key) - 1;
+      const actions: Array<() => void> = [];
+      if (state.step === 'type') {
+        if (state.result) {
+          if (!isInfieldFlyResult(state.result)) {
+            getTypeOptionsForResult(state.result).forEach((option) => actions.push(() => onSelectType(option)));
+          }
+          const fielderList = getFielderOptionsForResult(state.result);
+          if (fielderList) {
+            fielderList.forEach((option) => actions.push(() => onSelectFielder(option)));
+          }
+        }
+      } else if (state.step === 'zone') {
+        getZoneOptionsForResult(state.result).forEach((option) => actions.push(() => onSelectZone(option)));
+      }
+      const action = actions[index];
+      if (action) {
+        event.preventDefault();
+        action();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    onBack,
+    onClose,
+    onConfirm,
+    onNext,
+    onSelectFielder,
+    onSelectResult,
+    onSelectType,
+    onSelectZone,
+    primaryAction,
+    primaryDisabled,
+    letterKeys,
+    resultOptionsOrdered,
+    outFlyStartIndex,
+    formatShortcutHint,
+    state.result,
+    state.step,
+  ]);
 
   const renderStep = () => {
     if (state.step === 'result') {
@@ -5287,6 +6694,7 @@ function HitWizardModal({
                     {options.map((option) => {
                       const isSelected = state.result === option.value;
                       const outlineColor = option.group === 'out' ? '#ef4444' : option.color;
+                      const shortcutHint = resultShortcutMap.get(option.value);
                       return (
                         <button
                           key={option.value}
@@ -5304,7 +6712,14 @@ function HitWizardModal({
                             cursor: 'pointer',
                           }}
                         >
-                          <div>{option.label}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                            <span>{option.label}</span>
+                            {shortcutHint ? (
+                              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>
+                                ({shortcutHint})
+                              </span>
+                            ) : null}
+                          </div>
                           <div style={{ color: '#cbd5e1', fontSize: '12px', fontWeight: 700 }}>{option.helper}</div>
                         </button>
                       );
@@ -5323,6 +6738,17 @@ function HitWizardModal({
 
     if (state.step === 'type') {
       const options = getTypeOptionsForResult(state.result);
+      const shortcutOptions: string[] = [];
+      if (state.result && !isInfieldFlyResult(state.result)) {
+        shortcutOptions.push(...options);
+      }
+      if (fielderOptions) {
+        shortcutOptions.push(...fielderOptions);
+      }
+      const optionShortcutMap = new Map<string, string | null>();
+      shortcutOptions.forEach((option, idx) => {
+        optionShortcutMap.set(option, formatShortcutHint(idx));
+      });
       return (
         <div style={{ display: 'grid', gap: '10px' }}>
           <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '14px' }}>
@@ -5340,12 +6766,12 @@ function HitWizardModal({
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
                   {options.map((option) => {
                     const isSelected = state.type === option;
-                    return (
-                      <button
-                        key={option}
-                        type="button"
-                        onClick={() => onSelectType(option)}
-                        style={{
+                      return (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => onSelectType(option)}
+                          style={{
                           padding: '10px',
                           borderRadius: '10px',
                           border: isSelected ? '1px solid rgba(59,130,246,0.6)' : '1px solid rgba(148,163,184,0.25)',
@@ -5354,12 +6780,19 @@ function HitWizardModal({
                           fontWeight: 800,
                           cursor: 'pointer',
                           boxShadow: isSelected ? '0 0 0 1px rgba(59,130,246,0.35)' : 'none',
-                        }}
-                      >
-                        {option}
-                      </button>
-                    );
-                  })}
+                          }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                            <span>{option}</span>
+                            {optionShortcutMap.get(option) ? (
+                              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>
+                                ({optionShortcutMap.get(option)})
+                              </span>
+                            ) : null}
+                          </span>
+                        </button>
+                      );
+                    })}
                 </div>
               )}
               {fielderOptions ? (
@@ -5386,7 +6819,14 @@ function HitWizardModal({
                             boxShadow: isSelected ? '0 0 0 1px rgba(239,68,68,0.35)' : 'none',
                           }}
                         >
-                          {option}
+                          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                            <span>{option}</span>
+                            {optionShortcutMap.get(option) ? (
+                              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>
+                                ({optionShortcutMap.get(option)})
+                              </span>
+                            ) : null}
+                          </span>
                         </button>
                       );
                     })}
@@ -5410,8 +6850,9 @@ function HitWizardModal({
       <div style={{ display: 'grid', gap: '10px' }}>
         <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '14px' }}>타구가 향한 방향을 선택하세요.</span>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
-          {zoneOptions.map((option) => {
+          {zoneOptions.map((option, idx) => {
             const isSelected = state.zone === option;
+            const shortcutHint = formatShortcutHint(idx);
             return (
               <button
                 key={option}
@@ -5428,7 +6869,14 @@ function HitWizardModal({
                   boxShadow: isSelected ? '0 0 0 1px rgba(52,211,153,0.35)' : 'none',
                 }}
               >
-                {option}
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                  <span>{option}</span>
+                  {shortcutHint ? (
+                    <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>
+                      ({shortcutHint})
+                    </span>
+                  ) : null}
+                </span>
               </button>
             );
           })}
@@ -5469,6 +6917,9 @@ function HitWizardModal({
           <div style={{ display: 'grid', gap: '4px' }}>
             <span style={{ fontWeight: 900 }}>타격 기록</span>
             <span style={{ color: '#94a3b8', fontWeight: 700 }}>결과 → 유형 → 방향 순서로 안내합니다.</span>
+            <span style={{ color: '#64748b', fontWeight: 700, fontSize: '12px' }}>
+              단축키: 1-9/0=선택 · Q~P/A~L=뜬공 아웃부터 · Enter=다음/기록 · Backspace=이전 · Esc=취소
+            </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div
                 style={{
@@ -5566,7 +7017,10 @@ function HitWizardModal({
               cursor: 'pointer',
             }}
           >
-            취소
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <span>취소</span>
+              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>(Esc)</span>
+            </span>
           </button>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button
@@ -5584,7 +7038,10 @@ function HitWizardModal({
                 opacity: state.step === 'result' ? 0.6 : 1,
               }}
             >
-              이전
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                <span>이전</span>
+                <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>(Backspace)</span>
+              </span>
             </button>
             <button
               type="button"
@@ -5602,7 +7059,10 @@ function HitWizardModal({
                 boxShadow: primaryDisabled ? 'none' : '0 10px 20px rgba(37,99,235,0.25)',
               }}
             >
-              {primaryLabel}
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                <span>{primaryLabel}</span>
+                <span style={{ fontSize: '12px', color: '#dbeafe', fontWeight: 700 }}>(Enter)</span>
+              </span>
             </button>
           </div>
         </div>
@@ -5616,6 +7076,7 @@ function ActionModal({
   onClose,
   actions,
   bases,
+  onRunnerPickoffWithAdvance,
   bench,
   lineup,
 }: {
@@ -5623,6 +7084,7 @@ function ActionModal({
   onClose: () => void;
   actions: ReturnType<typeof useDemoStore>['actions'];
   bases: (string | null)[];
+  onRunnerPickoffWithAdvance?: (baseIndex: 0 | 1 | 2) => void;
   bench: { name: string; pos: string; number: string; throws: string; bats: string }[];
   lineup: { name: string; pos: string; number: string; throws: string; bats: string }[];
 }) {
@@ -5679,7 +7141,18 @@ function ActionModal({
         <>
           <RunnerActionButton label="도루 성공" color="#22c55e" onClick={handleRunnerAction(() => actions.runnerStealSuccess(data.base))} />
           <RunnerActionButton label="도루자 아웃" color="#ef4444" onClick={handleRunnerAction(() => actions.runnerCaught(data.base))} />
-          <RunnerActionButton label="견제사" color="#ef4444" onClick={handleRunnerAction(() => actions.runnerPickoff(data.base))} />
+          <RunnerActionButton
+            label="견제사"
+            color="#ef4444"
+            onClick={() => {
+              if (onRunnerPickoffWithAdvance) {
+                onRunnerPickoffWithAdvance(data.base);
+              } else {
+                actions.runnerPickoff(data.base);
+              }
+              onClose();
+            }}
+          />
           <RunnerActionButton label="주루사" color="#ef4444" onClick={handleRunnerAction(() => actions.runnerOut(data.base))} />
           <RunnerActionButton label="런다운 아웃" color="#ef4444" onClick={handleRunnerAction(() => actions.runnerRundownOut(data.base))} />
           <RunnerActionButton label="주루 방해" color="#f97316" onClick={handleRunnerAction(() => actions.runnerInterference(data.base))} />
