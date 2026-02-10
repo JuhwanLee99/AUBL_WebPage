@@ -536,7 +536,7 @@ class _HomeScreenState extends State<HomeScreen> {
             children: values.map((v) {
               final (icon, title, desc) = v;
               return Container(
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: AppTheme.slate800.withValues(alpha: 0.5),
                   borderRadius: BorderRadius.circular(12),
@@ -548,7 +548,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(icon, color: AppTheme.blue400, size: 20),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Text(title,
                         style: const TextStyle(
                           color: AppTheme.slate300,
@@ -556,7 +556,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.5,
                         )),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 2),
                     Text(desc,
                         style: const TextStyle(
                             color: AppTheme.slate500, fontSize: 11)),

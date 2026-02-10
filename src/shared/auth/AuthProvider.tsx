@@ -11,7 +11,7 @@ import {
   signOut,
 } from 'firebase/auth';
 import type { User } from 'firebase/auth';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { PropsWithChildren } from 'react';
 import { auth } from '../firebase/client';
 import { doc, setDoc } from 'firebase/firestore';
@@ -59,6 +59,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [idToken, setIdToken] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hadUserRef = useRef(false);
 
   useEffect(() => {
     if (IS_TEST_MODE) return;
@@ -98,11 +99,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setUser(nextUser);
       if (!nextUser) {
         setIdToken(null);
-        sendLogoutToFlutter();
+        if (hadUserRef.current) {
+          sendLogoutToFlutter();
+          hadUserRef.current = false;
+        }
         setInitializing(false);
         return;
       }
 
+      hadUserRef.current = true;
       try {
         const token = await getIdToken(nextUser, true);
         setIdToken(token);
