@@ -1,6 +1,6 @@
 // **`src/app/Layout.tsx`**
 
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { Outlet, Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../shared/auth/AuthProvider';
 import { useAdmin } from '../shared/auth/useAdmin';
@@ -20,7 +20,10 @@ export default function Layout() {
   const { state } = useDemoStore();
   const isLiveOverlay = location.pathname.startsWith('/live-overlay');
   const isScoreboardText = location.pathname.startsWith('/scoreboard-text');
-  const isEmbedded = new URLSearchParams(location.search).get('embedded') === 'flutter';
+  const isEmbeddedParam = new URLSearchParams(location.search).get('embedded') === 'flutter';
+  const embeddedRef = useRef(false);
+  if (isEmbeddedParam) embeddedRef.current = true;
+  const isEmbedded = embeddedRef.current;
   const hideChrome = isLiveOverlay || isEmbedded;
   const isLanding = location.pathname === '/';
   const scoreboardTextPath = state.activeMatchId ? `/scoreboard-text/${state.activeMatchId}` : '/scoreboard-text';
