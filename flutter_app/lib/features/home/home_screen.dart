@@ -10,6 +10,7 @@ import '../../core/models/match_state.dart';
 import '../../core/models/team_notice.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../app/shell_controller.dart';
 import '../../core/webview/app_webview_screen.dart';
 import '../../core/widgets/match_status_badge.dart';
 import '../intro/intro_screen.dart';
@@ -713,12 +714,18 @@ class _LiveMatchCard extends StatelessWidget {
 
         return GestureDetector(
           onTap: () {
-            Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => AppWebViewScreen(
-                path: '/scoreboard-text/${match.id}',
-                title: '문자중계',
-              ),
-            ));
+            final shell = ShellController.of(context);
+            if (shell != null) {
+              shell.openEmbeddedWebView(
+                  '/scoreboard-text/${match.id}', '문자중계');
+            } else {
+              Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => AppWebViewScreen(
+                  path: '/scoreboard-text/${match.id}',
+                  title: '문자중계',
+                ),
+              ));
+            }
           },
           child: Container(
             width: double.infinity,

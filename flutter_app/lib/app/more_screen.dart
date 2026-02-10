@@ -6,6 +6,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../core/theme/app_theme.dart';
 import '../core/webview/app_webview_screen.dart';
 import '../features/account/account_screen.dart';
+import 'shell_controller.dart';
 import '../features/auth/login_webview_screen.dart';
 import '../features/intro/intro_screen.dart';
 import '../features/intro/rules_screen.dart';
@@ -82,12 +83,69 @@ class _MoreScreenState extends State<MoreScreen> {
     }
   }
 
+  Widget _buildLoginBanner() {
+    return GestureDetector(
+      onTap: _login,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.person_outline, color: Colors.white, size: 32),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('로그인하고 더 많은 기능을 이용하세요',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600)),
+                  SizedBox(height: 4),
+                  Text('팀 관리, 승부예측 등 다양한 기능을 사용할 수 있습니다.',
+                      style: TextStyle(color: Colors.white70, fontSize: 12)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text('로그인',
+                  style: TextStyle(
+                      color: Color(0xFF1E3A8A),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('더보기')),
       body: ListView(
         children: [
+          if (!_checking && !_loggedIn) ...[
+            _buildLoginBanner(),
+            const SizedBox(height: 8),
+          ],
           const _SectionTitle('일반'),
           _MenuTile(
             icon: Icons.emoji_events,
@@ -123,10 +181,17 @@ class _MoreScreenState extends State<MoreScreen> {
             _MenuTile(
               icon: Icons.fact_check,
               label: '기록원',
-              onTap: () => _push(const AppWebViewScreen(
-                path: '/scorekeeper',
-                title: '기록원',
-              )),
+              onTap: () {
+                final shell = ShellController.of(context);
+                if (shell != null) {
+                  shell.openEmbeddedWebView('/scorekeeper', '기록원');
+                } else {
+                  _push(const AppWebViewScreen(
+                    path: '/scorekeeper',
+                    title: '기록원',
+                  ));
+                }
+              },
             ),
             _MenuTile(
               icon: Icons.scoreboard,
