@@ -4330,12 +4330,13 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         const raw = snap.data() as SharedGameState;
         const merged = mergeOwnerLineups(raw, matchId, stateRef.current);
         const data = sanitizeSpectatorState(merged);
+        const { feed: _feed, events: _events, ...core } = data as SharedGameState & { feed?: unknown; events?: unknown };
         skipFirestoreWriteRef.current = true;
         dispatch({
           type: 'hydrate',
           state: normalizeState(initialState, {
             ...stateRef.current,
-            ...data,
+            ...core,
             matches: stateRef.current.matches,
           }),
         });
@@ -4354,12 +4355,13 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         const raw = snap.data() as SharedGameState;
         const merged = mergeOwnerLineups(raw, matchId, stateRef.current);
         const data = sanitizeSpectatorState(merged);
+        const { feed: _feed, events: _events, ...core } = data as SharedGameState & { feed?: unknown; events?: unknown };
         skipFirestoreWriteRef.current = true;
         dispatch({
           type: 'hydrate',
           state: normalizeState(initialState, {
             ...stateRef.current,
-            ...data,
+            ...core,
             matches: stateRef.current.matches,
           }),
         });
