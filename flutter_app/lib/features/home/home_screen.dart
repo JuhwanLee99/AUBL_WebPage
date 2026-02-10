@@ -14,6 +14,7 @@ import '../../app/shell_controller.dart';
 import '../../core/webview/app_webview_screen.dart';
 import '../../core/widgets/match_status_badge.dart';
 import '../intro/intro_screen.dart';
+import '../teams/team_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -160,6 +161,58 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // ── 홈팀 공지 (라이브 경기 위) ──
+                    if (_userTeamId != null) ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildSectionTitle(
+                              '$_userTeamName 공지',
+                              Icons.campaign,
+                              AppTheme.blue400,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => TeamDetailScreen(
+                                    teamId: _userTeamId!,
+                                    teamName: _userTeamName ?? _userTeamId!,
+                                  ),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                    color: AppTheme.blue400.withValues(alpha: 0.4)),
+                                borderRadius: BorderRadius.circular(8),
+                                color: AppTheme.blue400.withValues(alpha: 0.1),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.groups, size: 13, color: AppTheme.blue400),
+                                  SizedBox(width: 4),
+                                  Text('팀 페이지',
+                                      style: TextStyle(
+                                          color: AppTheme.blue400,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _buildTeamNotices(),
+                      const SizedBox(height: 24),
+                    ],
+
                     // ── 라이브 경기 ──
                     _buildSectionTitle(
                         '라이브 경기', Icons.circle, AppTheme.red500),
@@ -189,18 +242,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 8),
                     _buildRecentResults(),
                     const SizedBox(height: 24),
-
-                    // ── 팀 공지 ──
-                    if (_userTeamId != null) ...[
-                      _buildSectionTitle(
-                        '$_userTeamName 공지',
-                        Icons.campaign,
-                        AppTheme.slate300,
-                      ),
-                      const SizedBox(height: 8),
-                      _buildTeamNotices(),
-                      const SizedBox(height: 24),
-                    ],
 
                     // ── KEY VALUES ──
                     _buildKeyValues(),
@@ -249,7 +290,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── 라이브 경기 (실시간) ──
+  // ── 라이브 경기 (실시간, 좌우 스크롤 + 도트 인디케이터) ──
   Widget _buildLiveMatches() {
     return StreamBuilder<List<Match>>(
       stream: _fs.watchLiveMatches(),
@@ -261,10 +302,10 @@ class _HomeScreenState extends State<HomeScreen> {
         if (matches.isEmpty) {
           return const _PlaceholderCard(text: '현재 진행 중인 경기가 없습니다.');
         }
-        return Column(
-          children:
-              matches.map((m) => _LiveMatchCard(match: m, fs: _fs)).toList(),
-        );
+        if (matches.length == 1) {
+          return _LiveMatchCard(match: matches.first, fs: _fs);
+        }
+        return _LiveMatchCarousel(matches: matches, fs: _fs);
       },
     );
   }
@@ -757,12 +798,12 @@ class _LiveMatchCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12),
-                // 팀명 + 스코어
+                // 팀명 + 스코어 (원정 왼쪽 - 홈 오른쪽)
                 Row(
                   children: [
                     Expanded(
                       child: Text(
-                        match.homeTeamName,
+                        match.awayTeamName,
                         style: const TextStyle(
                             color: Colors.white,
                             fontSize: 15,
@@ -780,9 +821,9 @@ class _LiveMatchCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        '${ms?.homeScore ?? match.homeScore ?? 0}'
+                        '${ms?.awayScore ?? match.awayScore ?? 0}'
                         '  :  '
-                        '${ms?.awayScore ?? match.awayScore ?? 0}',
+                        '${ms?.homeScore ?? match.homeScore ?? 0}',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 22,
@@ -793,7 +834,7 @@ class _LiveMatchCard extends StatelessWidget {
                     ),
                     Expanded(
                       child: Text(
-                        match.awayTeamName,
+                        match.homeTeamName,
                         style: const TextStyle(
                             color: Colors.white,
                             fontSize: 15,
@@ -1072,7 +1113,7 @@ class _SchedulePreviewCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            match.homeTeamName,
+            match.awayTeamName,
             style: const TextStyle(
                 color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
             maxLines: 1,
@@ -1084,7 +1125,7 @@ class _SchedulePreviewCard extends StatelessWidget {
                   style: TextStyle(color: AppTheme.slate500, fontSize: 13)),
               Expanded(
                 child: Text(
-                  match.awayTeamName,
+                  match.homeTeamName,
                   style: const TextStyle(
                       color: Colors.white,
                       fontSize: 14,

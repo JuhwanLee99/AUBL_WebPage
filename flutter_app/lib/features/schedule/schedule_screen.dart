@@ -296,12 +296,12 @@ class _MatchCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
-            // 팀 vs 팀
+            // 팀 vs 팀 (원정 왼쪽 - 홈 오른쪽)
             Row(
               children: [
                 Expanded(
                   child: Text(
-                    match.homeTeamName,
+                    match.awayTeamName,
                     style: const TextStyle(
                         color: Colors.white,
                         fontSize: 14,
@@ -313,7 +313,7 @@ class _MatchCard extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Text(
-                      '${match.homeScore ?? 0} : ${match.awayScore ?? 0}',
+                      '${match.awayScore ?? 0} : ${match.homeScore ?? 0}',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
@@ -331,7 +331,7 @@ class _MatchCard extends StatelessWidget {
                   ),
                 Expanded(
                   child: Text(
-                    match.awayTeamName,
+                    match.homeTeamName,
                     style: const TextStyle(
                         color: Colors.white,
                         fontSize: 14,
