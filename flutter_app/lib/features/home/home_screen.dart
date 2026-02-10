@@ -12,6 +12,7 @@ import '../../core/services/firestore_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/webview/app_webview_screen.dart';
 import '../../core/widgets/match_status_badge.dart';
+import '../intro/intro_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -123,189 +124,108 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: _onRefresh,
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            // ── 히어로 섹션 ──
-            _buildHero(),
-
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ── 라이브 경기 ──
-                  _buildSectionTitle(
-                      '라이브 경기', Icons.circle, AppTheme.red500),
-                  const SizedBox(height: 8),
-                  _buildLiveMatches(),
-                  const SizedBox(height: 24),
-
-                  // ── 오늘 일정 ──
-                  _buildSectionTitle(
-                      '오늘 일정', Icons.calendar_today, AppTheme.blue400),
-                  const SizedBox(height: 8),
-                  _buildHorizontalSchedule(
-                      _todayMatches, '오늘 예정된 경기가 없습니다.'),
-                  const SizedBox(height: 24),
-
-                  // ── 내일 일정 ──
-                  _buildSectionTitle(
-                      '내일 일정', Icons.event, AppTheme.green500),
-                  const SizedBox(height: 8),
-                  _buildHorizontalSchedule(
-                      _tomorrowMatches, '내일 예정된 경기가 없습니다.'),
-                  const SizedBox(height: 24),
-
-                  // ── 최근 경기 결과 ──
-                  _buildSectionTitle(
-                      '최근 경기 결과', Icons.scoreboard, AppTheme.orange500),
-                  const SizedBox(height: 8),
-                  _buildRecentResults(),
-                  const SizedBox(height: 24),
-
-                  // ── 팀 공지 ──
-                  if (_userTeamId != null) ...[
+      body: Stack(
+        children: [
+          // 화면 중앙 배경 로고
+          Center(
+            child: Opacity(
+              opacity: 0.5,
+              child: Image.asset(
+                'assets/images/aubl_clean.png',
+                width: 400,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+          // 메인 콘텐츠
+          RefreshIndicator(
+            onRefresh: _onRefresh,
+            child: CustomScrollView(
+          slivers: [
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _StickyHeroDelegate(
+                statusBarHeight: MediaQuery.of(context).padding.top,
+                onIntroTap: () {
+                  Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => const IntroScreen(),
+                  ));
+                },
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── 라이브 경기 ──
                     _buildSectionTitle(
-                      '$_userTeamName 공지',
-                      Icons.campaign,
-                      AppTheme.amber400,
-                    ),
+                        '라이브 경기', Icons.circle, AppTheme.red500),
                     const SizedBox(height: 8),
-                    _buildTeamNotices(),
+                    _buildLiveMatches(),
                     const SizedBox(height: 24),
+
+                    // ── 오늘 일정 ──
+                    _buildSectionTitle(
+                        '오늘 일정', Icons.calendar_today, AppTheme.slate300),
+                    const SizedBox(height: 8),
+                    _buildHorizontalSchedule(
+                        _todayMatches, '오늘 예정된 경기가 없습니다.'),
+                    const SizedBox(height: 24),
+
+                    // ── 내일 일정 ──
+                    _buildSectionTitle(
+                        '내일 일정', Icons.event, AppTheme.slate300),
+                    const SizedBox(height: 8),
+                    _buildHorizontalSchedule(
+                        _tomorrowMatches, '내일 예정된 경기가 없습니다.'),
+                    const SizedBox(height: 24),
+
+                    // ── 최근 경기 결과 ──
+                    _buildSectionTitle(
+                        '최근 경기 결과', Icons.scoreboard, AppTheme.slate300),
+                    const SizedBox(height: 8),
+                    _buildRecentResults(),
+                    const SizedBox(height: 24),
+
+                    // ── 팀 공지 ──
+                    if (_userTeamId != null) ...[
+                      _buildSectionTitle(
+                        '$_userTeamName 공지',
+                        Icons.campaign,
+                        AppTheme.slate300,
+                      ),
+                      const SizedBox(height: 8),
+                      _buildTeamNotices(),
+                      const SizedBox(height: 24),
+                    ],
+
+                    // ── KEY VALUES ──
+                    _buildKeyValues(),
+                    const SizedBox(height: 16),
+
+                    // ── 시즌 요약 ──
+                    _buildSectionTitle(
+                        '2026 시즌', Icons.sports_baseball, AppTheme.slate300),
+                    const SizedBox(height: 8),
+                    _buildSeasonSnapshot(),
+                    const SizedBox(height: 24),
+
+                    // ── 바로가기 ──
+                    _buildSeasonHighlights(),
+                    const SizedBox(height: 24),
+
+                    // ── 소셜 CTA ──
+                    _buildSocialCta(),
+                    const SizedBox(height: 16),
                   ],
-
-                  // ── KEY VALUES ──
-                  _buildKeyValues(),
-                  const SizedBox(height: 24),
-
-                  // ── 시즌 요약 ──
-                  _buildSectionTitle(
-                      '2026 시즌', Icons.sports_baseball, AppTheme.blue500),
-                  const SizedBox(height: 8),
-                  _buildSeasonSnapshot(),
-                  const SizedBox(height: 24),
-
-                  // ── 시즌 하이라이트 ──
-                  _buildSeasonHighlights(),
-                  const SizedBox(height: 24),
-
-                  // ── 소셜 CTA ──
-                  _buildSocialCta(),
-                  const SizedBox(height: 16),
-                ],
+                ),
               ),
             ),
           ],
         ),
       ),
-    );
-  }
-
-  // ── 히어로 영역 ──
-  Widget _buildHero() {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.fromLTRB(
-          20, MediaQuery.of(context).padding.top + 24, 20, 28),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF0a1a3f), Color(0xFF0f2f8f), Color(0xFF0a1a3f)],
-        ),
-      ),
-      child: Stack(
-        children: [
-          // 라디얼 글로우
-          Positioned(
-            top: -40,
-            left: -40,
-            child: Container(
-              width: 160,
-              height: 160,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    AppTheme.blue500.withValues(alpha: 0.16),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: -20,
-            right: -20,
-            child: Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    AppTheme.purple500.withValues(alpha: 0.10),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppTheme.orange500, AppTheme.purple500],
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Text(
-                  '2026 SEASON',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'AUBL',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 32,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Amateur University Baseball League',
-                style: TextStyle(
-                  color: AppTheme.slate400,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '대학 아마추어 야구의 모든 것',
-                style: TextStyle(
-                  color: AppTheme.blue400.withValues(alpha: 0.9),
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
         ],
       ),
     );
@@ -358,7 +278,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return SizedBox(
-      height: 110,
+      height: 120,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: matches.length,
@@ -393,8 +313,10 @@ class _HomeScreenState extends State<HomeScreen> {
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: AppTheme.slate800,
+            color: AppTheme.slate800.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+                color: AppTheme.slate700.withValues(alpha: 0.5)),
           ),
           child: Row(
             children: [
@@ -402,14 +324,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 width: 24,
                 height: 24,
                 decoration: BoxDecoration(
-                  color: AppTheme.orange500.withValues(alpha: 0.14),
+                  color: AppTheme.blue500.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
                 child: Text(
                   '${idx + 1}',
                   style: const TextStyle(
-                    color: AppTheme.orange500,
+                    color: AppTheme.blue400,
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
                   ),
@@ -473,12 +395,13 @@ class _HomeScreenState extends State<HomeScreen> {
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppTheme.slate800,
+            color: AppTheme.slate800.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(10),
-            border: n.pinned
-                ? Border.all(
-                    color: AppTheme.amber400.withValues(alpha: 0.4))
-                : null,
+            border: Border.all(
+              color: n.pinned
+                  ? AppTheme.amber400.withValues(alpha: 0.3)
+                  : AppTheme.slate700.withValues(alpha: 0.5),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -534,21 +457,18 @@ class _HomeScreenState extends State<HomeScreen> {
           label: 'TEAMS',
           value: '${teamGroups.length}',
           description: '참가 팀',
-          color: AppTheme.orange500,
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         _StatCard(
           label: 'GROUPS',
           value: '${groupLetters.length}',
           description: '조 편성',
-          color: AppTheme.blue400,
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         _StatCard(
           label: 'GAMES',
           value: _loadingSchedule ? '-' : '${_completedMatches.length}',
           description: '완료된 경기',
-          color: AppTheme.green500,
         ),
       ],
     );
@@ -557,56 +477,61 @@ class _HomeScreenState extends State<HomeScreen> {
   // ── KEY VALUES ──
   Widget _buildKeyValues() {
     const values = [
-      (Icons.school, 'UNIVERSITY', '대학생 중심의 리그 운영', AppTheme.blue400),
-      (Icons.sports_baseball, 'FAIR PLAY', '공정한 경쟁과 스포츠맨십', AppTheme.green500),
-      (Icons.people, 'COMMUNITY', '야구를 사랑하는 커뮤니티', AppTheme.orange500),
-      (Icons.trending_up, 'GROWTH', '선수 개개인의 성장 지원', AppTheme.purple500),
+      (Icons.school, 'UNIVERSITY', '대학생 중심의 리그 운영'),
+      (Icons.sports_baseball, 'FAIR PLAY', '공정한 경쟁과 스포츠맨십'),
+      (Icons.people, 'COMMUNITY', '야구를 사랑하는 커뮤니티'),
+      (Icons.trending_up, 'GROWTH', '선수 개개인의 성장 지원'),
     ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitle('AUBL KEY VALUES', Icons.star, AppTheme.amber400),
-        const SizedBox(height: 10),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: 1.5,
-          children: values.map((v) {
-            final (icon, title, desc, color) = v;
-            return Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppTheme.slate800,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                    color: color.withValues(alpha: 0.2)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, color: color, size: 22),
-                  const SizedBox(height: 8),
-                  Text(title,
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.5,
-                      )),
-                  const SizedBox(height: 3),
-                  Text(desc,
-                      style: const TextStyle(
-                          color: AppTheme.slate400, fontSize: 12)),
-                ],
-              ),
-            );
-          }).toList(),
-        ),
+        _buildSectionTitle('AUBL KEY VALUES', Icons.star, AppTheme.blue400),
+        const SizedBox(height: 8),
+        LayoutBuilder(builder: (context, constraints) {
+          // 태블릿(넓은 화면)에서 카드 높이가 과도하게 커지지 않도록 비율 조정
+          final ratio = constraints.maxWidth > 600 ? 2.4 : 2.0;
+          return GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            padding: EdgeInsets.zero,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            childAspectRatio: ratio,
+            children: values.map((v) {
+              final (icon, title, desc) = v;
+              return Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppTheme.slate800.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: AppTheme.slate700.withValues(alpha: 0.5)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, color: AppTheme.blue400, size: 20),
+                    const SizedBox(height: 6),
+                    Text(title,
+                        style: const TextStyle(
+                          color: AppTheme.slate300,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                        )),
+                    const SizedBox(height: 3),
+                    Text(desc,
+                        style: const TextStyle(
+                            color: AppTheme.slate500, fontSize: 11)),
+                  ],
+                ),
+              );
+            }).toList(),
+          );
+        }),
       ],
     );
   }
@@ -624,7 +549,7 @@ class _HomeScreenState extends State<HomeScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionTitle(
-            '바로가기', Icons.bolt, AppTheme.amber400),
+            '바로가기', Icons.bolt, AppTheme.slate300),
         const SizedBox(height: 10),
         Row(
           children: highlights.map((h) {
@@ -647,7 +572,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   margin: const EdgeInsets.symmetric(horizontal: 4),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   decoration: BoxDecoration(
-                    color: AppTheme.slate800,
+                    color: AppTheme.slate800.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                         color: AppTheme.slate700.withValues(alpha: 0.5)),
@@ -682,40 +607,39 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       },
       child: Container(
-        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              AppTheme.purple500.withValues(alpha: 0.15),
-              AppTheme.orange500.withValues(alpha: 0.10),
-            ],
+          gradient: const LinearGradient(
+            colors: [Color(0x99833AB4), Color(0x99E1306C), Color(0x99F77737)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-              color: AppTheme.purple500.withValues(alpha: 0.25)),
         ),
-        child: const Row(
-          children: [
-            Icon(Icons.camera_alt, color: AppTheme.purple500, size: 28),
-            SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('AUBL 인스타그램',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600)),
-                  SizedBox(height: 2),
-                  Text('@aubl_1981 · 소식과 하이라이트',
-                      style:
-                          TextStyle(color: AppTheme.slate400, fontSize: 12)),
-                ],
+        child: const Padding(
+          padding: EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(Icons.camera_alt, color: Colors.white, size: 24),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('AUBL 인스타그램',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600)),
+                    SizedBox(height: 2),
+                    Text('@aubl_1981 · 소식과 하이라이트',
+                        style: TextStyle(
+                            color: Colors.white70, fontSize: 12)),
+                  ],
+                ),
               ),
-            ),
-            Icon(Icons.open_in_new, color: AppTheme.slate500, size: 18),
-          ],
+              Icon(Icons.open_in_new, color: Colors.white70, size: 18),
+            ],
+          ),
         ),
       ),
     );
@@ -730,11 +654,9 @@ class _StatCard extends StatelessWidget {
     required this.label,
     required this.value,
     required this.description,
-    required this.color,
   });
 
   final String label, value, description;
-  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -742,16 +664,17 @@ class _StatCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: AppTheme.slate800,
+          color: AppTheme.slate800.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: 0.2)),
+          border: Border.all(
+              color: AppTheme.slate700.withValues(alpha: 0.5)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(label,
-                style: TextStyle(
-                    color: color,
+                style: const TextStyle(
+                    color: AppTheme.slate400,
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.5)),
@@ -802,10 +725,10 @@ class _LiveMatchCard extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppTheme.slate800,
+              color: AppTheme.slate800.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                  color: AppTheme.red500.withValues(alpha: 0.4)),
+                  color: AppTheme.red500.withValues(alpha: 0.3)),
             ),
             child: Column(
               children: [
@@ -879,9 +802,9 @@ class _LiveMatchCard extends StatelessWidget {
                     children: [
                       Column(
                         children: [
-                          _bsoRow('B', ms.balls, 4, AppTheme.green500),
+                          _bsoRow('B', ms.balls, 3, AppTheme.green500),
                           const SizedBox(height: 3),
-                          _bsoRow('S', ms.strikes, 3, AppTheme.yellow500),
+                          _bsoRow('S', ms.strikes, 2, AppTheme.yellow500),
                           const SizedBox(height: 3),
                           _bsoRow('O', ms.outs, 3, AppTheme.red500),
                         ],
@@ -890,18 +813,95 @@ class _LiveMatchCard extends StatelessWidget {
                       _BaseDiamond(bases: ms.bases),
                     ],
                   ),
+                  // 투수 / 타자 정보
+                  if (ms.currentPitcher != null ||
+                      ms.currentBatter != null) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (ms.currentPitcher != null) ...[
+                          const Icon(Icons.sports_baseball,
+                              size: 12, color: AppTheme.slate400),
+                          const SizedBox(width: 4),
+                          Text('투수 ${ms.currentPitcher}',
+                              style: const TextStyle(
+                                  color: AppTheme.slate300,
+                                  fontSize: 11)),
+                        ],
+                        if (ms.currentPitcher != null &&
+                            ms.currentBatter != null)
+                          const SizedBox(width: 14),
+                        if (ms.currentBatter != null) ...[
+                          const Icon(Icons.person,
+                              size: 12, color: AppTheme.slate400),
+                          const SizedBox(width: 4),
+                          Text('타석 ${ms.currentBatter}',
+                              style: const TextStyle(
+                                  color: AppTheme.slate300,
+                                  fontSize: 11)),
+                        ],
+                      ],
+                    ),
+                  ],
                 ],
-                // 장소 + 문자중계 링크
+                // 경기 일시 + 장소
                 const SizedBox(height: 10),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    if (match.venue != null) ...[
+                    if (match.startTime != null) ...[
+                      Text(_formatDateTime(match.startTime!),
+                          style: const TextStyle(
+                              color: AppTheme.slate500, fontSize: 11)),
+                      if (match.venue != null)
+                        const SizedBox(width: 8),
+                    ],
+                    if (match.venue != null)
                       Text(match.venue!,
                           style: const TextStyle(
-                              color: AppTheme.slate500, fontSize: 12)),
-                      const SizedBox(width: 12),
-                    ],
+                              color: AppTheme.slate500, fontSize: 11)),
+                  ],
+                ),
+                // 문자중계 + 라이브 오버레이 버튼
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).push(MaterialPageRoute<void>(
+                          builder: (_) => AppWebViewScreen(
+                            path: '/live-overlay/${match.id}',
+                            title: '라이브 오버레이',
+                          ),
+                        ));
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                              color: AppTheme.red500.withValues(alpha: 0.4)),
+                          borderRadius: BorderRadius.circular(8),
+                          color: AppTheme.red500.withValues(alpha: 0.1),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.live_tv,
+                                size: 13, color: AppTheme.red500),
+                            SizedBox(width: 4),
+                            Text('라이브',
+                                style: TextStyle(
+                                    color: AppTheme.red500,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 4),
@@ -931,6 +931,15 @@ class _LiveMatchCard extends StatelessWidget {
         );
       },
     );
+  }
+
+  String _formatDateTime(String startTime) {
+    try {
+      final dt = DateTime.parse(startTime);
+      return DateFormat('M/d (E) HH:mm', 'ko').format(dt);
+    } catch (_) {
+      return startTime;
+    }
   }
 
   Widget _bsoRow(String label, int value, int max, Color color) {
@@ -1028,8 +1037,10 @@ class _SchedulePreviewCard extends StatelessWidget {
       width: 200,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.slate800,
+        color: AppTheme.slate800.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+            color: AppTheme.slate700.withValues(alpha: 0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1099,14 +1110,176 @@ class _PlaceholderCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppTheme.slate800,
+        color: AppTheme.slate800.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+            color: AppTheme.slate700.withValues(alpha: 0.5)),
       ),
       child: Text(
         text,
         style: const TextStyle(color: AppTheme.slate500, fontSize: 14),
         textAlign: TextAlign.center,
       ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────
+// 스티키 히어로 헤더 (스크롤 시 AUBL 영역 고정)
+// ────────────────────────────────────────────
+class _StickyHeroDelegate extends SliverPersistentHeaderDelegate {
+  _StickyHeroDelegate({
+    required this.statusBarHeight,
+    required this.onIntroTap,
+  });
+
+  final double statusBarHeight;
+  final VoidCallback onIntroTap;
+
+  static const double _badgeArea = 32.0;
+  static const double _pinnedRow = 62.0;
+  static const double _topPad = 14.0;
+  static const double _bottomPad = 10.0;
+
+  @override
+  double get maxExtent =>
+      statusBarHeight + _topPad + _badgeArea + _pinnedRow + _bottomPad;
+
+  @override
+  double get minExtent =>
+      statusBarHeight + _topPad + _pinnedRow + _bottomPad;
+
+  @override
+  bool shouldRebuild(covariant _StickyHeroDelegate old) =>
+      statusBarHeight != old.statusBarHeight;
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    final t = (shrinkOffset / _badgeArea).clamp(0.0, 1.0);
+
+    return Stack(
+      children: [
+        // 배경 그라데이션
+        Positioned.fill(
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF0a1a3f),
+                  Color(0xFF0f2f8f),
+                  Color(0xFF0a1a3f),
+                ],
+              ),
+            ),
+          ),
+        ),
+        // 콘텐츠
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+              20, statusBarHeight + _topPad, 20, _bottomPad),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 뱃지 — 스크롤 시 접히며 페이드아웃
+              ClipRect(
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  heightFactor: 1.0 - t,
+                  child: Opacity(
+                    opacity: 1.0 - t,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 3),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                              color: AppTheme.slate500
+                                  .withValues(alpha: 0.4)),
+                          borderRadius: BorderRadius.circular(20),
+                          color: Colors.white.withValues(alpha: 0.06),
+                        ),
+                        child: const Text(
+                          '46TH AUBL · HOSTED BY CHUNG-ANG UNIVERSITY (SEOUL)',
+                          style: TextStyle(
+                            color: AppTheme.slate300,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              // AUBL 타이틀 + 부제 + 리그소개 — 항상 고정
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'AUBL',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.5,
+                            height: 1.1,
+                          ),
+                        ),
+                        SizedBox(height: 3),
+                        Text(
+                          '전국대학아마추어야구연합회 · SINCE 1981',
+                          style: TextStyle(
+                            color: AppTheme.slate400,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: onIntroTap,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 7),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                            color: AppTheme.slate500
+                                .withValues(alpha: 0.4)),
+                        borderRadius: BorderRadius.circular(8),
+                        color: Colors.white.withValues(alpha: 0.06),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.info_outline,
+                              size: 13, color: AppTheme.slate300),
+                          SizedBox(width: 5),
+                          Text('리그 소개',
+                              style: TextStyle(
+                                  color: AppTheme.slate300,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

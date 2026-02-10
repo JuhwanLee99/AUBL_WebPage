@@ -12,6 +12,8 @@ class MatchState {
     this.bases = const [null, null, null],
     this.homeScore = 0,
     this.awayScore = 0,
+    this.currentPitcher,
+    this.currentBatter,
   });
 
   final String id;
@@ -24,6 +26,8 @@ class MatchState {
   final List<String?> bases; // [first, second, third]
   final int homeScore;
   final int awayScore;
+  final String? currentPitcher;
+  final String? currentBatter;
 
   String get inningLabel => '$inning회 ${half == 'top' ? '초' : '말'}';
 
@@ -45,6 +49,8 @@ class MatchState {
           : const [null, null, null],
       homeScore: score?['home'] as int? ?? 0,
       awayScore: score?['away'] as int? ?? 0,
+      currentPitcher: d['currentPitcher'] as String?,
+      currentBatter: d['currentBatter'] as String?,
     );
   }
 }
