@@ -558,15 +558,19 @@ class _HomeScreenState extends State<HomeScreen> {
             return Expanded(
               child: GestureDetector(
                 onTap: () {
-                  // 바로가기 탭 인덱스: 팀=1, 일정=2, 기록=3, 순위=더보기
-                  final idx = {
+                  final shell = ShellController.of(context);
+                  if (shell == null) return;
+                  const tabMap = {
                     '팀': 1,
                     '일정': 2,
                     '기록': 3,
+                    '순위': 5, // 더보기 탭 → 순위는 별도 push
                   };
-                  final tabIdx = idx[label];
-                  if (tabIdx != null) {
-                    // MainShell의 BottomNav 탭 전환은 직접 접근이 어려우므로 스킵
+                  final tabIdx = tabMap[label];
+                  if (tabIdx != null && tabIdx < 5) {
+                    shell.switchTab(tabIdx);
+                  } else if (label == '순위') {
+                    shell.switchTab(5); // 더보기 탭으로 이동
                   }
                 },
                 child: Container(

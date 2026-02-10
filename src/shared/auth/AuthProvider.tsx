@@ -5,6 +5,7 @@ import {
   getIdToken,
   onIdTokenChanged,
   setPersistence,
+  signInWithCustomToken,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -60,11 +61,24 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (IS_TEST_MODE) return; // 테스트 모드일 때는 실행 안 함
+    if (IS_TEST_MODE) return;
     if (typeof window === 'undefined') return;
-    setPersistence(auth, browserLocalPersistence).catch(() => {
-      // Ignore persistence errors (e.g., incognito), fallback to default behavior.
-    });
+    setPersistence(auth, browserLocalPersistence).catch(() => {});
+  }, []);
+
+  // Flutter 앱에서 로그인 상태를 주입받기 위한 글로벌 핸들러
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    (window as any).__flutterAuthInject = async (customToken: string) => {
+      try {
+        await signInWithCustomToken(auth, customToken);
+      } catch (e) {
+        console.error('[FlutterBridge] Auth inject failed:', e);
+      }
+    };
+    return () => {
+      delete (window as any).__flutterAuthInject;
+    };
   }, []);
 
   useEffect(() => {

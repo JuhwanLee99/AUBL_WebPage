@@ -99,6 +99,7 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
             _applySystemUiChrome();
             if (!mounted) return;
             setState(() => _loading = false);
+            unawaited(_injectAuthIfNeeded());
           },
           onWebResourceError: (error) {
             if (!mounted) return;
@@ -167,6 +168,24 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
         return;
       case BridgeMessageType.unknown:
         return;
+    }
+  }
+
+  /// Flutter 로그인 상태를 WebView에 주입
+  Future<void> _injectAuthIfNeeded() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      final idToken = await user.getIdToken();
+      if (idToken == null || idToken.isEmpty) return;
+      final customToken =
+          await _authBridgeService.exchangeWebIdToken(idToken);
+      final escaped = customToken.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
+      await _controller.runJavaScript(
+        "if(window.__flutterAuthInject) window.__flutterAuthInject('$escaped');",
+      );
+    } catch (_) {
+      // 인증 주입 실패 시 무시 (웹에서 별도 로그인 가능)
     }
   }
 
