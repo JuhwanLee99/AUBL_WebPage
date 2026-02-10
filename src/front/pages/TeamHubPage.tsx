@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import gsap from 'gsap';
+import { collection, getDocs } from 'firebase/firestore';
 import { GROUP_LETTERS, GROUP_COLORS, TEAM_GROUPS } from '../../shared/lib/teamGroups';
 import type { GroupLetter } from '../../shared/lib/teamGroups';
 import { useContent } from '../../shared/state/contentProvider';
 import { buildTeamDirectory, encodeTeamId } from '../../shared/lib/teamDirectory';
+import { firestore } from '../../shared/firebase/client';
 
 /* ─── 로컬 타입 ─── */
 
@@ -25,8 +27,29 @@ export default function TeamHubPage() {
   const [activeGroup, setActiveGroup] = useState<GroupKey>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('NAME');
+  const [logoById, setLogoById] = useState<Record<string, string>>({});
   const teamEntries = teamsContent.entries.length ? teamsContent.entries : TEAM_GROUPS;
   const teams = buildTeamDirectory(teamEntries);
+
+  useEffect(() => {
+    let alive = true;
+    getDocs(collection(firestore, 'teams'))
+      .then((snap) => {
+        if (!alive) return;
+        const next: Record<string, string> = {};
+        snap.forEach((docSnap) => {
+          const data = docSnap.data() as { emblemUrl?: string };
+          if (typeof data.emblemUrl === 'string' && data.emblemUrl.trim()) {
+            next[docSnap.id] = data.emblemUrl.trim();
+          }
+        });
+        setLogoById(next);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -69,6 +92,10 @@ export default function TeamHubPage() {
     });
     return map;
   }, [teams]);
+
+  const logoForTeam = useMemo(() => {
+    return (name: string) => logoById[encodeTeamId(name)];
+  }, [logoById]);
 
   return (
     <div style={{ display: 'grid', gap: '28px' }} ref={pageRef}>
@@ -312,7 +339,13 @@ export default function TeamHubPage() {
                   padding: '16px',
                   borderRadius: '18px',
                   border: '1px solid rgba(148,163,184,0.25)',
-                  background: 'rgba(15,23,42,0.65)',
+                  backgroundColor: 'rgba(15,23,42,0.65)',
+                  backgroundImage: logoForTeam(team.name)
+                    ? `linear-gradient(180deg, rgba(15,23,42,0.7), rgba(15,23,42,0.7)), url(${logoForTeam(team.name)})`
+                    : undefined,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'center',
+                  backgroundSize: '120px auto',
                   color: '#e2e8f0',
                   textDecoration: 'none',
                   display: 'grid',

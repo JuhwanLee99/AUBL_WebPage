@@ -190,22 +190,24 @@ export default function TeamsPage() {
               </span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              {g.teams.map((team) => (
-                <span
-                  key={team.name}
-                  style={{
-                    padding: '10px 14px',
-                    borderRadius: '12px',
-                    background: `${g.color}0c`,
-                    border: `1px solid ${g.color}25`,
-                    color: '#e2e8f0',
-                    fontWeight: 700,
-                    fontSize: '14px',
-                  }}
-                >
-                  {team.name}
-                </span>
-              ))}
+              {g.teams.map((team) => {
+                return (
+                  <span
+                    key={team.name}
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: '12px',
+                      backgroundColor: `${g.color}0c`,
+                      border: `1px solid ${g.color}25`,
+                      color: '#e2e8f0',
+                      fontWeight: 700,
+                      fontSize: '14px',
+                    }}
+                  >
+                    {team.name}
+                  </span>
+                );
+              })}
             </div>
           </section>
         ))
@@ -240,19 +242,20 @@ export default function TeamsPage() {
             </span>
           </div>
           <div style={{ display: 'grid', gap: '10px' }}>
-            {filteredTeams.map((team, i) => (
-              <div
-                key={team.name}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '14px',
-                  padding: '14px 18px',
-                  borderRadius: '14px',
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(148,163,184,0.15)',
-                }}
-              >
+            {filteredTeams.map((team, i) => {
+              return (
+                <div
+                  key={team.name}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px',
+                    padding: '14px 18px',
+                    borderRadius: '14px',
+                    backgroundColor: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(148,163,184,0.15)',
+                  }}
+                >
                 <span
                   style={{
                     width: '28px',
@@ -271,8 +274,9 @@ export default function TeamsPage() {
                   {i + 1}
                 </span>
                 <span style={{ fontWeight: 700, fontSize: '15px', color: '#e2e8f0' }}>{team.name}</span>
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         </section>
       )}

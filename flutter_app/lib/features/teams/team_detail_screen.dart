@@ -366,6 +366,13 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
               title: '경기 결과',
             ),
           ));
+        } else {
+          Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => AppWebViewScreen(
+              path: '/scoreboard-text/${match.id}',
+              title: '경기 정보',
+            ),
+          ));
         }
       },
     );
