@@ -482,8 +482,8 @@ export default function ScoreboardPanel({
           style={{
             display: 'grid',
             gridTemplateColumns: hideBases
-              ? 'minmax(0, 0.55fr) minmax(360px, 1.8fr)'
-              : 'minmax(0, 0.9fr) minmax(360px, 1.35fr)',
+              ? 'minmax(0, 0.55fr) minmax(min(360px, 60vw), 1.8fr)'
+              : 'minmax(0, 0.9fr) minmax(min(360px, 60vw), 1.35fr)',
             gap: 'clamp(10px, 1.6vw, 14px)',
             alignItems: 'stretch',
           }}
