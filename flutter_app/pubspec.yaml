@@ -22,6 +22,7 @@ dependencies:
   cached_network_image: ^3.4.1
   url_launcher: ^6.3.2
   timeago: ^3.7.1
+  shared_preferences: ^2.3.0
 
 dev_dependencies:
   flutter_test:
