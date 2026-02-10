@@ -14,6 +14,7 @@ export default [
       'dist',
       'node_modules',
       'functions/venv/**',
+      'flutter_app/**',
       'scripts/**',
       'tailwind.config.js',
     ],

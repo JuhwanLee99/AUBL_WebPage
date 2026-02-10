@@ -1,0 +1,5 @@
+{
+  "AUBL_ENV": "dev",
+  "AUBL_WEB_BASE_URL": "https://aubl-backup.web.app",
+  "AUBL_AUTH_BRIDGE_URL": "https://asia-northeast3-aubl-backup.cloudfunctions.net/exchange_web_id_token"
+}
