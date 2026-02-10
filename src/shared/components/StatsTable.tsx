@@ -34,8 +34,8 @@ const stylesByDensity: Record<StatsTableDensity, StyleSet> = {
     subtitleFontSize: '11px',
     subtitleLabel: '실시간 자동 집계',
     tableFontSize: '11px',
-    tableMinWidthBatter: '600px',
-    tableMinWidthPitcher: '520px',
+    tableMinWidthBatter: '680px',
+    tableMinWidthPitcher: '620px',
     headerPadding: '6px 5px',
     cellPadding: '6px 5px',
     tableRadius: '8px',
@@ -49,8 +49,8 @@ const stylesByDensity: Record<StatsTableDensity, StyleSet> = {
     subtitleFontSize: '12px',
     subtitleLabel: '실시간 자동 집계 (타석 기준)',
     tableFontSize: '12px',
-    tableMinWidthBatter: '600px',
-    tableMinWidthPitcher: '540px',
+    tableMinWidthBatter: '720px',
+    tableMinWidthPitcher: '660px',
     headerPadding: '6px 4px',
     cellPadding: '6px 4px',
     tableRadius: '10px',
@@ -59,6 +59,7 @@ const stylesByDensity: Record<StatsTableDensity, StyleSet> = {
 };
 
 const formatFloat = (val: number) => (Number.isFinite(val) ? val.toFixed(3).replace(/^0/, '') : '-');
+const formatEra = (val: number) => (Number.isFinite(val) ? val.toFixed(2) : '-');
 
 export default function StatsTable({ title, stats, variant, density = 'regular' }: StatsTableProps) {
   const isBatter = variant === 'batter';
@@ -70,6 +71,8 @@ export default function StatsTable({ title, stats, variant, density = 'regular' 
         { key: 'pa', label: '타석' },
         { key: 'ab', label: '타수' },
         { key: 'h', label: '안타' },
+        { key: 'r', label: '득점' },
+        { key: 'rbi', label: '타점' },
         { key: 'singles', label: '1루타' },
         { key: 'doubles', label: '2루타' },
         { key: 'triples', label: '3루타' },
@@ -94,6 +97,9 @@ export default function StatsTable({ title, stats, variant, density = 'regular' 
         { key: 'bb', label: '볼넷' },
         { key: 'hbp', label: '사구' },
         { key: 'so', label: '탈삼진' },
+        { key: 'r', label: '실점' },
+        { key: 'er', label: '자책' },
+        { key: 'era', label: 'ERA' },
       ];
 
   const rows = isBatter
@@ -105,9 +111,11 @@ export default function StatsTable({ title, stats, variant, density = 'regular' 
       })
     : (stats as PitcherStatLine[]).map((stat) => {
         const ip = `${Math.floor(stat.outs / 3)}.${stat.outs % 3}`;
+        const era = stat.outs > 0 ? formatEra((stat.er * 27) / stat.outs) : '-';
         return {
           ...stat,
           outsIp: ip,
+          era,
           pitchCombo: `${stat.pitches} (${stat.strikes}/${stat.balls})`,
           appearanceLabel:
             stat.appearanceLabel ?? (stat.appearanceOrder === 0 ? '선발' : stat.appearanceOrder ? `계투(${stat.appearanceOrder})` : '-'),

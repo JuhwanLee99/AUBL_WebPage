@@ -72,3 +72,54 @@ export interface Notice {
   isImportant?: boolean; // 긴급/중요 상단 고정용
   allowComments?: boolean; // 댓글 허용 여부 (없으면 true로 취급)
 }
+
+export type TeamMemberRole = 'player' | 'staff' | 'coach';
+
+export interface TeamMember {
+  uid: string;
+  name: string;
+  role: TeamMemberRole;
+  number?: string;
+  position?: string;
+  bats?: string;
+  throws?: string;
+  profileImageUrl?: string;
+  profileBio?: string;
+  joinedAt?: number;
+  status?: 'active' | 'inactive';
+}
+
+export type TeamNoticeCategory = '일반' | '훈련' | '경기' | '긴급';
+
+export interface TeamNotice {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: number;
+  createdByUid?: string | null;
+  createdByName?: string | null;
+  category?: TeamNoticeCategory;
+  pinned?: boolean;
+}
+
+export interface TeamNoticeComment {
+  id: string;
+  noticeId: string;
+  uid: string;
+  author: string;
+  content: string;
+  createdAt: number;
+  parentId?: string | null;
+  likedBy?: string[];
+  likeCount?: number;
+}
+
+export interface UserProfile {
+  uid: string;
+  email?: string | null;
+  emailLower?: string | null;
+  displayName?: string | null;
+  createdAt?: string | null;
+  lastSignInAt?: string | null;
+  updatedAt?: number | null;
+}

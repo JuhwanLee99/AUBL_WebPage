@@ -276,7 +276,7 @@ export default function IndependentScoreboardPanel({
               width: '20px',
               height: '20px',
               borderRadius: '4px',
-              background: gameState.bases[1] ? '#22c55e' : 'rgba(148, 163, 184, 0.2)',
+              background: gameState.bases[1] ? '#facc15' : 'rgba(148, 163, 184, 0.2)',
               border: '2px solid #1e293b',
             }}
           />
@@ -290,7 +290,7 @@ export default function IndependentScoreboardPanel({
               width: '20px',
               height: '20px',
               borderRadius: '4px',
-              background: gameState.bases[2] ? '#22c55e' : 'rgba(148, 163, 184, 0.2)',
+              background: gameState.bases[2] ? '#facc15' : 'rgba(148, 163, 184, 0.2)',
               border: '2px solid #1e293b',
             }}
           />
@@ -304,7 +304,7 @@ export default function IndependentScoreboardPanel({
               width: '20px',
               height: '20px',
               borderRadius: '4px',
-              background: gameState.bases[0] ? '#22c55e' : 'rgba(148, 163, 184, 0.2)',
+              background: gameState.bases[0] ? '#facc15' : 'rgba(148, 163, 184, 0.2)',
               border: '2px solid #1e293b',
             }}
           />

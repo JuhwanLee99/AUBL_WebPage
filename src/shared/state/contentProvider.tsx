@@ -220,10 +220,17 @@ const DEFAULT_RULES: RulesContent = {
 
 const DEFAULT_TEAMS: TeamsContent = {
   pageBadge: 'AUBL · TEAMS',
-  pageTitle: '2026 참가팀 · 조편성',
-  pageDescription: '총 40개 대학이 A~H조 조별 리그에 참가합니다. 조별 상위 2팀은 으뜸 토너먼트 16강, 3·4등은 버금 토너먼트 16강으로 포스트시즌이 진행됩니다.',
+  pageTitle: '팀 허브 · 팀 페이지 안내',
+  pageDescription:
+    '참가팀 목록에서 팀을 선택하면 해당 팀의 일정, 결과, 로스터, 시즌 기록과 공지로 바로 이동합니다. 각 팀 페이지는 팀 소식과 정보를 모아보는 허브 역할을 합니다.',
   pageNote: '조편성은 대표자회의 의결에 따라 확정되며, 변경될 수 있습니다. 최종 조편성은 시즌 개막 전 공지됩니다.',
   entries: TEAM_GROUPS,
+};
+
+const LEGACY_TEAMS_COPY = {
+  pageTitle: '2026 참가팀 · 조편성',
+  pageDescription:
+    '총 40개 대학이 A~H조 조별 리그에 참가합니다. 조별 상위 2팀은 으뜸 토너먼트 16강, 3·4등은 버금 토너먼트 16강으로 포스트시즌이 진행됩니다.',
 };
 
 const defaultContent: ContentState = {
@@ -416,10 +423,18 @@ function normalizeContentPatch(input: Partial<ContentState>): Partial<ContentSta
   }
 
   if (input.teams) {
-    patch.teams = {
+    const normalizedTeams: TeamsContent = {
       ...input.teams,
       entries: normalizeTeamsEntries(input.teams.entries, defaultContent.teams.entries),
     };
+    if (
+      normalizedTeams.pageTitle === LEGACY_TEAMS_COPY.pageTitle &&
+      normalizedTeams.pageDescription === LEGACY_TEAMS_COPY.pageDescription
+    ) {
+      normalizedTeams.pageTitle = defaultContent.teams.pageTitle;
+      normalizedTeams.pageDescription = defaultContent.teams.pageDescription;
+    }
+    patch.teams = normalizedTeams;
   }
 
   return patch;

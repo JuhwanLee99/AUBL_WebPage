@@ -4,6 +4,9 @@ import LandingPage from '../front/pages/LandingPage';
 import IntroPage from '../front/pages/IntroPage';
 import RulePage from '../front/pages/RulePage';
 import TeamsPage from '../front/pages/TeamsPage';
+import TeamHubPage from '../front/pages/TeamHubPage';
+import TeamDetailPage from '../front/pages/TeamDetailPage';
+import TeamNoticeDetailPage from '../front/pages/TeamNoticeDetailPage';
 import StandingsPage from './pages/StandingPage';
 import PredictionPage from './pages/PredictionPage';
 import RecordPage from './pages/RecordPage';
@@ -36,6 +39,7 @@ import AdminLandingPage from './pages/admin/AdminLandingPage';
 import AdminIntroPage from './pages/admin/AdminIntroPage';
 import AdminRulesPage from './pages/admin/AdminRulesPage';
 import AdminTeamsPage from './pages/admin/AdminTeamsPage';
+import AdminRolesPage from './pages/admin/AdminRolesPage';
 
 export const router = createBrowserRouter([
   {
@@ -61,6 +65,18 @@ export const router = createBrowserRouter([
       {
         path: 'intro/teams',
         element: <TeamsPage />,
+      },
+      {
+        path: 'teams',
+        element: <TeamHubPage />,
+      },
+      {
+        path: 'teams/:teamId',
+        element: <TeamDetailPage />,
+      },
+      {
+        path: 'teams/:teamId/notices/:noticeId',
+        element: <TeamNoticeDetailPage />,
       },
       {
         path: 'standings',
@@ -137,6 +153,10 @@ export const router = createBrowserRouter([
         element: <ScoreboardPage />,
       },
       {
+        path: 'scoreboard/:matchId',
+        element: <ScoreboardPage />,
+      },
+      {
         path: 'scoreboard-text',
         element: <ScoreboardTextPage />,
       },
@@ -149,7 +169,19 @@ export const router = createBrowserRouter([
         element: <ScoreboardLiveOverlayPage />,
       },
       {
+        path: 'live-overlay/:matchId',
+        element: <ScoreboardLiveOverlayPage />,
+      },
+      {
         path: 'scorekeeper',
+        element: (
+          <RequireAdmin>
+            <ScorekeeperPage />
+          </RequireAdmin>
+        ),
+      },
+      {
+        path: 'scorekeeper/:matchId',
         element: (
           <RequireAdmin>
             <ScorekeeperPage />
@@ -169,6 +201,7 @@ export const router = createBrowserRouter([
           { path: 'intro', element: <AdminIntroPage /> },
           { path: 'rules', element: <AdminRulesPage /> },
           { path: 'teams', element: <AdminTeamsPage /> },
+          { path: 'roles', element: <AdminRolesPage /> },
         ],
       },
       {
