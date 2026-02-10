@@ -12,6 +12,7 @@ import {
   setDoc,
   writeBatch,
   deleteDoc,
+  deleteField,
   getDoc,
   getDocs,
   runTransaction,
@@ -1572,8 +1573,10 @@ function reducer(state: DemoState, action: Action): DemoState {
     'syncActiveMatch',
     'releaseLock',
     'resumeLock',
+    'setFeed',
+    'setEvents',
   ];
-  const lockBypass: Action['type'][] = ['selectMatch', 'setMatches', 'syncActiveMatch', 'hydrate'];
+  const lockBypass: Action['type'][] = ['selectMatch', 'setMatches', 'syncActiveMatch', 'hydrate', 'setFeed', 'setEvents'];
   if (isLockedByOther(state) && !lockBypass.includes(action.type)) {
     return state;
   }
@@ -4710,10 +4713,15 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         if (key !== lastStateKeyRef.current) {
           lastStateKeyRef.current = key;
 
-          const payload = pruneUndefined({
-            ...core,
-            updatedAt: Date.now(),
-          });
+          const payload = {
+            ...pruneUndefined({
+              ...core,
+              updatedAt: Date.now(),
+            }),
+            // Ensure stale feed/events fields are removed from matchStates doc.
+            feed: deleteField(),
+            events: deleteField(),
+          };
 
           await setDoc(doc(firestore, 'matchStates', matchId), payload, { merge: true });
         }
@@ -5309,12 +5317,13 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
               const mergedOwner = mergeOwnerLineups(data, matchIdLocal, stateRef.current);
               const active = stateRef.current.matches.find((m) => m.id === matchIdLocal);
               const sanitized = applyLineupVisibility(mergedOwner, active, isAdmin);
+              const { feed: _feed, events: _events, ...core } = sanitized as SharedGameState & { feed?: unknown; events?: unknown };
               skipFirestoreWriteRef.current = true;
               dispatch({
                 type: 'hydrate',
                 state: normalizeState(initialState, {
                   ...stateRef.current,
-                  ...sanitized,
+                  ...core,
                   matches: stateRef.current.matches,
                 }),
               });
