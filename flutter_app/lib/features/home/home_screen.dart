@@ -992,6 +992,7 @@ class _LiveMatchCard extends StatelessWidget {
                           builder: (_) => AppWebViewScreen(
                             path: '/live-overlay/${match.id}',
                             title: '라이브 오버레이',
+                            minimalHeader: true,
                           ),
                         ));
                       },

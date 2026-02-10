@@ -73,10 +73,10 @@ export default function ScoreboardLiveOverlayPage() {
   // 모바일 감지 함수
   const isMobileDevice = () => {
     const userAgent = navigator.userAgent || navigator.vendor || (window as Window & { opera?: string }).opera || '';
-    const isMobileUA = /android|ipad|iphone|ipod/i.test(userAgent);
-    const isPortrait = window.innerHeight > window.innerWidth;
+    const isMobileUA = /android|iphone|ipod/i.test(userAgent);
     const isSmallScreen = Math.min(window.innerWidth, window.innerHeight) < 768;
-    return isMobileUA || (isPortrait && isSmallScreen);
+    // 태블릿(iPad, 대화면 Android)은 제외하고, 작은 모바일만 회전 기본값 적용
+    return isMobileUA && isSmallScreen;
   };
 
   // 기본값: 모바일이면 회전된 상태(true), 데스크톱이면 정방향(false)
@@ -94,6 +94,7 @@ export default function ScoreboardLiveOverlayPage() {
 
   // 음소거 버튼 카운트다운 (초)
   const [unmuteCountdown, setUnmuteCountdown] = useState(10);
+  const [showUnmuteHint, setShowUnmuteHint] = useState(true);
 
   // 전체 화면 상태 (iOS용 가상 전체 화면)
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -124,6 +125,13 @@ export default function ScoreboardLiveOverlayPage() {
 
     return () => clearInterval(timer);
   }, [isMuted, unmuteCountdown]);
+
+  // 우측 상단 음소거 해제 안내 메시지 (5초 표시)
+  useEffect(() => {
+    setShowUnmuteHint(true);
+    const timer = setTimeout(() => setShowUnmuteHint(false), 5000);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const handleResize = () => {
@@ -328,6 +336,15 @@ export default function ScoreboardLiveOverlayPage() {
         zIndex: isFullscreen ? 9999 : undefined,
       }}
     >
+      <style>
+        {`
+          @keyframes muteGlow {
+            0% { box-shadow: 0 0 0 1px rgba(248,113,113,0.35), 0 0 10px rgba(248,113,113,0.25); }
+            50% { box-shadow: 0 0 0 2px rgba(248,113,113,0.65), 0 0 22px rgba(248,113,113,0.55); }
+            100% { box-shadow: 0 0 0 1px rgba(248,113,113,0.35), 0 0 10px rgba(248,113,113,0.25); }
+          }
+        `}
+      </style>
       <div style={containerStyle}>
         <iframe
           title="AUBL Live Stream"
@@ -447,6 +464,10 @@ export default function ScoreboardLiveOverlayPage() {
                 padding: `${6 * uiScale}px ${10 * uiScale}px`,
                 fontSize: `${11 * uiScale}px`,
                 fontWeight: 900,
+                border: isMuted && unmuteCountdown > 0
+                  ? '1px solid rgba(248,113,113,0.8)'
+                  : undefined,
+                animation: isMuted && unmuteCountdown > 0 ? 'muteGlow 2.4s ease-in-out infinite' : undefined,
               }}
               title={isMuted ? "소리 켜기" : "소리 끄기"}
             >
@@ -481,6 +502,30 @@ export default function ScoreboardLiveOverlayPage() {
               </svg>
             </button>
           </div>
+
+          {showUnmuteHint && isMuted && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '24%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                padding: `${14 * uiScale}px ${22 * uiScale}px`,
+                borderRadius: '16px',
+                background: 'rgba(15,23,42,0.85)',
+                border: '2px solid rgba(248,113,113,0.85)',
+                color: '#fee2e2',
+                fontSize: `${16 * uiScale}px`,
+                fontWeight: 900,
+                whiteSpace: 'nowrap',
+                boxShadow:
+                  '0 22px 56px rgba(15,23,42,0.75), 0 0 0 2px rgba(248,113,113,0.35), 0 0 36px rgba(248,113,113,0.9), 0 0 70px rgba(248,113,113,0.7)',
+                pointerEvents: 'none',
+              }}
+            >
+              우측 상단 음소거 해제
+            </div>
+          )}
 
           {/* 왼쪽 상단 점수판 (컴팩트 버전) */}
           <div
@@ -555,62 +600,7 @@ export default function ScoreboardLiveOverlayPage() {
             </div>
           </div>
 
-          {/* 중앙 음소거 해제 버튼 (음소거 상태일 때만 10초간 표시) */}
-          {isMuted && unmuteCountdown > 0 && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                pointerEvents: 'auto',
-                zIndex: 10,
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setIsMuted(false)}
-                style={{
-                  padding: `${20 * uiScale}px ${40 * uiScale}px`,
-                  borderRadius: '16px',
-                  border: '3px solid #ef4444',
-                  background: 'linear-gradient(135deg, rgba(239,68,68,0.95), rgba(220,38,38,0.95))',
-                  color: '#ffffff',
-                  fontSize: `${24 * uiScale}px`,
-                  fontWeight: 900,
-                  cursor: 'pointer',
-                  boxShadow: '0 8px 32px rgba(239,68,68,0.6), 0 0 0 4px rgba(255,255,255,0.2)',
-                  transition: 'all 0.3s',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: `${8 * uiScale}px`,
-                  animation: 'pulse 2s infinite',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'scale(1.05)';
-                  e.currentTarget.style.boxShadow = '0 12px 40px rgba(239,68,68,0.8), 0 0 0 6px rgba(255,255,255,0.3)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'scale(1)';
-                  e.currentTarget.style.boxShadow = '0 8px 32px rgba(239,68,68,0.6), 0 0 0 4px rgba(255,255,255,0.2)';
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: `${12 * uiScale}px` }}>
-                  <span style={{ fontSize: `${32 * uiScale}px` }}>🔇</span>
-                  <span>소리 켜기</span>
-                </div>
-                <span style={{
-                  fontSize: `${16 * uiScale}px`,
-                  fontWeight: 600,
-                  opacity: 0.9,
-                  color: '#fecaca'
-                }}>
-                  {unmuteCountdown}초 후 자동 숨김
-                </span>
-              </button>
-            </div>
-          )}
+          {/* 중앙 음소거 해제 버튼 제거됨 */}
 
           {/* 하단 Last Play */}
           <div
