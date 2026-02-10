@@ -1952,15 +1952,12 @@ function buildDisplayItems(
 
   const items: DisplayItem[] = [];
 
-  const eventIdsWithRunnerDetails = new Set<string>();
+  const eventIdsWithPrimaryLog = new Set<string>();
   chronological.forEach((entry) => {
     if (!entry.eventId) return;
-    if (!entry.batter?.trim() || !entry.order || entry.order <= 0) return;
-    const matched = eventsById.get(entry.eventId);
-    if (!matched) return;
-    if (Array.isArray(matched.runners) && matched.runners.length > 0) {
-      eventIdsWithRunnerDetails.add(entry.eventId);
-    }
+    if (!entry.order || entry.order <= 0) return;
+    if (!entry.batter?.trim()) return;
+    eventIdsWithPrimaryLog.add(entry.eventId);
   });
 
   const markerText = (inning: number, half: Half, type: 'start' | 'end') => {
@@ -2014,10 +2011,12 @@ function buildDisplayItems(
       prevBatter = null;
     }
 
+    const isRunnerOnly = !entry.batter?.trim() || !entry.order || entry.order === 0;
     const shouldCollapseRunnerLog =
+      isRunnerOnly &&
       entry.eventId &&
-      eventIdsWithRunnerDetails.has(entry.eventId) &&
-      (!entry.batter?.trim() || !entry.order || entry.order === 0);
+      eventIdsWithPrimaryLog.has(entry.eventId) &&
+      eventsById.has(entry.eventId);
 
     if (shouldCollapseRunnerLog) {
       prevHalf = entry.half;
