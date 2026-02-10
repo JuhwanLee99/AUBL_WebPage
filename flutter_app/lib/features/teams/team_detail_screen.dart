@@ -10,6 +10,7 @@ import '../../core/models/team_member.dart';
 import '../../core/models/team_notice.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/webview/app_webview_screen.dart';
 import '../../core/widgets/match_status_badge.dart';
 import '../../core/widgets/section_header.dart';
 import 'team_notice_detail_screen.dart';
@@ -335,7 +336,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
       dense: true,
       leading: MatchStatusBadge(status: match.status),
       title: Text(
-        '${isHome ? "vs" : "@"} $opponent',
+        'VS $opponent',
         style: const TextStyle(color: Colors.white, fontSize: 14),
       ),
       trailing: match.isCompleted || match.isLive
@@ -350,6 +351,23 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
               match.startTime?.substring(0, 10) ?? '',
               style: const TextStyle(color: AppTheme.slate400, fontSize: 12),
             ),
+      onTap: () {
+        if (match.isLive) {
+          Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => AppWebViewScreen(
+              path: '/scoreboard-text/${match.id}',
+              title: '문자중계',
+            ),
+          ));
+        } else if (match.isCompleted) {
+          Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => AppWebViewScreen(
+              path: '/scoreboard-text/${match.id}',
+              title: '경기 결과',
+            ),
+          ));
+        }
+      },
     );
   }
 
