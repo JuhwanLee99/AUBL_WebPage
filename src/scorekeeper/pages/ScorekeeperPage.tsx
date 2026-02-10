@@ -5324,6 +5324,8 @@ function HitAdvanceModal({
         onClick={(e) => e.stopPropagation()}
         style={{
           width: 'min(560px, 100%)',
+          maxHeight: '90vh',
+          overflow: 'auto',
           background: '#0f172a',
           borderRadius: '16px',
           border: '1px solid rgba(148, 163, 184, 0.25)',
@@ -6682,15 +6684,15 @@ function HitWizardModal({
   const renderStep = () => {
     if (state.step === 'result') {
       return (
-        <div style={{ display: 'grid', gap: '12px' }}>
+        <div style={{ display: 'grid', gap: '8px' }}>
           <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '14px' }}>타격 후 결과를 먼저 선택하세요.</span>
-          <div style={{ display: 'grid', gap: '10px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(340px, 100%), 1fr))', gap: '10px', alignItems: 'start' }}>
             {battedBallResultGroups.map((group) => {
               const options = battedBallResultOptions.filter((option) => option.group === group.key);
               return (
-                <div key={group.key} style={{ display: 'grid', gap: '6px' }}>
+                <div key={group.key} style={{ display: 'grid', gap: '4px' }}>
                   <div style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>{group.label}</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '6px' }}>
                     {options.map((option) => {
                       const isSelected = state.result === option.value;
                       const outlineColor = option.group === 'out' ? '#ef4444' : option.color;
@@ -6701,8 +6703,8 @@ function HitWizardModal({
                           type="button"
                           onClick={() => onSelectResult(option.value)}
                           style={{
-                            padding: '12px 10px',
-                            borderRadius: '12px',
+                            padding: '8px 8px',
+                            borderRadius: '10px',
                             border: isSelected ? `2px solid ${outlineColor}` : '1px solid rgba(148,163,184,0.25)',
                             background: isSelected ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
                             color: option.color,
@@ -6710,17 +6712,18 @@ function HitWizardModal({
                             textAlign: 'left',
                             boxShadow: isSelected ? `0 0 0 1px ${outlineColor}40` : 'none',
                             cursor: 'pointer',
+                            fontSize: '13px',
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
                             <span>{option.label}</span>
                             {shortcutHint ? (
-                              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>
+                              <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>
                                 ({shortcutHint})
                               </span>
                             ) : null}
                           </div>
-                          <div style={{ color: '#cbd5e1', fontSize: '12px', fontWeight: 700 }}>{option.helper}</div>
+                          <div style={{ color: '#cbd5e1', fontSize: '11px', fontWeight: 700 }}>{option.helper}</div>
                         </button>
                       );
                     })}
@@ -6902,13 +6905,15 @@ function HitWizardModal({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: 'min(640px, 100%)',
+          width: 'min(1200px, 95vw)',
+          maxHeight: '95vh',
+          overflow: 'auto',
           background: '#0f172a',
           borderRadius: '16px',
           border: '1px solid rgba(148, 163, 184, 0.25)',
           padding: '18px',
           display: 'grid',
-          gap: '14px',
+          gap: '12px',
           color: '#e2e8f0',
           boxShadow: '0 24px 60px rgba(0,0,0,0.4)',
         }}
