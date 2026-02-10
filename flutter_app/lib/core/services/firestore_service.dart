@@ -323,6 +323,37 @@ class FirestoreService {
         .map((doc) => doc.exists ? doc.data() : null);
   }
 
+  Future<Map<String, dynamic>?> findUserTeamMembership(String uid) async {
+    final group = _db.collectionGroup('members');
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs = [];
+    try {
+      final snap = await group.where('uid', isEqualTo: uid).limit(1).get();
+      docs = snap.docs;
+    } catch (_) {}
+
+    if (docs.isEmpty) {
+      try {
+        final snap = await group
+            .where(FieldPath.documentId, isEqualTo: uid)
+            .limit(1)
+            .get();
+        docs = snap.docs;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    if (docs.isEmpty) return null;
+    final doc = docs.first;
+    final teamId = doc.reference.parent.parent?.id;
+    if (teamId == null) return null;
+    final data = doc.data();
+    return {
+      'teamId': teamId,
+      'role': data['role'] ?? 'player',
+    };
+  }
+
   /// 이메일로 uid 조회 (팀원 추가 시 사용)
   Future<String?> findUidByEmail(String email) async {
     final snap = await _db

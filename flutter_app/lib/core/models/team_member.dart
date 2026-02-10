@@ -50,6 +50,7 @@ class TeamMember {
 
   Map<String, dynamic> toFirestore() {
     return {
+      'uid': uid,
       'name': name,
       'role': role,
       if (number != null) 'number': number,

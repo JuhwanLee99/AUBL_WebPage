@@ -98,14 +98,28 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       final roleDoc = await _fs.watchUserRole(user.uid).first;
+      String? teamId;
+      String? teamName;
       if (roleDoc != null && roleDoc['teamId'] != null) {
-        final teamId = roleDoc['teamId'] as String;
-        final teamName = roleDoc['teamName'] as String? ?? teamId;
+        teamId = roleDoc['teamId'] as String;
+        teamName = roleDoc['teamName'] as String? ?? teamId;
+      } else {
+        final membership = await _fs.findUserTeamMembership(user.uid);
+        if (membership != null) {
+          teamId = membership['teamId'] as String?;
+          if (teamId != null) {
+            final team = await _fs.getTeam(teamId);
+            teamName = team?.name ?? teamId;
+          }
+        }
+      }
+
+      if (teamId != null) {
         final notices = await _fs.watchTeamNotices(teamId).first;
         if (mounted) {
           setState(() {
             _userTeamId = teamId;
-            _userTeamName = teamName;
+            _userTeamName = teamName ?? teamId!;
             _teamNotices = [
               ...notices.where((n) => n.pinned),
               ...notices.where((n) => !n.pinned),

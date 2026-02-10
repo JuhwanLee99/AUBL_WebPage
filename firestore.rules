@@ -142,17 +142,22 @@ service cloud.firestore {
       }
 
       match /notices/{noticeId} {
-        allow read: if isAdmin() || isCoachOfTeam(teamId) || isTeamMember(teamId);
+        allow read: if true;
         allow write: if isAdmin() || isCoachOfTeam(teamId);
 
         match /comments/{commentId} {
-          allow read: if isAdmin() || isCoachOfTeam(teamId) || isTeamMember(teamId);
-          allow create: if request.auth != null && (isAdmin() || isCoachOfTeam(teamId) || isTeamMember(teamId));
+          allow read: if true;
+          allow create: if request.auth != null;
           allow update, delete: if request.auth != null && (
             isAdmin() || isCoachOfTeam(teamId) || request.auth.uid == resource.data.uid
           );
         }
       }
+    }
+
+    // 컬렉션 그룹(members) 조회 허용
+    match /{path=**}/members/{memberId} {
+      allow read: if true;
     }
 
     // 그 외 모든 접근 거부

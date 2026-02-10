@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import { useDemoStore } from '../../shared/state/demoStore';
 import type { MatchSchedule } from '../../shared/state/demoStore';
-import { collection, collectionGroup, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { collection, collectionGroup, doc, FieldPath, getDoc, getDocs, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { firestore } from '../../shared/firebase/client';
 import { useContent } from '../../shared/state/contentProvider';
 import { useAdmin } from '../../shared/auth/useAdmin';
@@ -227,8 +227,14 @@ export default function LandingPage() {
     let cancelled = false;
     const run = async () => {
       try {
-        const q = query(collectionGroup(firestore, 'members'), where('uid', '==', user.uid), limit(1));
-        const snap = await getDocs(q);
+        let snap = await getDocs(
+          query(collectionGroup(firestore, 'members'), where('uid', '==', user.uid), limit(1)),
+        );
+        if (snap.empty) {
+          snap = await getDocs(
+            query(collectionGroup(firestore, 'members'), where(FieldPath.documentId(), '==', user.uid), limit(1)),
+          );
+        }
         if (cancelled) return;
         if (snap.empty) {
           setMemberTeamId(null);
