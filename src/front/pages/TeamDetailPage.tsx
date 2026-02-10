@@ -58,6 +58,7 @@ export default function TeamDetailPage() {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
   const [memberEmail, setMemberEmail] = useState('');
+  const [memberName, setMemberName] = useState('');
   const [memberRole, setMemberRole] = useState<'player' | 'staff'>('player');
   const [memberStatus, setMemberStatus] = useState<string | null>(null);
   const [memberError, setMemberError] = useState<string | null>(null);
@@ -257,8 +258,10 @@ export default function TeamDetailPage() {
       }
       const userDoc = userSnap.docs[0];
       const userData = userDoc.data() as UserProfile;
-      const nameSeed = userData.displayName ?? userData.email ?? emailLower;
-      const safeName = nameSeed?.split('@')[0] ?? '선수';
+    const nameSeed = userData.displayName ?? userData.email ?? emailLower;
+    const fallbackName = nameSeed?.split('@')[0] ?? '선수';
+    const inputName = memberName.trim();
+    const safeName = inputName.length ? inputName : fallbackName;
 
       await setDoc(
         doc(firestore, 'teams', teamDocId),
@@ -286,6 +289,7 @@ export default function TeamDetailPage() {
 
       setMemberStatus('팀원을 추가했습니다.');
       setMemberEmail('');
+      setMemberName('');
     } catch {
       setMemberError('팀원 추가 중 문제가 발생했습니다.');
     } finally {
@@ -1230,6 +1234,21 @@ export default function TeamDetailPage() {
                 value={memberEmail}
                 onChange={(e) => setMemberEmail(e.target.value)}
                 placeholder="player@example.com"
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  background: 'rgba(15,23,42,0.6)',
+                  color: '#e2e8f0',
+                }}
+              />
+            </div>
+            <div style={{ display: 'grid', gap: '6px' }}>
+              <label style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>팀원 이름</label>
+              <input
+                value={memberName}
+                onChange={(e) => setMemberName(e.target.value)}
+                placeholder="선수 실명"
                 style={{
                   padding: '10px 12px',
                   borderRadius: '10px',

@@ -2,8 +2,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/services/firestore_service.dart';
 import '../auth/login_webview_screen.dart';
 
 class AccountScreen extends StatefulWidget {
@@ -14,6 +16,7 @@ class AccountScreen extends StatefulWidget {
 }
 
 class _AccountScreenState extends State<AccountScreen> {
+  final _fs = FirestoreService();
   bool _loading = true;
   bool _isAdmin = false;
   String _roleLabel = '일반';
@@ -34,11 +37,48 @@ class _AccountScreenState extends State<AccountScreen> {
     try {
       final token = await user.getIdTokenResult(true);
       final admin = token.claims?['admin'] == true;
+      String roleLabel = '일반';
+      String roleDetail = '사용자';
+
+      if (admin) {
+        roleLabel = '관리자';
+        roleDetail = '정식 승인';
+      } else {
+        final roleDoc = await FirebaseFirestore.instance
+            .collection('roles')
+            .doc(user.uid)
+            .get();
+        final data = roleDoc.data();
+        if (roleDoc.exists && data?['role'] == 'coach') {
+          roleLabel = '감독';
+          roleDetail = data?['teamName'] as String? ??
+              data?['teamId'] as String? ??
+              '감독';
+        } else {
+          final membership = await _fs.findUserTeamMembership(user.uid);
+          if (membership != null) {
+            final role = membership['role'] as String? ?? 'player';
+            roleLabel = switch (role) {
+              'coach' => '감독',
+              'staff' => '스태프',
+              _ => '선수',
+            };
+            final teamId = membership['teamId'] as String?;
+            if (teamId != null) {
+              final team = await _fs.getTeam(teamId);
+              roleDetail = team?.name ?? teamId;
+            } else {
+              roleDetail = '팀 소속';
+            }
+          }
+        }
+      }
+
       if (mounted) {
         setState(() {
           _isAdmin = admin;
-          _roleLabel = admin ? '관리자' : '일반';
-          _roleDetail = admin ? '정식 승인' : '사용자';
+          _roleLabel = roleLabel;
+          _roleDetail = roleDetail;
           _loading = false;
         });
       }

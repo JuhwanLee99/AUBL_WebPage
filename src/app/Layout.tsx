@@ -643,6 +643,13 @@ export default function Layout() {
                           {roleLabel}
                         </span>
                       </Link>
+                    ) : roleLabel === '선수' ? (
+                      <span className="player-badge-wrap">
+                        <span className="player-badge" title={`권한: ${roleLabel} (${roleDetail})`}>
+                          {roleLabel}
+                        </span>
+                        <span className="player-badge-team">{roleDetail}</span>
+                      </span>
                     ) : (
                       <span
                         className="badge-hoverable"

@@ -168,6 +168,7 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> with WidgetsBin
     final query = <String, String>{
       'embedded': 'flutter',
       'nativeGoogle': '1',
+      'forceLogout': '1',
     };
     if (widget.nextPath != null && widget.nextPath!.startsWith('/')) {
       query['next'] = widget.nextPath!;
@@ -178,6 +179,8 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> with WidgetsBin
   Future<void> _requestWebIdTokenIfNeeded() async {
     if (_authenticating) return;
     if (FirebaseAuth.instance.currentUser != null) return;
+    final uri = _loginUri();
+    if (uri.queryParameters['forceLogout'] == '1') return;
     try {
       await _controller.runJavaScript(_webTokenProbeScript);
     } catch (_) {}

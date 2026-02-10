@@ -14,13 +14,14 @@ type LocationState = {
 };
 
 export default function LoginPage() {
-  const { loginWithEmail, registerWithEmail, loginWithGoogle, error, user } = useAuth();
+  const { loginWithEmail, registerWithEmail, loginWithGoogle, logout, error, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const embedded = searchParams.get('embedded') === 'flutter';
   const nativeGoogleEnabled = searchParams.get('nativeGoogle') === '1';
   const rawNext = searchParams.get('next');
+  const forceLogout = searchParams.get('forceLogout') === '1';
   const next = rawNext && rawNext.startsWith('/') ? rawNext : null;
   const redirectTo = useMemo(() => next || (location.state as LocationState | null)?.from || '/', [location.state, next]);
 
@@ -32,12 +33,32 @@ export default function LoginPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [logoutReady, setLogoutReady] = useState(!forceLogout);
 
   useEffect(() => {
     if (!embedded || !user) return;
+    if (forceLogout && !logoutReady) return;
     void sendLoginSuccessToFlutter(user);
     navigate(redirectTo, { replace: true });
-  }, [embedded, navigate, redirectTo, user]);
+  }, [embedded, forceLogout, logoutReady, navigate, redirectTo, user]);
+
+  useEffect(() => {
+    if (!forceLogout) return;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        await logout();
+      } catch {
+        // ignore
+      } finally {
+        if (!cancelled) setLogoutReady(true);
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [forceLogout, logout]);
 
   const handleSubmit = async (evt: React.FormEvent<HTMLFormElement>) => {
     evt.preventDefault();

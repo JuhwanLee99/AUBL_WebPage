@@ -227,6 +227,58 @@ button:focus-visible {
   color: #fed7aa !important;
 }
 
+.player-badge-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.player-badge {
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(56, 189, 248, 0.16);
+  color: #7dd3fc;
+  font-weight: 800;
+  font-size: 12px;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease, background-color 150ms ease;
+}
+
+.player-badge-team {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translate(-50%, 2px);
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.5);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease, transform 150ms ease;
+  z-index: 20;
+}
+
+.player-badge-wrap:hover .player-badge {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(56, 189, 248, 0.35);
+  border-color: rgba(56, 189, 248, 0.75);
+  background: rgba(56, 189, 248, 0.28);
+  color: #e0f2fe;
+}
+
+.player-badge-wrap:hover .player-badge-team {
+  opacity: 1;
+  transform: translate(-50%, 8px);
+}
+
 @media (max-width: 1024px) {
   :root {
     --page-padding: 32px 18px 64px;
