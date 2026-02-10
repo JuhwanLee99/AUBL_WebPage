@@ -2,41 +2,24 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../core/theme/app_theme.dart';
 import '../features/auth/login_webview_screen.dart';
-import '../features/home/home_screen.dart';
+import 'main_shell.dart';
 
 class AublApp extends StatelessWidget {
   const AublApp({super.key});
-
-  static const Color _chromeColor = Color(0xFF0F172A);
-  static const SystemUiOverlayStyle _systemUiStyle = SystemUiOverlayStyle(
-    statusBarColor: _chromeColor,
-    statusBarIconBrightness: Brightness.light,
-    statusBarBrightness: Brightness.dark,
-    systemNavigationBarColor: _chromeColor,
-    systemNavigationBarIconBrightness: Brightness.light,
-    systemNavigationBarDividerColor: _chromeColor,
-  );
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'AUBL',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0F172A)),
-        useMaterial3: true,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: _chromeColor,
-          foregroundColor: Colors.white,
-          systemOverlayStyle: _systemUiStyle,
-        ),
-      ),
+      theme: AppTheme.dark,
       builder: (context, child) {
         return AnnotatedRegion<SystemUiOverlayStyle>(
-          value: _systemUiStyle,
+          value: AppTheme.systemUiStyle,
           child: Container(
-            color: _chromeColor,
+            color: AppTheme.slate900,
             child: child ?? const SizedBox.shrink(),
           ),
         );
@@ -64,7 +47,7 @@ class _AuthGate extends StatelessWidget {
           return const LoginWebViewScreen();
         }
 
-        return const HomeScreen();
+        return const MainShell();
       },
     );
   }
