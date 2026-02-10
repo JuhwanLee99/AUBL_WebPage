@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/data/team_groups.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/background_logo.dart';
 import 'team_detail_screen.dart';
 import 'widgets/team_card.dart';
 
@@ -52,16 +53,7 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
       appBar: AppBar(title: const Text('팀')),
       body: Stack(
         children: [
-          Center(
-            child: Opacity(
-              opacity: 0.5,
-              child: Image.asset(
-                'assets/images/aubl_clean.png',
-                width: 400,
-                fit: BoxFit.contain,
-              ),
-            ),
-          ),
+          const BackgroundLogo(),
           Column(
         children: [
           // ── 검색바 ──

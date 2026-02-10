@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../core/models/match.dart' as m;
 import '../../core/services/firestore_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/background_logo.dart';
 import '../../core/widgets/match_status_badge.dart';
 import '../../core/data/team_groups.dart';
 import '../../core/webview/app_webview_screen.dart';
@@ -90,16 +91,7 @@ class _ScheduleScreenState extends State<ScheduleScreen>
       ),
       body: Stack(
         children: [
-          Center(
-            child: Opacity(
-              opacity: 0.5,
-              child: Image.asset(
-                'assets/images/aubl_clean.png',
-                width: 400,
-                fit: BoxFit.contain,
-              ),
-            ),
-          ),
+          const BackgroundLogo(verticalOffset: -(kTextTabBarHeight / 2)),
           _loading
           ? const Center(child: CircularProgressIndicator())
           : TabBarView(
