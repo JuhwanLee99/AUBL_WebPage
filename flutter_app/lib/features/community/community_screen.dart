@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/notice.dart';
 import '../../core/services/firestore_service.dart';
@@ -17,6 +18,9 @@ class _CommunityScreenState extends State<CommunityScreen> {
   final _fs = FirestoreService();
   List<Notice> _notices = [];
   bool _loading = true;
+  String _selectedCategory = '전체';
+
+  static const _categories = ['전체', '긴급', '경기공지', '징계', '일반'];
 
   @override
   void initState() {
@@ -25,13 +29,18 @@ class _CommunityScreenState extends State<CommunityScreen> {
   }
 
   Future<void> _loadNotices() async {
-    final notices = await _fs.getNotices(limit: 20);
+    final notices = await _fs.getNotices(limit: 30);
     if (mounted) {
       setState(() {
         _notices = notices;
         _loading = false;
       });
     }
+  }
+
+  List<Notice> get _filteredNotices {
+    if (_selectedCategory == '전체') return _notices;
+    return _notices.where((n) => n.category == _selectedCategory).toList();
   }
 
   Color _categoryColor(String cat) => switch (cat) {
@@ -43,27 +52,78 @@ class _CommunityScreenState extends State<CommunityScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final filtered = _filteredNotices;
+
     return Scaffold(
       appBar: AppBar(title: const Text('커뮤니티')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _loadNotices,
-              child: _notices.isEmpty
-                  ? const Center(
-                      child: Text('공지가 없습니다.',
-                          style: TextStyle(color: AppTheme.slate500)))
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(12),
-                      itemCount: _notices.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 6),
-                      itemBuilder: (context, i) {
-                        final n = _notices[i];
-                        final ago = timeago.format(
-                          DateTime.fromMillisecondsSinceEpoch(n.createdAt),
-                          locale: 'ko',
+              child: ListView(
+                children: [
+                  // ── 갤러리 배너 ──
+                  _buildGalleryBanner(),
+                  const Divider(height: 1),
+
+                  // ── 카테고리 필터 ──
+                  SizedBox(
+                    height: 48,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      children: _categories.map((cat) {
+                        final selected = cat == _selectedCategory;
+                        final color =
+                            cat == '전체' ? AppTheme.blue400 : _categoryColor(cat);
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            label: Text(cat,
+                                style: TextStyle(
+                                    color: selected ? Colors.white : color,
+                                    fontSize: 13)),
+                            selected: selected,
+                            selectedColor: color,
+                            onSelected: (_) =>
+                                setState(() => _selectedCategory = cat),
+                          ),
                         );
-                        return ListTile(
+                      }).toList(),
+                    ),
+                  ),
+
+                  // ── 공지 수 ──
+                  Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: Text(
+                      '${filtered.length}개 공지',
+                      style: const TextStyle(
+                          color: AppTheme.slate500, fontSize: 12),
+                    ),
+                  ),
+
+                  // ── 공지 목록 ──
+                  if (filtered.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Center(
+                        child: Text('공지가 없습니다.',
+                            style: TextStyle(color: AppTheme.slate500)),
+                      ),
+                    )
+                  else
+                    ...filtered.map((n) {
+                      final ago = timeago.format(
+                        DateTime.fromMillisecondsSinceEpoch(n.createdAt),
+                        locale: 'ko',
+                      );
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 3),
+                        child: ListTile(
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
@@ -107,10 +167,62 @@ class _CommunityScreenState extends State<CommunityScreen> {
                           ),
                           trailing: const Icon(Icons.chevron_right,
                               size: 18, color: AppTheme.slate500),
-                        );
-                      },
-                    ),
+                        ),
+                      );
+                    }),
+                  const SizedBox(height: 32),
+                ],
+              ),
             ),
+    );
+  }
+
+  Widget _buildGalleryBanner() {
+    return GestureDetector(
+      onTap: () async {
+        final uri =
+            Uri.parse('https://gall.dcinside.com/mini/board/lists/?id=aubl');
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      },
+      child: Container(
+        margin: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppTheme.blue500.withValues(alpha: 0.15),
+              AppTheme.slate800,
+            ],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.slate700),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.photo_library, color: AppTheme.blue400, size: 28),
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('AUBL 갤러리',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600)),
+                  SizedBox(height: 2),
+                  Text('DC인사이드 갤러리로 이동',
+                      style:
+                          TextStyle(color: AppTheme.slate400, fontSize: 12)),
+                ],
+              ),
+            ),
+            Icon(Icons.open_in_new, color: AppTheme.slate500, size: 18),
+          ],
+        ),
+      ),
     );
   }
 }

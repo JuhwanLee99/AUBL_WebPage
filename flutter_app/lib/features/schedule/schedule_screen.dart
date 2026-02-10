@@ -250,12 +250,28 @@ class _MatchCard extends StatelessWidget {
         ),
         child: Column(
           children: [
-            // 상단: 날짜 + 상태
+            // 상단: 날짜 + 배지들
             Row(
               children: [
                 Text(dateLabel,
                     style: const TextStyle(
                         color: AppTheme.slate400, fontSize: 12)),
+                if (match.isPractice) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: AppTheme.amber400.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text('연습',
+                        style: TextStyle(
+                            color: AppTheme.amber400,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ],
                 const Spacer(),
                 MatchStatusBadge(status: match.status),
               ],
@@ -306,11 +322,20 @@ class _MatchCard extends StatelessWidget {
                 ),
               ],
             ),
+            // 장소 + 비고
             if (match.venue != null && match.venue!.isNotEmpty) ...[
               const SizedBox(height: 6),
               Text(match.venue!,
                   style: const TextStyle(
                       color: AppTheme.slate500, fontSize: 11)),
+            ],
+            if (match.notes != null && match.notes!.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(match.notes!,
+                  style: const TextStyle(
+                      color: AppTheme.slate500, fontSize: 11),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
             ],
           ],
         ),

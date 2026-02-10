@@ -4,6 +4,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../auth/login_webview_screen.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -64,9 +65,31 @@ class _AccountScreenState extends State<AccountScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : user == null
-              ? const Center(
-                  child: Text('로그인 정보가 없습니다.',
-                      style: TextStyle(color: AppTheme.slate400)))
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.person_outline,
+                          size: 48, color: AppTheme.slate500),
+                      const SizedBox(height: 16),
+                      const Text('로그인이 필요합니다.',
+                          style: TextStyle(color: AppTheme.slate400)),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const LoginWebViewScreen(),
+                            ),
+                          );
+                          if (mounted) _loadRole();
+                        },
+                        icon: const Icon(Icons.login),
+                        label: const Text('로그인'),
+                      ),
+                    ],
+                  ),
+                )
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [

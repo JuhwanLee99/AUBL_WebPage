@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../features/account/account_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/records/records_screen.dart';
 import '../features/schedule/schedule_screen.dart';
@@ -21,6 +22,7 @@ class _MainShellState extends State<MainShell> {
     TeamHubScreen(),
     ScheduleScreen(),
     RecordsScreen(),
+    AccountScreen(),
     MoreScreen(),
   ];
 
@@ -48,6 +50,8 @@ class _MainShellState extends State<MainShell> {
                 icon: Icon(Icons.calendar_month), label: '일정'),
             BottomNavigationBarItem(
                 icon: Icon(Icons.leaderboard), label: '기록'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.person), label: '계정'),
             BottomNavigationBarItem(icon: Icon(Icons.menu), label: '더보기'),
           ],
         ),

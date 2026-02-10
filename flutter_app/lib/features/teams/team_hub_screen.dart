@@ -12,12 +12,15 @@ class TeamHubScreen extends StatefulWidget {
   State<TeamHubScreen> createState() => _TeamHubScreenState();
 }
 
+enum _SortMode { name, group }
+
 class _TeamHubScreenState extends State<TeamHubScreen> {
   String _searchQuery = '';
   String? _selectedGroup;
+  _SortMode _sortMode = _SortMode.group;
 
   List<TeamGroupEntry> get _filteredTeams {
-    var teams = teamGroups;
+    var teams = teamGroups.toList();
 
     if (_selectedGroup != null) {
       teams = teams.where((t) => t.group == _selectedGroup).toList();
@@ -25,6 +28,15 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
       teams = teams.where((t) => t.name.toLowerCase().contains(q)).toList();
+    }
+
+    if (_sortMode == _SortMode.name) {
+      teams.sort((a, b) => a.name.compareTo(b.name));
+    } else {
+      teams.sort((a, b) {
+        final g = a.group.compareTo(b.group);
+        return g != 0 ? g : a.name.compareTo(b.name);
+      });
     }
     return teams;
   }
@@ -90,16 +102,36 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
             ),
           ),
 
-          // ── 팀 수 ──
+          // ── 팀 수 + 정렬 ──
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '${filtered.length}개 팀',
-                style: const TextStyle(
-                    color: AppTheme.slate400, fontSize: 13),
-              ),
+            child: Row(
+              children: [
+                Text(
+                  '${filtered.length}개 팀',
+                  style: const TextStyle(
+                      color: AppTheme.slate400, fontSize: 13),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () => setState(() => _sortMode =
+                      _sortMode == _SortMode.group
+                          ? _SortMode.name
+                          : _SortMode.group),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.sort, size: 14, color: AppTheme.slate500),
+                      const SizedBox(width: 4),
+                      Text(
+                        _sortMode == _SortMode.group ? '조별' : '이름순',
+                        style: const TextStyle(
+                            color: AppTheme.slate500, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
 
