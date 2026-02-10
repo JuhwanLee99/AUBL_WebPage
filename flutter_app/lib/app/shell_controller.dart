@@ -5,11 +5,13 @@ class ShellController extends InheritedWidget {
     super.key,
     required this.openEmbeddedWebView,
     required this.closeEmbeddedWebView,
+    required this.switchTab,
     required super.child,
   });
 
   final void Function(String path, String title) openEmbeddedWebView;
   final VoidCallback closeEmbeddedWebView;
+  final void Function(int index) switchTab;
 
   static ShellController? of(BuildContext context) {
     return context.dependOnInheritedWidgetOfExactType<ShellController>();

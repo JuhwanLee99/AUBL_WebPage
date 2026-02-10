@@ -146,10 +146,18 @@ class _IntroScreenState extends State<IntroScreen> {
 
   // ── 히어로 ──
   Widget _buildHero(Map<String, dynamic> intro) {
-    final heroTitle =
-        intro['heroTitle'] as String? ?? 'AUBL 리그 소개';
-    final tagline = intro['tagline'] as String? ??
-        '1981년 창설, 대학 아마추어 야구의 전통과 미래';
+    final heroTitle = intro['heroTitle'] as String? ??
+        '순수 아마추어 대학 야구의 46년 — 2026년, 중앙대학교(서울)와 함께 새로운 도약을 준비합니다.';
+    final heroDescription = intro['heroDescription'] as String? ??
+        '1981년 출범한 전국대학아마추어야구연합회(AUBL)는 엘리트 선수 중심이 아닌 '
+            '일반 대학생들의 땀방울로 성장했습니다. 2026 시즌은 중앙대학교(서울)가 주최를 '
+            '맡아 조별 예선과 으뜸·버금 토너먼트를 통해 리그의 전통과 혁신을 모두 보여줄 예정입니다.';
+
+    const heroMetrics = [
+      ('2026 HOST', '중앙대학교(서울)', '제46회 AUBL 운영'),
+      ('참가 규모', '약 40개 대학', 'A~H조 조별 예선 후 으뜸·버금'),
+      ('핵심 가치', '실시간 기록 · 중계 · 디지털화', '모바일 친화 기록/중계'),
+    ];
 
     return Container(
       width: double.infinity,
@@ -216,30 +224,75 @@ class _IntroScreenState extends State<IntroScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              // 메트릭 배지
+              // 배지
               Row(
                 children: [
-                  _heroBadge('Since 1981', AppTheme.amber400),
-                  const SizedBox(width: 8),
-                  _heroBadge('${teamGroups.length}개 팀', AppTheme.blue400),
-                  const SizedBox(width: 8),
-                  _heroBadge('${groupLetters.length}개 조', AppTheme.green500),
+                  _heroBadge('AUBL · LEAGUE INTRO', AppTheme.blue400),
                 ],
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                '46th AUBL · Hosted by Chung-Ang University (Seoul)',
+                style: TextStyle(
+                    color: AppTheme.slate300,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 14),
               Text(
                 heroTitle,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 24,
+                  fontSize: 20,
                   fontWeight: FontWeight.w800,
+                  height: 1.3,
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 10),
               Text(
-                tagline,
-                style: const TextStyle(color: AppTheme.slate400, fontSize: 13),
+                heroDescription,
+                style: const TextStyle(
+                    color: AppTheme.slate300, fontSize: 13, height: 1.6),
               ),
+              const SizedBox(height: 16),
+              // 히어로 메트릭
+              ...heroMetrics.map((m) {
+                final (label, value, note) = m;
+                return Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.04),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: AppTheme.slate500.withValues(alpha: 0.25)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(label,
+                          style: const TextStyle(
+                              color: AppTheme.slate400,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.5)),
+                      const SizedBox(height: 4),
+                      Text(value,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 2),
+                      Text(note,
+                          style: const TextStyle(
+                              color: AppTheme.slate300,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                );
+              }),
             ],
           ),
         ],
@@ -275,12 +328,12 @@ class _IntroScreenState extends State<IntroScreen> {
     );
   }
 
-  // ── 회장 인사말 ──
+  // ── 회장단 인사말 ──
   Widget _buildChairmanMessage() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('회장 인사말', Icons.record_voice_over, AppTheme.blue400),
+        _sectionTitle('회장단 인사말', Icons.record_voice_over, AppTheme.orange500),
         const SizedBox(height: 10),
         Container(
           padding: const EdgeInsets.all(16),
@@ -299,7 +352,7 @@ class _IntroScreenState extends State<IntroScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '"야구를 사랑하는 대학생들이 함께 만들어가는 리그"',
+                '"변화와 혁신, 그리고 변하지 않는 열정으로"',
                 style: TextStyle(
                     color: AppTheme.blue400,
                     fontSize: 14,
@@ -308,19 +361,32 @@ class _IntroScreenState extends State<IntroScreen> {
               ),
               SizedBox(height: 10),
               Text(
-                'AUBL은 1981년 창설 이래, 대학 아마추어 야구의 발전과 선수들의 '
-                '건전한 스포츠 활동을 지원해 왔습니다. 공정한 경쟁과 스포츠맨십을 '
-                '바탕으로, 모든 참가 팀과 선수들이 최고의 경험을 할 수 있도록 '
-                '노력하겠습니다.',
+                '존경하는 야구 가족 여러분, 안녕하십니까. 2026년 제46대 '
+                '전국대학아마추어야구연합회(AUBL) 회장을 맡게 된 '
+                '정흥영(중앙대학교 서울)입니다. 1981년 시작된 AUBL은 '
+                '46년 동안 대한민국 대학 스포츠를 대표하는 커뮤니티로 '
+                '성장했습니다. 올해 저희 연합회는 "소통하는 리그, 공정한 리그, '
+                '안전한 리그"를 목표로, 경기는 치열하게 그러나 끝나면 서로의 '
+                '어깨를 두드려주는 대학 야구의 낭만을 지켜가겠습니다.',
+                style: TextStyle(
+                    color: AppTheme.slate300, fontSize: 13, height: 1.6),
+              ),
+              SizedBox(height: 8),
+              Text(
+                '2026 시즌은 웹 플랫폼 고도화의 해입니다. 선수들이 자신의 기록과 '
+                '일정을 언제 어디서나 확인할 수 있도록 실시간 기록과 중계를 '
+                '강화하고, 모든 운영진이 여러분의 땀방울이 헛되지 않도록 최선을 '
+                '다하겠습니다. 부상 없는 즐거운 시즌이 되길 바랍니다.',
                 style: TextStyle(
                     color: AppTheme.slate300, fontSize: 13, height: 1.6),
               ),
               SizedBox(height: 10),
               Align(
                 alignment: Alignment.centerRight,
-                child: Text('— AUBL 회장단',
+                child: Text('제46대 전국대학아마추어야구연합회장 정흥영',
                     style: TextStyle(
-                        color: AppTheme.slate500, fontSize: 12)),
+                        color: AppTheme.slate500, fontSize: 12,
+                        fontWeight: FontWeight.w600)),
               ),
             ],
           ),
@@ -329,33 +395,36 @@ class _IntroScreenState extends State<IntroScreen> {
     );
   }
 
-  // ── 역사와 전통 ──
+  // ── 역사와 유산 ──
   Widget _buildHistorySection() {
     const milestones = [
       (
-        '1981',
-        '리그 창설',
-        '대학 아마추어 야구 리그의 시작',
-        AppTheme.amber400
+        'Since 1981',
+        'Since 1981',
+        '1981년 대학생들의 작은 교류전으로 출발해 45년을 이어온 '
+            '국내 유일 순수 대학 아마추어 야구 리그.',
+        AppTheme.blue400
       ),
       (
-        '1990s–2010s',
-        '왕조의 시대',
-        '명문 팀들의 치열한 경쟁과 전설적인 경기',
-        AppTheme.orange500
+        'Dynasties',
+        'Dynasties',
+        '한국외국어대학교(서울)와 동국대학교(L.A.E)가 각각 통산 8회 '
+            '우승으로 최다 우승 기록을 보유하며 리그의 역사를 이끌어왔습니다.',
+        AppTheme.purple500
       ),
       (
         '2025→2026',
-        '새로운 도약',
-        '디지털 전환과 확장된 리그 운영',
-        AppTheme.blue400
+        '2025 → 2026',
+        '2025년 아주대 주최 시즌을 지나 2026년에는 중앙대학교(서울)가 '
+            '호스트를 맡아 8개 조 예선과 으뜸·버금 토너먼트로 리그를 운영합니다.',
+        AppTheme.green500
       ),
     ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('역사와 전통', Icons.history_edu, AppTheme.amber400),
+        _sectionTitle('역사와 유산', Icons.history_edu, AppTheme.blue400),
         const SizedBox(height: 10),
         ...milestones.map((m) {
           final (year, title, desc, color) = m;
@@ -412,116 +481,47 @@ class _IntroScreenState extends State<IntroScreen> {
   // ── 조직 구성 ──
   Widget _buildOrganizationSection() {
     const roles = [
-      (Icons.account_balance, '주최', 'AUBL 운영위원회'),
-      (Icons.groups, '회장단', '회장 1인, 부회장 2인'),
-      (Icons.gavel, '감사', '감사위원 1인'),
+      ('주최 (2026)', '중앙대학교(서울)', '46주년 시즌 운영 전권을 위임받은 호스트 대학'),
+      ('회장단', '회장 정흥영 · 기록부장 이주환', '실시간 기록 · 중계 · 디지털화, 웹 개발을 기록부가 주도'),
+      ('감사', '연 2회 회계 감사', '주최 외 제3의 대학(차기 주최 등)이 상·하반기 2회 진행'),
     ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('조직 구성', Icons.corporate_fare, AppTheme.indigo500),
+        _sectionTitle('조직 구성', Icons.corporate_fare, AppTheme.green500),
         const SizedBox(height: 10),
-        Row(
-          children: roles.map((r) {
-            final (icon, title, desc) = r;
-            return Expanded(
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppTheme.slate800,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  children: [
-                    Icon(icon, color: AppTheme.indigo500, size: 24),
-                    const SizedBox(height: 8),
-                    Text(title,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 3),
-                    Text(desc,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                            color: AppTheme.slate400, fontSize: 11)),
-                  ],
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      ],
-    );
-  }
-
-  // ── 리그 구조 & 규정 ──
-  Widget _buildLeagueStructure() {
-    const items = [
-      (
-        Icons.verified_user,
-        '회원 자격',
-        '4년제 대학 재학·휴학생으로 구성된 야구 동아리',
-        AppTheme.green500,
-      ),
-      (
-        Icons.sports_baseball,
-        '경기 운영',
-        '조별 리그 → 포스트시즌 (으뜸/버금 4강) 토너먼트',
-        AppTheme.blue400,
-      ),
-      (
-        Icons.emoji_events,
-        '순위·포스트시즌',
-        'Elo 레이팅 기반 순위, 상위 팀 토너먼트 진출',
-        AppTheme.amber400,
-      ),
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionTitle('리그 구조 & 규정', Icons.menu_book, AppTheme.green500),
-        const SizedBox(height: 10),
-        ...items.map((item) {
-          final (icon, title, desc, color) = item;
+        ...roles.map((r) {
+          final (label, value, detail) = r;
           return Container(
             margin: const EdgeInsets.only(bottom: 8),
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: AppTheme.slate800,
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                  color: AppTheme.slate700.withValues(alpha: 0.5)),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(icon, color: color, size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 2),
-                      Text(desc,
-                          style: const TextStyle(
-                              color: AppTheme.slate400, fontSize: 12)),
-                    ],
-                  ),
-                ),
+                Text(label,
+                    style: const TextStyle(
+                        color: AppTheme.green500,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5)),
+                const SizedBox(height: 6),
+                Text(value,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text(detail,
+                    style: const TextStyle(
+                        color: AppTheme.slate400, fontSize: 12,
+                        height: 1.5)),
               ],
             ),
           );
@@ -530,86 +530,152 @@ class _IntroScreenState extends State<IntroScreen> {
     );
   }
 
-  // ── 포스트시즌 ──
-  Widget _buildPostseason() {
+  // ── 리그 구조 · 규정 요약 ──
+  Widget _buildLeagueStructure() {
+    const cards = [
+      (
+        '회원 자격',
+        [
+          '각 대학 본부에 정식 등록된 야구회 소속원만 참가',
+          '재학생 원칙, 휴학생·군 복무자 참가 허용',
+          '대학원생은 원칙적으로 불허',
+          '엘리트 선수(대한야구소프트볼협회 등록) 출신 제한으로 순수 아마추어리즘 유지',
+        ],
+      ),
+      (
+        '경기 운영',
+        [
+          '정규 7이닝, 4이닝 이상 진행 시 정식 경기 인정',
+          '콜드 게임: 5회 10점 차 / 6회 7점 차',
+          '노쇼 10분 경과 시 몰수, 무단 불참 시 1년 출전 정지',
+        ],
+      ),
+      (
+        '순위 · 포스트시즌',
+        [
+          'A~H조, 조당 4~5팀 풀리그',
+          '순위: 승률 → 승자승 → TQB → 최소 실점 → 최다 득점 → 추첨',
+          '각 조 상위 2팀 으뜸 토너먼트 16강, 하위권 팀은 버금 16강으로 진출',
+        ],
+      ),
+    ];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('포스트시즌', Icons.military_tech, AppTheme.orange500),
+        _sectionTitle('리그 구조 · 규정 요약', Icons.menu_book, AppTheme.orange500),
         const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      AppTheme.amber400.withValues(alpha: 0.12),
-                      AppTheme.slate800,
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                      color: AppTheme.amber400.withValues(alpha: 0.25)),
-                ),
-                child: const Column(
-                  children: [
-                    Icon(Icons.emoji_events,
-                        color: AppTheme.amber400, size: 28),
-                    SizedBox(height: 8),
-                    Text('으뜸 4강',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700)),
-                    SizedBox(height: 4),
-                    Text('상위권 팀 토너먼트',
-                        style: TextStyle(
-                            color: AppTheme.slate400, fontSize: 12)),
-                  ],
-                ),
-              ),
+        ...cards.map((card) {
+          final (title, points) = card;
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppTheme.slate800,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                  color: AppTheme.slate700.withValues(alpha: 0.5)),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      AppTheme.blue400.withValues(alpha: 0.10),
-                      AppTheme.slate800,
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                      color: AppTheme.blue400.withValues(alpha: 0.2)),
-                ),
-                child: const Column(
-                  children: [
-                    Icon(Icons.workspace_premium,
-                        color: AppTheme.blue400, size: 28),
-                    SizedBox(height: 8),
-                    Text('버금 4강',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700)),
-                    SizedBox(height: 4),
-                    Text('하위권 팀 토너먼트',
-                        style: TextStyle(
-                            color: AppTheme.slate400, fontSize: 12)),
-                  ],
-                ),
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                ...points.map((p) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('• ',
+                              style: TextStyle(
+                                  color: AppTheme.orange500, fontSize: 13)),
+                          Expanded(
+                            child: Text(p,
+                                style: const TextStyle(
+                                    color: AppTheme.slate300,
+                                    fontSize: 13,
+                                    height: 1.5)),
+                          ),
+                        ],
+                      ),
+                    )),
+              ],
             ),
-          ],
-        ),
+          );
+        }),
+      ],
+    );
+  }
+
+  // ── 2026 포스트시즌 스냅샷 ──
+  Widget _buildPostseason() {
+    const blocks = [
+      (
+        '으뜸 4강 (2026.01.25 예정)',
+        [
+          '세종대 Kings vs 경희대 국제 Lions',
+          '연세대 Eagles vs 서울시립대 Falcons',
+        ],
+        AppTheme.amber400,
+      ),
+      (
+        '버금 4강 (2026.01.24 예정)',
+        [
+          '한국공학대 Winners vs 한국외대 글로벌 Union',
+          '경희대 서울 Braves vs 인하대 Biryong',
+        ],
+        AppTheme.purple500,
+      ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle(
+            '2026 포스트시즌 스냅샷', Icons.military_tech, AppTheme.purple500),
+        const SizedBox(height: 10),
+        ...blocks.map((block) {
+          final (title, matchups, color) = block;
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.slate800,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                  color: color.withValues(alpha: 0.25)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                ...matchups.map((m) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Row(
+                        children: [
+                          Text('• ',
+                              style: TextStyle(color: color, fontSize: 13)),
+                          Expanded(
+                            child: Text(m,
+                                style: const TextStyle(
+                                    color: AppTheme.slate300, fontSize: 13)),
+                          ),
+                        ],
+                      ),
+                    )),
+              ],
+            ),
+          );
+        }),
       ],
     );
   }
