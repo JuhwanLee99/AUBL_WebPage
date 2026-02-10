@@ -65,6 +65,7 @@ class _RecordsScreenState extends State<RecordsScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabCtrl;
   int _selectedYear = 2024;
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -80,6 +81,17 @@ class _RecordsScreenState extends State<RecordsScreen>
 
   @override
   Widget build(BuildContext context) {
+    // 리그 요약 통계 계산
+    final batters = _batterStats.where((s) => s.year == _selectedYear).toList();
+    final pitchers = _pitcherStats.where((s) => s.year == _selectedYear).toList();
+    final avgOps = batters.isEmpty
+        ? 0.0
+        : batters.fold<double>(0, (s, b) => s + b.ops) / batters.length;
+    final avgEra = pitchers.isEmpty
+        ? 0.0
+        : pitchers.fold<double>(0, (s, p) => s + p.era) / pitchers.length;
+    final totalSb = batters.fold<int>(0, (s, b) => s + b.sb);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('기록'),
@@ -103,11 +115,69 @@ class _RecordsScreenState extends State<RecordsScreen>
           tabs: const [Tab(text: '타자'), Tab(text: '투수')],
         ),
       ),
-      body: TabBarView(
-        controller: _tabCtrl,
+      body: Column(
         children: [
-          _BatterTable(year: _selectedYear),
-          _PitcherTable(year: _selectedYear),
+          // ── 검색 + 리그 요약 ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            child: TextField(
+              decoration: const InputDecoration(
+                hintText: '선수명 또는 팀명 검색...',
+                prefixIcon: Icon(Icons.search),
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+              onChanged: (v) => setState(() => _searchQuery = v),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            child: Row(
+              children: [
+                _metricChip('AVG ERA', avgEra.toStringAsFixed(2),
+                    AppTheme.orange500),
+                const SizedBox(width: 8),
+                _metricChip('AVG OPS', avgOps.toStringAsFixed(3),
+                    AppTheme.blue400),
+                const SizedBox(width: 8),
+                _metricChip('SB', '$totalSb', AppTheme.green500),
+              ],
+            ),
+          ),
+          // ── 테이블 ──
+          Expanded(
+            child: TabBarView(
+              controller: _tabCtrl,
+              children: [
+                _BatterTable(year: _selectedYear, search: _searchQuery),
+                _PitcherTable(year: _selectedYear, search: _searchQuery),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _metricChip(String label, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label,
+              style: TextStyle(
+                  color: color, fontSize: 10, fontWeight: FontWeight.w700)),
+          const SizedBox(width: 6),
+          Text(value,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800)),
         ],
       ),
     );
@@ -115,12 +185,20 @@ class _RecordsScreenState extends State<RecordsScreen>
 }
 
 class _BatterTable extends StatelessWidget {
-  const _BatterTable({required this.year});
+  const _BatterTable({required this.year, this.search = ''});
   final int year;
+  final String search;
 
   @override
   Widget build(BuildContext context) {
-    final stats = _batterStats.where((s) => s.year == year).toList()
+    final q = search.toLowerCase();
+    final stats = _batterStats
+        .where((s) =>
+            s.year == year &&
+            (q.isEmpty ||
+                s.name.toLowerCase().contains(q) ||
+                s.team.toLowerCase().contains(q)))
+        .toList()
       ..sort((a, b) {
         final c = b.ops.compareTo(a.ops);
         return c != 0 ? c : b.war.compareTo(a.war);
@@ -197,12 +275,20 @@ class _BatterTable extends StatelessWidget {
 }
 
 class _PitcherTable extends StatelessWidget {
-  const _PitcherTable({required this.year});
+  const _PitcherTable({required this.year, this.search = ''});
   final int year;
+  final String search;
 
   @override
   Widget build(BuildContext context) {
-    final stats = _pitcherStats.where((s) => s.year == year).toList()
+    final q = search.toLowerCase();
+    final stats = _pitcherStats
+        .where((s) =>
+            s.year == year &&
+            (q.isEmpty ||
+                s.name.toLowerCase().contains(q) ||
+                s.team.toLowerCase().contains(q)))
+        .toList()
       ..sort((a, b) {
         final c = a.era.compareTo(b.era);
         return c != 0 ? c : b.war.compareTo(a.war);

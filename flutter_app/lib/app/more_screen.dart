@@ -5,7 +5,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../core/theme/app_theme.dart';
 import '../core/webview/app_webview_screen.dart';
-import '../features/account/account_screen.dart';
+import '../features/auth/login_webview_screen.dart';
 import '../features/community/community_screen.dart';
 import '../features/intro/intro_screen.dart';
 import '../features/intro/rules_screen.dart';
@@ -22,19 +22,26 @@ class MoreScreen extends StatefulWidget {
 class _MoreScreenState extends State<MoreScreen> {
   bool _isAdmin = false;
   bool _checking = true;
+  bool _loggedIn = false;
 
   @override
   void initState() {
     super.initState();
-    _checkAdmin();
+    _checkAuth();
   }
 
-  Future<void> _checkAdmin() async {
+  Future<void> _checkAuth() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      if (mounted) setState(() => _checking = false);
+      if (mounted) {
+        setState(() {
+          _loggedIn = false;
+          _checking = false;
+        });
+      }
       return;
     }
+    _loggedIn = true;
     try {
       final token = await user.getIdTokenResult(true);
       if (!mounted) return;
@@ -53,12 +60,26 @@ class _MoreScreenState extends State<MoreScreen> {
     );
   }
 
+  Future<void> _login() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const LoginWebViewScreen()),
+    );
+    // 로그인 후 돌아오면 상태 갱신
+    if (mounted) _checkAuth();
+  }
+
   Future<void> _logout() async {
     try {
       await GoogleSignIn().signOut();
     } catch (_) {}
     await FirebaseAuth.instance.signOut();
     await WebViewCookieManager().clearCookies();
+    if (mounted) {
+      setState(() {
+        _loggedIn = false;
+        _isAdmin = false;
+      });
+    }
   }
 
   @override
@@ -78,12 +99,6 @@ class _MoreScreenState extends State<MoreScreen> {
             label: '커뮤니티',
             onTap: () => _push(const CommunityScreen()),
           ),
-          _MenuTile(
-            icon: Icons.person,
-            label: '계정',
-            onTap: () => _push(const AccountScreen()),
-          ),
-
           const Divider(height: 32),
           const _SectionTitle('리그 정보'),
           _MenuTile(
@@ -102,7 +117,7 @@ class _MoreScreenState extends State<MoreScreen> {
             onTap: () => _push(const PredictionScreen()),
           ),
 
-          if (!_checking && _isAdmin) ...[
+          if (!_checking && _loggedIn && _isAdmin) ...[
             const Divider(height: 32),
             const _SectionTitle('관리자'),
             _MenuTile(
@@ -140,12 +155,20 @@ class _MoreScreenState extends State<MoreScreen> {
           ],
 
           const Divider(height: 32),
-          _MenuTile(
-            icon: Icons.logout,
-            label: '로그아웃',
-            color: AppTheme.red500,
-            onTap: _logout,
-          ),
+          if (_loggedIn)
+            _MenuTile(
+              icon: Icons.logout,
+              label: '로그아웃',
+              color: AppTheme.red500,
+              onTap: _logout,
+            )
+          else
+            _MenuTile(
+              icon: Icons.login,
+              label: '로그인',
+              color: AppTheme.blue400,
+              onTap: _login,
+            ),
           const SizedBox(height: 32),
         ],
       ),

@@ -132,6 +132,30 @@ class StandingsScreen extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(height: 16),
+
+          // ── 요약 통계 ──
+          Row(
+            children: [
+              _summaryCard(
+                'AVG Elo',
+                '${(rankings.fold<double>(0, (sum, t) => sum + t.elo) / rankings.length).round()}',
+                AppTheme.blue400,
+              ),
+              const SizedBox(width: 10),
+              _summaryCard(
+                '참가 팀',
+                '${rankings.length}',
+                AppTheme.green500,
+              ),
+              const SizedBox(width: 10),
+              _summaryCard(
+                '총 경기',
+                '${rankings.fold<int>(0, (sum, t) => sum + t.games) ~/ 2}',
+                AppTheme.orange500,
+              ),
+            ],
+          ),
           const SizedBox(height: 20),
 
           // ── 순위 테이블 ──
@@ -187,6 +211,36 @@ class StandingsScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+Widget _summaryCard(String label, String value, Color color) {
+  return Expanded(
+    child: Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.slate800,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: TextStyle(
+                  color: color,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5)),
+          const SizedBox(height: 4),
+          Text(value,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800)),
+        ],
+      ),
+    ),
+  );
 }
 
 const _h =
