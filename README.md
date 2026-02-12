@@ -97,39 +97,42 @@ npm run dev
 
 ---
 
-## 📱 Flutter 하이브리드 앱 (1차)
+## 📱 Flutter 모바일 앱
 
-레포의 `flutter_app/` 폴더에 Flutter 앱 초기 구조가 포함되어 있습니다.
+`flutter_app/` 폴더에 Flutter 기반 크로스플랫폼 모바일 앱이 포함되어 있습니다.
+네이티브 UI와 WebView를 결합한 하이브리드 아키텍처로, 핵심 화면은 Flutter 네이티브로 구현하고
+기록원·관리자 패널 등 복잡한 웹 기능은 WebView로 연동합니다.
 
-### 1) SDK 준비 및 의존성 설치
+### 주요 기능
+
+| 카테고리 | 기능 |
+|----------|------|
+| **홈 대시보드** | 실시간 경기 캐러셀, 오늘/내일 일정, 최근 결과, 소속팀 공지 |
+| **팀 허브** | 41개 대학 팀 디렉토리, 그룹(A-H) 필터, 팀 상세·로스터·공지 |
+| **일정 & 경기** | 전체/라이브/결과/조별/연습경기 탭, 실시간 BSO·주자 표시 |
+| **기록실** | 시즌별 타자·투수 스탯 테이블 (AVG, ERA, WAR 등) |
+| **순위** | Elo 기반 파워랭킹, 승률·전적 비교 |
+| **커뮤니티** | 전체 공지(긴급/경기/징계/일반), 댓글 |
+| **알림** | FCM 푸시 알림, 경기·공지·팀별 구독 설정 |
+| **인증** | 네이티브 Google 로그인 + WebView 토큰 브리지 동기화 |
+| **관리자** | 기록원(Scorekeeper), 스코어보드, 일정 관리, 어드민 패널 (WebView) |
+
+### 기술 스택
+
+* **Flutter 3.4+** / Dart
+* **Firebase** (Auth, Firestore, Cloud Messaging)
+* **WebView** (`webview_flutter`) — 기록원·관리자 패널 연동
+* **Material Design 3** 다크 테마
+
+### 빠른 시작
 
 ```bash
 cd flutter_app
 flutter pub get
+flutter run --dart-define-from-file=env/dev.json
 ```
 
-플랫폼 파일이 누락된 환경이면 아래 명령으로 복원 가능합니다.
-
-```bash
-flutter create . --platforms=android,ios
-```
-
-### 2) Firebase 모바일 설정 파일 배치
-
-* Android: `flutter_app/android/app/google-services.json`
-* iOS: `flutter_app/ios/Runner/GoogleService-Info.plist`
-
-### 3) 실행 예시 (`dart-define`)
-
-```bash
-cd flutter_app
-flutter run \
-  --dart-define=AUBL_ENV=dev \
-  --dart-define=AUBL_WEB_BASE_URL=https://aubl-backup.web.app \
-  --dart-define=AUBL_AUTH_BRIDGE_URL=https://asia-northeast3-aubl-backup.cloudfunctions.net/exchange_web_id_token
-```
-
-하이브리드 인증 및 WebView 동작 계약은 `flutter_app/README.md`를 참고하세요.
+자세한 아키텍처, 디렉토리 구조, 설정 방법은 [`flutter_app/README.md`](flutter_app/README.md)를 참고하세요.
 
 ---
 
