@@ -1,7 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../core/theme/app_theme.dart';
@@ -364,18 +363,18 @@ class _MoreScreenState extends State<MoreScreen> {
           _MenuTile(
             icon: Icons.privacy_tip_outlined,
             label: '개인정보 처리방침',
-            onTap: () => launchUrl(
-              Uri.parse('https://aubl-backup.web.app/privacy'),
-              mode: LaunchMode.externalApplication,
-            ),
+            onTap: () => _push(const AppWebViewScreen(
+              path: '/privacy',
+              title: '개인정보 처리방침',
+            )),
           ),
           _MenuTile(
             icon: Icons.description_outlined,
             label: '이용약관',
-            onTap: () => launchUrl(
-              Uri.parse('https://aubl-backup.web.app/terms'),
-              mode: LaunchMode.externalApplication,
-            ),
+            onTap: () => _push(const AppWebViewScreen(
+              path: '/terms',
+              title: '이용약관',
+            )),
           ),
           const Divider(height: 32),
           if (_loggedIn)

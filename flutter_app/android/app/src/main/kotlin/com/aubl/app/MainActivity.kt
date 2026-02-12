@@ -1,4 +1,4 @@
-package com.aubl.aubl_flutter_app
+package com.aubl.app
 
 import io.flutter.embedding.android.FlutterActivity
 
