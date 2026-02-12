@@ -346,6 +346,10 @@ button:focus-visible {
   align-items: start;
 }
 
+.auth-tips-bottom {
+  grid-column: 1 / -1;
+}
+
 .auth-hero {
   background: radial-gradient(circle at 15% 20%, rgba(59, 130, 246, 0.2), transparent 40%),
     radial-gradient(circle at 95% 0%, rgba(249, 115, 22, 0.15), transparent 40%),
