@@ -15,6 +15,9 @@ export function useAdmin() {
 
   useEffect(() => {
     let cancelled = false;
+    // user가 변경될 때 loading을 즉시 true로 리셋하여
+    // RequireAdmin이 권한 확인 완료 전에 access-denied로 리다이렉트하지 않도록 방지
+    setLoading(true);
     const run = async () => {
       if (FORCE_ADMIN) {
         setIsAdmin(true);
