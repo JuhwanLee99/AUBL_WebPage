@@ -66,3 +66,10 @@ flutter_app/ios/Pods/
 flutter_app/ios/Flutter/ephemeral/
 flutter_app/ios/Flutter/Generated.xcconfig
 flutter_app/android/app/google-services.json
+flutter_app/ios/Runner/GoogleService-Info.plist
+
+# Flutter env configs
+flutter_app/env/
+
+# Data exports
+flutter_app/*.csv
