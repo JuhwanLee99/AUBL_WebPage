@@ -6,9 +6,9 @@ const SECTIONS = [
   {
     title: '1. 개인정보의 수집 항목 및 수집 방법',
     items: [
-      '회원가입 시 수집 항목: 이름, 이메일 주소, Google 계정 고유 식별자(UID)',
+      '회원가입 시 수집 항목: 이메일 주소, 이름(Google 로그인 시), 계정 고유 식별자(UID)',
       '서비스 이용 과정에서 자동 수집: 기기 식별 정보, 앱 버전, OS 종류 및 버전, FCM 푸시 토큰',
-      '수집 방법: Google 로그인(OAuth 2.0)을 통한 자동 수집, Firebase Authentication 및 Firestore 서비스 이용 과정에서의 자동 생성·수집',
+      '수집 방법: 이메일·비밀번호 회원가입 또는 Google 로그인(OAuth 2.0)을 통한 수집, Firebase Authentication 및 Firestore 서비스 이용 과정에서의 자동 생성·수집',
     ],
   },
   {
@@ -73,8 +73,8 @@ const SECTIONS = [
   {
     title: '9. 개인정보 보호책임자',
     items: [
-      '책임자: 이주환 (AUBL 기록부장)',
-      '이메일: aubl.official@gmail.com',
+      '책임자: 이주환 (AUBL 기록팀장)',
+      '이메일: aublcau@gmail.com',
       '개인정보 관련 문의사항은 위 연락처로 문의해 주시기 바랍니다.',
     ],
   },
@@ -82,7 +82,7 @@ const SECTIONS = [
     title: '10. 개인정보 처리방침의 변경',
     items: [
       '본 방침은 시행일로부터 적용되며, 변경 시 앱 내 공지 또는 웹사이트를 통해 사전 고지합니다.',
-      '시행일: 2025년 3월 1일',
+      '시행일: 2026년 2월 21일',
     ],
   },
 ];
