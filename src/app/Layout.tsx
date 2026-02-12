@@ -1,6 +1,6 @@
 // **`src/app/Layout.tsx`**
 
-import { Outlet, Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../shared/auth/AuthProvider';
 import { useAdmin } from '../shared/auth/useAdmin';
@@ -1036,6 +1036,11 @@ export default function Layout() {
           }}
         >
           <div style={{ maxWidth: '1600px', margin: '0 auto', padding: '0 24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginBottom: '12px', fontSize: '13px' }}>
+              <Link to="/privacy" style={{ color: '#94a3b8', textDecoration: 'none' }}>개인정보 처리방침</Link>
+              <span style={{ color: '#475569' }}>|</span>
+              <Link to="/terms" style={{ color: '#94a3b8', textDecoration: 'none' }}>이용약관</Link>
+            </div>
             &copy; 2026 Amateur University Baseball League. All rights reserved.
           </div>
           <div className="preview-toggle-inline">
