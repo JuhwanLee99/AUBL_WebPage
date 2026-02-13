@@ -33,10 +33,13 @@ class TeamDetailScreen extends StatefulWidget {
 
 class _TeamDetailScreenState extends State<TeamDetailScreen> {
   final _fs = FirestoreService();
+  final TextEditingController _noticeSearchController =
+      TextEditingController();
   Team? _team;
   bool _loading = true;
   bool _isCoach = false;
   List<m.Match> _matches = [];
+  String _noticeSearchQuery = '';
 
   @override
   void initState() {
@@ -44,6 +47,12 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     _loadTeam();
     _loadMatches();
     _checkCoachRole();
+  }
+
+  @override
+  void dispose() {
+    _noticeSearchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadTeam() async {
@@ -304,23 +313,108 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
             return b.createdAt.compareTo(a.createdAt);
           });
 
+        final query = _noticeSearchQuery.trim().toLowerCase();
+        final visible = query.isEmpty
+            ? sorted.take(5).toList()
+            : sorted.where((notice) {
+                final title = notice.title.toLowerCase();
+                final content = notice.content.toLowerCase();
+                final author = (notice.createdByName ?? '').toLowerCase();
+                return title.contains(query) ||
+                    content.contains(query) ||
+                    author.contains(query);
+              }).toList();
+
         return Column(
-          children: sorted.take(5).map((n) {
-            return NoticeCard(
-              notice: n,
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => TeamNoticeDetailScreen(
-                      teamId: widget.teamId,
-                      teamName: widget.teamName,
-                      notice: n,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: TextField(
+                controller: _noticeSearchController,
+                onChanged: (value) =>
+                    setState(() => _noticeSearchQuery = value),
+                textInputAction: TextInputAction.search,
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: '제목, 내용, 작성자 검색',
+                  hintStyle:
+                      const TextStyle(color: AppTheme.slate500, fontSize: 13),
+                  prefixIcon: const Icon(Icons.search,
+                      color: AppTheme.slate500, size: 20),
+                  suffixIcon: _noticeSearchQuery.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.close,
+                              color: AppTheme.slate500, size: 18),
+                          onPressed: () {
+                            _noticeSearchController.clear();
+                            setState(() => _noticeSearchQuery = '');
+                          },
+                        ),
+                  filled: true,
+                  fillColor: AppTheme.slate800.withValues(alpha: 0.5),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(
+                      color: AppTheme.slate700.withValues(alpha: 0.6),
                     ),
                   ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(
+                      color: AppTheme.slate700.withValues(alpha: 0.6),
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(
+                      color: AppTheme.blue500.withValues(alpha: 0.9),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '${visible.length}개 공지',
+                  style:
+                      const TextStyle(color: AppTheme.slate500, fontSize: 12),
+                ),
+              ),
+            ),
+            if (visible.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  _noticeSearchQuery.trim().isEmpty
+                      ? '아직 공지가 없습니다.'
+                      : '검색 결과가 없습니다.',
+                  style: const TextStyle(color: AppTheme.slate500),
+                ),
+              )
+            else
+              ...visible.map((n) {
+                return NoticeCard(
+                  notice: n,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => TeamNoticeDetailScreen(
+                          teamId: widget.teamId,
+                          teamName: widget.teamName,
+                          notice: n,
+                        ),
+                      ),
+                    );
+                  },
                 );
-              },
-            );
-          }).toList(),
+              }),
+          ],
         );
       },
     );

@@ -13,6 +13,7 @@ class NotificationService {
 
   static const String _teamKey = 'notif_team_id';
   static const String _matchPrefKey = 'notif_match_pref';
+  static const String _allNotificationsKey = 'notif_all_enabled';
   static const String _communityNoticeKey = 'notif_community_notice';
   static const String _teamNoticeKey = 'notif_team_notice';
   static const String _topicCommunityUrgent = 'community_urgent';
@@ -53,29 +54,21 @@ class NotificationService {
         ?.createNotificationChannel(channel);
 
     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-    await _messaging.subscribeToTopic(_topicCommunityUrgent);
+
     final prefs = await SharedPreferences.getInstance();
     final storedTeam = prefs.getString(_teamKey);
-    final communityNoticeOn = _readBoolPref(prefs, _communityNoticeKey, true);
-    final teamNoticeOn = _readBoolPref(prefs, _teamNoticeKey, true);
-    if (communityNoticeOn) {
-      await _messaging.subscribeToTopic(_topicCommunityNotices);
-    } else {
-      await _messaging.unsubscribeFromTopic(_topicCommunityNotices);
-    }
-    if (teamNoticeOn && storedTeam != null && storedTeam.isNotEmpty) {
-      await _messaging.subscribeToTopic('team_${storedTeam}_notices');
-    } else if (storedTeam != null && storedTeam.isNotEmpty) {
-      await _messaging.unsubscribeFromTopic('team_${storedTeam}_notices');
-    }
-    final pref = _readMatchPreference(prefs);
-    await _applyMatchPreference(pref, storedTeam);
+    await _syncSubscriptions(prefs, teamId: storedTeam);
     _initialized = true;
   }
 
   Future<MatchNotifyPreference> getMatchPreference() async {
     final prefs = await SharedPreferences.getInstance();
     return _readMatchPreference(prefs);
+  }
+
+  Future<bool> getAllNotificationsEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return _readBoolPref(prefs, _allNotificationsKey, true);
   }
 
   Future<bool> getCommunityNoticeEnabled() async {
@@ -88,15 +81,16 @@ class NotificationService {
     return _readBoolPref(prefs, _teamNoticeKey, true);
   }
 
+  Future<void> setAllNotificationsEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_allNotificationsKey, enabled);
+    await _syncSubscriptions(prefs);
+  }
+
   Future<void> setCommunityNoticeEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_communityNoticeKey, enabled);
-    if (!Platform.isAndroid) return;
-    if (enabled) {
-      await _messaging.subscribeToTopic(_topicCommunityNotices);
-    } else {
-      await _messaging.unsubscribeFromTopic(_topicCommunityNotices);
-    }
+    await _syncSubscriptions(prefs);
   }
 
   Future<void> setTeamNoticeEnabled(
@@ -105,14 +99,8 @@ class NotificationService {
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_teamNoticeKey, enabled);
-    if (!Platform.isAndroid) return;
     final storedTeam = teamId ?? prefs.getString(_teamKey);
-    if (storedTeam == null || storedTeam.isEmpty) return;
-    if (enabled) {
-      await _messaging.subscribeToTopic('team_${storedTeam}_notices');
-    } else {
-      await _messaging.unsubscribeFromTopic('team_${storedTeam}_notices');
-    }
+    await _syncSubscriptions(prefs, teamId: storedTeam);
   }
 
   Future<void> setMatchPreference(
@@ -120,18 +108,15 @@ class NotificationService {
     String? teamId,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    if (!Platform.isAndroid) {
-      await prefs.setString(_matchPrefKey, pref.name);
-      return;
-    }
-    final prev = _readMatchPreference(prefs);
-    final storedTeam = teamId ?? prefs.getString(_teamKey);
-    await _switchMatchPreference(prev, pref, storedTeam);
     await prefs.setString(_matchPrefKey, pref.name);
+    final storedTeam = teamId ?? prefs.getString(_teamKey);
+    await _syncSubscriptions(prefs, teamId: storedTeam);
   }
 
   Future<void> updateTeamSubscriptions(String? teamId) async {
     final prefs = await SharedPreferences.getInstance();
+    final prev = prefs.getString(_teamKey);
+
     if (!Platform.isAndroid) {
       if (teamId != null && teamId.isNotEmpty) {
         await prefs.setString(_teamKey, teamId);
@@ -140,34 +125,19 @@ class NotificationService {
       }
       return;
     }
-    final prev = prefs.getString(_teamKey);
-    final matchPref = _readMatchPreference(prefs);
-    final teamNoticeOn = _readBoolPref(prefs, _teamNoticeKey, true);
-    if (prev != null && prev != teamId) {
-      if (teamNoticeOn) {
-        await _messaging.unsubscribeFromTopic('team_${prev}_notices');
-      }
-      if (matchPref == MatchNotifyPreference.team) {
-        await _messaging.unsubscribeFromTopic('team_${prev}_matches');
-      }
+
+    if (prev != null && prev.isNotEmpty && prev != teamId) {
+      await _messaging.unsubscribeFromTopic('team_${prev}_notices');
+      await _messaging.unsubscribeFromTopic('team_${prev}_matches');
     }
 
     if (teamId != null && teamId.isNotEmpty) {
-      if (teamNoticeOn) {
-        await _messaging.subscribeToTopic('team_${teamId}_notices');
-      } else {
-        await _messaging.unsubscribeFromTopic('team_${teamId}_notices');
-      }
-      if (matchPref == MatchNotifyPreference.team) {
-        await _messaging.subscribeToTopic('team_${teamId}_matches');
-      }
       await prefs.setString(_teamKey, teamId);
     } else {
       await prefs.remove(_teamKey);
-      if (matchPref == MatchNotifyPreference.team) {
-        await _messaging.unsubscribeFromTopic('team_${prev}_matches');
-      }
     }
+
+    await _syncSubscriptions(prefs, teamId: teamId);
   }
 
   MatchNotifyPreference _readMatchPreference(SharedPreferences prefs) {
@@ -184,39 +154,60 @@ class NotificationService {
     return value ?? fallback;
   }
 
-  Future<void> _applyMatchPreference(
-    MatchNotifyPreference pref,
+  Future<void> _syncSubscriptions(
+    SharedPreferences prefs, {
     String? teamId,
-  ) async {
-    await _switchMatchPreference(null, pref, teamId);
-  }
+  }) async {
+    if (!Platform.isAndroid) return;
 
-  Future<void> _switchMatchPreference(
-    MatchNotifyPreference? prev,
-    MatchNotifyPreference next,
-    String? teamId,
-  ) async {
-    if (prev == MatchNotifyPreference.all && next != MatchNotifyPreference.all) {
-      await _messaging.unsubscribeFromTopic(_topicMatchesAll);
+    final currentTeamId = teamId ?? prefs.getString(_teamKey);
+    final allEnabled = _readBoolPref(prefs, _allNotificationsKey, true);
+    if (!allEnabled) {
+      await _unsubscribeAllTopics(currentTeamId);
+      return;
     }
-    if (prev == MatchNotifyPreference.team && next != MatchNotifyPreference.team) {
-      if (teamId != null && teamId.isNotEmpty) {
-        await _messaging.unsubscribeFromTopic('team_${teamId}_matches');
+
+    await _messaging.subscribeToTopic(_topicCommunityUrgent);
+
+    final communityNoticeOn = _readBoolPref(prefs, _communityNoticeKey, true);
+    if (communityNoticeOn) {
+      await _messaging.subscribeToTopic(_topicCommunityNotices);
+    } else {
+      await _messaging.unsubscribeFromTopic(_topicCommunityNotices);
+    }
+
+    final teamNoticeOn = _readBoolPref(prefs, _teamNoticeKey, true);
+    if (currentTeamId != null && currentTeamId.isNotEmpty) {
+      if (teamNoticeOn) {
+        await _messaging.subscribeToTopic('team_${currentTeamId}_notices');
+      } else {
+        await _messaging.unsubscribeFromTopic('team_${currentTeamId}_notices');
       }
     }
 
-    if (next == MatchNotifyPreference.all) {
+    final matchPref = _readMatchPreference(prefs);
+    if (matchPref == MatchNotifyPreference.all) {
       await _messaging.subscribeToTopic(_topicMatchesAll);
-      if (teamId != null && teamId.isNotEmpty) {
-        await _messaging.unsubscribeFromTopic('team_${teamId}_matches');
-      }
-    } else if (next == MatchNotifyPreference.team) {
-      if (teamId != null && teamId.isNotEmpty) {
-        await _messaging.subscribeToTopic('team_${teamId}_matches');
-      }
-      await _messaging.unsubscribeFromTopic(_topicMatchesAll);
     } else {
       await _messaging.unsubscribeFromTopic(_topicMatchesAll);
+    }
+
+    if (currentTeamId != null && currentTeamId.isNotEmpty) {
+      if (matchPref == MatchNotifyPreference.team) {
+        await _messaging.subscribeToTopic('team_${currentTeamId}_matches');
+      } else {
+        await _messaging.unsubscribeFromTopic('team_${currentTeamId}_matches');
+      }
+    }
+  }
+
+  Future<void> _unsubscribeAllTopics(String? teamId) async {
+    await _messaging.unsubscribeFromTopic(_topicCommunityUrgent);
+    await _messaging.unsubscribeFromTopic(_topicCommunityNotices);
+    await _messaging.unsubscribeFromTopic(_topicMatchesAll);
+    if (teamId != null && teamId.isNotEmpty) {
+      await _messaging.unsubscribeFromTopic('team_${teamId}_notices');
+      await _messaging.unsubscribeFromTopic('team_${teamId}_matches');
     }
   }
 

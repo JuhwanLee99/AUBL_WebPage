@@ -19,9 +19,11 @@ class CommunityScreen extends StatefulWidget {
 
 class _CommunityScreenState extends State<CommunityScreen> {
   final _fs = FirestoreService();
+  final TextEditingController _searchController = TextEditingController();
   List<Notice> _notices = [];
   bool _loading = true;
   String _selectedCategory = '전체';
+  String _searchQuery = '';
   ValueNotifier<int>? _refreshNotifier;
 
   static const _categories = ['전체', '긴급', '경기공지', '징계', '일반'];
@@ -46,6 +48,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
   @override
   void dispose() {
     _refreshNotifier?.removeListener(_loadNotices);
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -77,8 +80,19 @@ class _CommunityScreenState extends State<CommunityScreen> {
   }
 
   List<Notice> get _filteredNotices {
-    if (_selectedCategory == '전체') return _notices;
-    return _notices.where((n) => n.category == _selectedCategory).toList();
+    final categoryFiltered = _selectedCategory == '전체'
+        ? _notices
+        : _notices.where((n) => n.category == _selectedCategory).toList();
+
+    final q = _searchQuery.trim().toLowerCase();
+    if (q.isEmpty) return categoryFiltered;
+
+    return categoryFiltered.where((n) {
+      final title = n.title.toLowerCase();
+      final content = n.content.toLowerCase();
+      final author = n.author.toLowerCase();
+      return title.contains(q) || content.contains(q) || author.contains(q);
+    }).toList();
   }
 
   Color _categoryColor(String cat) => switch (cat) {
@@ -135,6 +149,55 @@ class _CommunityScreenState extends State<CommunityScreen> {
                     ),
                   ),
 
+                  // ── 검색 ──
+                  Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: (value) =>
+                          setState(() => _searchQuery = value),
+                      textInputAction: TextInputAction.search,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      decoration: InputDecoration(
+                        hintText: '제목, 내용, 작성자 검색',
+                        hintStyle: const TextStyle(
+                            color: AppTheme.slate500, fontSize: 13),
+                        prefixIcon: const Icon(Icons.search,
+                            color: AppTheme.slate500, size: 20),
+                        suffixIcon: _searchQuery.isEmpty
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.close,
+                                    color: AppTheme.slate500, size: 18),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _searchQuery = '');
+                                },
+                              ),
+                        filled: true,
+                        fillColor: AppTheme.slate800.withValues(alpha: 0.5),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide:
+                              BorderSide(color: AppTheme.slate700.withValues(alpha: 0.6)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide:
+                              BorderSide(color: AppTheme.slate700.withValues(alpha: 0.6)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide:
+                              BorderSide(color: AppTheme.blue500.withValues(alpha: 0.9)),
+                        ),
+                      ),
+                    ),
+                  ),
+
                   // ── 공지 수 ──
                   Padding(
                     padding:
@@ -148,11 +211,15 @@ class _CommunityScreenState extends State<CommunityScreen> {
 
                   // ── 공지 목록 ──
                   if (filtered.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(32),
+                    Padding(
+                      padding: const EdgeInsets.all(32),
                       child: Center(
-                        child: Text('공지가 없습니다.',
-                            style: TextStyle(color: AppTheme.slate500)),
+                        child: Text(
+                          _searchQuery.trim().isEmpty
+                              ? '공지가 없습니다.'
+                              : '검색 결과가 없습니다.',
+                          style: const TextStyle(color: AppTheme.slate500),
+                        ),
                       ),
                     )
                   else
