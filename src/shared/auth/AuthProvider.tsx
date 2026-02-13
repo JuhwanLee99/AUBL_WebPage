@@ -5,14 +5,18 @@ import {
   getIdToken,
   onIdTokenChanged,
   setPersistence,
+  signInWithCustomToken,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
 } from 'firebase/auth';
 import type { User } from 'firebase/auth';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { PropsWithChildren } from 'react';
 import { auth } from '../firebase/client';
+import { doc, setDoc } from 'firebase/firestore';
+import { firestore } from '../firebase/client';
+import { sendLogoutToFlutter, sendTokenRefreshToFlutter } from '../bridge/flutterBridge';
 
 // -----------------------------------------------------------
 // [로컬 테스트용 설정]
@@ -55,13 +59,37 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [idToken, setIdToken] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hadUserRef = useRef(false);
 
   useEffect(() => {
-    if (IS_TEST_MODE) return; // 테스트 모드일 때는 실행 안 함
+    if (IS_TEST_MODE) return;
     if (typeof window === 'undefined') return;
-    setPersistence(auth, browserLocalPersistence).catch(() => {
-      // Ignore persistence errors (e.g., incognito), fallback to default behavior.
-    });
+    setPersistence(auth, browserLocalPersistence).catch(() => {});
+  }, []);
+
+  // Flutter 앱에서 로그인 상태를 주입받기 위한 글로벌 핸들러
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    (window as any).__flutterAuthInject = async (customToken: string) => {
+      try {
+        await signInWithCustomToken(auth, customToken);
+      } catch (e) {
+        console.error('[FlutterBridge] Auth inject failed:', e);
+      }
+    };
+    (window as any).__flutterGetIdToken = async () => {
+      try {
+        if (!auth.currentUser) return null;
+        return await getIdToken(auth.currentUser, true);
+      } catch (e) {
+        console.error('[FlutterBridge] Get idToken failed:', e);
+        return null;
+      }
+    };
+    return () => {
+      delete (window as any).__flutterAuthInject;
+      delete (window as any).__flutterGetIdToken;
+    };
   }, []);
 
   useEffect(() => {
@@ -71,13 +99,19 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setUser(nextUser);
       if (!nextUser) {
         setIdToken(null);
+        if (hadUserRef.current) {
+          sendLogoutToFlutter();
+          hadUserRef.current = false;
+        }
         setInitializing(false);
         return;
       }
 
+      hadUserRef.current = true;
       try {
         const token = await getIdToken(nextUser, true);
         setIdToken(token);
+        await sendTokenRefreshToFlutter(nextUser, token);
       } catch (err) {
         setError(err instanceof Error ? err.message : '토큰을 불러오지 못했습니다.');
       } finally {
@@ -87,6 +121,22 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (IS_TEST_MODE) return;
+    if (!user) return;
+    const email = user.email ?? null;
+    const payload = {
+      uid: user.uid,
+      email,
+      emailLower: email ? email.toLowerCase() : null,
+      displayName: user.displayName ?? null,
+      createdAt: user.metadata?.creationTime ?? null,
+      lastSignInAt: user.metadata?.lastSignInTime ?? null,
+      updatedAt: Date.now(),
+    };
+    setDoc(doc(firestore, 'users', user.uid), payload, { merge: true }).catch(() => {});
+  }, [user]);
 
   const loginWithEmail = useCallback(
     async (email: string, password: string) => {
@@ -130,6 +180,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
     setError(null);
     await signOut(auth);
+    sendLogoutToFlutter();
   }, []);
 
   const refreshIdToken = useCallback(async () => {
@@ -137,6 +188,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (!auth.currentUser) return null;
     const token = await getIdToken(auth.currentUser, true);
     setIdToken(token);
+    await sendTokenRefreshToFlutter(auth.currentUser, token);
     return token;
   }, []);
 

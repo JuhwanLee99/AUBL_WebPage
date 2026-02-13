@@ -1,17 +1,29 @@
 import type * as React from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../shared/auth/AuthProvider';
+import {
+  hasFlutterBridge,
+  requestNativeGoogleSignInFromFlutter,
+  sendLoginSuccessToFlutter,
+} from '../../shared/bridge/flutterBridge';
+import { auth } from '../../shared/firebase/client';
 
 type LocationState = {
   from?: string;
 };
 
 export default function LoginPage() {
-  const { loginWithEmail, registerWithEmail, loginWithGoogle, error } = useAuth();
+  const { loginWithEmail, registerWithEmail, loginWithGoogle, logout, error, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const redirectTo = useMemo(() => (location.state as LocationState | null)?.from || '/', [location.state]);
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const embedded = searchParams.get('embedded') === 'flutter';
+  const nativeGoogleEnabled = searchParams.get('nativeGoogle') === '1';
+  const rawNext = searchParams.get('next');
+  const forceLogout = searchParams.get('forceLogout') === '1';
+  const next = rawNext && rawNext.startsWith('/') ? rawNext : null;
+  const redirectTo = useMemo(() => next || (location.state as LocationState | null)?.from || '/', [location.state, next]);
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
@@ -19,8 +31,34 @@ export default function LoginPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [showTerms, setShowTerms] = useState(false);
-  const [showPrivacy, setShowPrivacy] = useState(false);
+  const [agreedTerms, setAgreedTerms] = useState(false);
+  const [agreedPrivacy, setAgreedPrivacy] = useState(false);
+  const [logoutReady, setLogoutReady] = useState(!forceLogout);
+
+  useEffect(() => {
+    if (!embedded || !user) return;
+    if (forceLogout && !logoutReady) return;
+    void sendLoginSuccessToFlutter(user);
+    navigate(redirectTo, { replace: true });
+  }, [embedded, forceLogout, logoutReady, navigate, redirectTo, user]);
+
+  useEffect(() => {
+    if (!forceLogout) return;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        await logout();
+      } catch {
+        // ignore
+      } finally {
+        if (!cancelled) setLogoutReady(true);
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [forceLogout, logout]);
 
   const handleSubmit = async (evt: React.FormEvent<HTMLFormElement>) => {
     evt.preventDefault();
@@ -30,12 +68,20 @@ export default function LoginPage() {
       if (mode === 'login') {
         await loginWithEmail(email, password);
       } else {
+        if (!agreedTerms || !agreedPrivacy) {
+          setSubmitting(false);
+          setMessage('이용약관 및 개인정보 처리방침에 동의해 주세요.');
+          return;
+        }
         if (password !== confirmPassword) {
           setSubmitting(false);
           setMessage('비밀번호와 비밀번호 확인이 일치하지 않습니다.');
           return;
         }
         await registerWithEmail(email, password);
+      }
+      if (auth.currentUser) {
+        void sendLoginSuccessToFlutter(auth.currentUser);
       }
       navigate(redirectTo, { replace: true });
     } catch (err) {
@@ -49,7 +95,24 @@ export default function LoginPage() {
     setSubmitting(true);
     setMessage(null);
     try {
+      if (embedded && (nativeGoogleEnabled || hasFlutterBridge())) {
+        const sent = requestNativeGoogleSignInFromFlutter();
+        if (!sent) {
+          setMessage('앱 브리지 연결을 찾지 못했습니다. 앱을 다시 실행해 주세요.');
+          setSubmitting(false);
+          return;
+        }
+        setMessage('앱에서 Google 로그인을 진행 중입니다.');
+        setSubmitting(false);
+        return;
+      }
       await loginWithGoogle();
+      if (embedded && !auth.currentUser) {
+        return;
+      }
+      if (auth.currentUser) {
+        void sendLoginSuccessToFlutter(auth.currentUser);
+      }
       navigate(redirectTo, { replace: true });
     } catch (err) {
       setMessage(err instanceof Error ? err.message : '구글 로그인에 실패했습니다.');
@@ -60,39 +123,20 @@ export default function LoginPage() {
 
   return (
     <div className="auth-shell">
+      {/* 상단: 간결한 제목 + 설명 */}
       <div className="auth-hero">
         <p className="eyebrow">AUBL 계정</p>
         <h1>로그인하고 경기 소식을 가장 빠르게 만나보세요</h1>
         <p className="lede">
-          이메일·비밀번호(재확인) 또는 Google 계정으로 간편 로그인하세요.
-          <br />
-          로그인하면 실시간 전광판, 일정, 기록 열람과 알림 설정을 이용할 수 있습니다.
+          {embedded
+            ? nativeGoogleEnabled
+              ? '이메일·비밀번호 또는 Google 계정으로 로그인하세요.'
+              : '앱 내 WebView에서는 이메일·비밀번호 로그인만 지원합니다.'
+            : '이메일·비밀번호(재확인) 또는 Google 계정으로 간편 로그인하세요.'}
         </p>
-        <div className="auth-tips">
-          <div>
-            <span>🎟️</span>
-            <div>
-              <strong>회원 전용</strong>
-              <p>즐겨찾기 경기, 문자중계 구독 등 개인화 기능을 사용하려면 로그인하세요.</p>
-            </div>
-          </div>
-          <div>
-            <span>🔐</span>
-            <div>
-              <strong>안전한 인증</strong>
-              <p>비밀번호는 안전하게 암호화 저장되며, 모든 통신은 HTTPS로 보호됩니다.</p>
-            </div>
-          </div>
-          <div>
-            <span>✅</span>
-            <div>
-              <strong>알림 설정</strong>
-              <p>로그인하면 즐겨찾는 팀의 경기 시작/득점 알림을 바로 받아볼 수 있습니다.</p>
-            </div>
-          </div>
-        </div>
       </div>
 
+      {/* 로그인 카드 */}
       <div className="auth-card">
         <div className="auth-card__header">
           <button
@@ -157,6 +201,32 @@ export default function LoginPage() {
               />
             </label>
           )}
+          {mode === 'register' && (
+            <div style={{ display: 'grid', gap: '8px', marginTop: '4px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: '#cbd5e1' }}>
+                <input
+                  type="checkbox"
+                  checked={agreedTerms}
+                  onChange={(e) => setAgreedTerms(e.target.checked)}
+                  style={{ accentColor: '#f97316', width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <span>
+                  <Link to="/terms" target="_blank" className="auth-link" style={{ fontWeight: 700 }}>이용약관</Link>에 동의합니다 <span style={{ color: '#f97316' }}>*</span>
+                </span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: '#cbd5e1' }}>
+                <input
+                  type="checkbox"
+                  checked={agreedPrivacy}
+                  onChange={(e) => setAgreedPrivacy(e.target.checked)}
+                  style={{ accentColor: '#f97316', width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <span>
+                  <Link to="/privacy" target="_blank" className="auth-link" style={{ fontWeight: 700 }}>개인정보 처리방침</Link>에 동의합니다 <span style={{ color: '#f97316' }}>*</span>
+                </span>
+              </label>
+            </div>
+          )}
 
           {(message || error) && (
             <div className="auth-alert">
@@ -164,20 +234,23 @@ export default function LoginPage() {
             </div>
           )}
 
-          <div style={{ marginTop: '0px' }} />
           <button type="submit" className="auth-submit" disabled={submitting} style={{ marginTop: '6px' }}>
             {submitting ? '처리 중...' : mode === 'login' ? '로그인' : '가입하기'}
           </button>
         </form>
 
-        <div className="auth-divider">
-          <span>또는</span>
-        </div>
+        {(!embedded || nativeGoogleEnabled) && (
+          <>
+            <div className="auth-divider">
+              <span>또는</span>
+            </div>
 
-        <button type="button" className="auth-google" onClick={handleGoogle} disabled={submitting}>
-          <span>G</span>
-          Google 계정으로 계속하기
-        </button>
+            <button type="button" className="auth-google" onClick={handleGoogle} disabled={submitting}>
+              <span>G</span>
+              Google 계정으로 계속하기
+            </button>
+          </>
+        )}
 
         <p className="auth-footer">
           관리 권한이 없나요?{' '}
@@ -189,59 +262,40 @@ export default function LoginPage() {
           className="auth-footer"
           style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', textAlign: 'center', fontSize: '12px' }}
         >
-          <button
-            type="button"
-            className="auth-link"
-            style={{ border: 'none', background: 'transparent', padding: 0, fontWeight: 800, fontSize: '12px' }}
-            onClick={() => setShowTerms((v) => !v)}
-          >
-            회원약관 보기
-          </button>
-          <button
-            type="button"
-            className="auth-link"
-            style={{ border: 'none', background: 'transparent', padding: 0, fontWeight: 800, fontSize: '12px' }}
-            onClick={() => setShowPrivacy((v) => !v)}
-          >
-            개인정보 보호 안내
-          </button>
+          <Link to="/terms" className="auth-link" style={{ fontWeight: 800, fontSize: '12px' }}>
+            이용약관
+          </Link>
+          <Link to="/privacy" className="auth-link" style={{ fontWeight: 800, fontSize: '12px' }}>
+            개인정보 처리방침
+          </Link>
         </div>
-        {showTerms && (
-          <div
-            className="auth-alert"
-            style={{
-              background: 'rgba(96,165,250,0.12)',
-              borderColor: 'rgba(96,165,250,0.4)',
-              textAlign: 'center',
-              fontSize: '12px',
-            }}
-          >
-            <strong>회원약관 요약</strong>
-            <ul style={{ margin: '6px 0 0', paddingLeft: 0, listStyle: 'none', color: '#e2e8f0', lineHeight: 1.5 }}>
-              <li>리그 운영 목적 내에서만 계정을 사용합니다.</li>
-              <li>타인의 정보를 무단으로 사용하지 않습니다.</li>
-              <li>위반 시 관리자 권한으로 계정이 제한될 수 있습니다.</li>
-            </ul>
+      </div>
+
+      {/* 하단: 상세 안내 (데스크톱에서는 hero 영역에, 모바일에서는 로그인 카드 아래) */}
+      <div className="auth-tips-bottom">
+        <div className="auth-tips">
+          <div>
+            <span>🎟️</span>
+            <div>
+              <strong>회원 전용</strong>
+              <p>즐겨찾기 경기, 문자중계 구독 등 개인화 기능을 사용하려면 로그인하세요.</p>
+            </div>
           </div>
-        )}
-        {showPrivacy && (
-          <div
-            className="auth-alert"
-            style={{
-              background: 'rgba(34,197,94,0.12)',
-              borderColor: 'rgba(34,197,94,0.4)',
-              textAlign: 'center',
-              fontSize: '12px',
-            }}
-          >
-            <strong>개인정보 보호 안내</strong>
-            <ul style={{ margin: '6px 0 0', paddingLeft: 0, listStyle: 'none', color: '#e2e8f0', lineHeight: 1.5 }}>
-              <li>이메일과 로그인 기록은 인증 및 보안 감사 목적에만 사용됩니다.</li>
-              <li>비밀번호는 Firebase Auth에서 안전하게 해시 저장됩니다.</li>
-              <li>요청 시 계정 삭제 및 로그 기록 정리에 대해 관리자에게 문의하세요.</li>
-            </ul>
+          <div>
+            <span>🔐</span>
+            <div>
+              <strong>안전한 인증</strong>
+              <p>비밀번호는 안전하게 암호화 저장되며, 모든 통신은 HTTPS로 보호됩니다.</p>
+            </div>
           </div>
-        )}
+          <div>
+            <span>✅</span>
+            <div>
+              <strong>알림 설정</strong>
+              <p>로그인하면 즐겨찾는 팀의 경기 시작/득점 알림을 바로 받아볼 수 있습니다.</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -20,6 +20,11 @@ export default function Layout() {
   const { state } = useDemoStore();
   const isLiveOverlay = location.pathname.startsWith('/live-overlay');
   const isScoreboardText = location.pathname.startsWith('/scoreboard-text');
+  const isEmbeddedParam = new URLSearchParams(location.search).get('embedded') === 'flutter';
+  const embeddedRef = useRef(false);
+  if (isEmbeddedParam) embeddedRef.current = true;
+  const isEmbedded = embeddedRef.current;
+  const hideChrome = isLiveOverlay || isEmbedded;
   const isLanding = location.pathname === '/';
   const scoreboardTextPath = state.activeMatchId ? `/scoreboard-text/${state.activeMatchId}` : '/scoreboard-text';
   const liveOverlayPath = state.activeMatchId ? `/live-overlay/${state.activeMatchId}` : '/live-overlay';
@@ -236,6 +241,10 @@ export default function Layout() {
         ],
       },
       {
+        path: '/teams',
+        label: '팀',
+      },
+      {
         path: '/schedule',
         label: '경기 일정',
         children: [
@@ -334,7 +343,7 @@ export default function Layout() {
   return (
     <ContentProvider>
       <div className="app-shell">
-      {!isLiveOverlay && (
+      {!hideChrome && (
         <header className="app-header">
           <div
             className="app-header__inner"
@@ -634,6 +643,13 @@ export default function Layout() {
                           {roleLabel}
                         </span>
                       </Link>
+                    ) : roleLabel === '선수' ? (
+                      <span className="player-badge-wrap">
+                        <span className="player-badge" title={`권한: ${roleLabel} (${roleDetail})`}>
+                          {roleLabel}
+                        </span>
+                        <span className="player-badge-team">{roleDetail}</span>
+                      </span>
                     ) : (
                       <span
                         className="badge-hoverable"
@@ -779,8 +795,8 @@ export default function Layout() {
         </header>
       )}
 
-      <main className="app-main" style={isLiveOverlay ? { maxWidth: '100%', margin: 0, padding: 0 } : undefined}>
-        {!isLiveOverlay && showMobileNotice && (
+      <main className="app-main" style={hideChrome ? { maxWidth: '100%', margin: 0, padding: 0 } : undefined}>
+        {!hideChrome && showMobileNotice && (
           <div
             role="alertdialog"
             aria-live="polite"
@@ -804,7 +820,8 @@ export default function Layout() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <div style={{ fontSize: '15px', fontWeight: 900, color: '#fde68a' }}>PC 화면에 최적화된 사이트입니다.</div>
                 <div style={{ fontSize: '13px', color: '#e2e8f0', lineHeight: 1.55 }}>
-                  모바일 버전은 아직 최적화 중이라 일부 레이아웃이 깨질 수 있어요. 원활한 이용을 위해 PC 브라우저 사용을 권장합니다.
+                  모바일 버전은 아직 최적화 중이라 일부 레이아웃이 깨질 수 있어요. 모바일에서는 <strong style={{ color: '#facc15' }}>AUBL 앱 사용</strong>을 권장하며,
+                  웹 이용 시에는 PC 브라우저에서 더 안정적으로 이용할 수 있습니다.
                 </div>
               </div>
             </div>
@@ -858,7 +875,7 @@ export default function Layout() {
           </div>
         )}
 
-        {!isLiveOverlay && showNotificationPrompt && typeof Notification !== 'undefined' && (
+        {!hideChrome && showNotificationPrompt && typeof Notification !== 'undefined' && (
           <div
             style={{
               display: 'flex',
@@ -948,7 +965,7 @@ export default function Layout() {
           </div>
         )}
 
-        {!isLiveOverlay && notificationBlocked && (
+        {!hideChrome && notificationBlocked && (
           <div
             style={{
               display: 'flex',
@@ -1008,7 +1025,7 @@ export default function Layout() {
         <Outlet />
       </main>
 
-      {!isLiveOverlay && (
+      {!hideChrome && (
         <footer
           style={{
             marginTop: 'auto',
@@ -1020,6 +1037,11 @@ export default function Layout() {
           }}
         >
           <div style={{ maxWidth: '1600px', margin: '0 auto', padding: '0 24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginBottom: '12px', fontSize: '13px' }}>
+              <Link to="/privacy" style={{ color: '#94a3b8', textDecoration: 'none' }}>개인정보 처리방침</Link>
+              <span style={{ color: '#475569' }}>|</span>
+              <Link to="/terms" style={{ color: '#94a3b8', textDecoration: 'none' }}>이용약관</Link>
+            </div>
             &copy; 2026 Amateur University Baseball League. All rights reserved.
           </div>
           <div className="preview-toggle-inline">

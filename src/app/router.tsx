@@ -3,7 +3,12 @@ import Layout from './Layout';
 import LandingPage from '../front/pages/LandingPage';
 import IntroPage from '../front/pages/IntroPage';
 import RulePage from '../front/pages/RulePage';
+import PrivacyPage from '../front/pages/PrivacyPage';
+import TermsPage from '../front/pages/TermsPage';
 import TeamsPage from '../front/pages/TeamsPage';
+import TeamHubPage from '../front/pages/TeamHubPage';
+import TeamDetailPage from '../front/pages/TeamDetailPage';
+import TeamNoticeDetailPage from '../front/pages/TeamNoticeDetailPage';
 import StandingsPage from './pages/StandingPage';
 import PredictionPage from './pages/PredictionPage';
 import RecordPage from './pages/RecordPage';
@@ -36,6 +41,7 @@ import AdminLandingPage from './pages/admin/AdminLandingPage';
 import AdminIntroPage from './pages/admin/AdminIntroPage';
 import AdminRulesPage from './pages/admin/AdminRulesPage';
 import AdminTeamsPage from './pages/admin/AdminTeamsPage';
+import AdminRolesPage from './pages/admin/AdminRolesPage';
 
 export const router = createBrowserRouter([
   {
@@ -59,8 +65,28 @@ export const router = createBrowserRouter([
         element: <RulePage />,
       },
       {
+        path: 'privacy',
+        element: <PrivacyPage />,
+      },
+      {
+        path: 'terms',
+        element: <TermsPage />,
+      },
+      {
         path: 'intro/teams',
         element: <TeamsPage />,
+      },
+      {
+        path: 'teams',
+        element: <TeamHubPage />,
+      },
+      {
+        path: 'teams/:teamId',
+        element: <TeamDetailPage />,
+      },
+      {
+        path: 'teams/:teamId/notices/:noticeId',
+        element: <TeamNoticeDetailPage />,
       },
       {
         path: 'standings',
@@ -185,6 +211,7 @@ export const router = createBrowserRouter([
           { path: 'intro', element: <AdminIntroPage /> },
           { path: 'rules', element: <AdminRulesPage /> },
           { path: 'teams', element: <AdminTeamsPage /> },
+          { path: 'roles', element: <AdminRolesPage /> },
         ],
       },
       {

@@ -4078,14 +4078,14 @@ function FieldView({
   onSelectFielder: (payload: { name: string; pos: string }) => void;
 }) {
   const label = `${half === 'top' ? '▲' : '▼'} ${inning}`;
-  const baseSize = 'clamp(20px, 3.4vw, 30px)';
+  const baseSize = 'clamp(19px, 3.2vw, 29px)';
   const groundShift = '-4%';
   const positions = {
     second: { x: 50, y: 35 },
     first: { x: 72, y: 63 },
     third: { x: 28, y: 63 },
     home: { x: 50, y: 92 },
-    batter: { x: 65, y: 90 },
+    batter: { x: 75, y: 90 },
   };
   return (
     <div
@@ -4130,24 +4130,24 @@ function FieldView({
       </span>
       <OutLights outs={outs} balls={balls} strikes={strikes} />
       <Base
-        marker={Boolean(bases[1])}
-        label={bases[1] ?? '2'}
+        occupied={Boolean(bases[1])}
+        runnerName={bases[1] ?? undefined}
         top={`${positions.second.y}%`}
         left={`${positions.second.x}%`}
         size={baseSize}
         onSelect={() => bases[1] && onSelectRunner({ base: 1, name: bases[1] })}
       />
       <Base
-        marker={Boolean(bases[0])}
-        label={bases[0] ?? '1'}
+        occupied={Boolean(bases[0])}
+        runnerName={bases[0] ?? undefined}
         top={`${positions.first.y}%`}
         left={`${positions.first.x}%`}
         size={baseSize}
         onSelect={() => bases[0] && onSelectRunner({ base: 0, name: bases[0] })}
       />
       <Base
-        marker={Boolean(bases[2])}
-        label={bases[2] ?? '3'}
+        occupied={Boolean(bases[2])}
+        runnerName={bases[2] ?? undefined}
         top={`${positions.third.y}%`}
         left={`${positions.third.x}%`}
         size={baseSize}
@@ -4167,69 +4167,118 @@ function FieldView({
 }
 
 function Base({
-  marker,
-  label,
+  occupied,
+  runnerName,
   top,
   left,
   size,
   onSelect,
 }: {
-  marker?: boolean;
-  label?: string;
+  occupied?: boolean;
+  runnerName?: string;
   top?: string;
   left?: string;
   size?: string;
   onSelect?: () => void;
 }) {
-  const clickable = marker && onSelect;
+  const clickable = occupied && onSelect;
+  const parsedRunner = (() => {
+    const raw = (runnerName ?? '').trim();
+    const match = raw.match(/^(.*?)(?:\(([^)]*)\))?\s*$/);
+    return {
+      name: (match?.[1] ?? raw).trim(),
+      number: (match?.[2] ?? '').trim(),
+    };
+  })();
+
   return (
     <div
       style={{
         position: 'absolute',
         top,
         left,
-        transform: 'translate(-50%, -50%) rotate(45deg)',
+        transform: 'translate(-50%, -50%)',
         width: size ?? '28px',
         height: size ?? '28px',
-        background: '#f4f4f5',
-        borderRadius: '4px',
-        border: '2px solid #e5e7eb',
-        display: 'grid',
-        placeItems: 'center',
-        boxShadow: marker ? '0 0 0 8px rgba(248, 113, 113, 0.2)' : undefined,
-        cursor: clickable ? 'pointer' : 'default',
-        transition: 'transform 120ms ease, box-shadow 120ms ease',
-        ...(clickable
-          ? {
-              transformOrigin: 'center',
-            }
-          : {}),
-      }}
-      role={clickable ? 'button' : undefined}
-      onClick={() => clickable && onSelect?.()}
-      onMouseEnter={(e) => {
-        if (clickable) {
-          (e.currentTarget as HTMLDivElement).style.transform = 'translate(-50%, -50%) rotate(45deg) scale(1.05)';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (clickable) {
-          (e.currentTarget as HTMLDivElement).style.transform = 'translate(-50%, -50%) rotate(45deg)';
-        }
+        zIndex: occupied ? 5 : 4,
       }}
     >
-      {marker && (
-        <span
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          transform: 'rotate(45deg)',
+          background: occupied ? '#facc15' : '#f4f4f5',
+          borderRadius: '4px',
+          border: occupied ? '2px solid #f59e0b' : '2px solid #e5e7eb',
+          display: 'grid',
+          placeItems: 'center',
+          boxShadow: occupied ? '0 0 0 8px rgba(250, 204, 21, 0.3), 0 8px 18px rgba(245, 158, 11, 0.35)' : undefined,
+          cursor: clickable ? 'pointer' : 'default',
+          transition: 'transform 120ms ease, box-shadow 120ms ease',
+          transformOrigin: 'center',
+        }}
+        role={clickable ? 'button' : undefined}
+        title={occupied ? runnerName : undefined}
+        onClick={() => clickable && onSelect?.()}
+        onMouseEnter={(e) => {
+          if (clickable) {
+            (e.currentTarget as HTMLDivElement).style.transform = 'rotate(45deg) scale(1.06)';
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (clickable) {
+            (e.currentTarget as HTMLDivElement).style.transform = 'rotate(45deg)';
+          }
+        }}
+      >
+        <div
           style={{
             transform: 'rotate(-45deg)',
-            fontWeight: 900,
-            color: '#ef4444',
-            fontSize: '10px',
+            width: '94%',
+            display: 'grid',
+            justifyItems: 'center',
+            alignContent: 'center',
+            marginTop: '2px',
+            gap: '1px',
+            userSelect: 'none',
           }}
         >
-          {label}
-        </span>
-      )}
+          <span
+            style={{
+              maxWidth: '100%',
+              minHeight: '9px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontWeight: 900,
+              color: occupied ? '#1f2937' : '#6b7280',
+              fontSize: '11px',
+              lineHeight: 1.1,
+            }}
+            title={runnerName}
+          >
+            {parsedRunner.name || ' '}
+          </span>
+          <span
+            style={{
+              maxWidth: '100%',
+              minHeight: '8px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontWeight: 800,
+              color: occupied ? '#1f2937' : '#6b7280',
+              fontSize: '8px',
+              lineHeight: 1,
+              opacity: parsedRunner.number ? 1 : 0.6,
+            }}
+            title={parsedRunner.number || undefined}
+          >
+            {parsedRunner.number || ' '}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -5324,6 +5373,8 @@ function HitAdvanceModal({
         onClick={(e) => e.stopPropagation()}
         style={{
           width: 'min(560px, 100%)',
+          maxHeight: '90vh',
+          overflow: 'auto',
           background: '#0f172a',
           borderRadius: '16px',
           border: '1px solid rgba(148, 163, 184, 0.25)',
@@ -6682,15 +6733,15 @@ function HitWizardModal({
   const renderStep = () => {
     if (state.step === 'result') {
       return (
-        <div style={{ display: 'grid', gap: '12px' }}>
+        <div style={{ display: 'grid', gap: '8px' }}>
           <span style={{ color: '#cbd5e1', fontWeight: 800, fontSize: '14px' }}>타격 후 결과를 먼저 선택하세요.</span>
-          <div style={{ display: 'grid', gap: '10px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(340px, 100%), 1fr))', gap: '10px', alignItems: 'start' }}>
             {battedBallResultGroups.map((group) => {
               const options = battedBallResultOptions.filter((option) => option.group === group.key);
               return (
-                <div key={group.key} style={{ display: 'grid', gap: '6px' }}>
+                <div key={group.key} style={{ display: 'grid', gap: '4px' }}>
                   <div style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>{group.label}</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '6px' }}>
                     {options.map((option) => {
                       const isSelected = state.result === option.value;
                       const outlineColor = option.group === 'out' ? '#ef4444' : option.color;
@@ -6701,8 +6752,8 @@ function HitWizardModal({
                           type="button"
                           onClick={() => onSelectResult(option.value)}
                           style={{
-                            padding: '12px 10px',
-                            borderRadius: '12px',
+                            padding: '8px 8px',
+                            borderRadius: '10px',
                             border: isSelected ? `2px solid ${outlineColor}` : '1px solid rgba(148,163,184,0.25)',
                             background: isSelected ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
                             color: option.color,
@@ -6710,17 +6761,18 @@ function HitWizardModal({
                             textAlign: 'left',
                             boxShadow: isSelected ? `0 0 0 1px ${outlineColor}40` : 'none',
                             cursor: 'pointer',
+                            fontSize: '13px',
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
                             <span>{option.label}</span>
                             {shortcutHint ? (
-                              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>
+                              <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>
                                 ({shortcutHint})
                               </span>
                             ) : null}
                           </div>
-                          <div style={{ color: '#cbd5e1', fontSize: '12px', fontWeight: 700 }}>{option.helper}</div>
+                          <div style={{ color: '#cbd5e1', fontSize: '11px', fontWeight: 700 }}>{option.helper}</div>
                         </button>
                       );
                     })}
@@ -6902,13 +6954,15 @@ function HitWizardModal({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: 'min(640px, 100%)',
+          width: 'min(1200px, 95vw)',
+          maxHeight: '95vh',
+          overflow: 'auto',
           background: '#0f172a',
           borderRadius: '16px',
           border: '1px solid rgba(148, 163, 184, 0.25)',
           padding: '18px',
           display: 'grid',
-          gap: '14px',
+          gap: '12px',
           color: '#e2e8f0',
           boxShadow: '0 24px 60px rgba(0,0,0,0.4)',
         }}
@@ -9086,8 +9140,8 @@ function getDefenseAssignments(lineup: { name: string; pos: string }[]) {
     P: { x: 50, y: 54 },
     C: { x: 50, y: 84 },
     '1B': { x: 76, y: 52 },
-    '2B': { x: 62, y: 40 },
-    SS: { x: 38, y: 40 },
+    '2B': { x: 62.4, y: 40 },
+    SS: { x: 37.6, y: 40 },
     '3B': { x: 24, y: 52 },
     LF: { x: 18, y: 20 },
     CF: { x: 50, y: 12 },
@@ -9097,8 +9151,8 @@ function getDefenseAssignments(lineup: { name: string; pos: string }[]) {
     { x: 50, y: 54 },
     { x: 50, y: 84 },
     { x: 76, y: 52 },
-    { x: 62, y: 40 },
-    { x: 38, y: 40 },
+    { x: 62.4, y: 40 },
+    { x: 37.6, y: 40 },
     { x: 24, y: 52 },
     { x: 18, y: 20 },
     { x: 50, y: 12 },

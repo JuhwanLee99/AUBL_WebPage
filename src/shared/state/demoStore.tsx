@@ -12,6 +12,7 @@ import {
   setDoc,
   writeBatch,
   deleteDoc,
+  deleteField,
   getDoc,
   getDocs,
   runTransaction,
@@ -605,8 +606,9 @@ function mergeOwnerLineups(
   if (!currentUid || !matchId) return data;
   if (data.scorerUid && data.scorerUid !== currentUid) return data;
 
+  const localIsDemo = isDemoLineups(localState.lineups);
   const localHasPlayers =
-    hasActualPlayers(localState.lineups.home) || hasActualPlayers(localState.lineups.away);
+    !localIsDemo && (hasActualPlayers(localState.lineups.home) || hasActualPlayers(localState.lineups.away));
   if (!localHasPlayers) return data;
 
   return {
@@ -824,6 +826,13 @@ function normalizeEvents(events: unknown, fallback: { inning: number; half: Half
         battedBall,
         error: e.error ?? null,
         notes: typeof e.notes === 'string' ? e.notes : undefined,
+        strikeType: e.strikeType === 'swinging' || e.strikeType === 'looking' ? e.strikeType : undefined,
+        rbi: typeof e.rbi === 'number' ? e.rbi : undefined,
+        dpRoute: Array.isArray(e.dpRoute) ? e.dpRoute.filter((v): v is number => typeof v === 'number') : undefined,
+        earnedRunsBy:
+          e.earnedRunsBy && typeof e.earnedRunsBy === 'object'
+            ? (e.earnedRunsBy as Record<string, number>)
+            : undefined,
         createdAt: typeof e.createdAt === 'number' ? e.createdAt : undefined,
         eventId: typeof e.eventId === 'string' ? e.eventId : undefined,
       };
@@ -1126,9 +1135,22 @@ function normalizeState(base: DemoState, incoming: DemoState): DemoState {
   const hasActualPlayers = (lineup: PlayerSlot[]) =>
     lineup.some(slot => slot.name && slot.name.trim() !== '');
 
-  const rawLineups = merged.lineups ?? base.lineups;
+  let rawLineups = merged.lineups ?? base.lineups;
   const hasLineups = hasActualPlayers(rawLineups.home) || hasActualPlayers(rawLineups.away);
-  const safeLineups = hasLineups ? ensureCompleteLineups(rawLineups) : rawLineups;
+  const isDemo = isDemoLineups(rawLineups);
+  if ((!hasLineups || isDemo) && merged.activeMatchId) {
+    const active = matches.find((m) => m.id === merged.activeMatchId);
+    const activeLineups = active?.lineups;
+    const activeHasPlayers = activeLineups
+      ? hasActualPlayers(activeLineups.home) || hasActualPlayers(activeLineups.away)
+      : false;
+    if (activeLineups && activeHasPlayers) {
+      rawLineups = activeLineups;
+    }
+  }
+  const safeLineups = hasActualPlayers(rawLineups.home) || hasActualPlayers(rawLineups.away)
+    ? ensureCompleteLineups(rawLineups)
+    : rawLineups;
   const history = Array.isArray(merged.history)
     ? merged.history.map((snap) => {
         const normalizedHistoryFeed = normalizeFeed((snap as DemoSnapshot).feed, { inning: snap.inning, half: snap.half });
@@ -1572,8 +1594,10 @@ function reducer(state: DemoState, action: Action): DemoState {
     'syncActiveMatch',
     'releaseLock',
     'resumeLock',
+    'setFeed',
+    'setEvents',
   ];
-  const lockBypass: Action['type'][] = ['selectMatch', 'setMatches', 'syncActiveMatch', 'hydrate'];
+  const lockBypass: Action['type'][] = ['selectMatch', 'setMatches', 'syncActiveMatch', 'hydrate', 'setFeed', 'setEvents'];
   if (isLockedByOther(state) && !lockBypass.includes(action.type)) {
     return state;
   }
@@ -2297,6 +2321,7 @@ function createPlayEventWithBatter(
     battedBall?: BattedBallDetails | null;
     error?: ErrorDetails | string | null;
     notes?: string;
+    rbi?: number;
   },
   pitch: number,
   batter: string,
@@ -2315,6 +2340,7 @@ function createPlayEventWithBatter(
     battedBall: details.battedBall ?? null,
     error: details.error ?? null,
     notes: details.notes,
+    rbi: details.rbi,
     createdAt,
     eventId,
   };
@@ -2609,6 +2635,7 @@ function applyFielderChoice(
       runners: runnerMoves.map((move) => move.runnerSummary),
       battedBall: battedBall ?? null,
       notes: `야수선택${contextNote ? ` ${contextNote}` : ''} · ${batterName}`,
+      rbi: runs > 0 ? runs : undefined,
     },
     pitchNumber,
     batterName,
@@ -4330,12 +4357,13 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         const raw = snap.data() as SharedGameState;
         const merged = mergeOwnerLineups(raw, matchId, stateRef.current);
         const data = sanitizeSpectatorState(merged);
+        const { feed: _feed, events: _events, ...core } = data as SharedGameState & { feed?: unknown; events?: unknown };
         skipFirestoreWriteRef.current = true;
         dispatch({
           type: 'hydrate',
           state: normalizeState(initialState, {
             ...stateRef.current,
-            ...data,
+            ...core,
             matches: stateRef.current.matches,
           }),
         });
@@ -4354,12 +4382,13 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         const raw = snap.data() as SharedGameState;
         const merged = mergeOwnerLineups(raw, matchId, stateRef.current);
         const data = sanitizeSpectatorState(merged);
+        const { feed: _feed, events: _events, ...core } = data as SharedGameState & { feed?: unknown; events?: unknown };
         skipFirestoreWriteRef.current = true;
         dispatch({
           type: 'hydrate',
           state: normalizeState(initialState, {
             ...stateRef.current,
-            ...data,
+            ...core,
             matches: stateRef.current.matches,
           }),
         });
@@ -4708,10 +4737,15 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
         if (key !== lastStateKeyRef.current) {
           lastStateKeyRef.current = key;
 
-          const payload = pruneUndefined({
-            ...core,
-            updatedAt: Date.now(),
-          });
+          const payload = {
+            ...pruneUndefined({
+              ...core,
+              updatedAt: Date.now(),
+            }),
+            // Ensure stale feed/events fields are removed from matchStates doc.
+            feed: deleteField(),
+            events: deleteField(),
+          };
 
           await setDoc(doc(firestore, 'matchStates', matchId), payload, { merge: true });
         }
@@ -5307,12 +5341,13 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
               const mergedOwner = mergeOwnerLineups(data, matchIdLocal, stateRef.current);
               const active = stateRef.current.matches.find((m) => m.id === matchIdLocal);
               const sanitized = applyLineupVisibility(mergedOwner, active, isAdmin);
+              const { feed: _feed, events: _events, ...core } = sanitized as SharedGameState & { feed?: unknown; events?: unknown };
               skipFirestoreWriteRef.current = true;
               dispatch({
                 type: 'hydrate',
                 state: normalizeState(initialState, {
                   ...stateRef.current,
-                  ...sanitized,
+                  ...core,
                   matches: stateRef.current.matches,
                 }),
               });
