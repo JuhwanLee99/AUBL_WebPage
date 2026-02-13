@@ -6,6 +6,7 @@ import { useAuth } from '../shared/auth/AuthProvider';
 import { useAdmin } from '../shared/auth/useAdmin';
 import { useDemoStore } from '../shared/state/demoStore';
 import { ContentProvider } from '../shared/state/contentProvider';
+import { initializeTeamMapping } from '../shared/api/transformers';
 
 const NOTIFICATION_PROMPT_KEY = 'aubl:notificationPrompt:v1';
 const NOTIFICATION_PROMPT_SNOOZE_MS = 1000 * 60 * 60 * 24; // 24시간 동안 재등장 방지
@@ -47,6 +48,15 @@ export default function Layout() {
     if (typeof window === 'undefined') return;
     const isNarrowMobile = window.matchMedia('(max-width: 640px)').matches;
     setPreviewMode(isNarrowMobile ? 'mobile' : 'desktop');
+  }, []);
+
+  // 팀 매핑 초기화 (백엔드에서 팀 목록 가져오기)
+  useEffect(() => {
+    // 백엔드 연동이 활성화된 경우에만 팀 매핑 초기화
+    const isBackendEnabled = import.meta.env.VITE_ENABLE_BACKEND_INTEGRATION === 'true';
+    if (isBackendEnabled) {
+      void initializeTeamMapping();
+    }
   }, []);
 
   // 첫 방문 모바일 사용자에게 PC 최적화 안내

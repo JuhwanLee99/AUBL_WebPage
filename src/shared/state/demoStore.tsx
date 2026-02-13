@@ -1378,6 +1378,150 @@ function calculateGameStats(record: GameRecord) {
   return stats;
 }
 
+/**
+ * 투수 통계 계산 함수
+ * feed 데이터에서 각 투수별로 피안타, 탈삼진, 볼넷 등을 집계
+ */
+function calculatePitcherStats(feed: PlayLog[]) {
+  type PitcherStat = {
+    ip: number; // 이닝 (아웃 카운트 기반)
+    bf: number; // 상대 타자 수
+    ab: number; // 상대 타수
+    h: number;  // 피안타
+    hr: number; // 피홈런
+    bb: number; // 볼넷
+    hbp: number; // 사구
+    so: number; // 탈삼진
+    r: number;  // 실점
+    er: number; // 자책점 (현재는 실점과 동일하게 처리)
+    pitches: number; // 투구수
+    outs: number; // 아웃 카운트 (IP 계산용)
+  };
+
+  const stats = new Map<string, PitcherStat>();
+
+  const ensureStat = (name: string): PitcherStat => {
+    if (!stats.has(name)) {
+      stats.set(name, {
+        ip: 0, bf: 0, ab: 0, h: 0, hr: 0, bb: 0, hbp: 0,
+        so: 0, r: 0, er: 0, pitches: 0, outs: 0
+      });
+    }
+    return stats.get(name)!;
+  };
+
+  // 각 이닝/half별 현재 투수 추적
+  type InningKey = string; // "1-top", "1-bottom" 등
+  const currentPitcher = new Map<InningKey, string>();
+
+  const chronological = [...feed].reverse();
+
+  chronological.forEach((entry) => {
+    const key: InningKey = `${entry.inning}-${entry.half}`;
+    const normalized = entry.result.replace(/\s+/g, '');
+
+    // 투수 등판 로그 감지
+    if (normalized.includes('투수') && !entry.batter) {
+      // "홍길동(10) 투수 (선발)" 형식에서 투수 이름 추출
+      const match = entry.result.match(/^(.+?)\s*투수/);
+      if (match) {
+        const pitcherName = match[1].trim();
+        currentPitcher.set(key, pitcherName);
+      }
+      return;
+    }
+
+    // 타석 결과 처리
+    const pitcher = currentPitcher.get(key);
+    if (!pitcher || !entry.batter) return;
+
+    const stat = ensureStat(pitcher);
+    stat.pitches += entry.pitch; // 투구수 누적
+
+    // 결과 분석
+    let kind = '';
+    if (normalized.includes('홈런')) kind = 'hr';
+    else if (normalized.includes('3루타')) kind = 'triple';
+    else if (normalized.includes('2루타')) kind = 'double';
+    else if (normalized.includes('1루타')) kind = 'single';
+    else if (normalized.includes('고의') || normalized.toUpperCase().includes('IB')) kind = 'bb';
+    else if (normalized.includes('볼넷')) kind = 'bb';
+    else if (normalized.includes('몸에맞는공')) kind = 'hbp';
+    else if (normalized.includes('타격방해')) kind = 'ci';
+    else if (normalized.includes('야수선택') || normalized.toUpperCase().includes('F.C')) kind = 'fc';
+    else if (normalized.includes('희생')) kind = 'sac';
+    else if (normalized.includes('낫아웃')) kind = 'so_reach';
+    else if (normalized.includes('삼진')) kind = 'so';
+    else if (normalized.includes('아웃') && !normalized.includes('도루')) kind = 'out';
+
+    if (!kind) return;
+
+    // 상대 타자 수 (타석)
+    if (['single', 'double', 'triple', 'hr', 'bb', 'ci', 'fc', 'hbp', 'so', 'so_reach', 'out', 'sac'].includes(kind)) {
+      stat.bf++;
+    }
+
+    switch (kind) {
+      case 'single':
+      case 'double':
+      case 'triple':
+        stat.ab++;
+        stat.h++;
+        break;
+      case 'hr':
+        stat.ab++;
+        stat.h++;
+        stat.hr++;
+        break;
+      case 'bb':
+        stat.bb++;
+        break;
+      case 'hbp':
+        stat.hbp++;
+        break;
+      case 'ci':
+        // 타격방해는 타수 미포함
+        break;
+      case 'fc':
+        stat.ab++;
+        break;
+      case 'so':
+      case 'so_reach':
+        stat.ab++;
+        stat.so++;
+        stat.outs++;
+        break;
+      case 'out':
+        stat.ab++;
+        stat.outs++;
+        break;
+      case 'sac':
+        // 희생타는 타수 미포함
+        break;
+    }
+
+    // 실점 계산 (득점 포함된 경우)
+    const runsMatch = normalized.match(/(\d+)\s*득점/);
+    if (runsMatch) {
+      const runs = Number(runsMatch[1]);
+      stat.r += runs;
+      stat.er += runs; // 자책점은 일단 실점과 동일하게 처리
+    } else if (normalized.includes('득점')) {
+      stat.r++;
+      stat.er++;
+    }
+  });
+
+  // IP 계산 (아웃 카운트 / 3)
+  stats.forEach((stat) => {
+    const fullInnings = Math.floor(stat.outs / 3);
+    const remainingOuts = stat.outs % 3;
+    stat.ip = fullInnings + remainingOuts / 10; // 5.2 형식
+  });
+
+  return stats;
+}
+
 export function buildGameRecord(state: DemoState): GameRecord {
   // [추가] 선수 객체의 이름을 '이름(등번호)'로 변환하는 내부 함수
   const transformPlayer = (p: PlayerSlot) => ({
@@ -5166,6 +5310,41 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
           const maxInning = Math.max(lineScoreBase.home.length, lineScoreBase.away.length);
           const innings = Array.from({ length: maxInning }, (_v, idx) => idx + 1);
           const fillLine = (arr: number[]) => Array.from({ length: maxInning }, (_v, idx) => arr[idx] ?? 0);
+          // 투수 통계 계산
+          const pitcherStatsMap = calculatePitcherStats(snapshot.feed);
+
+          // 투수 기록 추출 함수
+          const toPitcherLines = (side: 'home' | 'away'): PostGamePitcherLine[] => {
+            // lineup과 bench에서 투수 찾기
+            const allPlayers = [...snapshot.lineups[side], ...snapshot.benches[side]];
+            const pitchers = allPlayers.filter(p => p.pos.toUpperCase() === 'P');
+
+            return pitchers.map(p => {
+              const uniqueName = p.number ? `${p.name}(${p.number})` : p.name;
+              const stat = pitcherStatsMap.get(uniqueName);
+
+              // 통계가 있으면 사용, 없으면 기본값
+              return {
+                name: uniqueName,
+                result: undefined, // 승/패/세/홀드 등 (수동 입력 필요)
+                ip: stat?.ip ?? 0,
+                bf: stat?.bf ?? 0,
+                ab: stat?.ab ?? 0,
+                h: stat?.h ?? 0,
+                hr: stat?.hr ?? 0,
+                bb: stat?.bb ?? 0,
+                hbp: stat?.hbp ?? 0,
+                so: stat?.so ?? 0,
+                r: stat?.r ?? 0,
+                er: stat?.er ?? 0,
+                pitches: stat?.pitches ?? 0,
+                wp: 0, // Wild Pitch는 feed에서 감지 필요
+                bk: 0, // Balk는 feed에서 감지 필요
+                sh: 0, // Sacrifice Hit 허용은 타자 기록에서 역계산 필요
+                sf: 0, // Sacrifice Fly 허용은 타자 기록에서 역계산 필요
+              };
+            });
+          };
 
           const postGame: PostGameRecord = {
             lineScore: { innings, home: fillLine(lineScoreBase.home), away: fillLine(lineScoreBase.away) },
@@ -5181,7 +5360,10 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
               home: toBatterLines('home'),
               away: toBatterLines('away'),
             },
-            // 투수 기록 등도 필요하면 여기서 추가 (현재는 타자 위주)
+            pitchers: {
+              home: toPitcherLines('home'),
+              away: toPitcherLines('away'),
+            },
           };
 
           void pushMatchUpdate(matchId, {
@@ -5190,6 +5372,25 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
             awayScore: snapshot.score.away,
             postGame, // 상세 기록 저장
           }).catch(() => {});
+
+          // 백엔드로 경기 데이터 전송 (Firestore 임포트 트리거)
+          // 백엔드 연동이 활성화된 경우에만 전송
+          const isBackendEnabled = import.meta.env.VITE_ENABLE_BACKEND_INTEGRATION === 'true';
+          if (isBackendEnabled) {
+            // 완료된 경기 단건만 즉시 임포트하여 중복 처리 위험을 낮춘다.
+            void import('../api').then(({ importFirestoreMatch }) => {
+              importFirestoreMatch(matchId)
+                .then((response) => {
+                  console.log('✅ 백엔드 단건 임포트 성공:', response);
+                })
+                .catch((error) => {
+                  console.error('❌ 백엔드 단건 임포트 실패:', error);
+                  // 실패해도 Firestore에는 저장되어 있으므로 나중에 재시도 가능
+                });
+            }).catch(() => {
+              console.error('❌ API 모듈 로드 실패');
+            });
+          }
         }
       },
       resetGame: () => dispatch({ type: 'resetGame' }),

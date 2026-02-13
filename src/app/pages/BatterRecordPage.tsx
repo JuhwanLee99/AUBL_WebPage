@@ -1,42 +1,60 @@
-import { useMemo, useState } from 'react';
-
-type BatterStat = {
-  name: string;
-  team: string;
-  year: number;
-  avg: number;
-  obp: number;
-  slg: number;
-  ops: number;
-  hr: number;
-  rbi: number;
-  sb: number;
-  war: number;
-};
-
-const BATTER_STATS: BatterStat[] = [
-  { name: '서준호', team: 'Epsilon Eagles', year: 2024, avg: 0.331, obp: 0.412, slg: 0.610, ops: 1.022, hr: 14, rbi: 48, sb: 8, war: 3.2 },
-  { name: '김하늘', team: 'Alpha College', year: 2024, avg: 0.321, obp: 0.386, slg: 0.512, ops: 0.898, hr: 9, rbi: 41, sb: 10, war: 2.7 },
-  { name: '전유진', team: 'Gamma Tech', year: 2024, avg: 0.305, obp: 0.372, slg: 0.521, ops: 0.893, hr: 10, rbi: 37, sb: 4, war: 2.2 },
-  { name: '윤태훈', team: 'Beta University', year: 2024, avg: 0.299, obp: 0.392, slg: 0.429, ops: 0.821, hr: 6, rbi: 33, sb: 21, war: 2.5 },
-  { name: '박민수', team: 'Alpha College', year: 2024, avg: 0.284, obp: 0.402, slg: 0.386, ops: 0.788, hr: 4, rbi: 24, sb: 26, war: 2.1 },
-  { name: '정재원', team: 'Epsilon Eagles', year: 2023, avg: 0.318, obp: 0.401, slg: 0.504, ops: 0.905, hr: 12, rbi: 45, sb: 7, war: 3.5 },
-  { name: '신지환', team: 'Alpha College', year: 2023, avg: 0.297, obp: 0.362, slg: 0.489, ops: 0.851, hr: 11, rbi: 39, sb: 9, war: 1.8 },
-  { name: '김세인', team: 'Beta University', year: 2023, avg: 0.281, obp: 0.354, slg: 0.348, ops: 0.702, hr: 3, rbi: 27, sb: 6, war: 1.6 },
-  { name: '강건우', team: 'Delta Dragons', year: 2024, avg: 0.272, obp: 0.343, slg: 0.367, ops: 0.710, hr: 2, rbi: 22, sb: 22, war: 2.0 },
-  { name: '박지온', team: 'Gamma Tech', year: 2024, avg: 0.271, obp: 0.338, slg: 0.373, ops: 0.711, hr: 3, rbi: 19, sb: 18, war: 1.4 },
-];
+import { useEffect, useMemo, useState } from 'react';
+import { getBatterRecords, getSeasons } from '../../shared/api';
+import type { BatterRecordRow, SeasonSummary } from '../../shared/api';
 
 export default function BatterRecordPage() {
-  const years = useMemo(() => Array.from(new Set(BATTER_STATS.map((b) => b.year))).sort((a, b) => b - a), []);
-  const [selectedYear, setSelectedYear] = useState(years[0]);
+  const [seasons, setSeasons] = useState<SeasonSummary[]>([]);
+  const [selectedSeasonId, setSelectedSeasonId] = useState<number | undefined>();
+  const [rows, setRows] = useState<BatterRecordRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const rows = useMemo(() => {
-    return BATTER_STATS
-      .filter((b) => b.year === selectedYear)
-      .sort((a, b) => b.ops - a.ops || b.war - a.war)
-      .map((b, idx) => ({ ...b, rank: idx + 1 }));
-  }, [selectedYear]);
+  useEffect(() => {
+    let mounted = true;
+    void (async () => {
+      try {
+        const fetched = await getSeasons();
+        if (!mounted) return;
+        setSeasons(fetched);
+        if (fetched.length > 0) setSelectedSeasonId((prev) => prev ?? fetched[0].id);
+      } catch (err) {
+        if (!mounted) return;
+        setError(err instanceof Error ? err.message : '시즌 목록을 불러오지 못했습니다.');
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const fetched = await getBatterRecords({ seasonId: selectedSeasonId, sort: 'ops', limit: 200 });
+        if (!mounted) return;
+        const ranked = [...fetched].sort((a, b) => b.ops - a.ops || b.hits - a.hits);
+        setRows(ranked);
+      } catch (err) {
+        if (!mounted) return;
+        setError(err instanceof Error ? err.message : '타자 기록을 불러오지 못했습니다.');
+        setRows([]);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [selectedSeasonId]);
+
+  const activeYear = useMemo(
+    () => seasons.find((season) => season.id === selectedSeasonId)?.year,
+    [seasons, selectedSeasonId]
+  );
 
   return (
     <div style={{ display: 'grid', gap: '22px' }}>
@@ -55,17 +73,17 @@ export default function BatterRecordPage() {
           타자 기록
         </span>
         <div style={{ display: 'grid', gap: '6px' }}>
-          <h1 style={{ margin: 0, fontSize: '30px', fontWeight: 900 }}>기록원 입력 기반 – 타자 세부 랭킹</h1>
+          <h1 style={{ margin: 0, fontSize: '30px', fontWeight: 900 }}>백엔드 집계 기반 – 타자 랭킹</h1>
           <p style={{ margin: 0, color: '#cbd5e1', lineHeight: 1.6 }}>
-            타율·출루·장타·OPS, 홈런과 도루까지 한 화면에. 기록원이 남긴 데이터를 즉시 반영해 시즌별 상위 타자를 제공합니다.
+            시즌별 타율·출루율·장타율·OPS와 주요 counting stat을 제공합니다.
           </p>
         </div>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           <label style={{ display: 'grid', gap: '6px', fontWeight: 800, color: '#94a3b8', fontSize: '12px' }}>
             시즌 선택
             <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              value={selectedSeasonId ?? ''}
+              onChange={(e) => setSelectedSeasonId(Number(e.target.value) || undefined)}
               style={{
                 background: '#0f172a',
                 color: '#e2e8f0',
@@ -75,13 +93,17 @@ export default function BatterRecordPage() {
                 fontWeight: 800,
               }}
             >
-              {years.map((year) => (
-                <option key={year} value={year}>
-                  {year} 시즌
+              {seasons.map((season) => (
+                <option key={season.id} value={season.id}>
+                  {season.year} 시즌
                 </option>
               ))}
             </select>
           </label>
+          <div style={{ display: 'grid', gap: '6px', alignContent: 'end' }}>
+            <span style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>선택 시즌</span>
+            <span style={{ color: '#e2e8f0', fontWeight: 900 }}>{activeYear ?? '-'}</span>
+          </div>
         </div>
       </header>
 
@@ -94,6 +116,9 @@ export default function BatterRecordPage() {
           background: 'rgba(15,23,42,0.75)',
         }}
       >
+        {loading && <p style={{ margin: 0, padding: '16px', color: '#cbd5e1' }}>타자 기록을 불러오는 중...</p>}
+        {error && <p style={{ margin: 0, padding: '16px', color: '#fca5a5' }}>{error}</p>}
+
         <div
           style={{
             display: 'grid',
@@ -117,37 +142,43 @@ export default function BatterRecordPage() {
           <span>HR</span>
           <span>RBI</span>
           <span>SB</span>
-          <span>WAR</span>
+          <span>G</span>
         </div>
 
         <div style={{ display: 'grid' }}>
-          {rows.map((row) => (
-            <div
-              key={`${row.name}-${row.year}`}
-              className="player-row"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '60px 1.1fr 0.9fr repeat(8, minmax(70px, 0.6fr))',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '14px 18px',
-                borderTop: '1px solid rgba(148,163,184,0.14)',
-                background: row.rank <= 3 ? 'rgba(236,72,153,0.07)' : 'transparent',
-              }}
-            >
-              <span style={{ fontWeight: 900, color: row.rank <= 3 ? '#f472b6' : '#e2e8f0' }}>#{row.rank}</span>
-              <span style={{ fontWeight: 800 }}>{row.name}</span>
-              <span style={{ color: '#cbd5e1', fontWeight: 700 }}>{row.team}</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums', color: '#e2e8f0' }}>{row.avg.toFixed(3)}</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums', color: '#e2e8f0' }}>{row.obp.toFixed(3)}</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums', color: '#e2e8f0' }}>{row.slg.toFixed(3)}</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums', color: '#f97316', fontWeight: 800 }}>{row.ops.toFixed(3)}</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums', color: '#e2e8f0' }}>{row.hr}</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums', color: '#e2e8f0' }}>{row.rbi}</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums', color: row.sb >= 15 ? '#34d399' : '#e2e8f0' }}>{row.sb}</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums', color: '#fbbf24', fontWeight: 800 }}>{row.war.toFixed(1)}</span>
-            </div>
-          ))}
+          {rows.map((row, idx) => {
+            const rank = idx + 1;
+            return (
+              <div
+                key={`${row.playerId}-${row.teamId}-${row.seasonId}`}
+                className="player-row"
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '60px 1.1fr 0.9fr repeat(8, minmax(70px, 0.6fr))',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '14px 18px',
+                  borderTop: '1px solid rgba(148,163,184,0.14)',
+                  background: rank <= 3 ? 'rgba(236,72,153,0.07)' : 'transparent',
+                }}
+              >
+                <span style={{ fontWeight: 900, color: rank <= 3 ? '#f472b6' : '#e2e8f0' }}>#{rank}</span>
+                <span style={{ fontWeight: 800 }}>{row.playerName}</span>
+                <span style={{ color: '#cbd5e1', fontWeight: 700 }}>{row.teamName}</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums', color: '#e2e8f0' }}>{row.battingAverage.toFixed(3)}</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums', color: '#e2e8f0' }}>{row.onBasePct.toFixed(3)}</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums', color: '#e2e8f0' }}>{row.sluggingPct.toFixed(3)}</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums', color: '#f97316', fontWeight: 800 }}>{row.ops.toFixed(3)}</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums', color: '#e2e8f0' }}>{row.homeRuns}</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums', color: '#e2e8f0' }}>{row.runsBattedIn}</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums', color: row.stolenBases >= 10 ? '#34d399' : '#e2e8f0' }}>{row.stolenBases}</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums', color: '#e2e8f0' }}>{row.gamesPlayed}</span>
+              </div>
+            );
+          })}
+          {!loading && rows.length === 0 && (
+            <p style={{ margin: 0, padding: '16px', color: '#94a3b8' }}>표시할 타자 기록이 없습니다.</p>
+          )}
         </div>
       </section>
     </div>

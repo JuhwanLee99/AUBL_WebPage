@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useContent, type ContentState } from '../../shared/state/contentProvider';
 import { useRef } from 'react';
+import { useDemoStore } from '../../shared/state/demoStore';
+import { importFirestoreMatch } from '../../shared/api';
 
 const cardStyle = {
   borderRadius: '16px',
@@ -50,6 +52,10 @@ export default function AdminPage() {
   const { content, updateContent, resetContent } = useContent();
   const intro = content.intro;
   const previewRef = useRef<HTMLDivElement>(null);
+  const { state } = useDemoStore();
+
+  // 경기 재전송 상태
+  const [resendStatus, setResendStatus] = useState<Record<string, 'pending' | 'sending' | 'success' | 'error'>>({});
 
   const [tickerDraft, setTickerDraft] = useState(lines(content.tickerItems));
 
@@ -209,6 +215,30 @@ export default function AdminPage() {
     setStatus('모든 문구를 기본값으로 복원했습니다.');
   };
 
+  // 경기 재전송 함수
+  const handleResendMatch = async (matchId: string) => {
+    const match = state.matches.find(m => m.id === matchId);
+    if (!match || match.status !== 'completed' || !match.postGame) {
+      setStatus('전송할 수 없는 경기입니다. (완료되지 않았거나 기록이 없음)');
+      return;
+    }
+
+    setResendStatus(prev => ({ ...prev, [matchId]: 'sending' }));
+
+    try {
+      await importFirestoreMatch(matchId);
+
+      setResendStatus(prev => ({ ...prev, [matchId]: 'success' }));
+      setStatus(`✅ ${match.homeTeamName} vs ${match.awayTeamName} 경기 단건 임포트 성공`);
+    } catch (error) {
+      setResendStatus(prev => ({ ...prev, [matchId]: 'error' }));
+      setStatus(`❌ 경기 단건 임포트 실패: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  // 완료된 경기 목록
+  const completedMatches = state.matches.filter(m => m.status === 'completed' && m.postGame);
+
   const infoText = useMemo(
     () =>
       [
@@ -256,6 +286,152 @@ export default function AdminPage() {
           {status}
         </div>
       )}
+
+      {/* 시즌 설정 섹션 */}
+      <div style={cardStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h3 style={{ margin: 0, color: '#e2e8f0' }}>시즌 설정</h3>
+
+          {/* 백엔드 연동 상태 표시 */}
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <span
+              style={{
+                padding: '4px 10px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 700,
+                background: import.meta.env.VITE_ENABLE_BACKEND_INTEGRATION === 'true'
+                  ? 'rgba(34,197,94,0.15)'
+                  : 'rgba(148,163,184,0.15)',
+                color: import.meta.env.VITE_ENABLE_BACKEND_INTEGRATION === 'true'
+                  ? '#86efac'
+                  : '#94a3b8',
+                border: `1px solid ${
+                  import.meta.env.VITE_ENABLE_BACKEND_INTEGRATION === 'true'
+                    ? 'rgba(34,197,94,0.3)'
+                    : 'rgba(148,163,184,0.3)'
+                }`,
+              }}
+            >
+              {import.meta.env.VITE_ENABLE_BACKEND_INTEGRATION === 'true' ? '자동 전송 ON' : '자동 전송 OFF'}
+            </span>
+
+            {import.meta.env.VITE_BACKEND_TEST_MODE === 'true' && (
+              <span
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  background: 'rgba(234,179,8,0.15)',
+                  color: '#fef08a',
+                  border: '1px solid rgba(234,179,8,0.3)',
+                }}
+              >
+                테스트 모드
+              </span>
+            )}
+          </div>
+        </div>
+
+        <p style={{ margin: 0, color: '#94a3b8', fontSize: '14px' }}>
+          자동 전송이 켜져 있으면 경기 종료 시 Firestore 단건 임포트 API를 호출합니다.
+        </p>
+      </div>
+
+      {/* 경기 재전송 섹션 */}
+      <div style={cardStyle}>
+        <h3 style={{ margin: '0 0 16px 0', color: '#e2e8f0' }}>경기 데이터 백엔드 재전송</h3>
+        <p style={{ margin: '0 0 12px 0', color: '#94a3b8', fontSize: '14px' }}>
+          완료된 경기 데이터를 백엔드 DB로 재전송합니다. (실패한 경기 또는 재처리가 필요한 경우)
+        </p>
+
+        {completedMatches.length === 0 ? (
+          <p style={{ color: '#64748b', fontSize: '14px', fontStyle: 'italic' }}>
+            완료된 경기가 없습니다.
+          </p>
+        ) : (
+          <div style={{ display: 'grid', gap: '12px', maxHeight: '400px', overflowY: 'auto' }}>
+            {completedMatches.map((match) => {
+              const status = resendStatus[match.id] || 'pending';
+              const statusColors = {
+                pending: { bg: 'rgba(100,116,139,0.12)', border: 'rgba(100,116,139,0.3)', color: '#94a3b8' },
+                sending: { bg: 'rgba(234,179,8,0.12)', border: 'rgba(234,179,8,0.4)', color: '#fef08a' },
+                success: { bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.35)', color: '#bbf7d0' },
+                error: { bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.4)', color: '#fca5a5' },
+              };
+
+              const statusLabels = {
+                pending: '대기',
+                sending: '전송 중...',
+                success: '전송 완료',
+                error: '전송 실패',
+              };
+
+              return (
+                <div
+                  key={match.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '12px 14px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(71,85,105,0.3)',
+                    background: 'rgba(15,23,42,0.5)',
+                    gap: '12px',
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: '4px' }}>
+                      {match.awayTeamName} vs {match.homeTeamName}
+                    </div>
+                    <div style={{ color: '#94a3b8', fontSize: '13px' }}>
+                      {new Date(match.startTime).toLocaleDateString('ko-KR')} · {match.homeScore}-{match.awayScore}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        ...statusColors[status],
+                        border: `1px solid ${statusColors[status].border}`,
+                        background: statusColors[status].bg,
+                        color: statusColors[status].color,
+                      }}
+                    >
+                      {statusLabels[status]}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => handleResendMatch(match.id)}
+                      disabled={status === 'sending'}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(59,130,246,0.4)',
+                        background: status === 'sending' ? 'rgba(71,85,105,0.2)' : 'rgba(59,130,246,0.16)',
+                        color: status === 'sending' ? '#64748b' : '#93c5fd',
+                        fontWeight: 700,
+                        fontSize: '13px',
+                        cursor: status === 'sending' ? 'not-allowed' : 'pointer',
+                        opacity: status === 'sending' ? 0.5 : 1,
+                      }}
+                    >
+                      {status === 'sending' ? '전송 중...' : '재전송'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       <div style={cardStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
