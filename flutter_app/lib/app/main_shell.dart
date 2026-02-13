@@ -19,10 +19,11 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   int _currentIndex = 0;
   bool _loggedIn = false;
   late final StreamSubscription<User?> _authSub;
+  final _refreshNotifier = ValueNotifier<int>(0);
 
   // 임베디드 웹뷰 오버레이 상태
   String? _overlayPath;
@@ -41,6 +42,7 @@ class _MainShellState extends State<MainShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loggedIn = FirebaseAuth.instance.currentUser != null;
     _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (mounted) setState(() => _loggedIn = user != null);
@@ -49,8 +51,17 @@ class _MainShellState extends State<MainShell> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _refreshNotifier.dispose();
     _authSub.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshNotifier.value++;
+    }
   }
 
   void _openEmbeddedWebView(String path, String title, {bool fullscreen = false}) {
@@ -76,6 +87,7 @@ class _MainShellState extends State<MainShell> {
     return ShellController(
       openEmbeddedWebView: _openEmbeddedWebView,
       closeEmbeddedWebView: _closeEmbeddedWebView,
+      refreshNotifier: _refreshNotifier,
       switchTab: (i) {
         if (hasOverlay) _closeEmbeddedWebView();
         setState(() => _currentIndex = i);

@@ -34,4 +34,26 @@ class Notice {
       allowComments: d['allowComments'] as bool? ?? true,
     );
   }
+
+  factory Notice.fromJson(Map<String, dynamic> d) => Notice(
+        id: d['id'] as String? ?? '',
+        title: d['title'] as String? ?? '',
+        category: d['category'] as String? ?? '일반',
+        content: d['content'] as String? ?? '',
+        author: d['author'] as String? ?? '',
+        createdAt: d['createdAt'] as int? ?? 0,
+        isImportant: d['isImportant'] as bool? ?? false,
+        allowComments: d['allowComments'] as bool? ?? true,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'category': category,
+        'content': content,
+        'author': author,
+        'createdAt': createdAt,
+        'isImportant': isImportant,
+        'allowComments': allowComments,
+      };
 }

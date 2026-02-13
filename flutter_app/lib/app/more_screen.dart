@@ -10,6 +10,8 @@ import 'shell_controller.dart';
 import '../features/auth/login_webview_screen.dart';
 import '../features/intro/intro_screen.dart';
 import '../features/intro/rules_screen.dart';
+import '../features/legal/privacy_screen.dart';
+import '../features/legal/terms_screen.dart';
 import '../features/standings/standings_screen.dart';
 import '../core/services/notification_service.dart';
 
@@ -363,18 +365,12 @@ class _MoreScreenState extends State<MoreScreen> {
           _MenuTile(
             icon: Icons.privacy_tip_outlined,
             label: '개인정보 처리방침',
-            onTap: () => _push(const AppWebViewScreen(
-              path: '/privacy',
-              title: '개인정보 처리방침',
-            )),
+            onTap: () => _push(const PrivacyScreen()),
           ),
           _MenuTile(
             icon: Icons.description_outlined,
             label: '이용약관',
-            onTap: () => _push(const AppWebViewScreen(
-              path: '/terms',
-              title: '이용약관',
-            )),
+            onTap: () => _push(const TermsScreen()),
           ),
           const Divider(height: 32),
           if (_loggedIn)

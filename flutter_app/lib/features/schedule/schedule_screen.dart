@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/models/match.dart' as m;
+import '../../app/shell_controller.dart';
+import '../../core/services/cache_service.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/background_logo.dart';
@@ -26,6 +28,7 @@ class _ScheduleScreenState extends State<ScheduleScreen>
   List<m.Match> _allMatches = [];
   bool _loading = true;
   String? _groupFilter;
+  ValueNotifier<int>? _refreshNotifier;
 
   @override
   void initState() {
@@ -35,18 +38,47 @@ class _ScheduleScreenState extends State<ScheduleScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final notifier = ShellController.of(context)?.refreshNotifier;
+    if (notifier != _refreshNotifier) {
+      _refreshNotifier?.removeListener(_loadMatches);
+      _refreshNotifier = notifier;
+      _refreshNotifier?.addListener(_loadMatches);
+    }
+  }
+
+  @override
   void dispose() {
+    _refreshNotifier?.removeListener(_loadMatches);
     _tabCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _loadMatches() async {
-    final matches = await _fs.getAllMatches();
-    if (mounted) {
-      setState(() {
-        _allMatches = matches;
-        _loading = false;
-      });
+    // 캐시에서 즉시 로드
+    final cached = await CacheService.instance.getCachedMatches();
+    if (cached != null && _loading) {
+      if (mounted) {
+        setState(() {
+          _allMatches = cached;
+          _loading = false;
+        });
+      }
+    }
+
+    // 네트워크에서 최신 데이터
+    try {
+      final matches = await _fs.getAllMatches();
+      if (mounted) {
+        setState(() {
+          _allMatches = matches;
+          _loading = false;
+        });
+      }
+      CacheService.instance.cacheMatches(matches);
+    } catch (_) {
+      if (mounted && _loading) setState(() => _loading = false);
     }
   }
 
