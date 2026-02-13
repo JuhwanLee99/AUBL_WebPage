@@ -87,6 +87,7 @@ export default function TeamDetailPage() {
   const [noticeCategory, setNoticeCategory] = useState<TeamNoticeCategory>('일반');
   const [noticePinned, setNoticePinned] = useState(false);
   const [noticeFilter, setNoticeFilter] = useState<'ALL' | TeamNoticeCategory>('ALL');
+  const [noticeSearchQuery, setNoticeSearchQuery] = useState('');
   const [noticeStatus, setNoticeStatus] = useState<string | null>(null);
   const [noticeError, setNoticeError] = useState<string | null>(null);
   const [noticeBusy, setNoticeBusy] = useState(false);
@@ -108,6 +109,7 @@ export default function TeamDetailPage() {
     setNoticeCategory('일반');
     setNoticePinned(false);
     setNoticeFilter('ALL');
+    setNoticeSearchQuery('');
   }, [teamDocId]);
 
   useEffect(() => {
@@ -462,7 +464,13 @@ export default function TeamDetailPage() {
   };
 
   const sortedNotices = useMemo(() => {
-    const filtered = noticeFilter === 'ALL' ? notices : notices.filter((notice) => (notice.category ?? '일반') === noticeFilter);
+    const categoryFiltered = noticeFilter === 'ALL' ? notices : notices.filter((notice) => (notice.category ?? '일반') === noticeFilter);
+    const query = noticeSearchQuery.trim().toLowerCase();
+    const filtered = !query
+      ? categoryFiltered
+      : categoryFiltered.filter((notice) =>
+          `${notice.title} ${notice.content} ${notice.createdByName ?? ''}`.toLowerCase().includes(query),
+        );
     const copy = [...filtered];
     copy.sort((a, b) => {
       const pinnedA = a.pinned ? 1 : 0;
@@ -471,7 +479,7 @@ export default function TeamDetailPage() {
       return (b.createdAt ?? 0) - (a.createdAt ?? 0);
     });
     return copy;
-  }, [notices, noticeFilter]);
+  }, [notices, noticeFilter, noticeSearchQuery]);
 
   if (!team) {
     return (
@@ -811,6 +819,50 @@ export default function TeamDetailPage() {
           ))}
         </div>
 
+        <div style={{ display: 'grid', gap: '8px' }}>
+          <div style={{ position: 'relative' }}>
+            <input
+              value={noticeSearchQuery}
+              onChange={(e) => setNoticeSearchQuery(e.target.value)}
+              placeholder="제목, 내용, 작성자 검색"
+              style={{
+                width: '100%',
+                padding: '10px 76px 10px 12px',
+                borderRadius: '10px',
+                border: '1px solid rgba(148,163,184,0.35)',
+                background: 'rgba(15,23,42,0.6)',
+                color: '#e2e8f0',
+                fontWeight: 600,
+              }}
+            />
+            {noticeSearchQuery.trim() && (
+              <button
+                type="button"
+                onClick={() => setNoticeSearchQuery('')}
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  padding: '4px 8px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  background: 'rgba(51,65,85,0.85)',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                  fontSize: '11px',
+                  cursor: 'pointer',
+                }}
+              >
+                초기화
+              </button>
+            )}
+          </div>
+          <div style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
+            {sortedNotices.length}개 공지
+          </div>
+        </div>
+
         {noticeStatus && (
           <div style={{ color: '#bbf7d0', fontWeight: 800, background: 'rgba(34,197,94,0.1)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(34,197,94,0.35)' }}>
             {noticeStatus}
@@ -1036,7 +1088,9 @@ export default function TeamDetailPage() {
             )})}
           </div>
         ) : (
-          <div style={{ color: '#94a3b8', fontWeight: 700 }}>등록된 팀 공지가 없습니다.</div>
+          <div style={{ color: '#94a3b8', fontWeight: 700 }}>
+            {noticeSearchQuery.trim() ? '검색 결과가 없습니다.' : '등록된 팀 공지가 없습니다.'}
+          </div>
         )}
       </section>
 

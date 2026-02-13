@@ -28,6 +28,7 @@ class _MoreScreenState extends State<MoreScreen> {
   bool _loggedIn = false;
   bool _loadingNotif = true;
   MatchNotifyPreference _matchPref = MatchNotifyPreference.team;
+  bool _allNotificationsOn = true;
   bool _communityNoticeOn = true;
   bool _teamNoticeOn = true;
 
@@ -64,11 +65,14 @@ class _MoreScreenState extends State<MoreScreen> {
 
   Future<void> _loadNotificationPrefs() async {
     final pref = await NotificationService.instance.getMatchPreference();
+    final allEnabled =
+        await NotificationService.instance.getAllNotificationsEnabled();
     final community = await NotificationService.instance.getCommunityNoticeEnabled();
     final teamNotice = await NotificationService.instance.getTeamNoticeEnabled();
     if (!mounted) return;
     setState(() {
       _matchPref = pref;
+      _allNotificationsOn = allEnabled;
       _communityNoticeOn = community;
       _teamNoticeOn = teamNotice;
       _loadingNotif = false;
@@ -79,7 +83,7 @@ class _MoreScreenState extends State<MoreScreen> {
     return switch (pref) {
       MatchNotifyPreference.all => '전체 경기',
       MatchNotifyPreference.team => '소속팀 경기',
-      MatchNotifyPreference.off => '받지 않음',
+      MatchNotifyPreference.off => '경기 알림 받지 않음',
     };
   }
 
@@ -87,6 +91,11 @@ class _MoreScreenState extends State<MoreScreen> {
     final community = _communityNoticeOn ? '커뮤니티' : '커뮤니티 off';
     final team = _teamNoticeOn ? '홈팀' : '홈팀 off';
     return '$community · $team';
+  }
+
+  String _notificationSummary() {
+    if (!_allNotificationsOn) return '전체 알림 받지 않음';
+    return '${_matchPrefLabel(_matchPref)} · ${_noticePrefLabel()}';
   }
 
   void _openNotificationSettings() {
@@ -98,6 +107,7 @@ class _MoreScreenState extends State<MoreScreen> {
       ),
       builder: (context) {
         var temp = _matchPref;
+        var tempAll = _allNotificationsOn;
         return StatefulBuilder(
           builder: (context, setSheetState) {
             return Padding(
@@ -116,34 +126,54 @@ class _MoreScreenState extends State<MoreScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    '커뮤니티 긴급 공지는 항상 알림이 전송됩니다.',
+                    '전체 알림을 끄면 긴급 공지를 포함해 모든 알림이 중단됩니다.',
                     style: TextStyle(color: AppTheme.slate400, fontSize: 12),
                   ),
                   const SizedBox(height: 12),
-                    SwitchListTile(
-                      value: _communityNoticeOn,
-                      onChanged: (value) async {
-                        await NotificationService.instance
-                            .setCommunityNoticeEnabled(value);
+                  SwitchListTile(
+                    value: tempAll,
+                    onChanged: (value) async {
+                      setSheetState(() => tempAll = value);
+                      await NotificationService.instance
+                          .setAllNotificationsEnabled(value);
                       if (mounted) {
-                        setState(() => _communityNoticeOn = value);
+                        setState(() => _allNotificationsOn = value);
                       }
                     },
+                    activeThumbColor: AppTheme.blue400,
+                    title: const Text('전체 알림',
+                        style: TextStyle(color: Colors.white)),
+                    subtitle: const Text('긴급 공지 포함 전체 알림 (ON/OFF)',
+                        style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
+                  ),
+                  SwitchListTile(
+                    value: _communityNoticeOn,
+                    onChanged: !tempAll
+                        ? null
+                        : (value) async {
+                            await NotificationService.instance
+                                .setCommunityNoticeEnabled(value);
+                            if (mounted) {
+                              setState(() => _communityNoticeOn = value);
+                            }
+                          },
                       activeThumbColor: AppTheme.blue400,
                       title: const Text('커뮤니티 공지',
                           style: TextStyle(color: Colors.white)),
                       subtitle: const Text('긴급 제외 공지 알림 (ON/OFF)',
                           style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
-                    ),
+                  ),
                   SwitchListTile(
                     value: _teamNoticeOn,
-                    onChanged: (value) async {
-                      await NotificationService.instance
-                          .setTeamNoticeEnabled(value);
-                      if (mounted) {
-                        setState(() => _teamNoticeOn = value);
-                      }
-                    },
+                    onChanged: !tempAll
+                        ? null
+                        : (value) async {
+                            await NotificationService.instance
+                                .setTeamNoticeEnabled(value);
+                            if (mounted) {
+                              setState(() => _teamNoticeOn = value);
+                            }
+                          },
                     activeThumbColor: AppTheme.blue400,
                     title: const Text('홈팀 공지',
                         style: TextStyle(color: Colors.white)),
@@ -151,29 +181,34 @@ class _MoreScreenState extends State<MoreScreen> {
                         style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
                   ),
                   const SizedBox(height: 8),
-                  RadioGroup<MatchNotifyPreference>(
-                    groupValue: temp,
-                    onChanged: (value) async {
-                      if (value == null) return;
-                      setSheetState(() => temp = value);
-                      await NotificationService.instance
-                          .setMatchPreference(value);
-                      if (mounted) {
-                        setState(() => _matchPref = value);
-                      }
-                    },
-                    child: Column(
-                      children: [
-                        for (final pref in MatchNotifyPreference.values)
-                          RadioListTile<MatchNotifyPreference>(
-                            value: pref,
-                            activeColor: AppTheme.blue400,
-                            title: Text(
-                              _matchPrefLabel(pref),
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                          ),
-                      ],
+                  IgnorePointer(
+                    ignoring: !tempAll,
+                    child: Opacity(
+                      opacity: tempAll ? 1 : 0.55,
+                      child: RadioGroup<MatchNotifyPreference>(
+                        groupValue: temp,
+                        onChanged: (value) {
+                          if (value == null || !tempAll) return;
+                          setSheetState(() => temp = value);
+                          NotificationService.instance.setMatchPreference(value);
+                          if (mounted) {
+                            setState(() => _matchPref = value);
+                          }
+                        },
+                        child: Column(
+                          children: [
+                            for (final pref in MatchNotifyPreference.values)
+                              RadioListTile<MatchNotifyPreference>(
+                                value: pref,
+                                activeColor: AppTheme.blue400,
+                                title: Text(
+                                  _matchPrefLabel(pref),
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -294,7 +329,7 @@ class _MoreScreenState extends State<MoreScreen> {
             label: '알림 설정',
             value: _loadingNotif
                 ? '확인 중...'
-                : '경기 ${_matchPrefLabel(_matchPref)} · ${_noticePrefLabel()}',
+                : _notificationSummary(),
             onTap: _openNotificationSettings,
           ),
           const Divider(height: 32),

@@ -20,6 +20,7 @@ const FILTERS: { label: string; value: FilterValue }[] = [
 export default function CommunityNoticesPage() {
   const [notices, setNotices] = useState<Notice[]>([]); // 전체 공지사항 원본
   const [activeFilter, setActiveFilter] = useState<FilterValue>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
   const { isAdmin } = useAdmin();
   const navigate = useNavigate();
 
@@ -39,11 +40,18 @@ export default function CommunityNoticesPage() {
 
   // 2. 현재 선택된 필터에 따라 보여줄 목록을 계산합니다. (Client-side Filtering)
   const filteredNotices = useMemo(() => {
-    if (activeFilter === 'ALL') {
-      return notices;
-    }
-    return notices.filter(notice => notice.category === activeFilter);
-  }, [notices, activeFilter]);
+    const categoryFiltered =
+      activeFilter === 'ALL'
+        ? notices
+        : notices.filter((notice) => notice.category === activeFilter);
+
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return categoryFiltered;
+
+    return categoryFiltered.filter((notice) =>
+      `${notice.title} ${notice.content} ${notice.author}`.toLowerCase().includes(q),
+    );
+  }, [notices, activeFilter, searchQuery]);
 
   return (
     <div style={{ color: '#f8fafc', maxWidth: '800px', margin: '0 auto', paddingBottom: '40px' }}>
@@ -94,11 +102,57 @@ export default function CommunityNoticesPage() {
         ))}
       </div>
 
+      {/* 검색 */}
+      <div style={{ marginBottom: '16px', position: 'relative' }}>
+        <input
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="제목, 내용, 작성자 검색"
+          style={{
+            width: '100%',
+            borderRadius: '10px',
+            border: '1px solid rgba(148, 163, 184, 0.35)',
+            background: 'rgba(15, 23, 42, 0.6)',
+            color: '#e2e8f0',
+            fontSize: '14px',
+            fontWeight: 600,
+            padding: '11px 40px 11px 12px',
+            outline: 'none',
+          }}
+        />
+        {searchQuery.trim() && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery('')}
+            style={{
+              position: 'absolute',
+              right: '8px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              border: 'none',
+              borderRadius: '8px',
+              background: 'rgba(51,65,85,0.85)',
+              color: '#cbd5e1',
+              fontSize: '12px',
+              fontWeight: 800,
+              padding: '5px 8px',
+              cursor: 'pointer',
+            }}
+          >
+            초기화
+          </button>
+        )}
+      </div>
+
+      <div style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700, marginBottom: '12px' }}>
+        {filteredNotices.length}개 공지
+      </div>
+
       {/* 공지사항 목록 (filteredNotices 사용) */}
       <div style={{ display: 'grid', gap: '16px' }}>
         {filteredNotices.length === 0 ? (
           <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
-            해당 카테고리의 게시글이 없습니다.
+            {searchQuery.trim() ? '검색 결과가 없습니다.' : '해당 카테고리의 게시글이 없습니다.'}
           </div>
         ) : (
           filteredNotices.map(notice => (
