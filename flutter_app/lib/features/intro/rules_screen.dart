@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/data/default_rules.dart';
+import '../../core/services/cache_service.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/theme/app_theme.dart';
 
@@ -23,12 +24,31 @@ class _RulesScreenState extends State<RulesScreen> {
   }
 
   Future<void> _loadContent() async {
-    final data = await _fs.getStaticContent();
-    if (mounted) {
-      setState(() {
-        _content = data;
-        _loading = false;
-      });
+    // 캐시에서 즉시 로드
+    final cached = await CacheService.instance.getCachedStaticContent();
+    if (cached != null && _loading) {
+      if (mounted) {
+        setState(() {
+          _content = cached;
+          _loading = false;
+        });
+      }
+    }
+
+    // 네트워크에서 최신 데이터
+    try {
+      final data = await _fs.getStaticContent();
+      if (mounted) {
+        setState(() {
+          _content = data;
+          _loading = false;
+        });
+      }
+      if (data != null) {
+        CacheService.instance.cacheStaticContent(data);
+      }
+    } catch (_) {
+      if (mounted && _loading) setState(() => _loading = false);
     }
   }
 

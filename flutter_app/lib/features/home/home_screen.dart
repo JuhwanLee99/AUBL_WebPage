@@ -11,6 +11,7 @@ import '../../core/data/team_groups.dart';
 import '../../core/models/match.dart';
 import '../../core/models/match_state.dart';
 import '../../core/models/team_notice.dart';
+import '../../core/services/cache_service.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/theme/app_theme.dart';
@@ -45,6 +46,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _userTeamName;
   List<TeamNotice> _teamNotices = [];
   bool _loadingNotices = true;
+  ValueNotifier<int>? _refreshNotifier;
 
   @override
   void initState() {
@@ -69,53 +71,80 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final notifier = ShellController.of(context)?.refreshNotifier;
+    if (notifier != _refreshNotifier) {
+      _refreshNotifier?.removeListener(_onAppResume);
+      _refreshNotifier = notifier;
+      _refreshNotifier?.addListener(_onAppResume);
+    }
+  }
+
+  void _onAppResume() {
+    _loadSchedule();
+    _loadUserTeam();
+  }
+
+  @override
   void dispose() {
+    _refreshNotifier?.removeListener(_onAppResume);
     _authSub?.cancel();
     _noticeController.dispose();
     super.dispose();
   }
 
+  void _applyMatches(List<Match> all) {
+    final now = DateTime.now();
+    final todayStr =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final tomorrow = now.add(const Duration(days: 1));
+    final tomorrowStr =
+        '${tomorrow.year}-${tomorrow.month.toString().padLeft(2, '0')}-${tomorrow.day.toString().padLeft(2, '0')}';
+
+    final today = <Match>[];
+    final tmrw = <Match>[];
+    final completed = <Match>[];
+
+    for (final m in all) {
+      if (m.isCompleted) completed.add(m);
+      if (m.startTime != null) {
+        final dateStr = m.startTime!.substring(0, 10);
+        if (dateStr == todayStr && m.status == 'scheduled') {
+          today.add(m);
+        } else if (dateStr == tomorrowStr && m.status == 'scheduled') {
+          tmrw.add(m);
+        }
+      }
+    }
+
+    completed.sort(
+        (a, b) => (b.startTime ?? '').compareTo(a.startTime ?? ''));
+
+    if (mounted) {
+      setState(() {
+        _todayMatches = today;
+        _tomorrowMatches = tmrw;
+        _completedMatches = completed.take(5).toList();
+        _loadingSchedule = false;
+      });
+    }
+  }
+
   Future<void> _loadSchedule() async {
+    // 캐시에서 즉시 로드
+    final cached = await CacheService.instance.getCachedMatches();
+    if (cached != null && _loadingSchedule) {
+      _applyMatches(cached);
+    }
+
+    // 네트워크에서 최신 데이터
     try {
       final all = await _fs.getAllMatches();
-      final now = DateTime.now();
-      final todayStr =
-          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      final tomorrow = now.add(const Duration(days: 1));
-      final tomorrowStr =
-          '${tomorrow.year}-${tomorrow.month.toString().padLeft(2, '0')}-${tomorrow.day.toString().padLeft(2, '0')}';
-
-      final today = <Match>[];
-      final tmrw = <Match>[];
-      final completed = <Match>[];
-
-      for (final m in all) {
-        if (m.isCompleted) {
-          completed.add(m);
-        }
-        if (m.startTime != null) {
-          final dateStr = m.startTime!.substring(0, 10);
-          if (dateStr == todayStr && m.status == 'scheduled') {
-            today.add(m);
-          } else if (dateStr == tomorrowStr && m.status == 'scheduled') {
-            tmrw.add(m);
-          }
-        }
-      }
-
-      completed.sort(
-          (a, b) => (b.startTime ?? '').compareTo(a.startTime ?? ''));
-
-      if (mounted) {
-        setState(() {
-          _todayMatches = today;
-          _tomorrowMatches = tmrw;
-          _completedMatches = completed.take(5).toList();
-          _loadingSchedule = false;
-        });
-      }
+      _applyMatches(all);
+      unawaited(CacheService.instance.cacheMatches(all));
     } catch (_) {
-      if (mounted) setState(() => _loadingSchedule = false);
+      if (mounted && _loadingSchedule) setState(() => _loadingSchedule = false);
     }
   }
 

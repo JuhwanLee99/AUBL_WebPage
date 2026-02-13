@@ -3,6 +3,8 @@ import 'package:timeago/timeago.dart' as timeago;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/notice.dart';
+import '../../app/shell_controller.dart';
+import '../../core/services/cache_service.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/background_logo.dart';
@@ -20,6 +22,7 @@ class _CommunityScreenState extends State<CommunityScreen> {
   List<Notice> _notices = [];
   bool _loading = true;
   String _selectedCategory = '전체';
+  ValueNotifier<int>? _refreshNotifier;
 
   static const _categories = ['전체', '긴급', '경기공지', '징계', '일반'];
 
@@ -29,13 +32,47 @@ class _CommunityScreenState extends State<CommunityScreen> {
     _loadNotices();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final notifier = ShellController.of(context)?.refreshNotifier;
+    if (notifier != _refreshNotifier) {
+      _refreshNotifier?.removeListener(_loadNotices);
+      _refreshNotifier = notifier;
+      _refreshNotifier?.addListener(_loadNotices);
+    }
+  }
+
+  @override
+  void dispose() {
+    _refreshNotifier?.removeListener(_loadNotices);
+    super.dispose();
+  }
+
   Future<void> _loadNotices() async {
-    final notices = await _fs.getNotices(limit: 30);
-    if (mounted) {
-      setState(() {
-        _notices = notices;
-        _loading = false;
-      });
+    // 캐시에서 즉시 로드
+    final cached = await CacheService.instance.getCachedNotices();
+    if (cached != null && _loading) {
+      if (mounted) {
+        setState(() {
+          _notices = cached;
+          _loading = false;
+        });
+      }
+    }
+
+    // 네트워크에서 최신 데이터
+    try {
+      final notices = await _fs.getNotices(limit: 30);
+      if (mounted) {
+        setState(() {
+          _notices = notices;
+          _loading = false;
+        });
+      }
+      CacheService.instance.cacheNotices(notices);
+    } catch (_) {
+      if (mounted && _loading) setState(() => _loading = false);
     }
   }
 
