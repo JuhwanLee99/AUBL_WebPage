@@ -102,6 +102,16 @@ class _ScheduleScreenState extends State<ScheduleScreen>
     }).toList();
   }
 
+  void _openMatchDetail(m.Match match) {
+    final title = match.isLive ? '문자중계' : '경기 결과';
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => AppWebViewScreen(
+        path: '/scoreboard-text/${match.id}',
+        title: title,
+      ),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -129,10 +139,10 @@ class _ScheduleScreenState extends State<ScheduleScreen>
           : TabBarView(
               controller: _tabCtrl,
               children: [
-                _MatchList(
+                _AllMatchesTab(
                   matches: _allMatches,
-                  emptyMessage: '등록된 일정이 없습니다.',
                   onRefresh: _loadMatches,
+                  onMatchTap: _openMatchDetail,
                 ),
                 // 라이브
                 StreamBuilder<List<m.Match>>(
@@ -158,6 +168,7 @@ class _ScheduleScreenState extends State<ScheduleScreen>
                   matches: _completedMatches,
                   emptyMessage: '완료된 경기가 없습니다.',
                   onRefresh: _loadMatches,
+                  onMatchTap: _openMatchDetail,
                 ),
                 // 조별
                 _buildGroupTab(),
@@ -167,6 +178,7 @@ class _ScheduleScreenState extends State<ScheduleScreen>
                   matches: _practiceMatches,
                   emptyMessage: '연습경기가 없습니다.',
                   onRefresh: _loadMatches,
+                  onMatchTap: _openMatchDetail,
                 ),
               ],
             ),
@@ -210,9 +222,202 @@ class _ScheduleScreenState extends State<ScheduleScreen>
             matches: _groupMatches(),
             emptyMessage: '해당 조의 경기가 없습니다.',
             onRefresh: _loadMatches,
+            onMatchTap: _openMatchDetail,
           ),
         ),
       ],
+    );
+  }
+}
+
+// ── 전체 탭: 날짜별 그룹 + 오늘 경기 하이라이트 ──
+
+class _AllMatchesTab extends StatefulWidget {
+  const _AllMatchesTab({
+    required this.matches,
+    required this.onRefresh,
+    required this.onMatchTap,
+  });
+
+  final List<m.Match> matches;
+  final Future<void> Function() onRefresh;
+  final void Function(m.Match) onMatchTap;
+
+  @override
+  State<_AllMatchesTab> createState() => _AllMatchesTabState();
+}
+
+class _AllMatchesTabState extends State<_AllMatchesTab> {
+  final _todayKey = GlobalKey();
+  bool _didScroll = false;
+
+  @override
+  void didUpdateWidget(_AllMatchesTab old) {
+    super.didUpdateWidget(old);
+    if (!_didScroll && widget.matches.isNotEmpty) {
+      _scheduleScroll();
+    }
+  }
+
+  void _scheduleScroll() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _todayKey.currentContext;
+      if (ctx != null && !_didScroll) {
+        _didScroll = true;
+        Scrollable.ensureVisible(
+          ctx,
+          alignment: 0.3,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.matches.isEmpty) {
+      return const Center(
+        child: Text('등록된 일정이 없습니다.',
+            style: TextStyle(color: AppTheme.slate500)),
+      );
+    }
+
+    final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    // 날짜별 그룹핑
+    final grouped = <String, List<m.Match>>{};
+    for (final match in widget.matches) {
+      final dateKey = (match.startTime != null && match.startTime!.length >= 10)
+          ? match.startTime!.substring(0, 10)
+          : 'unknown';
+      (grouped[dateKey] ??= []).add(match);
+    }
+
+    final sortedDates = grouped.keys.toList()..sort();
+
+    if (grouped.containsKey(todayStr) && !_didScroll) {
+      _scheduleScroll();
+    }
+
+    final children = <Widget>[];
+
+    for (final dateKey in sortedDates) {
+      final matches = grouped[dateKey]!;
+      final isToday = dateKey == todayStr;
+
+      String dateLabel;
+      if (dateKey == 'unknown') {
+        dateLabel = '일정 미정';
+      } else {
+        try {
+          final dt = DateTime.parse(dateKey);
+          dateLabel = DateFormat('M월 d일 (E)', 'ko').format(dt);
+        } catch (_) {
+          dateLabel = dateKey;
+        }
+      }
+
+      if (isToday) {
+        // 오늘 경기: 파란색 테두리로 전체 감싸기
+        children.add(
+          Container(
+            key: _todayKey,
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: AppTheme.blue500.withValues(alpha: 0.6),
+                width: 1.5,
+              ),
+              color: AppTheme.blue500.withValues(alpha: 0.04),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppTheme.blue500.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        'TODAY',
+                        style: TextStyle(
+                          color: AppTheme.blue400,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      dateLabel,
+                      style: const TextStyle(
+                        color: AppTheme.blue400,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                for (int i = 0; i < matches.length; i++) ...[
+                  _MatchCard(
+                    match: matches[i],
+                    onTap: () => widget.onMatchTap(matches[i]),
+                  ),
+                  if (i < matches.length - 1) const SizedBox(height: 8),
+                ],
+              ],
+            ),
+          ),
+        );
+      } else {
+        // 다른 날짜: 날짜 헤더 + 카드
+        children.add(
+          Padding(
+            padding: EdgeInsets.only(
+              bottom: 6,
+              top: children.isEmpty ? 0 : 12,
+            ),
+            child: Text(
+              dateLabel,
+              style: const TextStyle(
+                color: AppTheme.slate500,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        );
+        for (int i = 0; i < matches.length; i++) {
+          children.add(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _MatchCard(
+                match: matches[i],
+                onTap: () => widget.onMatchTap(matches[i]),
+              ),
+            ),
+          );
+        }
+      }
+    }
+
+    children.add(const SizedBox(height: 32));
+
+    return RefreshIndicator(
+      onRefresh: widget.onRefresh,
+      child: ListView(
+        padding: const EdgeInsets.all(12),
+        children: children,
+      ),
     );
   }
 }
