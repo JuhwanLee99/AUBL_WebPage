@@ -418,7 +418,7 @@ export default function ScoreboardPanel({
           style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr 1fr',
-            gap: 'clamp(10px, 1.4vw, 16px)',
+            gap: 'clamp(4px, 1.4vw, 16px)',
             alignItems: 'center',
             textAlign: 'center',
           }}
@@ -526,8 +526,8 @@ export default function ScoreboardPanel({
           gap: '12px',
         }}
       >
-        <span style={{ color: '#67e8f9' }}>LAST PLAY</span>
-        <span style={{ color: '#e2e8f0', textTransform: 'none', letterSpacing: '0.02em', fontWeight: 700 }}>
+        <span style={{ color: '#67e8f9', flexShrink: 0 }}>LAST PLAY</span>
+        <span style={{ color: '#e2e8f0', textTransform: 'none', letterSpacing: '0.02em', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
           {state.lastPlay}
         </span>
       </div>
@@ -563,19 +563,25 @@ function ScoreCell({ label, value }: { label: string; value: number }) {
         background: '#0b1220',
         border: '2px solid #111827',
         borderRadius: '12px',
-        padding: '16px 12px',
+        padding: 'clamp(8px, 3vw, 16px) clamp(4px, 2vw, 12px)',
         display: 'grid',
-        gap: '6px',
+        gap: 'clamp(2px, 1vw, 6px)',
         alignItems: 'center',
         justifyItems: 'center',
+        minWidth: 0,
+        overflow: 'hidden',
       }}
     >
       <span
         style={{
-          fontSize: 'clamp(14px, 2vw, 20px)',
+          fontSize: 'clamp(11px, 2vw, 20px)',
           fontWeight: 900,
           letterSpacing: '0.06em',
           color: '#f8fafc',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          maxWidth: '100%',
         }}
       >
         {label}
@@ -599,9 +605,9 @@ function CountBlock({ label, lights }: { label: string; lights: { active: boolea
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: '40px 1fr',
+        gridTemplateColumns: 'clamp(20px, 5vw, 40px) 1fr',
         alignItems: 'center',
-        gap: '8px',
+        gap: 'clamp(2px, 1vw, 8px)',
         color: '#f8fafc',
         fontWeight: 900,
       }}
@@ -681,19 +687,21 @@ export function BoxScoreTable({
         borderRadius: '12px',
         overflow: 'hidden',
         background: 'rgba(255,255,255,0.02)',
-        display: 'grid',
-        gridTemplateRows: 'auto auto',
         height: 'fit-content',
         minHeight: '0',
         alignSelf: 'center',
+        marginLeft: 'auto',
       }}
     >
+      <div style={{ overflowX: 'auto', direction: 'rtl' }}>
+      <div style={{ direction: 'ltr' }}>
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: gridColumns,
           background: 'rgba(255,255,255,0.03)',
           borderBottom: '1px solid rgba(148,163,184,0.2)',
+          minWidth: 'max-content',
         }}
       >
         {headers.map((h) => (
@@ -712,7 +720,7 @@ export function BoxScoreTable({
           </div>
         ))}
       </div>
-      <div style={{ display: 'grid', gridAutoRows: 'auto' }}>
+      <div style={{ display: 'grid', gridAutoRows: 'auto', minWidth: 'max-content' }}>
         {rows.map((row, idx) => (
           <div
             key={row.name}
@@ -753,6 +761,8 @@ export function BoxScoreTable({
           </div>
         ))}
       </div>
+      </div>
+      </div>
     </div>
   );
 }
@@ -773,45 +783,53 @@ function PlayerInfoChip({
       style={{
         display: 'grid',
         gap: '2px',
-        padding: '8px 12px',
+        padding: 'clamp(4px, 1.2vw, 8px) clamp(6px, 1.8vw, 12px)',
         background: 'rgba(15,23,42,0.9)',
         border: `1px solid ${color}33`,
         borderRadius: '12px',
         width: '100%',
         maxWidth: '320px',
         minWidth: 0,
+        overflow: 'hidden',
         justifyItems: 'center',
       }}
     >
       <span
         style={{
           display: 'inline-flex',
-          gap: '8px',
+          gap: 'clamp(4px, 1vw, 8px)',
           alignItems: 'center',
           fontWeight: 900,
-          fontSize: '13px',
+          fontSize: 'clamp(11px, 1.8vw, 13px)',
           color: '#e2e8f0',
+          maxWidth: '100%',
+          overflow: 'hidden',
         }}
       >
         <span
           style={{
             fontWeight: 800,
-            fontSize: '12px',
+            fontSize: 'clamp(10px, 1.6vw, 12px)',
             letterSpacing: '0.03em',
             textTransform: 'uppercase',
             color,
+            flexShrink: 0,
           }}
         >
           {label}
         </span>
-        <span>{value}</span>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</span>
       </span>
       {subLabel ? (
         <span
           style={{
             fontWeight: 700,
-            fontSize: '12px',
+            fontSize: 'clamp(10px, 1.6vw, 12px)',
             color: '#94a3b8',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            maxWidth: '100%',
           }}
         >
           {subLabel}

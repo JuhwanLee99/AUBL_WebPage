@@ -44,10 +44,11 @@ export default function MatchSelectorBar({ summaryTime, summaryVenue, showViewer
         display: 'flex',
         alignItems: 'center',
         gap: '10px',
+        flexWrap: 'wrap' as const,
         background: '#0b1220',
         border: '1px solid #1f2937',
         borderRadius: '12px',
-        padding: '10px 14px',
+        padding: 'clamp(6px, 1.4vw, 10px) clamp(8px, 1.8vw, 14px)',
         color: '#cbd5e1',
         fontWeight: 800,
         fontSize: 'clamp(12px, 1.8vw, 14px)',
@@ -70,7 +71,9 @@ export default function MatchSelectorBar({ summaryTime, summaryVenue, showViewer
             border: '1px solid rgba(148,163,184,0.35)',
             background: 'rgba(15,23,42,0.9)',
             color: '#e2e8f0',
-            minWidth: '220px',
+            minWidth: 'min(220px, 100%)',
+            width: '100%',
+            maxWidth: '300px',
           }}
         >
           {!hasActive ? (
