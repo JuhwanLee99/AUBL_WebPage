@@ -594,10 +594,6 @@ export default function MatchSchedulePage() {
               </span>
             )}
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <button type="button" onClick={() => goTo('/scoreboard')} style={quickActionStyle} title="전광판">
-                <span aria-hidden>📺</span>
-                전광판
-              </button>
               <button type="button" onClick={() => goTo('/scoreboard-text')} style={quickActionStyle} title={textButtonLabel}>
                 <span aria-hidden>💬</span>
                 {textButtonLabel}

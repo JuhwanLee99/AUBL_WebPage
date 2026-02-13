@@ -416,7 +416,7 @@ export default function LandingPage() {
     return () => unsub();
   }, []);
 
-  const handleOpenMatch = (matchId: string, path: '/scoreboard' | '/scoreboard-text') => {
+  const handleOpenMatch = (matchId: string, path: '/live-overlay' | '/scoreboard-text') => {
     actions.selectMatch(matchId);
     navigate(`${path}/${matchId}`);
   };
@@ -943,22 +943,29 @@ export default function LandingPage() {
                 })()}
 
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenMatch(match.id, '/scoreboard')}
-                    style={{
-                      padding: '10px 12px',
-                      borderRadius: '12px',
-                      background: 'rgba(15, 23, 42, 0.75)',
-                      color: '#e2e8f0',
-                      border: '1px solid rgba(148, 163, 184, 0.35)',
-                      fontWeight: 800,
-                      fontSize: '13px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    전광판 열기
-                  </button>
+                  {(() => {
+                    const hasOverlay = Boolean((match.liveVideoUrl || '').trim());
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => hasOverlay && handleOpenMatch(match.id, '/live-overlay')}
+                        disabled={!hasOverlay}
+                        title={hasOverlay ? '라이브 오버레이' : '기록원에서 유튜브 링크 미입력'}
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: '12px',
+                          background: hasOverlay ? 'rgba(15, 23, 42, 0.75)' : 'rgba(148, 163, 184, 0.12)',
+                          color: hasOverlay ? '#e2e8f0' : '#94a3b8',
+                          border: hasOverlay ? '1px solid rgba(148, 163, 184, 0.35)' : '1px dashed rgba(148, 163, 184, 0.45)',
+                          fontWeight: 800,
+                          fontSize: '13px',
+                          cursor: hasOverlay ? 'pointer' : 'not-allowed',
+                        }}
+                      >
+                        {hasOverlay ? '라이브 오버레이' : '라이브 없음'}
+                      </button>
+                    );
+                  })()}
                   <button
                     type="button"
                     onClick={() => handleOpenMatch(match.id, '/scoreboard-text')}

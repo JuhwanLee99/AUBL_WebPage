@@ -286,17 +286,45 @@ export default function ScoreboardTextPage() {
     <div className="scoreboard-text-page">
       <div className="main-content-grid">
         <div className={`scoreboard-section ${isMobile ? 'mobile-layout' : ''}`}>
-          <ScoreboardFrame
-            variant="text"
-            hideBases
-            showFootnote={false}
-            showViewerBadge
-            panelStyle={
-              isMobile
-                ? { width: '100%', maxWidth: '100%', height: 'auto', minHeight: '500px', overflow: 'hidden' }
-                : { width: '100%', aspectRatio: '4 / 3' }
-            }
-          />
+          <div style={{ position: 'relative' }}>
+            <ScoreboardFrame
+              variant="text"
+              hideBases
+              showFootnote={false}
+              showViewerBadge
+              panelStyle={
+                isMobile
+                  ? { width: '100%', maxWidth: '100%', height: 'auto', minHeight: '500px', overflow: 'hidden' }
+                  : { width: '100%', aspectRatio: '4 / 3' }
+              }
+            />
+            <button
+              type="button"
+              onClick={() => navigate(state.activeMatchId ? `/scoreboard/${state.activeMatchId}` : '/scoreboard')}
+              title="전광판 크게 보기"
+              aria-label="전광판 크게 보기"
+              style={{
+                position: 'absolute',
+                top: '10px',
+                right: '10px',
+                width: '34px',
+                height: '34px',
+                borderRadius: '10px',
+                border: '1px solid rgba(148,163,184,0.45)',
+                background: 'rgba(15,23,42,0.82)',
+                color: '#e2e8f0',
+                fontSize: '16px',
+                fontWeight: 900,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+              }}
+            >
+              ⤢
+            </button>
+          </div>
           <div style={{ marginTop: '20px' }}>
             <NowPlayingCard
               batter={parsePlayerName(currentBatter).raw}

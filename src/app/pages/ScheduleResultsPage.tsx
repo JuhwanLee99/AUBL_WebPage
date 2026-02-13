@@ -87,9 +87,9 @@ export default function ScheduleResultsPage() {
               const targetId = results[0]?.id ?? null;
               actions.selectMatch(targetId);
               if (targetId) {
-                navigate(`/scoreboard/${targetId}`);
+                navigate(`/scoreboard-text/${targetId}`);
               } else {
-                navigate('/scoreboard');
+                navigate('/scoreboard-text');
               }
             }}
             style={{
@@ -102,7 +102,7 @@ export default function ScheduleResultsPage() {
               cursor: 'pointer',
             }}
           >
-            전광판 이동
+            문자중계 이동
           </button>
         </div>
       </header>
@@ -192,7 +192,7 @@ export default function ScheduleResultsPage() {
                       type="button"
                       onClick={() => {
                         actions.selectMatch(match.id);
-                        navigate(`/scoreboard/${match.id}`);
+                        navigate(`/scoreboard-text/${match.id}`);
                       }}
                       style={{
                         padding: '6px 10px',
