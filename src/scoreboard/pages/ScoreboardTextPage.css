@@ -215,6 +215,10 @@
   .scoreboard-text-page {
     gap: 8px;
     overflow-x: hidden;
+    /* 부모(.app-main)의 오른쪽 패딩을 잠식하여 스코어보드를 오른쪽으로 이동 */
+    margin-right: -8px;
+    width: calc(100% + 8px);
+    max-width: none;
   }
 
   .main-content-grid {
@@ -280,6 +284,7 @@
     height: auto !important;
     min-height: 0 !important;
     max-height: none !important;
+    padding: clamp(10px, 2vw, 14px) !important;
   }
 
   /* 박스스코어와 BSO/베이스를 세로로 배치 */
@@ -287,17 +292,29 @@
     display: grid !important;
     grid-template-columns: 1fr !important;
     grid-template-rows: auto auto !important;
-    gap: 12px !important;
+    gap: 16px !important;
   }
 
-  /* BSO/베이스를 두 번째 행으로 이동 */
+  /* BSO/베이스를 두 번째 행으로 이동 + 충분한 여백 확보 */
   .scoreboard-section > div:first-child > div:nth-child(2) > div > div:first-child {
     order: 2 !important;
+    padding: 10px 0 !important;
+    justify-content: center !important;
   }
 
-  /* 박스스코어를 첫 번째 행으로 */
+  /* 박스스코어를 첫 번째 행으로 + 스크롤 허용 */
   .scoreboard-section > div:first-child > div:nth-child(2) > div > div:last-child {
     order: 1 !important;
+    overflow-x: auto !important;
+    min-width: 0 !important;
+  }
+
+  /* BSO 카운트를 가로로 나열 (모바일 공간 활용) */
+  .scoreboard-section > div:first-child > div:nth-child(2) > div > div:first-child > div:first-child {
+    display: flex !important;
+    gap: 16px !important;
+    justify-content: center !important;
+    flex-wrap: wrap !important;
   }
 
   /* 전광판 내부 모든 컨텐츠 높이 제한 제거 */
@@ -322,6 +339,11 @@
     max-width: 100vw;
     overflow: hidden;
   }
+
+  /* 전광판 내부 패딩 축소 → 콘텐츠 영역 확대 */
+  .scoreboard-section > div:first-child {
+    padding: 10px 8px !important;
+  }
 }
 
 /* 문자중계 영역 반응형 개선 */
@@ -343,4 +365,105 @@
   .scoreboard-section > div:first-child {
     grid-template-rows: auto auto auto !important;
   }
+}
+
+/* ── 모바일 프리뷰 모드: 미디어 쿼리 대신 attribute selector로 동일 규칙 적용 ── */
+
+/* 오른쪽 이동 + 패딩 축소 (=@media max-width:480px) */
+:root[data-preview-mode='mobile'] .scoreboard-text-page {
+  gap: 8px;
+  margin-right: -8px;
+  width: calc(100% + 8px);
+  max-width: none;
+}
+
+/* 1-column 레이아웃 (=@media max-width:1400px + 900px) */
+:root[data-preview-mode='mobile'] .main-content-grid {
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-items: start;
+  grid-auto-rows: auto;
+}
+
+:root[data-preview-mode='mobile'] .stats-grid {
+  grid-template-columns: 1fr;
+}
+
+:root[data-preview-mode='mobile'] .removed-players-grid {
+  grid-template-columns: 1fr;
+}
+
+:root[data-preview-mode='mobile'] .live-feed-section {
+  padding: 10px;
+  gap: 10px;
+  min-height: min(50vh, 400px);
+  font-size: 14px;
+}
+
+/* 전광판 컨테이너 (=@media max-width:900px) */
+:root[data-preview-mode='mobile'] .scoreboard-section {
+  min-width: 0;
+  width: 100%;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+:root[data-preview-mode='mobile'] .scoreboard-section > div:first-child {
+  overflow: visible !important;
+  overflow-y: visible !important;
+  min-height: 500px !important;
+  height: auto !important;
+  max-height: none !important;
+  aspect-ratio: auto !important;
+  display: grid !important;
+  grid-template-rows: auto auto auto !important;
+  padding: 10px 8px !important;
+}
+
+/* 중간 영역 세로 배치 */
+:root[data-preview-mode='mobile'] .scoreboard-section > div:first-child > div:nth-child(2) {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  padding: clamp(10px, 2vw, 14px) !important;
+}
+
+:root[data-preview-mode='mobile'] .scoreboard-section > div:first-child > div:nth-child(2) > div {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  grid-template-rows: auto auto !important;
+  gap: 16px !important;
+}
+
+/* BSO → 두 번째 행 */
+:root[data-preview-mode='mobile'] .scoreboard-section > div:first-child > div:nth-child(2) > div > div:first-child {
+  order: 2 !important;
+  padding: 10px 0 !important;
+  justify-content: center !important;
+}
+
+/* BoxScore → 첫 번째 행 + 스크롤 */
+:root[data-preview-mode='mobile'] .scoreboard-section > div:first-child > div:nth-child(2) > div > div:last-child {
+  order: 1 !important;
+  overflow-x: auto !important;
+  min-width: 0 !important;
+}
+
+/* BSO 가로 나열 */
+:root[data-preview-mode='mobile'] .scoreboard-section > div:first-child > div:nth-child(2) > div > div:first-child > div:first-child {
+  display: flex !important;
+  gap: 16px !important;
+  justify-content: center !important;
+  flex-wrap: wrap !important;
+}
+
+/* 높이 제한 해제 */
+:root[data-preview-mode='mobile'] .scoreboard-section > div:first-child > * {
+  max-height: none !important;
+}
+
+:root[data-preview-mode='mobile'] .scoreboard-section > div:last-child {
+  height: auto !important;
 }

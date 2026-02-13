@@ -820,7 +820,8 @@ export default function Layout() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <div style={{ fontSize: '15px', fontWeight: 900, color: '#fde68a' }}>PC 화면에 최적화된 사이트입니다.</div>
                 <div style={{ fontSize: '13px', color: '#e2e8f0', lineHeight: 1.55 }}>
-                  모바일 버전은 아직 최적화 중이라 일부 레이아웃이 깨질 수 있어요. 원활한 이용을 위해 PC 브라우저 사용을 권장합니다.
+                  모바일 버전은 아직 최적화 중이라 일부 레이아웃이 깨질 수 있어요. 모바일에서는 <strong style={{ color: '#facc15' }}>AUBL 앱 사용</strong>을 권장하며,
+                  웹 이용 시에는 PC 브라우저에서 더 안정적으로 이용할 수 있습니다.
                 </div>
               </div>
             </div>

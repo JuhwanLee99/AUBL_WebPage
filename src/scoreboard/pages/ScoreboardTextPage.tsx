@@ -1243,7 +1243,7 @@ function FieldView({
   onSelectFielder?: (payload: { name: string; pos: string }) => void;
 }) {
   const label = `${half === 'top' ? '▲' : '▼'} ${inning}`;
-  const baseSize = 'clamp(20px, 3.4vw, 30px)';
+  const baseSize = 'clamp(26px, 4.2vw, 38px)';
   const groundShift = '-4%';
   const positions = {
     second: { x: 50, y: 35 },
@@ -1618,9 +1618,9 @@ function getDefenseAssignments(lineup: { name: string; pos: string }[]) {
     '2B': { x: 62, y: 40 },
     SS: { x: 38, y: 40 },
     '3B': { x: 24, y: 52 },
-    LF: { x: 18, y: 20 },
-    CF: { x: 50, y: 12 },
-    RF: { x: 82, y: 20 },
+    LF: { x: 18, y: 25 },
+    CF: { x: 50, y: 17 },
+    RF: { x: 82, y: 25 },
   };
   const fallback: { x: number; y: number }[] = [
     { x: 50, y: 54 },
@@ -1629,9 +1629,9 @@ function getDefenseAssignments(lineup: { name: string; pos: string }[]) {
     { x: 62, y: 40 },
     { x: 38, y: 40 },
     { x: 24, y: 52 },
-    { x: 18, y: 20 },
-    { x: 50, y: 12 },
-    { x: 82, y: 20 },
+    { x: 18, y: 25 },
+    { x: 50, y: 17 },
+    { x: 82, y: 25 },
   ];
   return lineup
     .filter((slot) => Boolean(posMap[slot.pos.toUpperCase()]))
