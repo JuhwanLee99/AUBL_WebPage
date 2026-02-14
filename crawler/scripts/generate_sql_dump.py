@@ -13,7 +13,6 @@ import json
 import re
 import sys
 from collections import defaultdict
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 
@@ -50,6 +49,38 @@ def _parse_innings(val) -> str:
         return "NULL"
 
 
+def _normalize_team_name(name: str | None) -> str:
+    if not isinstance(name, str):
+        return ""
+    compact = re.sub(r"\s+", "", name).lower()
+    return re.sub(r"[^0-9a-z가-힣]", "", compact)
+
+
+def _iter_jsonl(path: Path):
+    if not path.exists():
+        return
+    with open(path, encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(row, dict):
+                yield row
+
+
+def _row_year(row: dict) -> int | None:
+    value = row.get("year")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    return None
+
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: python generate_sql_dump.py <jsonl_dir> [--year YEAR]", file=sys.stderr)
@@ -77,19 +108,24 @@ def main():
     teams_file = data_dir / "teams.jsonl"
     teams: dict[int, str] = {}  # team_idx → name
     team_id_map: dict[int, str] = {}  # team_idx → SQL variable name
-    if teams_file.exists():
-        with open(teams_file) as f:
-            for line in f:
-                t = json.loads(line)
-                idx = t.get("team_idx")
-                name = t.get("name")
-                if idx and name:
-                    teams[idx] = name
+    team_name_map: dict[str, str] = {}  # team_name → SQL variable name
+    team_name_norm_map: dict[str, str] = {}  # normalized team_name → SQL variable name
+    for t in _iter_jsonl(teams_file) or []:
+        if _row_year(t) != year:
+            continue
+        idx = t.get("team_idx")
+        name = t.get("name")
+        if idx and name:
+            teams[idx] = name
 
     out.write("-- Teams\n")
     for i, (idx, name) in enumerate(sorted(teams.items(), key=lambda x: x[0])):
         var = f"@team_{i}"
         team_id_map[idx] = var
+        team_name_map[name] = var
+        normalized_name = _normalize_team_name(name)
+        if normalized_name:
+            team_name_norm_map[normalized_name] = var
         out.write(
             f"INSERT INTO TEAM (team_name, team_code) "
             f"SELECT {_esc(name)}, {_esc(str(idx))} FROM DUAL "
@@ -98,18 +134,28 @@ def main():
         out.write(f"SET {var} = (SELECT team_id FROM TEAM WHERE team_code = {_esc(str(idx))});\n")
     out.write("\n")
 
+    def _resolve_team_var(team_idx, team_name):
+        var = team_id_map.get(team_idx)
+        if var:
+            return var
+        if isinstance(team_name, str):
+            var = team_name_map.get(team_name)
+            if var:
+                return var
+            normalized = _normalize_team_name(team_name)
+            if normalized:
+                return team_name_norm_map.get(normalized)
+        return None
+
     # 3. PLAYER — collect unique players, strip jersey numbers
     players_file = data_dir / "players.jsonl"
     players: dict[str, dict] = {}  # name → {position, team_idx}
-    if players_file.exists():
-        with open(players_file) as f:
-            for line in f:
-                p = json.loads(line)
-                name = _strip_jersey(p.get("name") or "")
-                if not name:
-                    continue
-                if name not in players:
-                    players[name] = {"position": p.get("position"), "team_idx": p.get("team_idx")}
+    for p in _iter_jsonl(players_file) or []:
+        name = _strip_jersey(p.get("name") or "")
+        if not name:
+            continue
+        if name not in players:
+            players[name] = {"position": p.get("position"), "team_idx": p.get("team_idx")}
 
     out.write("-- Players\n")
     for name, info in sorted(players.items()):
@@ -124,36 +170,34 @@ def main():
     # 4. TEAM_PLAYER — roster
     roster_file = data_dir / "roster_players.jsonl"
     out.write("-- Team-Player Roster\n")
-    if roster_file.exists():
-        with open(roster_file) as f:
-            for line in f:
-                r = json.loads(line)
-                team_idx = r.get("team_idx")
-                name = _strip_jersey(r.get("name") or "")
-                if not name or not team_idx:
-                    continue
-                team_var = team_id_map.get(team_idx)
-                if not team_var:
-                    continue
-                out.write(
-                    f"INSERT INTO TEAM_PLAYER (team_id, player_id, season_id) "
-                    f"SELECT {team_var}, "
-                    f"(SELECT player_id FROM PLAYER WHERE player_name = {_esc(name)} LIMIT 1), "
-                    f"@season_id FROM DUAL "
-                    f"WHERE (SELECT player_id FROM PLAYER WHERE player_name = {_esc(name)} LIMIT 1) IS NOT NULL "
-                    f"AND NOT EXISTS ("
-                    f"SELECT 1 FROM TEAM_PLAYER WHERE team_id = {team_var} "
-                    f"AND player_id = (SELECT player_id FROM PLAYER WHERE player_name = {_esc(name)} LIMIT 1) "
-                    f"AND season_id = @season_id);\n"
-                )
+    for r in _iter_jsonl(roster_file) or []:
+        if _row_year(r) != year:
+            continue
+        team_idx = r.get("team_idx")
+        name = _strip_jersey(r.get("name") or "")
+        if not name or not team_idx:
+            continue
+        team_var = team_id_map.get(team_idx)
+        if not team_var:
+            continue
+        out.write(
+            f"INSERT INTO TEAM_PLAYER (team_id, player_id, season_id) "
+            f"SELECT {team_var}, "
+            f"(SELECT player_id FROM PLAYER WHERE player_name = {_esc(name)} LIMIT 1), "
+            f"@season_id FROM DUAL "
+            f"WHERE (SELECT player_id FROM PLAYER WHERE player_name = {_esc(name)} LIMIT 1) IS NOT NULL "
+            f"AND NOT EXISTS ("
+            f"SELECT 1 FROM TEAM_PLAYER WHERE team_id = {team_var} "
+            f"AND player_id = (SELECT player_id FROM PLAYER WHERE player_name = {_esc(name)} LIMIT 1) "
+            f"AND season_id = @season_id);\n"
+        )
     out.write("\n")
 
     # 5. BATTER_STATS from league records
     league_bat_file = data_dir / "league_batting_records.jsonl"
     out.write("-- Batter Stats (league records)\n")
-    if league_bat_file.exists():
-        with open(league_bat_file) as f:
-            data = json.loads(f.readline())
+    data = next((row for row in (_iter_jsonl(league_bat_file) or []) if _row_year(row) == year), None)
+    if data:
         payload = data.get("payload", {})
         records = []
         d = payload.get("data")
@@ -207,9 +251,8 @@ def main():
     # 6. PITCHER_STATS from league records
     league_pitch_file = data_dir / "league_pitching_records.jsonl"
     out.write("-- Pitcher Stats (league records)\n")
-    if league_pitch_file.exists():
-        with open(league_pitch_file) as f:
-            data = json.loads(f.readline())
+    data = next((row for row in (_iter_jsonl(league_pitch_file) or []) if _row_year(row) == year), None)
+    if data:
         payload = data.get("payload", {})
         records = []
         d = payload.get("data")
@@ -270,47 +313,101 @@ def main():
 
     # Load matches
     matches: dict[int, dict] = {}
-    if matches_file.exists():
-        with open(matches_file) as f:
-            for line in f:
-                m = json.loads(line)
-                gidx = m.get("game_idx")
-                if gidx:
-                    matches[gidx] = m
+    for m in _iter_jsonl(matches_file) or []:
+        if _row_year(m) != year:
+            continue
+        gidx = m.get("game_idx")
+        if gidx:
+            matches[gidx] = m
+
+    # Some team names appear only in match headers (not in roster team list).
+    # Register them by name so GAME home/away mapping does not collapse to one side.
+    extra_team_names: list[str] = []
+    seen_extra: set[str] = set()
+    for match in matches.values():
+        for key in ("home_team_name", "away_team_name"):
+            name = match.get(key)
+            if not isinstance(name, str) or not name.strip():
+                continue
+            normalized_name = _normalize_team_name(name)
+            if name in team_name_map:
+                continue
+            if normalized_name and normalized_name in team_name_norm_map:
+                continue
+            if name in seen_extra:
+                continue
+            seen_extra.add(name)
+            extra_team_names.append(name)
+
+    if extra_team_names:
+        out.write("-- Additional Teams inferred from matches\n")
+        for i, name in enumerate(sorted(extra_team_names)):
+            var = f"@team_extra_{i}"
+            team_name_map[name] = var
+            normalized_name = _normalize_team_name(name)
+            if normalized_name:
+                team_name_norm_map[normalized_name] = var
+            out.write(
+                f"INSERT INTO TEAM (team_name, team_code) "
+                f"SELECT {_esc(name)}, NULL FROM DUAL "
+                f"WHERE NOT EXISTS (SELECT 1 FROM TEAM WHERE team_name = {_esc(name)});\n"
+            )
+            out.write(f"SET {var} = (SELECT team_id FROM TEAM WHERE team_name = {_esc(name)} LIMIT 1);\n")
+        out.write("\n")
 
     # Load batting stats by game_idx
     batting_by_game: dict[int, list] = defaultdict(list)
-    if batting_file.exists():
-        with open(batting_file) as f:
-            for line in f:
-                b = json.loads(line)
-                gidx = b.get("game_idx")
-                if gidx:
-                    batting_by_game[gidx].append(b)
+    for b in _iter_jsonl(batting_file) or []:
+        if _row_year(b) != year:
+            continue
+        gidx = b.get("game_idx")
+        if gidx:
+            batting_by_game[gidx].append(b)
 
     # Load pitching stats by game_idx
     pitching_by_game: dict[int, list] = defaultdict(list)
-    if pitching_file.exists():
-        with open(pitching_file) as f:
-            for line in f:
-                p = json.loads(line)
-                gidx = p.get("game_idx")
-                if gidx:
-                    pitching_by_game[gidx].append(p)
+    for p in _iter_jsonl(pitching_file) or []:
+        if _row_year(p) != year:
+            continue
+        gidx = p.get("game_idx")
+        if gidx:
+            pitching_by_game[gidx].append(p)
 
     out.write("-- Games and Game Logs\n")
     for gidx, match in sorted(matches.items()):
         home_idx = match.get("home_team_idx")
         away_idx = match.get("away_team_idx")
-        home_var = team_id_map.get(home_idx, "NULL")
-        away_var = team_id_map.get(away_idx, "NULL")
+        home_name = match.get("home_team_name")
+        away_name = match.get("away_team_name")
+        home_var = _resolve_team_var(home_idx, home_name)
+        away_var = _resolve_team_var(away_idx, away_name)
+        # Some source payloads have incorrect away team_idx. Fall back to name map.
+        if home_var and away_var and home_var == away_var and home_name != away_name:
+            resolved_home = _resolve_team_var(None, home_name)
+            resolved_away = _resolve_team_var(None, away_name)
+            if resolved_home:
+                home_var = resolved_home
+            if resolved_away:
+                away_var = resolved_away
+        home_var = home_var or "NULL"
+        away_var = away_var or "NULL"
         home_score = _num(match.get("home_runs"))
         away_score = _num(match.get("away_runs"))
+        phase = match.get("phase")
+        game_type = None
+        if isinstance(phase, str):
+            normalized = phase.strip().lower()
+            if normalized == "result":
+                game_type = "REGULAR"
+            elif normalized == "playoff":
+                game_type = "PLAYOFF"
+            elif normalized:
+                game_type = normalized.upper()
 
         out.write(f"\n-- Game {gidx}\n")
         out.write(
-            f"INSERT INTO GAME (season_id, game_date, game_number, home_team, away_team, home_score, away_score) "
-            f"SELECT @season_id, CURDATE(), {gidx}, {home_var}, {away_var}, {home_score}, {away_score} "
+            f"INSERT INTO GAME (season_id, game_date, game_number, home_team, away_team, home_score, away_score, game_type) "
+            f"SELECT @season_id, CURDATE(), {gidx}, {home_var}, {away_var}, {home_score}, {away_score}, {_esc(game_type)} "
             f"FROM DUAL WHERE NOT EXISTS ("
             f"SELECT 1 FROM GAME WHERE season_id = @season_id AND game_number = {gidx});\n"
         )
@@ -321,8 +418,17 @@ def main():
             pname = b.get("player_name") or ""
             team_idx = b.get("team_idx")
             side = b.get("team_side")
-            t_var = team_id_map.get(team_idx, "NULL")
-            if t_var == "NULL" or not pname:
+            t_var = team_id_map.get(team_idx)
+            # team_idx can be wrong in some Gameone payloads; prioritize side mapping when available.
+            if side == "home" and home_var != "NULL":
+                t_var = home_var
+            elif side == "away" and away_var != "NULL":
+                t_var = away_var
+            elif t_var is None and side == "home":
+                t_var = home_var if home_var != "NULL" else None
+            elif t_var is None and side == "away":
+                t_var = away_var if away_var != "NULL" else None
+            if t_var is None or not pname:
                 continue
 
             # Ensure TEAM_PLAYER row exists
@@ -372,8 +478,17 @@ def main():
             pname = p.get("player_name") or ""
             team_idx = p.get("team_idx")
             side = p.get("team_side")
-            t_var = team_id_map.get(team_idx, "NULL")
-            if t_var == "NULL" or not pname:
+            t_var = team_id_map.get(team_idx)
+            # team_idx can be wrong in some Gameone payloads; prioritize side mapping when available.
+            if side == "home" and home_var != "NULL":
+                t_var = home_var
+            elif side == "away" and away_var != "NULL":
+                t_var = away_var
+            elif t_var is None and side == "home":
+                t_var = home_var if home_var != "NULL" else None
+            elif t_var is None and side == "away":
+                t_var = away_var if away_var != "NULL" else None
+            if t_var is None or not pname:
                 continue
 
             ip_val = p.get("innings_pitched")

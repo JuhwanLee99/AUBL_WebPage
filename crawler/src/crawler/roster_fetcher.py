@@ -140,7 +140,8 @@ def _extract_player_position(row_html: str) -> str | None:
 
 
 def _normalize_team_name(name: str) -> str:
-    return re.sub(r"\s+", "", name).lower()
+    compact = re.sub(r"\s+", "", name).lower()
+    return re.sub(r"[^0-9a-z가-힣]", "", compact)
 
 
 def _clean_html_text(raw: str) -> str:

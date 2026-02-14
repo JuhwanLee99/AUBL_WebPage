@@ -31,6 +31,9 @@ CRAWLER_WEB_BASE_URL=
 SCHEDULE_LIST_ENDPOINT=/schedule/list
 BOXSCORE_ENDPOINT=/game/boxscore
 SCHEDULE_PAGE_PATH=/league/schedule/all
+SCHEDULE_RESULT_PAGE_PATH=/league/schedule/content/result
+SCHEDULE_PLAYOFF_PAGE_PATH=/league/schedule/content/playoff
+SCHEDULE_PAGE_LIMIT=200
 BOXSCORE_PAGE_PATH=/game/boxscore
 LEAGUE_PAGE_PATH=/league/
 SCHEDULE_ALL_PAGE_PATH=/league/schedule/all
@@ -53,6 +56,9 @@ CRAWLER_TLS_CIPHERS=
 `CRAWLER_DATA_SOURCE`는 `api`(기본값) 또는 `web`을 사용할 수 있습니다. `web` 모드에서는
 `CRAWLER_WEB_BASE_URL`(없으면 `CRAWLER_BASE_URL` fallback)을 사용해 HTML 페이지를
 가져오고, `HTML_JSON_SCRIPT_ID`가 있다면 해당 `<script>` 태그의 JSON을 파싱합니다.
+일정은 `SCHEDULE_RESULT_PAGE_PATH`(정규시즌)와 `SCHEDULE_PLAYOFF_PAGE_PATH`(플레이오프)를
+페이지 끝까지 순회해 `game_idx`를 수집합니다(`SCHEDULE_PAGE_LIMIT` 상한 적용).
+수집 중 HTML에서 `group_code`, `part_code`, `page`를 자동 탐색해 조별/라운드별 분기까지 따라갑니다.
 또한 기본적으로 리그 메인/일정/팀 랭킹/팀 공격·수비 랭킹/타자·투수 랭킹/선수 등록
 페이지를 함께 수집합니다. JSON이 없는 리그 타자/투수 랭킹 페이지는 HTML 테이블을
 직접 파싱해 레코드를 구성합니다.
@@ -68,8 +74,8 @@ HTTPS 핸드셰이크에서 `DH_KEY_TOO_SMALL` 오류가 발생하면 `CRAWLER_T
 CRAWLER_ENV_FILE=./crawler/config/.env
 ```
 
-The crawler also requires a MySQL connection string via `DATABASE_URL` (or
-`CRAWLER_DATABASE_URL`). For example:
+DB 모드 사용 시에는 MySQL 연결 문자열(`DATABASE_URL` 또는 `CRAWLER_DATABASE_URL`)이 필요합니다.
+예시:
 
 ```bash
 export DATABASE_URL=mysql+pymysql://root:aubl@localhost:3306/aubl
@@ -89,6 +95,11 @@ docker run --name aubl-mysql -e MYSQL_ROOT_PASSWORD=aubl -e MYSQL_DATABASE=aubl 
 
 ## Usage
 
+운영 데이터 처리 원칙:
+- 실시간 경기 이벤트는 Firebase에서 처리하고, 경기 종료 후 크롤러 결과를 DB에 반영합니다.
+- 박스스코어는 원본 수집값(점수/타격/투구)을 그대로 유지합니다.
+- 기권/몰수 승패는 점수 강제변경 대신 `matches.jsonl`의 `reported_winner`로 관리합니다.
+
 Run the crawler for a specific year range:
 
 ```bash
@@ -100,6 +111,13 @@ Run the crawler without a database by writing JSONL output:
 ```bash
 python -m crawler.cli --from-year 2024 --to-year 2024 --output-json ./out
 ```
+
+수집 누락 검증(시즌별 경기/기록 커버리지)은 다음 스크립트로 확인할 수 있습니다:
+
+```bash
+python scripts/verify_collection.py --input-dir ./out
+```
+출력에는 `regular_matches`/`playoff_matches`도 포함되어 정규시즌·플레이오프 수집 건수를 바로 확인할 수 있습니다.
 
 `./out`에는 다음 JSONL 파일들이 생성됩니다:
 
@@ -113,6 +131,88 @@ python -m crawler.cli --from-year 2024 --to-year 2024 --output-json ./out
 - `web_pages.jsonl`: 웹 스크래핑 페이지 원본/파싱 결과
 - `league_batting_records.jsonl`: 리그 타자 기록(연도별)
 - `league_pitching_records.jsonl`: 리그 투수 기록(연도별)
+
+### Full-season workflow (2015~2025)
+
+```bash
+PYTHONPATH=src python -m crawler.cli \
+  --from-year 2015 --to-year 2025 \
+  --data-source web \
+  --output-json /tmp/aubl_2015_2025_out
+```
+
+검증:
+
+```bash
+PYTHONPATH=src python scripts/verify_collection.py --input-dir /tmp/aubl_2015_2025_out
+```
+
+SQL 생성:
+
+```bash
+mkdir -p output/2015_2025
+for y in $(seq 2015 2025); do
+  PYTHONPATH=src python scripts/generate_sql_dump.py /tmp/aubl_2015_2025_out --year $y > output/2015_2025/import_${y}.sql
+done
+
+: > output/2015_2025/import_2015_2025.sql
+for y in $(seq 2015 2025); do
+  cat output/2015_2025/import_${y}.sql >> output/2015_2025/import_2015_2025.sql
+  printf '\n\n' >> output/2015_2025/import_2015_2025.sql
+done
+```
+
+산출물:
+- `output/2015_2025/import_2015.sql` ~ `output/2015_2025/import_2025.sql`
+- `output/2015_2025/import_2015_2025.sql`
+
+`generate_sql_dump.py`는 `team_side(home/away)`를 우선 사용해 팀 매핑 품질을 보정합니다.
+
+### Team-code normalization workflow (권장)
+
+유사 팀명 분리 케이스를 검출하고, 가능한 경우 기존 코드로 통합합니다.
+코드 후보가 없는 팀은 신규 코드(`90001`~`90007`)를 부여합니다.
+
+후보 검출:
+
+```bash
+python scripts/find_team_split_candidates.py \
+  output/2015_2025/import_2015_2025.sql \
+  --output-csv output/2015_2025/team_split_candidates.csv
+```
+
+통합/신규코드 적용:
+
+```bash
+python scripts/apply_team_code_normalization.py \
+  output/2015_2025/import_2015_2025.sql \
+  output/2015_2025/import_2015_2025_team_normalized.sql \
+  --mapping-csv output/2015_2025/team_code_normalization_map.csv
+```
+
+연도별 정규화 SQL 생성:
+
+```bash
+for y in $(seq 2015 2025); do
+  python scripts/apply_team_code_normalization.py \
+    output/2015_2025/import_${y}.sql \
+    output/2015_2025/import_${y}_team_normalized.sql \
+    --mapping-csv output/2015_2025/team_code_normalization_map.csv
+done
+```
+
+정규화 결과물:
+- `output/2015_2025/import_2015_2025_team_normalized.sql`
+- `output/2015_2025/import_2015_team_normalized.sql` ~ `output/2015_2025/import_2025_team_normalized.sql`
+- `output/2015_2025/team_code_normalization_map.csv`
+- `output/2015_2025/team_split_candidates.csv`
+- `output/2015_2025/team_split_review_sheet.csv`
+- `output/2015_2025/team_split_decision_queue.csv`
+- `output/2015_2025/team_normalization_yearly_report.csv`
+
+적재 권장:
+- 시즌 전체 적재 시 `import_2015_2025_team_normalized.sql` 사용
+- 연도별 적재 시 `import_<YEAR>_team_normalized.sql` 사용
 
 Run the crawler using HTML scraping mode:
 

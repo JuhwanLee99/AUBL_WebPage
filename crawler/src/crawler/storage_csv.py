@@ -46,6 +46,7 @@ class CsvStorage:
                 "game_idx",
                 "year",
                 "group_code",
+                "phase",
                 "status",
                 "home_team_idx",
                 "home_team_name",
@@ -218,7 +219,7 @@ class CsvStorage:
         path = self._paths["matches"]
         if not path.exists():
             return set()
-        match_statuses: dict[int, str | None] = {}
+        match_rows: dict[int, dict[str, Any]] = {}
         with path.open("r", encoding="utf-8", newline="") as handle:
             reader = csv.DictReader(handle)
             for row in reader:
@@ -232,13 +233,27 @@ class CsvStorage:
                 game_idx = row.get("game_idx")
                 if game_idx:
                     try:
-                        match_statuses[int(game_idx)] = row.get("status")
+                        match_rows[int(game_idx)] = row
                     except ValueError:
                         continue
-        if not match_statuses:
+        if not match_rows:
             return set()
-        stats_games = self._existing_stat_games()
-        return {game_idx for game_idx in match_statuses if game_idx in stats_games}
+        batting_games = self._existing_stat_games_by_type("batting_stats")
+        pitching_games = self._existing_stat_games_by_type("pitching_stats")
+        complete: set[int] = set()
+        for game_idx, row in match_rows.items():
+            has_batting = game_idx in batting_games
+            has_pitching = game_idx in pitching_games
+            home_runs = _to_int(row.get("home_runs"))
+            away_runs = _to_int(row.get("away_runs"))
+            is_forfeit_score = (
+                home_runs is not None
+                and away_runs is not None
+                and ((home_runs == 7 and away_runs == 0) or (home_runs == 0 and away_runs == 7))
+            )
+            if (has_batting and has_pitching) or is_forfeit_score:
+                complete.add(game_idx)
+        return complete
 
     def _existing_stat_games(self) -> set[int]:
         stat_games: set[int] = set()
@@ -257,6 +272,25 @@ class CsvStorage:
                             stat_games.add(int(game_idx))
                         except ValueError:
                             continue
+        return stat_games
+
+    def _existing_stat_games_by_type(self, key: str) -> set[int]:
+        stat_games: set[int] = set()
+        path = self._paths[key]
+        if not path.exists():
+            return stat_games
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                if not row:
+                    continue
+                game_idx = row.get("game_idx")
+                if not game_idx:
+                    continue
+                try:
+                    stat_games.add(int(game_idx))
+                except ValueError:
+                    continue
         return stat_games
 
     def update_crawl_state(self, year: int, group_code: str | None, max_game_idx: int | None) -> None:
@@ -323,6 +357,7 @@ class CsvStorage:
             "game_idx": game.game_idx,
             "year": year,
             "group_code": game.group_code,
+            "phase": game.phase,
             "status": match_data.status or game.status,
             "home_team_idx": match_data.home_team.team_idx if match_data.home_team else None,
             "home_team_name": match_data.home_team.name if match_data.home_team else None,
@@ -485,3 +520,12 @@ class CsvStorage:
 
 def _is_final_status(status: str) -> bool:
     return status.lower() in FINAL_STATUSES
+
+
+def _to_int(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None

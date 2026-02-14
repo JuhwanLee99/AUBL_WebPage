@@ -499,7 +499,7 @@ class Storage:
     # ── Boxscore ───────────────────────────────────────────────────────
 
     def get_existing_game_idx(self, year: int, group_code: str | None) -> set[int]:
-        """Return Gameone game_idx values that already have game logs stored."""
+        """Return Gameone game_idx values that are fully collected."""
         with self._engine.connect() as conn:
             season_id = self._find_season_id(conn, year)
             if season_id is None:
@@ -508,6 +508,8 @@ class Storage:
             query = select(
                 game_table.c.game_id,
                 game_table.c.game_number,
+                game_table.c.home_score,
+                game_table.c.away_score,
             ).where(
                 game_table.c.season_id == season_id,
                 game_table.c.game_number.isnot(None),
@@ -532,8 +534,21 @@ class Storage:
                     )
                 ).fetchall()
             }
-            log_ids = batter_ids | pitcher_ids
-            return {int(row.game_number) for row in rows if row.game_id in log_ids}
+            complete: set[int] = set()
+            for row in rows:
+                has_batter = row.game_id in batter_ids
+                has_pitcher = row.game_id in pitcher_ids
+                is_forfeit_score = (
+                    row.home_score is not None
+                    and row.away_score is not None
+                    and (
+                        (int(row.home_score) == 7 and int(row.away_score) == 0)
+                        or (int(row.home_score) == 0 and int(row.away_score) == 7)
+                    )
+                )
+                if (has_batter and has_pitcher) or is_forfeit_score:
+                    complete.add(int(row.game_number))
+            return complete
 
     def store_boxscore(
         self,
@@ -812,6 +827,7 @@ class Storage:
             "away_team": away_team_id,
             "home_score": match_data.home_runs,
             "away_score": match_data.away_runs,
+            "game_type": _normalize_game_type(game.phase),
         }
         if row:
             conn.execute(
@@ -1023,7 +1039,8 @@ def _resolve_team_registry(team: TeamInfo | None, registry: dict[str, int]) -> T
 
 
 def _normalize_team_name(name: str) -> str:
-    return re.sub(r"\s+", "", name).lower()
+    compact = re.sub(r"\s+", "", name).lower()
+    return re.sub(r"[^0-9a-z가-힣]", "", compact)
 
 
 def _extract_player_info(payload: dict[str, Any] | None) -> PlayerInfo | None:
@@ -1259,6 +1276,17 @@ def _team_id_for_side(
     if side == "away":
         return away_team_id
     return None
+
+
+def _normalize_game_type(phase: str | None) -> str | None:
+    if phase is None:
+        return None
+    normalized = phase.strip().lower()
+    if normalized == "result":
+        return "REGULAR"
+    if normalized == "playoff":
+        return "PLAYOFF"
+    return phase.upper()
 
 
 def _is_final_status(status: str) -> bool:

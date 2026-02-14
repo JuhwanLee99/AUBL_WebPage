@@ -106,7 +106,7 @@ class JsonStorage:
         path = self._paths["matches"]
         if not path.exists():
             return set()
-        match_statuses: dict[int, str | None] = {}
+        match_rows: dict[int, dict[str, Any]] = {}
         with path.open("r", encoding="utf-8") as handle:
             for line in handle:
                 line = line.strip()
@@ -123,11 +123,25 @@ class JsonStorage:
                     continue
                 game_idx = row.get("game_idx")
                 if isinstance(game_idx, int):
-                    match_statuses[game_idx] = row.get("status")
-        if not match_statuses:
+                    match_rows[game_idx] = row
+        if not match_rows:
             return set()
-        stats_games = self._existing_stat_games()
-        return {game_idx for game_idx in match_statuses if game_idx in stats_games}
+        batting_games = self._existing_stat_games_by_type("batting_stats")
+        pitching_games = self._existing_stat_games_by_type("pitching_stats")
+        complete: set[int] = set()
+        for game_idx, row in match_rows.items():
+            has_batting = game_idx in batting_games
+            has_pitching = game_idx in pitching_games
+            home_runs = row.get("home_runs")
+            away_runs = row.get("away_runs")
+            is_forfeit_score = (
+                isinstance(home_runs, int)
+                and isinstance(away_runs, int)
+                and ((home_runs == 7 and away_runs == 0) or (home_runs == 0 and away_runs == 7))
+            )
+            if (has_batting and has_pitching) or is_forfeit_score:
+                complete.add(game_idx)
+        return complete
 
     def _existing_stat_games(self) -> set[int]:
         stat_games: set[int] = set()
@@ -147,6 +161,25 @@ class JsonStorage:
                     game_idx = row.get("game_idx")
                     if isinstance(game_idx, int):
                         stat_games.add(game_idx)
+        return stat_games
+
+    def _existing_stat_games_by_type(self, key: str) -> set[int]:
+        stat_games: set[int] = set()
+        path = self._paths[key]
+        if not path.exists():
+            return stat_games
+        with path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                game_idx = row.get("game_idx")
+                if isinstance(game_idx, int):
+                    stat_games.add(game_idx)
         return stat_games
 
     def _has_league_record_year(self, key: str, year: int | None) -> bool:
@@ -241,6 +274,7 @@ class JsonStorage:
                 "game_idx": game.game_idx,
                 "year": year,
                 "group_code": game.group_code,
+                "phase": game.phase,
                 "status": match_data.status or game.status,
                 "home_team_idx": match_data.home_team.team_idx if match_data.home_team else None,
                 "home_team_name": match_data.home_team.name if match_data.home_team else None,

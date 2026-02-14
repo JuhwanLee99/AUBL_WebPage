@@ -243,6 +243,28 @@ export interface PitcherRanking {
   whip: number;
 }
 
+export interface SeasonSummary {
+  id: number;
+  year: number;
+}
+
+export interface TeamRecordStanding {
+  teamId: number;
+  teamName: string;
+  wins: number;
+  losses: number;
+  ties: number;
+  winPct: number;
+}
+
+export interface RecordsOverview {
+  seasonId: number;
+  totalGames: number;
+  totalTeams: number;
+  topBatter: BatterRanking | null;
+  topPitcher: PitcherRanking | null;
+}
+
 export type BatterRankingSort =
   | 'battingAverage'
   | 'hits'
@@ -261,6 +283,23 @@ function normalizeRankingLimit(limit: number | undefined): number | null {
   return Math.min(normalized, 100);
 }
 
+function isNotFoundError(err: unknown): boolean {
+  return err instanceof Error && err.message.includes('404');
+}
+
+function buildQuery(opts: {
+  seasonId: number;
+  limit?: number;
+  sort?: string;
+}): URLSearchParams {
+  const params = new URLSearchParams();
+  params.set('seasonId', String(opts.seasonId));
+  const limit = normalizeRankingLimit(opts.limit);
+  if (limit != null) params.set('limit', String(limit));
+  if (opts.sort) params.set('sort', opts.sort);
+  return params;
+}
+
 export async function getBatterRankings(opts: {
   seasonId: number;
   limit?: number;
@@ -269,16 +308,24 @@ export async function getBatterRankings(opts: {
   if (!Number.isInteger(opts.seasonId) || opts.seasonId <= 0) {
     throw new Error('seasonId is required and must be a positive integer.');
   }
-  const params = new URLSearchParams();
-  params.set('seasonId', String(opts.seasonId));
-  const limit = normalizeRankingLimit(opts.limit);
-  if (limit != null) params.set('limit', String(limit));
-  if (opts.sort) params.set('sort', opts.sort);
+  const params = buildQuery(opts);
   const qs = params.toString();
   try {
     return await fetchApi(`/api/rankings/batters${qs ? `?${qs}` : ''}`);
   } catch (err) {
-    if (err instanceof Error && err.message.includes('404')) return [];
+    if (isNotFoundError(err)) {
+      const legacySortMap: Partial<Record<BatterRankingSort, string>> = {
+        battingAverage: 'avg',
+        hits: 'hits',
+        homeRuns: 'hr',
+        rbi: 'rbi',
+        ops: 'ops',
+      };
+      const legacySort = opts.sort ? legacySortMap[opts.sort] : undefined;
+      const fallbackParams = buildQuery({ ...opts, sort: legacySort });
+      const fallbackQs = fallbackParams.toString();
+      return fetchApi(`/api/records/batters${fallbackQs ? `?${fallbackQs}` : ''}`);
+    }
     throw err;
   }
 }
@@ -291,18 +338,138 @@ export async function getPitcherRankings(opts: {
   if (!Number.isInteger(opts.seasonId) || opts.seasonId <= 0) {
     throw new Error('seasonId is required and must be a positive integer.');
   }
-  const params = new URLSearchParams();
-  params.set('seasonId', String(opts.seasonId));
-  const limit = normalizeRankingLimit(opts.limit);
-  if (limit != null) params.set('limit', String(limit));
-  if (opts.sort) params.set('sort', opts.sort);
+  const params = buildQuery(opts);
   const qs = params.toString();
   try {
     return await fetchApi(`/api/rankings/pitchers${qs ? `?${qs}` : ''}`);
   } catch (err) {
-    if (err instanceof Error && err.message.includes('404')) return [];
+    if (isNotFoundError(err)) {
+      const legacySortMap: Partial<Record<PitcherRankingSort, string>> = {
+        era: 'era',
+        whip: 'whip',
+        strikeouts: 'so',
+        wins: 'wins',
+        saves: 'saves',
+      };
+      const legacySort = opts.sort ? legacySortMap[opts.sort] : undefined;
+      const fallbackParams = buildQuery({ ...opts, sort: legacySort });
+      const fallbackQs = fallbackParams.toString();
+      return fetchApi(`/api/records/pitchers${fallbackQs ? `?${fallbackQs}` : ''}`);
+    }
     throw err;
   }
+}
+
+export async function getSeasons(): Promise<SeasonSummary[]> {
+  const raw = await fetchApi<unknown>('/api/seasons');
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const row = item as Record<string, unknown>;
+      const id = toFiniteNumber(row.id);
+      const year = toFiniteNumber(row.year);
+      if (id == null || year == null) return null;
+      return { id, year };
+    })
+    .filter((item): item is SeasonSummary => item !== null)
+    .sort((a, b) => b.year - a.year);
+}
+
+export async function getRecordOverview(seasonId: number): Promise<RecordsOverview> {
+  if (!Number.isInteger(seasonId) || seasonId <= 0) {
+    throw new Error('seasonId is required and must be a positive integer.');
+  }
+  const raw = await fetchApi<unknown>(`/api/records/overview?seasonId=${seasonId}`);
+  if (!raw || typeof raw !== 'object') {
+    return {
+      seasonId,
+      totalGames: 0,
+      totalTeams: 0,
+      topBatter: null,
+      topPitcher: null,
+    };
+  }
+  const row = raw as Record<string, unknown>;
+  const normalizeBatter = (entry: unknown): BatterRanking | null => {
+    if (!entry || typeof entry !== 'object') return null;
+    const e = entry as Record<string, unknown>;
+    return {
+      rank: toFiniteNumber(e.rank) ?? 1,
+      playerId: toFiniteNumber(e.playerId) ?? 0,
+      playerName: String(e.playerName ?? ''),
+      teamId: toFiniteNumber(e.teamId) ?? 0,
+      teamName: String(e.teamName ?? ''),
+      seasonId: toFiniteNumber(e.seasonId) ?? seasonId,
+      gamesPlayed: toFiniteNumber(e.gamesPlayed) ?? 0,
+      plateAppearance: toFiniteNumber(e.plateAppearance) ?? 0,
+      atBats: toFiniteNumber(e.atBats) ?? 0,
+      hits: toFiniteNumber(e.hits) ?? 0,
+      homeRuns: toFiniteNumber(e.homeRuns) ?? 0,
+      runsBattedIn: toFiniteNumber(e.runsBattedIn ?? e.rbi) ?? 0,
+      stolenBases: toFiniteNumber(e.stolenBases) ?? 0,
+      walks: toFiniteNumber(e.walks) ?? 0,
+      strikeouts: toFiniteNumber(e.strikeouts) ?? 0,
+      battingAverage: toFiniteNumber(e.battingAverage ?? e.avg) ?? 0,
+      onBasePct: toFiniteNumber(e.onBasePct ?? e.obp) ?? 0,
+      sluggingPct: toFiniteNumber(e.sluggingPct ?? e.slg) ?? 0,
+      ops: toFiniteNumber(e.ops) ?? 0,
+    };
+  };
+  const normalizePitcher = (entry: unknown): PitcherRanking | null => {
+    if (!entry || typeof entry !== 'object') return null;
+    const e = entry as Record<string, unknown>;
+    return {
+      rank: toFiniteNumber(e.rank) ?? 1,
+      playerId: toFiniteNumber(e.playerId) ?? 0,
+      playerName: String(e.playerName ?? ''),
+      teamId: toFiniteNumber(e.teamId) ?? 0,
+      teamName: String(e.teamName ?? ''),
+      seasonId: toFiniteNumber(e.seasonId) ?? seasonId,
+      gamesPlayed: toFiniteNumber(e.gamesPlayed) ?? 0,
+      inningsPitched: toFiniteNumber(e.inningsPitched) ?? 0,
+      wins: toFiniteNumber(e.wins) ?? 0,
+      losses: toFiniteNumber(e.losses) ?? 0,
+      saves: toFiniteNumber(e.saves) ?? 0,
+      strikeouts: toFiniteNumber(e.strikeouts) ?? 0,
+      walksAllowed: toFiniteNumber(e.walksAllowed ?? e.walks) ?? 0,
+      era: toFiniteNumber(e.era) ?? 0,
+      whip: toFiniteNumber(e.whip) ?? 0,
+    };
+  };
+
+  return {
+    seasonId: toFiniteNumber(row.seasonId) ?? seasonId,
+    totalGames: toFiniteNumber(row.totalGames) ?? 0,
+    totalTeams: toFiniteNumber(row.totalTeams) ?? 0,
+    topBatter: normalizeBatter(row.topBatter),
+    topPitcher: normalizePitcher(row.topPitcher),
+  };
+}
+
+export async function getTeamRecordStandings(seasonId: number): Promise<TeamRecordStanding[]> {
+  if (!Number.isInteger(seasonId) || seasonId <= 0) {
+    throw new Error('seasonId is required and must be a positive integer.');
+  }
+  const raw = await fetchApi<unknown>(`/api/records/teams?seasonId=${seasonId}`);
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const row = item as Record<string, unknown>;
+      const teamId = toFiniteNumber(row.teamId);
+      const teamName = typeof row.teamName === 'string' ? row.teamName : '';
+      if (teamId == null || !teamName) return null;
+      return {
+        teamId,
+        teamName,
+        wins: toFiniteNumber(row.wins) ?? 0,
+        losses: toFiniteNumber(row.losses) ?? 0,
+        ties: toFiniteNumber(row.ties ?? row.draws) ?? 0,
+        winPct: toFiniteNumber(row.winPct) ?? 0,
+      };
+    })
+    .filter((item): item is TeamRecordStanding => item !== null);
 }
 
 // ── Game Logs ──

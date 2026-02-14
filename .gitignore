@@ -74,3 +74,4 @@ flutter_app/env/
 # Data exports
 flutter_app/*.csv
 crawler/import_2024.sql
+crawler/output/
