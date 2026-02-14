@@ -243,15 +243,37 @@ export interface PitcherRanking {
   whip: number;
 }
 
-export async function getBatterRankings(opts?: {
-  seasonId?: number;
+export type BatterRankingSort =
+  | 'battingAverage'
+  | 'hits'
+  | 'homeRuns'
+  | 'rbi'
+  | 'ops'
+  | 'sluggingPct'
+  | 'onBasePct';
+
+export type PitcherRankingSort = 'era' | 'whip' | 'strikeouts' | 'wins' | 'saves';
+
+function normalizeRankingLimit(limit: number | undefined): number | null {
+  if (limit == null || !Number.isFinite(limit)) return null;
+  const normalized = Math.trunc(limit);
+  if (normalized <= 0) return 0;
+  return Math.min(normalized, 100);
+}
+
+export async function getBatterRankings(opts: {
+  seasonId: number;
   limit?: number;
-  sort?: 'ops' | 'avg' | 'hits' | 'hr';
+  sort?: BatterRankingSort;
 }): Promise<BatterRanking[]> {
+  if (!Number.isInteger(opts.seasonId) || opts.seasonId <= 0) {
+    throw new Error('seasonId is required and must be a positive integer.');
+  }
   const params = new URLSearchParams();
-  if (opts?.seasonId) params.set('seasonId', String(opts.seasonId));
-  if (opts?.limit) params.set('limit', String(opts.limit));
-  if (opts?.sort) params.set('sort', opts.sort);
+  params.set('seasonId', String(opts.seasonId));
+  const limit = normalizeRankingLimit(opts.limit);
+  if (limit != null) params.set('limit', String(limit));
+  if (opts.sort) params.set('sort', opts.sort);
   const qs = params.toString();
   try {
     return await fetchApi(`/api/rankings/batters${qs ? `?${qs}` : ''}`);
@@ -261,15 +283,19 @@ export async function getBatterRankings(opts?: {
   }
 }
 
-export async function getPitcherRankings(opts?: {
-  seasonId?: number;
+export async function getPitcherRankings(opts: {
+  seasonId: number;
   limit?: number;
-  sort?: 'era' | 'whip' | 'so' | 'wins' | 'saves';
+  sort?: PitcherRankingSort;
 }): Promise<PitcherRanking[]> {
+  if (!Number.isInteger(opts.seasonId) || opts.seasonId <= 0) {
+    throw new Error('seasonId is required and must be a positive integer.');
+  }
   const params = new URLSearchParams();
-  if (opts?.seasonId) params.set('seasonId', String(opts.seasonId));
-  if (opts?.limit) params.set('limit', String(opts.limit));
-  if (opts?.sort) params.set('sort', opts.sort);
+  params.set('seasonId', String(opts.seasonId));
+  const limit = normalizeRankingLimit(opts.limit);
+  if (limit != null) params.set('limit', String(limit));
+  if (opts.sort) params.set('sort', opts.sort);
   const qs = params.toString();
   try {
     return await fetchApi(`/api/rankings/pitchers${qs ? `?${qs}` : ''}`);

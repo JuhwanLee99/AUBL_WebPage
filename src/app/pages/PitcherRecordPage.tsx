@@ -2,27 +2,36 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getPitcherRankings, type PitcherRanking } from '../../shared/api/backendClient';
 
-type SortKey = 'era' | 'whip' | 'so' | 'wins' | 'saves';
+type SortKey = 'era' | 'whip' | 'strikeouts' | 'wins' | 'saves';
 
 export default function PitcherRecordPage() {
   const [data, setData] = useState<PitcherRanking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState<SortKey>('era');
+  const [seasonIdInput, setSeasonIdInput] = useState('1');
+  const seasonId = Number(seasonIdInput);
+  const seasonIdValid = Number.isInteger(seasonId) && seasonId > 0;
 
   useEffect(() => {
+    if (!seasonIdValid) {
+      setData([]);
+      setLoading(false);
+      setError('seasonId는 1 이상의 정수여야 합니다.');
+      return;
+    }
     setLoading(true);
     setError(null);
-    getPitcherRankings({ sort, limit: 50 })
+    getPitcherRankings({ seasonId, sort, limit: 0 })
       .then(setData)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [sort]);
+  }, [seasonId, seasonIdValid, sort]);
 
   const sortLabels: Record<SortKey, string> = {
-    era: 'ERA',
-    whip: 'WHIP',
-    so: 'K',
+    era: 'ERA ↑',
+    whip: 'WHIP ↑',
+    strikeouts: 'K',
     wins: 'W',
     saves: 'SV',
   };
@@ -55,8 +64,39 @@ export default function PitcherRecordPage() {
           투수 기록
         </span>
         <h1 style={{ margin: 0, fontSize: '30px', fontWeight: 900 }}>시즌 투수 랭킹</h1>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <label
+            style={{
+              display: 'inline-flex',
+              gap: '8px',
+              alignItems: 'center',
+              color: '#94a3b8',
+              fontWeight: 700,
+              fontSize: '12px',
+            }}
+          >
+            SEASON ID
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={seasonIdInput}
+              onChange={(e) => setSeasonIdInput(e.target.value)}
+              style={{
+                width: '88px',
+                borderRadius: '10px',
+                border: '1px solid rgba(148,163,184,0.35)',
+                background: 'rgba(15,23,42,0.85)',
+                color: '#e2e8f0',
+                padding: '6px 10px',
+                fontWeight: 800,
+              }}
+            />
+          </label>
+          <span style={{ color: '#94a3b8', fontSize: '12px' }}>요청: `GET /api/rankings/pitchers`</span>
+        </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          {(['era', 'whip', 'so', 'wins', 'saves'] as SortKey[]).map((key) => (
+          {(['era', 'whip', 'strikeouts', 'wins', 'saves'] as SortKey[]).map((key) => (
             <button
               key={key}
               onClick={() => setSort(key)}

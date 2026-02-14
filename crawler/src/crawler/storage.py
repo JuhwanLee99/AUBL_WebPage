@@ -133,10 +133,10 @@ pitcher_stats_table = Table(
     Column("saves", Integer, default=0),
     Column("holds", Integer, default=0),
     Column("hits_allowed", Integer, default=0),
-    Column("runs", Integer, default=0),
+    Column("runs_allowed", Integer, default=0),
     Column("earned_runs", Integer, default=0),
-    Column("home_runs_allowed", Integer, default=0),
-    Column("walks", Integer, default=0),
+    Column("home_runs_allow", Integer, default=0),
+    Column("walks_allowed", Integer, default=0),
     Column("strikeouts", Integer, default=0),
     Column("hit_batters", Integer, default=0),
     Column("wild_pitches", Integer, default=0),
@@ -373,12 +373,15 @@ class Storage:
     ) -> None:
         records = _extract_league_record_rows(payload)
         for rec in records:
-            name = rec.get("name") or rec.get("player_name") or rec.get("선수명")
-            team_name = rec.get("team_name") or rec.get("팀명") or rec.get("team")
+            name = _strip_jersey_number(
+                rec.get("mb_name") or rec.get("name") or rec.get("player_name") or rec.get("선수명") or ""
+            )
+            team_name = rec.get("club_name") or rec.get("team_name") or rec.get("팀명") or rec.get("team")
             if not name:
                 continue
             tp_id = self._find_tp_id_by_name(conn, name, team_name, season_id)
             if tp_id is None:
+                logger.debug("tp_id not found for batter %s / %s", name, team_name)
                 continue
             # Upsert BATTER_STATS for this tp_id + season_id
             existing = conn.execute(
@@ -388,20 +391,20 @@ class Storage:
                 )
             ).fetchone()
             values = {
-                "games_played": _safe_int(rec, ["games", "경기", "G"]),
-                "plate_appearance": _safe_int(rec, ["pa", "타석", "PA"]),
-                "at_bats": _safe_int(rec, ["ab", "타수", "AB"]),
-                "hits": _safe_int(rec, ["h", "안타", "H"]),
-                "doubles": _safe_int(rec, ["2b", "2B", "이루타"]),
-                "triples": _safe_int(rec, ["3b", "3B", "삼루타"]),
-                "home_runs": _safe_int(rec, ["hr", "홈런", "HR"]),
-                "runs_batted_in": _safe_int(rec, ["rbi", "타점", "RBI"]),
-                "stolen_bases": _safe_int(rec, ["sb", "도루", "SB"]),
-                "walks": _safe_int(rec, ["bb", "볼넷", "BB"]),
-                "strikeouts": _safe_int(rec, ["so", "삼진", "SO", "K"]),
-                "batting_average": _safe_decimal(rec, ["avg", "타율", "AVG"]),
-                "on_base_pct": _safe_decimal(rec, ["obp", "출루율", "OBP"]),
-                "slugging_pct": _safe_decimal(rec, ["slg", "장타율", "SLG"]),
+                "games_played": _safe_int(rec, ["mygamecnt", "games", "경기", "G"]),
+                "plate_appearance": _safe_int(rec, ["bats", "pa", "타석", "PA"]),
+                "at_bats": _safe_int(rec, ["bat_cnt", "ab", "타수", "AB"]),
+                "hits": _safe_int(rec, ["hit_cnt", "h", "안타", "H"]),
+                "doubles": _safe_int(rec, ["twobase", "2b", "2B", "이루타"]),
+                "triples": _safe_int(rec, ["threebase", "3b", "3B", "삼루타"]),
+                "home_runs": _safe_int(rec, ["homerun", "hr", "홈런", "HR"]),
+                "runs_batted_in": _safe_int(rec, ["bat_point", "rbi", "타점", "RBI"]),
+                "stolen_bases": _safe_int(rec, ["steal", "sb", "도루", "SB"]),
+                "walks": _safe_int(rec, ["fourball", "bb", "볼넷", "BB"]),
+                "strikeouts": _safe_int(rec, ["strikeout", "so", "삼진", "SO", "K"]),
+                "batting_average": _safe_decimal(rec, ["hit_rate", "avg", "타율", "AVG"]),
+                "on_base_pct": _safe_decimal(rec, ["base_rate", "obp", "출루율", "OBP"]),
+                "slugging_pct": _safe_decimal(rec, ["hitbase_rate", "slg", "장타율", "SLG"]),
                 "ops": _safe_decimal(rec, ["ops", "OPS"]),
             }
             # Remove None values
@@ -425,12 +428,15 @@ class Storage:
     ) -> None:
         records = _extract_league_record_rows(payload)
         for rec in records:
-            name = rec.get("name") or rec.get("player_name") or rec.get("선수명")
-            team_name = rec.get("team_name") or rec.get("팀명") or rec.get("team")
+            name = _strip_jersey_number(
+                rec.get("mb_name") or rec.get("name") or rec.get("player_name") or rec.get("선수명") or ""
+            )
+            team_name = rec.get("club_name") or rec.get("team_name") or rec.get("팀명") or rec.get("team")
             if not name:
                 continue
             tp_id = self._find_tp_id_by_name(conn, name, team_name, season_id)
             if tp_id is None:
+                logger.debug("tp_id not found for pitcher %s / %s", name, team_name)
                 continue
             existing = conn.execute(
                 select(pitcher_stats_table.c.pitcher_stat_id).where(
@@ -439,24 +445,24 @@ class Storage:
                 )
             ).fetchone()
             values = {
-                "games_played": _safe_int(rec, ["games", "경기", "G"]),
+                "games_played": _safe_int(rec, ["mygamecnt", "games", "경기", "G"]),
                 "games_started": _safe_int(rec, ["gs", "선발", "GS"]),
-                "innings_pitched": _safe_decimal(rec, ["ip", "이닝", "IP"]),
-                "wins": _safe_int(rec, ["w", "승", "W"]),
-                "losses": _safe_int(rec, ["l", "패", "L"]),
-                "saves": _safe_int(rec, ["sv", "세", "SV"]),
-                "holds": _safe_int(rec, ["hld", "홀", "HLD"]),
-                "hits_allowed": _safe_int(rec, ["h", "피안타", "H"]),
-                "runs": _safe_int(rec, ["r", "실점", "R"]),
-                "earned_runs": _safe_int(rec, ["er", "자책", "ER"]),
-                "home_runs_allowed": _safe_int(rec, ["hr", "피홈런", "HR"]),
-                "walks": _safe_int(rec, ["bb", "볼넷", "BB"]),
-                "strikeouts": _safe_int(rec, ["so", "삼진", "SO", "K"]),
-                "hit_batters": _safe_int(rec, ["hbp", "사구", "HBP"]),
-                "wild_pitches": _safe_int(rec, ["wp", "폭투", "WP"]),
-                "era": _safe_decimal(rec, ["era", "평균자책", "ERA"]),
+                "innings_pitched": _parse_innings_str(rec.get("inning")) or _safe_decimal(rec, ["ip", "이닝", "IP"]),
+                "wins": _safe_int(rec, ["win", "w", "승", "W"]),
+                "losses": _safe_int(rec, ["lose", "l", "패", "L"]),
+                "saves": _safe_int(rec, ["save", "sv", "세", "SV"]),
+                "holds": _safe_int(rec, ["hold", "hld", "홀", "HLD"]),
+                "hits_allowed": _safe_int(rec, ["nohit", "h", "피안타", "H"]),
+                "runs_allowed": _safe_int(rec, ["lost_point", "r", "실점", "R"]),
+                "earned_runs": _safe_int(rec, ["self_point", "er", "자책", "ER"]),
+                "home_runs_allow": _safe_int(rec, ["nohomerun", "hr", "피홈런", "HR"]),
+                "walks_allowed": _safe_int(rec, ["fourball", "bb", "볼넷", "BB"]),
+                "strikeouts": _safe_int(rec, ["strikeout", "so", "삼진", "SO", "K"]),
+                "hit_batters": _safe_int(rec, ["deadball", "hbp", "사구", "HBP"]),
+                "wild_pitches": _safe_int(rec, ["wildpitch", "wp", "폭투", "WP"]),
+                "era": _safe_decimal(rec, ["def_rate", "era", "평균자책", "ERA"]),
                 "whip": _safe_decimal(rec, ["whip", "WHIP"]),
-                "k_per_9": _safe_decimal(rec, ["k9", "K/9"]),
+                "k_per_9": _safe_decimal(rec, ["strikeout_rate", "k9", "K/9"]),
                 "bb_per_9": _safe_decimal(rec, ["bb9", "BB/9"]),
             }
             values = {k: v for k, v in values.items() if v is not None}
@@ -685,17 +691,20 @@ class Storage:
     def _upsert_player(self, conn: Connection, player: PlayerInfo | None) -> int | None:
         if player is None or not player.name:
             return None
+        clean_name = _strip_jersey_number(player.name)
+        if not clean_name:
+            return None
         # Find by name (players are matched by name since Gameone doesn't always provide IDs)
         row = conn.execute(
             select(player_table.c.player_id).where(
-                player_table.c.player_name == player.name
+                player_table.c.player_name == clean_name
             )
         ).fetchone()
         if row:
             return int(row.player_id)
         result = conn.execute(
             player_table.insert().values(
-                player_name=player.name,
+                player_name=clean_name,
                 position=player.position,
                 is_player=True,
             )
@@ -706,6 +715,9 @@ class Storage:
         self, conn: Connection, player: PlayerInfo | None, team_id: int | None,
     ) -> int | None:
         if player is None or not player.name:
+            return None
+        clean_name = _strip_jersey_number(player.name)
+        if not clean_name:
             return None
         # Try to find by name + team via TEAM_PLAYER
         if team_id is not None:
@@ -718,7 +730,7 @@ class Storage:
                     )
                 )
                 .where(
-                    player_table.c.player_name == player.name,
+                    player_table.c.player_name == clean_name,
                     team_player_table.c.team_id == team_id,
                 )
             ).fetchone()
@@ -727,7 +739,7 @@ class Storage:
         # Fallback: by name only
         row = conn.execute(
             select(player_table.c.player_id).where(
-                player_table.c.player_name == player.name
+                player_table.c.player_name == clean_name
             )
         ).fetchone()
         return int(row.player_id) if row else None
@@ -1305,6 +1317,35 @@ def _extract_league_record_rows(payload: dict[str, Any]) -> list[dict[str, Any]]
     if isinstance(data, list):
         return [r for r in data if isinstance(r, dict)]
     return []
+
+
+def _strip_jersey_number(name: str) -> str:
+    """Strip jersey number suffix from player names, e.g. '김민혁(52)' → '김민혁', '김동혁 (91)' → '김동혁'."""
+    if not name:
+        return ""
+    return re.sub(r"\s*[\(\(]\d+[\)\)]\s*$", "", name).strip()
+
+
+def _parse_innings_str(value: Any) -> Decimal | None:
+    """Parse Gameone inning strings like '22 ⅔' into Decimal(22.67)."""
+    if value is None:
+        return None
+    s = str(value).strip()
+    if not s:
+        return None
+    # Handle fraction suffixes: ⅓ = .33, ⅔ = .67
+    fraction_map = {"⅓": Decimal("0.3"), "⅔": Decimal("0.7"), "1/3": Decimal("0.3"), "2/3": Decimal("0.7")}
+    for frac_str, frac_val in fraction_map.items():
+        if frac_str in s:
+            whole = s.replace(frac_str, "").strip()
+            try:
+                return Decimal(whole) + frac_val if whole else frac_val
+            except Exception:
+                return None
+    try:
+        return Decimal(s)
+    except Exception:
+        return None
 
 
 def _safe_int(rec: dict[str, Any], keys: list[str]) -> int | None:
