@@ -1,10 +1,18 @@
 import json
+import logging
+import os
+import urllib.request
 
 from firebase_admin import auth as admin_auth
 from firebase_admin import messaging
 from firebase_admin import initialize_app
 from firebase_functions import firestore_fn, https_fn
 from firebase_functions.options import set_global_options
+
+logger = logging.getLogger(__name__)
+
+BACKEND_API_URL = os.environ.get("BACKEND_API_URL", "https://api.aubl.club")
+_COMPLETED_STATUSES = {"completed", "final", "ended", "종료"}
 
 set_global_options(max_instances=10)
 initialize_app()
@@ -139,3 +147,29 @@ def notify_community_urgent(event: firestore_fn.Event[firestore_fn.DocumentSnaps
         body,
         {"noticeId": str(notice_id or ""), "category": str(data.get("category") or "")},
     )
+
+
+@firestore_fn.on_document_updated(document="matches/{matchId}", region="asia-northeast3")
+def import_completed_match(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]]) -> None:
+    """When a match status changes to completed, import its data to MariaDB via backend API."""
+    before = event.data.before.to_dict() if event.data and event.data.before else {}
+    after = event.data.after.to_dict() if event.data and event.data.after else {}
+    if not after:
+        return
+    old_status = (before.get("status") or "").lower()
+    new_status = (after.get("status") or "").lower()
+    if old_status == new_status:
+        return
+    if new_status not in _COMPLETED_STATUSES:
+        return
+    match_id = event.params.get("matchId")
+    if not match_id:
+        return
+    url = f"{BACKEND_API_URL}/api/import/firestore/matches/{match_id}"
+    try:
+        req = urllib.request.Request(url, method="POST", data=b"")
+        req.add_header("Content-Type", "application/json")
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            logger.info("import_completed_match: %s -> %s (HTTP %s)", match_id, new_status, resp.status)
+    except Exception:
+        logger.exception("import_completed_match failed for %s", match_id)

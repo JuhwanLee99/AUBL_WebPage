@@ -159,6 +159,10 @@ export const router = createBrowserRouter([
         element: <BatterRecordPage />,
       },
       {
+        path: 'records/player/:playerId',
+        element: <PlayerDetailPage />,
+      },
+      {
         path: 'scoreboard',
         element: <ScoreboardPage />,
       },
@@ -215,7 +219,7 @@ export const router = createBrowserRouter([
         ],
       },
       {
-        path: 'player/:name',
+        path: 'player/:playerId',
         element: <PlayerDetailPage />,
       },
       {

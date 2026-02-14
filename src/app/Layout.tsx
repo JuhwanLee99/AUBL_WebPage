@@ -260,6 +260,7 @@ export default function Layout() {
         children: [
           { path: '/records/pitchers', label: '투수 기록' },
           { path: '/records/batters', label: '타자 기록' },
+          { path: '/records/player/1', label: '선수 상세' },
         ],
       },
       { path: '/community', label: '커뮤니티' },

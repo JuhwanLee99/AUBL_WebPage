@@ -9,6 +9,11 @@ class AppConfig {
     defaultValue: 'https://aubl-backup.web.app',
   );
 
+  static const String backendApiUrl = String.fromEnvironment(
+    'AUBL_BACKEND_API_URL',
+    defaultValue: 'https://api.aubl.club',
+  );
+
   static const String authBridgeUrl = String.fromEnvironment(
     'AUBL_AUTH_BRIDGE_URL',
     defaultValue:

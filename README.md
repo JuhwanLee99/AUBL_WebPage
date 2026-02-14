@@ -3,6 +3,11 @@
 대한민국 대학교 아마추어 야구 리그인 AUBL을 소개하고, 경기 데이터를 기반으로 승부를 예측하는 웹 플랫폼입니다.
 더불어 **실시간 경기 기록(Scorekeeping) 및 중계용 오버레이 시스템**을 포함한 통합 야구 운영 기능을 제공합니다.
 
+## 📚 사용 설명서
+
+* 웹 버전: [`docs/web-user-manual.md`](docs/web-user-manual.md)
+* 앱 버전: [`docs/app-user-manual.md`](docs/app-user-manual.md)
+
 ## 📊 승부 예측 모델
 
 본 프로젝트는 사회인 야구의 Low Data 특성을 고려하여 다음 모델들을 혼합하여 사용합니다.

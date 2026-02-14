@@ -10,4 +10,13 @@ export default defineConfig({
       },
     }),
   ],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'https://api.aubl.club',
+        changeOrigin: true,
+        secure: true,
+      },
+    },
+  },
 })
