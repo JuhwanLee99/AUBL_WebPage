@@ -425,6 +425,13 @@ function toStringValue(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
 }
 
+function toDisplayString(value: unknown, fallback = ''): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value === 'bigint') return String(value);
+  return fallback;
+}
+
 function toRegulationValue(value: unknown): string | null {
   if (typeof value === 'string') {
     const normalized = value.trim().toUpperCase();
@@ -566,7 +573,7 @@ function normalizeBatterRankingRow(
     teamName: toStringValue(row.teamName ?? row.team_name),
     seasonId: toFiniteNumber(row.seasonId ?? row.season_id) ?? fallbackSeasonId,
     seasonYear: toFiniteNumber(row.seasonYear ?? row.season_year ?? row.year),
-    jerseyNumber: toStringValue(row.jerseyNumber ?? row.backNumber ?? row.uniformNumber ?? row.number),
+    jerseyNumber: toDisplayString(row.jerseyNumber ?? row.backNumber ?? row.uniformNumber ?? row.number),
     gamesPlayed: toFiniteNumber(row.gamesPlayed ?? row.games_played) ?? 0,
     plateAppearance: toFiniteNumber(row.plateAppearance ?? row.plate_appearance) ?? 0,
     atBats: toFiniteNumber(row.atBats ?? row.at_bats) ?? 0,
@@ -609,7 +616,7 @@ function normalizePitcherRankingRow(
     teamName: toStringValue(row.teamName ?? row.team_name),
     seasonId: toFiniteNumber(row.seasonId ?? row.season_id) ?? fallbackSeasonId,
     seasonYear: toFiniteNumber(row.seasonYear ?? row.season_year ?? row.year),
-    jerseyNumber: toStringValue(row.jerseyNumber ?? row.backNumber ?? row.uniformNumber ?? row.number),
+    jerseyNumber: toDisplayString(row.jerseyNumber ?? row.backNumber ?? row.uniformNumber ?? row.number),
     gamesPlayed: toFiniteNumber(row.gamesPlayed ?? row.games_played) ?? 0,
     inningsPitched: toFiniteNumber(row.inningsPitched ?? row.innings_pitched ?? row.ip) ?? 0,
     wins: toFiniteNumber(row.wins ?? row.w) ?? 0,
@@ -1194,6 +1201,7 @@ export interface BatterGameLog {
   teamSide: string;
   playerName: string;
   playerPosition: string;
+  jerseyNumber: string;
   atBats: number;
   runs: number;
   hits: number;
@@ -1210,6 +1218,7 @@ export interface PitcherGameLog {
   teamSide: string;
   playerName: string;
   playerPosition: string;
+  jerseyNumber: string;
   inningsPitched: number;
   hitsAllowed: number;
   runsAllowed: number;
@@ -1248,6 +1257,7 @@ export async function getPlayerGameLogs(
         teamSide: toText(row.teamSide ?? row.team_side),
         playerName: toText(row.playerName ?? row.player_name),
         playerPosition: toText(row.playerPosition ?? row.player_position),
+        jerseyNumber: toText(row.jerseyNumber ?? row.jersey_number ?? row.backNumber ?? row.uniformNumber),
         atBats: toNumber(row.atBats ?? row.at_bats),
         runs: toNumber(row.runs),
         hits: toNumber(row.hits),
@@ -1270,6 +1280,7 @@ export async function getPlayerGameLogs(
         teamSide: toText(row.teamSide ?? row.team_side),
         playerName: toText(row.playerName ?? row.player_name),
         playerPosition: toText(row.playerPosition ?? row.player_position),
+        jerseyNumber: toText(row.jerseyNumber ?? row.jersey_number ?? row.backNumber ?? row.uniformNumber),
         inningsPitched: toNumber(row.inningsPitched ?? row.innings_pitched),
         hitsAllowed: toNumber(row.hitsAllowed ?? row.hits_allowed),
         runsAllowed: toNumber(row.runsAllowed ?? row.runs_allowed),

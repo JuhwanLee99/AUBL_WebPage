@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import zlib
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -19,6 +20,19 @@ from pathlib import Path
 def _strip_jersey(name: str) -> str:
     """'김민혁(52)' → '김민혁', '김동혁 (91)' → '김동혁'"""
     return re.sub(r"\s*[\(\(]\d+[\)\)]\s*$", "", name).strip()
+
+
+def _extract_jersey(name: str | None) -> int | None:
+    """Extract trailing jersey number from player name."""
+    if not isinstance(name, str):
+        return None
+    match = re.search(r"\(\s*(\d{1,3})\s*\)\s*$", name.strip())
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except (TypeError, ValueError):
+        return None
 
 
 def _esc(val: str | None) -> str:
@@ -64,6 +78,15 @@ def _ctx_code(value) -> str | None:
     if text in {"", "0", "-1", "None", "none", "NULL", "null"}:
         return None
     return text
+
+
+def _synthetic_user_id(team_token: str, player_name: str) -> int:
+    """Build deterministic negative user_id from team token + player name."""
+    seed = f"{team_token}::{player_name}".encode("utf-8")
+    value = zlib.crc32(seed) & 0x7FFFFFFF
+    if value == 0:
+        value = 1
+    return -value
 
 
 def _iter_jsonl(path: Path):
@@ -130,6 +153,7 @@ def main():
     out.write("ALTER TABLE PITCHER_GAME_LOG ADD COLUMN IF NOT EXISTS game_type VARCHAR(20) NULL;\n")
     out.write("ALTER TABLE PITCHER_GAME_LOG ADD COLUMN IF NOT EXISTS league_code VARCHAR(20) NULL;\n")
     out.write("ALTER TABLE PITCHER_GAME_LOG ADD COLUMN IF NOT EXISTS part_code VARCHAR(20) NULL;\n\n")
+    out.write("ALTER TABLE TEAM_PLAYER ADD COLUMN IF NOT EXISTS jersey_number INT NULL;\n\n")
 
     # 1. SEASON
     out.write(f"-- Season\n")
@@ -142,6 +166,8 @@ def main():
     team_id_map: dict[int, str] = {}  # team_idx → SQL variable name
     team_name_map: dict[str, str] = {}  # team_name → SQL variable name
     team_name_norm_map: dict[str, str] = {}  # normalized team_name → SQL variable name
+    team_idx_by_name: dict[str, int] = {}
+    team_idx_by_norm_name: dict[str, int] = {}
     for t in _iter_jsonl(teams_file) or []:
         if _row_year(t) != year:
             continue
@@ -149,6 +175,10 @@ def main():
         name = t.get("name")
         if idx and name:
             teams[idx] = name
+            team_idx_by_name[name] = idx
+            normalized_name = _normalize_team_name(name)
+            if normalized_name:
+                team_idx_by_norm_name[normalized_name] = idx
 
     out.write("-- Teams\n")
     for i, (idx, name) in enumerate(sorted(teams.items(), key=lambda x: x[0])):
@@ -179,23 +209,49 @@ def main():
                 return team_name_norm_map.get(normalized)
         return None
 
+    def _resolve_team_idx(team_idx, team_name) -> int | None:
+        if isinstance(team_idx, int):
+            return team_idx
+        if isinstance(team_idx, str) and team_idx.strip().isdigit():
+            return int(team_idx.strip())
+        if isinstance(team_name, str):
+            direct = team_idx_by_name.get(team_name)
+            if direct is not None:
+                return direct
+            normalized = _normalize_team_name(team_name)
+            if normalized:
+                return team_idx_by_norm_name.get(normalized)
+        return None
+
+    def _player_user_id(player_name: str, team_idx=None, team_name=None) -> int:
+        resolved_team_idx = _resolve_team_idx(team_idx, team_name)
+        if resolved_team_idx is not None:
+            team_token = f"T{resolved_team_idx}"
+        elif isinstance(team_name, str) and team_name.strip():
+            team_token = f"N{_normalize_team_name(team_name)}"
+        else:
+            team_token = "GLOBAL"
+        return _synthetic_user_id(team_token, player_name)
+
     # 3. PLAYER — collect unique players, strip jersey numbers
     players_file = data_dir / "players.jsonl"
-    players: dict[str, dict] = {}  # name → {position, team_idx}
+    players: dict[int, dict] = {}  # synthetic_user_id → {name, position}
     for p in _iter_jsonl(players_file) or []:
         name = _strip_jersey(p.get("name") or "")
         if not name:
             continue
-        if name not in players:
-            players[name] = {"position": p.get("position"), "team_idx": p.get("team_idx")}
+        user_id = _player_user_id(name, team_idx=p.get("team_idx"), team_name=None)
+        if user_id not in players:
+            players[user_id] = {"name": name, "position": p.get("position")}
 
     out.write("-- Players\n")
-    for name, info in sorted(players.items()):
+    for user_id, info in sorted(players.items(), key=lambda x: x[0]):
+        name = info.get("name")
         pos = info.get("position")
         out.write(
-            f"INSERT INTO PLAYER (player_name, position, is_player) "
-            f"SELECT {_esc(name)}, {_esc(pos)}, 1 FROM DUAL "
-            f"WHERE NOT EXISTS (SELECT 1 FROM PLAYER WHERE player_name = {_esc(name)});\n"
+            f"INSERT INTO PLAYER (user_id, player_name, position, is_player) "
+            f"SELECT {_num(user_id)}, {_esc(name)}, {_esc(pos)}, 1 FROM DUAL "
+            f"WHERE NOT EXISTS (SELECT 1 FROM PLAYER WHERE user_id = {_num(user_id)});\n"
         )
     out.write("\n")
 
@@ -206,23 +262,34 @@ def main():
         if _row_year(r) != year:
             continue
         team_idx = r.get("team_idx")
-        name = _strip_jersey(r.get("name") or "")
+        raw_name = r.get("name") or ""
+        name = _strip_jersey(raw_name)
+        jersey = _extract_jersey(raw_name)
+        user_id = _player_user_id(name, team_idx=team_idx, team_name=None)
         if not name or not team_idx:
             continue
         team_var = team_id_map.get(team_idx)
         if not team_var:
             continue
+        player_lookup = f"(SELECT player_id FROM PLAYER WHERE user_id = {_num(user_id)} LIMIT 1)"
         out.write(
-            f"INSERT INTO TEAM_PLAYER (team_id, player_id, season_id) "
+            f"INSERT INTO TEAM_PLAYER (team_id, player_id, season_id, jersey_number) "
             f"SELECT {team_var}, "
-            f"(SELECT player_id FROM PLAYER WHERE player_name = {_esc(name)} LIMIT 1), "
-            f"@season_id FROM DUAL "
-            f"WHERE (SELECT player_id FROM PLAYER WHERE player_name = {_esc(name)} LIMIT 1) IS NOT NULL "
+            f"{player_lookup}, "
+            f"@season_id, {_num(jersey)} FROM DUAL "
+            f"WHERE {player_lookup} IS NOT NULL "
             f"AND NOT EXISTS ("
             f"SELECT 1 FROM TEAM_PLAYER WHERE team_id = {team_var} "
-            f"AND player_id = (SELECT player_id FROM PLAYER WHERE player_name = {_esc(name)} LIMIT 1) "
+            f"AND player_id = {player_lookup} "
             f"AND season_id = @season_id);\n"
         )
+        if jersey is not None:
+            out.write(
+                f"UPDATE TEAM_PLAYER SET jersey_number = COALESCE(jersey_number, {_num(jersey)}) "
+                f"WHERE team_id = {team_var} "
+                f"AND player_id = {player_lookup} "
+                f"AND season_id = @season_id;\n"
+            )
     out.write("\n")
 
     # Build per-team context hints from league ranking rows so GAME can keep
@@ -269,10 +336,15 @@ def main():
             records = d
 
         for rec in records:
-            name = _strip_jersey(rec.get("mb_name") or rec.get("name") or "")
+            raw_name = rec.get("mb_name") or rec.get("name") or ""
+            name = _strip_jersey(raw_name)
+            jersey = _extract_jersey(raw_name)
             team_name = rec.get("club_name") or rec.get("team_name") or ""
             if not name:
                 continue
+            player_user_id = _player_user_id(name, team_idx=None, team_name=team_name)
+            team_var = _resolve_team_var(None, team_name)
+            team_condition = f"tp.team_id = {team_var}" if team_var else f"t.team_name = {_esc(team_name)}"
             league_code = _ctx_code(rec.get("league_code") or rec.get("group_code"))
             part_code = _ctx_code(rec.get("part_code"))
             _accumulate_team_context(team_name, league_code, part_code)
@@ -304,13 +376,23 @@ def main():
                 f"FROM TEAM_PLAYER tp "
                 f"JOIN PLAYER p ON tp.player_id = p.player_id "
                 f"JOIN TEAM t ON tp.team_id = t.team_id "
-                f"WHERE p.player_name = {_esc(name)} "
-                f"AND t.team_name = {_esc(team_name)} "
+                f"WHERE p.user_id = {_num(player_user_id)} "
+                f"AND {team_condition} "
                 f"AND tp.season_id = @season_id "
                 f"AND NOT EXISTS ("
                 f"SELECT 1 FROM BATTER_STATS bs WHERE bs.tp_id = tp.tp_id AND bs.season_id = @season_id) "
                 f"LIMIT 1;\n"
             )
+            if jersey is not None:
+                out.write(
+                    f"UPDATE TEAM_PLAYER tp "
+                    f"JOIN PLAYER p ON tp.player_id = p.player_id "
+                    f"JOIN TEAM t ON tp.team_id = t.team_id "
+                    f"SET tp.jersey_number = COALESCE(tp.jersey_number, {_num(jersey)}) "
+                    f"WHERE p.user_id = {_num(player_user_id)} "
+                    f"AND {team_condition} "
+                    f"AND tp.season_id = @season_id;\n"
+                )
     out.write("\n")
 
     # 6. PITCHER_STATS from league records
@@ -327,10 +409,15 @@ def main():
             records = d
 
         for rec in records:
-            name = _strip_jersey(rec.get("mb_name") or rec.get("name") or "")
+            raw_name = rec.get("mb_name") or rec.get("name") or ""
+            name = _strip_jersey(raw_name)
+            jersey = _extract_jersey(raw_name)
             team_name = rec.get("club_name") or rec.get("team_name") or ""
             if not name:
                 continue
+            player_user_id = _player_user_id(name, team_idx=None, team_name=team_name)
+            team_var = _resolve_team_var(None, team_name)
+            team_condition = f"tp.team_id = {team_var}" if team_var else f"t.team_name = {_esc(team_name)}"
             league_code = _ctx_code(rec.get("league_code") or rec.get("group_code"))
             part_code = _ctx_code(rec.get("part_code"))
             _accumulate_team_context(team_name, league_code, part_code)
@@ -365,13 +452,23 @@ def main():
                 f"FROM TEAM_PLAYER tp "
                 f"JOIN PLAYER p ON tp.player_id = p.player_id "
                 f"JOIN TEAM t ON tp.team_id = t.team_id "
-                f"WHERE p.player_name = {_esc(name)} "
-                f"AND t.team_name = {_esc(team_name)} "
+                f"WHERE p.user_id = {_num(player_user_id)} "
+                f"AND {team_condition} "
                 f"AND tp.season_id = @season_id "
                 f"AND NOT EXISTS ("
                 f"SELECT 1 FROM PITCHER_STATS ps WHERE ps.tp_id = tp.tp_id AND ps.season_id = @season_id) "
                 f"LIMIT 1;\n"
             )
+            if jersey is not None:
+                out.write(
+                    f"UPDATE TEAM_PLAYER tp "
+                    f"JOIN PLAYER p ON tp.player_id = p.player_id "
+                    f"JOIN TEAM t ON tp.team_id = t.team_id "
+                    f"SET tp.jersey_number = COALESCE(tp.jersey_number, {_num(jersey)}) "
+                    f"WHERE p.user_id = {_num(player_user_id)} "
+                    f"AND {team_condition} "
+                    f"AND tp.season_id = @season_id;\n"
+                )
     out.write("\n")
 
     # 7. GAME + BATTER_GAME_LOG + PITCHER_GAME_LOG from matches/batting_stats/pitching_stats
@@ -492,7 +589,9 @@ def main():
 
         # Batter game logs — ensure TEAM_PLAYER + BATTER_STATS exist first
         for b in batting_by_game.get(gidx, []):
-            pname = b.get("player_name") or ""
+            raw_pname = b.get("player_name") or ""
+            pname = _strip_jersey(raw_pname)
+            jersey = _extract_jersey(raw_pname)
             team_idx = b.get("team_idx")
             side = b.get("team_side")
             t_var = team_id_map.get(team_idx)
@@ -507,22 +606,37 @@ def main():
                 t_var = away_var if away_var != "NULL" else None
             if t_var is None or not pname:
                 continue
+            identity_team_idx = _resolve_team_idx(team_idx, None)
+            if identity_team_idx is None and side == "home":
+                identity_team_idx = _resolve_team_idx(home_idx, None)
+            if identity_team_idx is None and side == "away":
+                identity_team_idx = _resolve_team_idx(away_idx, None)
+            player_user_id = _player_user_id(pname, team_idx=identity_team_idx, team_name=None)
 
             # Ensure TEAM_PLAYER row exists
             out.write(
-                f"INSERT INTO TEAM_PLAYER (team_id, player_id, season_id) "
-                f"SELECT {t_var}, p.player_id, @season_id "
-                f"FROM PLAYER p WHERE p.player_name = {_esc(pname)} "
+                f"INSERT INTO TEAM_PLAYER (team_id, player_id, season_id, jersey_number) "
+                f"SELECT {t_var}, p.player_id, @season_id, {_num(jersey)} "
+                f"FROM PLAYER p WHERE p.user_id = {_num(player_user_id)} "
                 f"AND NOT EXISTS (SELECT 1 FROM TEAM_PLAYER tp2 "
                 f"WHERE tp2.team_id = {t_var} AND tp2.player_id = p.player_id "
                 f"AND tp2.season_id = @season_id) LIMIT 1;\n"
             )
+            if jersey is not None:
+                out.write(
+                    f"UPDATE TEAM_PLAYER tp "
+                    f"JOIN PLAYER p ON tp.player_id = p.player_id "
+                    f"SET tp.jersey_number = COALESCE(tp.jersey_number, {_num(jersey)}) "
+                    f"WHERE tp.team_id = {t_var} "
+                    f"AND p.user_id = {_num(player_user_id)} "
+                    f"AND tp.season_id = @season_id;\n"
+                )
             # Ensure BATTER_STATS row exists
             out.write(
                 f"INSERT INTO BATTER_STATS (tp_id, season_id) "
                 f"SELECT tp.tp_id, @season_id FROM TEAM_PLAYER tp "
                 f"JOIN PLAYER p ON tp.player_id = p.player_id "
-                f"WHERE p.player_name = {_esc(pname)} AND tp.team_id = {t_var} "
+                f"WHERE p.user_id = {_num(player_user_id)} AND tp.team_id = {t_var} "
                 f"AND tp.season_id = @season_id "
                 f"AND NOT EXISTS (SELECT 1 FROM BATTER_STATS bs "
                 f"WHERE bs.tp_id = tp.tp_id AND bs.season_id = @season_id) LIMIT 1;\n"
@@ -533,11 +647,11 @@ def main():
                 f"(game_idx, team_side, team_idx, player_idx, batter_stat_id, "
                 f"player_name, player_position, at_bats, runs, hits, rbi, walks, strikeouts, game_type, league_code, part_code) "
                 f"SELECT @game_id, {_esc(side)}, {t_var}, "
-                f"(SELECT player_id FROM PLAYER WHERE player_name = {_esc(pname)} LIMIT 1), "
+                f"(SELECT player_id FROM PLAYER WHERE user_id = {_num(player_user_id)} LIMIT 1), "
                 f"(SELECT bs.batter_stat_id FROM BATTER_STATS bs "
                 f"JOIN TEAM_PLAYER tp ON bs.tp_id = tp.tp_id "
                 f"JOIN PLAYER p ON tp.player_id = p.player_id "
-                f"WHERE p.player_name = {_esc(pname)} AND tp.team_id = {t_var} "
+                f"WHERE p.user_id = {_num(player_user_id)} AND tp.team_id = {t_var} "
                 f"AND bs.season_id = @season_id LIMIT 1), "
                 f"{_esc(pname)}, {_esc(b.get('player_position'))}, "
                 f"{_num(b.get('at_bats'))}, {_num(b.get('runs'))}, {_num(b.get('hits'))}, "
@@ -547,13 +661,15 @@ def main():
                 f"AND (SELECT bs.batter_stat_id FROM BATTER_STATS bs "
                 f"JOIN TEAM_PLAYER tp ON bs.tp_id = tp.tp_id "
                 f"JOIN PLAYER p ON tp.player_id = p.player_id "
-                f"WHERE p.player_name = {_esc(pname)} AND tp.team_id = {t_var} "
+                f"WHERE p.user_id = {_num(player_user_id)} AND tp.team_id = {t_var} "
                 f"AND bs.season_id = @season_id LIMIT 1) IS NOT NULL;\n"
             )
 
         # Pitcher game logs — ensure TEAM_PLAYER + PITCHER_STATS exist first
         for p in pitching_by_game.get(gidx, []):
-            pname = p.get("player_name") or ""
+            raw_pname = p.get("player_name") or ""
+            pname = _strip_jersey(raw_pname)
+            jersey = _extract_jersey(raw_pname)
             team_idx = p.get("team_idx")
             side = p.get("team_side")
             t_var = team_id_map.get(team_idx)
@@ -568,6 +684,12 @@ def main():
                 t_var = away_var if away_var != "NULL" else None
             if t_var is None or not pname:
                 continue
+            identity_team_idx = _resolve_team_idx(team_idx, None)
+            if identity_team_idx is None and side == "home":
+                identity_team_idx = _resolve_team_idx(home_idx, None)
+            if identity_team_idx is None and side == "away":
+                identity_team_idx = _resolve_team_idx(away_idx, None)
+            player_user_id = _player_user_id(pname, team_idx=identity_team_idx, team_name=None)
 
             ip_val = p.get("innings_pitched")
             if ip_val is not None:
@@ -588,19 +710,28 @@ def main():
 
             # Ensure TEAM_PLAYER row exists
             out.write(
-                f"INSERT INTO TEAM_PLAYER (team_id, player_id, season_id) "
-                f"SELECT {t_var}, p.player_id, @season_id "
-                f"FROM PLAYER p WHERE p.player_name = {_esc(pname)} "
+                f"INSERT INTO TEAM_PLAYER (team_id, player_id, season_id, jersey_number) "
+                f"SELECT {t_var}, p.player_id, @season_id, {_num(jersey)} "
+                f"FROM PLAYER p WHERE p.user_id = {_num(player_user_id)} "
                 f"AND NOT EXISTS (SELECT 1 FROM TEAM_PLAYER tp2 "
                 f"WHERE tp2.team_id = {t_var} AND tp2.player_id = p.player_id "
                 f"AND tp2.season_id = @season_id) LIMIT 1;\n"
             )
+            if jersey is not None:
+                out.write(
+                    f"UPDATE TEAM_PLAYER tp "
+                    f"JOIN PLAYER p ON tp.player_id = p.player_id "
+                    f"SET tp.jersey_number = COALESCE(tp.jersey_number, {_num(jersey)}) "
+                    f"WHERE tp.team_id = {t_var} "
+                    f"AND p.user_id = {_num(player_user_id)} "
+                    f"AND tp.season_id = @season_id;\n"
+                )
             # Ensure PITCHER_STATS row exists
             out.write(
                 f"INSERT INTO PITCHER_STATS (tp_id, season_id) "
                 f"SELECT tp.tp_id, @season_id FROM TEAM_PLAYER tp "
                 f"JOIN PLAYER p ON tp.player_id = p.player_id "
-                f"WHERE p.player_name = {_esc(pname)} AND tp.team_id = {t_var} "
+                f"WHERE p.user_id = {_num(player_user_id)} AND tp.team_id = {t_var} "
                 f"AND tp.season_id = @season_id "
                 f"AND NOT EXISTS (SELECT 1 FROM PITCHER_STATS ps "
                 f"WHERE ps.tp_id = tp.tp_id AND ps.season_id = @season_id) LIMIT 1;\n"
@@ -611,11 +742,11 @@ def main():
                 f"(game_idx, team_side, team_idx, player_idx, pitcher_stat_id, "
                 f"player_name, innings_pitched, hits_allowed, runs_allowed, earned_runs, walks, strikeouts, game_type, league_code, part_code) "
                 f"SELECT @game_id, {_esc(side)}, {t_var}, "
-                f"(SELECT player_id FROM PLAYER WHERE player_name = {_esc(pname)} LIMIT 1), "
+                f"(SELECT player_id FROM PLAYER WHERE user_id = {_num(player_user_id)} LIMIT 1), "
                 f"(SELECT ps.pitcher_stat_id FROM PITCHER_STATS ps "
                 f"JOIN TEAM_PLAYER tp ON ps.tp_id = tp.tp_id "
                 f"JOIN PLAYER p ON tp.player_id = p.player_id "
-                f"WHERE p.player_name = {_esc(pname)} AND tp.team_id = {t_var} "
+                f"WHERE p.user_id = {_num(player_user_id)} AND tp.team_id = {t_var} "
                 f"AND ps.season_id = @season_id LIMIT 1), "
                 f"{_esc(pname)}, {ip_str}, "
                 f"{_num(p.get('hits_allowed'))}, {_num(p.get('runs_allowed'))}, "
@@ -625,7 +756,7 @@ def main():
                 f"AND (SELECT ps.pitcher_stat_id FROM PITCHER_STATS ps "
                 f"JOIN TEAM_PLAYER tp ON ps.tp_id = tp.tp_id "
                 f"JOIN PLAYER p ON tp.player_id = p.player_id "
-                f"WHERE p.player_name = {_esc(pname)} AND tp.team_id = {t_var} "
+                f"WHERE p.user_id = {_num(player_user_id)} AND tp.team_id = {t_var} "
                 f"AND ps.season_id = @season_id LIMIT 1) IS NOT NULL;\n"
             )
 

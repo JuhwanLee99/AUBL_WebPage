@@ -31,8 +31,9 @@ PAT_SET_NAME = re.compile(
     r"SET (@[A-Za-z0-9_]+) = \(SELECT team_id FROM TEAM WHERE team_name = '((?:[^'\\]|\\.)*)' LIMIT 1\);$"
 )
 PAT_TEAM_PLAYER = re.compile(
-    r"INSERT INTO TEAM_PLAYER \(team_id, player_id, season_id\) SELECT (@[A-Za-z0-9_]+), p\.player_id, @season_id "
-    r"FROM PLAYER p WHERE p\.player_name = '((?:[^'\\]|\\.)*)'"
+    r"INSERT INTO TEAM_PLAYER \(team_id, player_id, season_id(?:, jersey_number)?\) "
+    r"SELECT (@[A-Za-z0-9_]+), p\.player_id, @season_id(?:, [^ ]+)? "
+    r"FROM PLAYER p WHERE (?:p\.player_name = '((?:[^'\\]|\\.)*)'|p\.user_id = -?\d+)"
 )
 PAT_GAME = re.compile(
     r"INSERT INTO GAME \(season_id, game_date, game_number, home_team, away_team, home_score, away_score, game_type(?:, league_code, part_code)?\) "

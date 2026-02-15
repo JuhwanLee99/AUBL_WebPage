@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
+  getPlayerGameLogs,
   getPlayerSearchIndex,
   getPlayerStats,
   getSeasons,
+  type BatterGameLog,
   type BatterStat,
+  type PitcherGameLog,
   type PitcherStat,
   type PlayerLookup,
   type PlayerStatsSummary,
@@ -56,6 +59,12 @@ export default function PlayerDetailPage() {
   const [stats, setStats] = useState<PlayerStatsSummary | null>(null);
   const [selectedBatterSeasonId, setSelectedBatterSeasonId] = useState<number | null>(null);
   const [selectedPitcherSeasonId, setSelectedPitcherSeasonId] = useState<number | null>(null);
+  const [batterGameLogs, setBatterGameLogs] = useState<BatterGameLog[]>([]);
+  const [pitcherGameLogs, setPitcherGameLogs] = useState<PitcherGameLog[]>([]);
+  const [gameLogsLoading, setGameLogsLoading] = useState<boolean>(false);
+  const [gameLogsError, setGameLogsError] = useState<string | null>(null);
+  const [gameIdInput, setGameIdInput] = useState<string>('');
+  const [selectedGameId, setSelectedGameId] = useState<number | null>(null);
   const [visitedPlayers, setVisitedPlayers] = useState<
     { playerId: number; playerName: string; teamName: string; jerseyNumber: string }[]
   >([]);
@@ -148,6 +157,37 @@ export default function PlayerDetailPage() {
       isMounted = false;
     };
   }, [currentPlayerId, viewSeasonId]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const load = async () => {
+      if (currentPlayerId == null) return;
+      setGameLogsLoading(true);
+      setGameLogsError(null);
+      try {
+        const payload = await getPlayerGameLogs(currentPlayerId, selectedGameId ?? undefined);
+        if (!isMounted) return;
+        const byGameDesc = <T extends { gameId: number }>(a: T, b: T) => b.gameId - a.gameId;
+        setBatterGameLogs([...payload.batterLogs].sort(byGameDesc));
+        setPitcherGameLogs([...payload.pitcherLogs].sort(byGameDesc));
+      } catch (err: unknown) {
+        if (!isMounted) return;
+        setBatterGameLogs([]);
+        setPitcherGameLogs([]);
+        setGameLogsError(err instanceof Error ? err.message : '경기별 기록을 불러오지 못했습니다.');
+      } finally {
+        if (isMounted) {
+          setGameLogsLoading(false);
+        }
+      }
+    };
+
+    load();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentPlayerId, selectedGameId]);
 
   const seasonYearById = useMemo(() => new Map(seasons.map((season) => [season.id, season.year])), [seasons]);
 
@@ -252,9 +292,42 @@ export default function PlayerDetailPage() {
       .join(' / ');
   }, [selectedBatterSeasonId, selectedPitcherSeasonId, seasonYearById, viewSeasonId]);
 
+  const gameLogSummary = useMemo(() => {
+    const gameIds = new Set<number>();
+    batterGameLogs.forEach((item) => gameIds.add(item.gameId));
+    pitcherGameLogs.forEach((item) => gameIds.add(item.gameId));
+
+    const batterAtBats = batterGameLogs.reduce((sum, item) => sum + item.atBats, 0);
+    const batterHits = batterGameLogs.reduce((sum, item) => sum + item.hits, 0);
+    const batterRuns = batterGameLogs.reduce((sum, item) => sum + item.runs, 0);
+    const batterRbi = batterGameLogs.reduce((sum, item) => sum + item.rbi, 0);
+
+    const pitcherIp = pitcherGameLogs.reduce((sum, item) => sum + item.inningsPitched, 0);
+    const pitcherEr = pitcherGameLogs.reduce((sum, item) => sum + item.earnedRuns, 0);
+    const pitcherK = pitcherGameLogs.reduce((sum, item) => sum + item.strikeouts, 0);
+    const pitcherBb = pitcherGameLogs.reduce((sum, item) => sum + item.walks, 0);
+    const pitcherEra = pitcherIp > 0 ? (pitcherEr * 9) / pitcherIp : 0;
+
+    return {
+      games: gameIds.size,
+      batterAtBats,
+      batterHits,
+      batterRuns,
+      batterRbi,
+      batterAvg: batterAtBats > 0 ? batterHits / batterAtBats : 0,
+      pitcherIp,
+      pitcherEr,
+      pitcherK,
+      pitcherBb,
+      pitcherEra,
+    };
+  }, [batterGameLogs, pitcherGameLogs]);
+
   const navigateToPlayer = (nextPlayerId: number) => {
     if (!Number.isInteger(nextPlayerId) || nextPlayerId <= 0) return;
     setError(null);
+    setGameIdInput('');
+    setSelectedGameId(null);
     navigate(`/records/player/${nextPlayerId}`);
   };
 
@@ -295,6 +368,19 @@ export default function PlayerDetailPage() {
       return;
     }
     navigateToPlayer(nextId);
+  };
+
+  const handleGameIdApply = () => {
+    if (!gameIdInput.trim()) {
+      setSelectedGameId(null);
+      return;
+    }
+    const parsed = Number(gameIdInput);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      setGameLogsError('Game ID는 1 이상의 정수여야 합니다.');
+      return;
+    }
+    setSelectedGameId(parsed);
   };
 
   const hasSelectedPlayer = currentPlayerId != null;
@@ -601,6 +687,151 @@ export default function PlayerDetailPage() {
             </section>
           )}
 
+          <section style={recordCardStyle}>
+            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#cbd5e1' }}>
+              경기별 기록 (Player Logs)
+            </h2>
+
+            <div style={{ display: 'flex', alignItems: 'end', gap: '10px', flexWrap: 'wrap' }}>
+              <label style={{ display: 'grid', gap: '6px', color: '#94a3b8', fontWeight: 800, fontSize: '12px', minWidth: '160px' }}>
+                Game ID 필터(선택)
+                <input
+                  value={gameIdInput}
+                  onChange={(e) => setGameIdInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return;
+                    handleGameIdApply();
+                  }}
+                  inputMode="numeric"
+                  placeholder="비우면 전체"
+                  style={inputStyle}
+                />
+              </label>
+              <button type="button" onClick={handleGameIdApply} style={secondaryButtonStyle}>
+                적용
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setGameIdInput('');
+                  setSelectedGameId(null);
+                }}
+                style={secondaryButtonStyle}
+              >
+                전체 보기
+              </button>
+              <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
+                현재 필터: {selectedGameId != null ? `Game #${selectedGameId}` : '전체'}
+              </span>
+            </div>
+
+            {gameLogsLoading && <div style={{ color: '#94a3b8', fontSize: '13px' }}>경기별 기록을 불러오는 중...</div>}
+            {!gameLogsLoading && gameLogsError && (
+              <div style={{ color: '#fca5a5', fontSize: '13px' }}>{gameLogsError}</div>
+            )}
+
+            {!gameLogsLoading && !gameLogsError && (
+              <>
+                <div style={recordGridStyle}>
+                  <StatItem label="경기 수" value={gameLogSummary.games} />
+                  <StatItem label="타자 AVG" value={gameLogSummary.batterAvg.toFixed(3)} />
+                  <StatItem label="타자 H" value={gameLogSummary.batterHits} />
+                  <StatItem label="타자 RBI" value={gameLogSummary.batterRbi} />
+                  <StatItem label="투수 ERA" value={gameLogSummary.pitcherEra.toFixed(2)} />
+                  <StatItem label="투수 IP" value={gameLogSummary.pitcherIp.toFixed(1)} />
+                  <StatItem label="투수 K" value={gameLogSummary.pitcherK} />
+                  <StatItem label="투수 BB" value={gameLogSummary.pitcherBb} />
+                </div>
+
+                <div style={logSectionStyle}>
+                  <h3 style={{ margin: 0, fontSize: '15px', color: '#f472b6', fontWeight: 800 }}>
+                    타자 경기 로그 ({batterGameLogs.length})
+                  </h3>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={logTableStyle}>
+                      <thead>
+                        <tr>
+                          <th style={logThStyle}>GAME</th>
+                          <th style={logThStyle}>SIDE</th>
+                          <th style={logThStyle}>POS</th>
+                          <th style={logThStyle}>NO</th>
+                          <th style={logThStyle}>AB</th>
+                          <th style={logThStyle}>H</th>
+                          <th style={logThStyle}>R</th>
+                          <th style={logThStyle}>RBI</th>
+                          <th style={logThStyle}>BB</th>
+                          <th style={logThStyle}>SO</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {batterGameLogs.map((row, index) => (
+                          <tr key={`${row.batterGlId}-${row.gameId}`} style={logTrStyle(index)}>
+                            <td style={logTdStyle}>{row.gameId}</td>
+                            <td style={logTdStyle}>{row.teamSide || '-'}</td>
+                            <td style={logTdStyle}>{row.playerPosition || '-'}</td>
+                            <td style={logTdStyle}>{row.jerseyNumber || '-'}</td>
+                            <td style={logTdStyle}>{row.atBats}</td>
+                            <td style={logTdStyle}>{row.hits}</td>
+                            <td style={logTdStyle}>{row.runs}</td>
+                            <td style={logTdStyle}>{row.rbi}</td>
+                            <td style={logTdStyle}>{row.walks}</td>
+                            <td style={logTdStyle}>{row.strikeouts}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {batterGameLogs.length === 0 && (
+                      <div style={logEmptyStyle}>타자 경기 로그가 없습니다.</div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={logSectionStyle}>
+                  <h3 style={{ margin: 0, fontSize: '15px', color: '#60a5fa', fontWeight: 800 }}>
+                    투수 경기 로그 ({pitcherGameLogs.length})
+                  </h3>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={logTableStyle}>
+                      <thead>
+                        <tr>
+                          <th style={logThStyle}>GAME</th>
+                          <th style={logThStyle}>SIDE</th>
+                          <th style={logThStyle}>POS</th>
+                          <th style={logThStyle}>NO</th>
+                          <th style={logThStyle}>IP</th>
+                          <th style={logThStyle}>H</th>
+                          <th style={logThStyle}>R</th>
+                          <th style={logThStyle}>ER</th>
+                          <th style={logThStyle}>BB</th>
+                          <th style={logThStyle}>SO</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pitcherGameLogs.map((row, index) => (
+                          <tr key={`${row.pitcherGlId}-${row.gameId}`} style={logTrStyle(index)}>
+                            <td style={logTdStyle}>{row.gameId}</td>
+                            <td style={logTdStyle}>{row.teamSide || '-'}</td>
+                            <td style={logTdStyle}>{row.playerPosition || '-'}</td>
+                            <td style={logTdStyle}>{row.jerseyNumber || '-'}</td>
+                            <td style={logTdStyle}>{row.inningsPitched.toFixed(1)}</td>
+                            <td style={logTdStyle}>{row.hitsAllowed}</td>
+                            <td style={logTdStyle}>{row.runsAllowed}</td>
+                            <td style={logTdStyle}>{row.earnedRuns}</td>
+                            <td style={logTdStyle}>{row.walks}</td>
+                            <td style={logTdStyle}>{row.strikeouts}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {pitcherGameLogs.length === 0 && (
+                      <div style={logEmptyStyle}>투수 경기 로그가 없습니다.</div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </section>
+
           {!selectedBatterStat && !selectedPitcherStat && (
             <div style={{ padding: '30px', textAlign: 'center', color: '#94a3b8' }}>
               해당 선수의 시즌 기록이 없습니다.
@@ -654,6 +885,47 @@ const recordGridStyle: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
   gap: '12px',
+};
+
+const logSectionStyle: React.CSSProperties = {
+  display: 'grid',
+  gap: '8px',
+};
+
+const logTableStyle: React.CSSProperties = {
+  width: '100%',
+  borderCollapse: 'collapse',
+  minWidth: '760px',
+};
+
+const logThStyle: React.CSSProperties = {
+  textAlign: 'center',
+  fontSize: '12px',
+  fontWeight: 800,
+  color: '#94a3b8',
+  borderBottom: '1px solid rgba(148,163,184,0.3)',
+  padding: '8px',
+  whiteSpace: 'nowrap',
+};
+
+const logTdStyle: React.CSSProperties = {
+  textAlign: 'center',
+  padding: '8px',
+  color: '#cbd5e1',
+  borderBottom: '1px solid rgba(148,163,184,0.14)',
+  fontVariantNumeric: 'tabular-nums',
+  whiteSpace: 'nowrap',
+};
+
+const logTrStyle = (index: number): React.CSSProperties => ({
+  background: index % 2 === 0 ? 'transparent' : 'rgba(148,163,184,0.04)',
+});
+
+const logEmptyStyle: React.CSSProperties = {
+  padding: '12px',
+  color: '#94a3b8',
+  textAlign: 'center',
+  fontSize: '12px',
 };
 
 function InfoItem({ label, value }: { label: string; value: string }) {

@@ -4,6 +4,7 @@ import gsap from 'gsap';
 import {
   getBatterRankings,
   getPitcherRankings,
+  getPlayerSearchIndex,
   getPlayoffSummaries,
   getPowerRankings,
   getRecordOverview,
@@ -77,6 +78,23 @@ const PITCHER_SORT_OPTIONS: Array<{ value: PitcherRankingSort; label: string }> 
   { value: 'wins', label: 'W' },
   { value: 'saves', label: 'SV' },
 ];
+
+function hasJerseyValue(value: string | null | undefined): boolean {
+  return typeof value === 'string' && value.trim() !== '';
+}
+
+function applyJerseyFallback<T extends { playerId: number; jerseyNumber: string }>(
+  rows: T[],
+  jerseyByPlayerId: Map<number, string> | null,
+): T[] {
+  if (!jerseyByPlayerId || jerseyByPlayerId.size === 0) return rows;
+  return rows.map((row) => {
+    if (hasJerseyValue(row.jerseyNumber)) return row;
+    const fallback = jerseyByPlayerId.get(row.playerId);
+    if (!fallback) return row;
+    return { ...row, jerseyNumber: fallback };
+  });
+}
 
 function parseTab(value: string | null): RecordsTab {
   const raw = (value || '').toLowerCase();
@@ -156,6 +174,7 @@ function formatTopPitcherValue(row: PitcherRanking, sort: PitcherRankingSort): s
 
 export default function RecordPage() {
   const sectionRef = useRef<HTMLDivElement>(null);
+  const jerseyCacheRef = useRef<Map<number, Map<number, string>>>(new Map());
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [seasons, setSeasons] = useState<SeasonSummary[]>([]);
@@ -413,17 +432,44 @@ export default function RecordPage() {
       battersTopPromise,
       pitchersTopPromise,
     ])
-      .then((results) => {
+      .then(async (results) => {
         if (!isMounted) return;
 
         const [overviewResult, standingsResult, battersResult, pitchersResult, playoffResult, topBattersResult, topPitchersResult] = results;
 
         const standingsRows = standingsResult.status === 'fulfilled' ? standingsResult.value : [];
-        const batterRows = battersResult.status === 'fulfilled' ? battersResult.value : [];
-        const pitcherRows = pitchersResult.status === 'fulfilled' ? pitchersResult.value : [];
+        let batterRows = battersResult.status === 'fulfilled' ? battersResult.value : [];
+        let pitcherRows = pitchersResult.status === 'fulfilled' ? pitchersResult.value : [];
         const playoffData = playoffResult.status === 'fulfilled' ? playoffResult.value : [];
-        const topBatterSource = topBattersResult.status === 'fulfilled' ? topBattersResult.value : [];
-        const topPitcherSource = topPitchersResult.status === 'fulfilled' ? topPitchersResult.value : [];
+        let topBatterSource = topBattersResult.status === 'fulfilled' ? topBattersResult.value : [];
+        let topPitcherSource = topPitchersResult.status === 'fulfilled' ? topPitchersResult.value : [];
+
+        const hasMissingJersey = [...batterRows, ...pitcherRows, ...topBatterSource, ...topPitcherSource].some(
+          (row) => !hasJerseyValue(row.jerseyNumber),
+        );
+
+        if (hasMissingJersey) {
+          let jerseyByPlayerId = jerseyCacheRef.current.get(selectedSeason.id) ?? null;
+          if (!jerseyByPlayerId) {
+            try {
+              const players = await getPlayerSearchIndex(selectedSeason.id);
+              jerseyByPlayerId = new Map(
+                players
+                  .map((item) => [item.playerId, (item.jerseyNumber || '').trim()] as const)
+                  .filter(([, jersey]) => jersey.length > 0),
+              );
+              jerseyCacheRef.current.set(selectedSeason.id, jerseyByPlayerId);
+            } catch {
+              jerseyByPlayerId = null;
+            }
+          }
+
+          if (!isMounted) return;
+          batterRows = applyJerseyFallback(batterRows, jerseyByPlayerId);
+          pitcherRows = applyJerseyFallback(pitcherRows, jerseyByPlayerId);
+          topBatterSource = applyJerseyFallback(topBatterSource, jerseyByPlayerId);
+          topPitcherSource = applyJerseyFallback(topPitcherSource, jerseyByPlayerId);
+        }
 
         const playoffSupported = supportsPlayoffFiltering([
           ...standingsRows.map((row) => ({ seasonType: row.seasonType, scope: row.scope })),
