@@ -15,6 +15,11 @@ function toWinPct(value: number): number {
   return value <= 1 ? value * 100 : value;
 }
 
+function estimateGamesFromStandings(rows: TeamRecordStanding[]): number {
+  const teamGameSum = rows.reduce((sum, row) => sum + row.wins + row.losses + row.ties, 0);
+  return Math.floor(teamGameSum / 2);
+}
+
 interface EnrichedStanding extends TeamRecordStanding {
   games: number;
   winPctDisplay: number;
@@ -29,17 +34,17 @@ export default function StandingsPage() {
   const [initializing, setInitializing] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
-    setInitializing(true);
-    setError(null);
 
     getSeasons()
       .then((items) => {
         if (!isMounted) return;
         setSeasons(items);
         if (items.length > 0) {
+          setLoading(true);
           setSelectedSeasonId((prev) => prev ?? items[0].id);
         } else {
           setError('등록된 시즌이 없습니다. 관리자에서 시즌을 먼저 생성해 주세요.');
@@ -63,20 +68,36 @@ export default function StandingsPage() {
     if (selectedSeasonId == null) return;
 
     let isMounted = true;
-    setLoading(true);
-    setError(null);
 
-    Promise.all([getTeamRecordStandings(selectedSeasonId), getRecordOverview(selectedSeasonId)])
-      .then(([standingRows, overviewData]) => {
+    Promise.allSettled([getTeamRecordStandings(selectedSeasonId), getRecordOverview(selectedSeasonId)])
+      .then(([standingResult, overviewResult]) => {
         if (!isMounted) return;
+        const standingRows = standingResult.status === 'fulfilled' ? standingResult.value : [];
+        const overviewData =
+          overviewResult.status === 'fulfilled'
+            ? overviewResult.value
+            : {
+                seasonId: selectedSeasonId,
+                totalGames: estimateGamesFromStandings(standingRows),
+                totalTeams: standingRows.length,
+                topBatter: null,
+                topPitcher: null,
+              };
+
         setStandings(standingRows);
         setOverview(overviewData);
-      })
-      .catch((err: unknown) => {
-        if (!isMounted) return;
-        setStandings([]);
-        setOverview(null);
-        setError(err instanceof Error ? err.message : '순위 데이터를 불러오지 못했습니다.');
+
+        const failedCount = [standingResult, overviewResult].filter(
+          (result) => result.status === 'rejected',
+        ).length;
+
+        if (failedCount === 2) {
+          setError('순위 데이터를 불러오지 못했습니다.');
+          return;
+        }
+        if (failedCount > 0) {
+          setWarning('일부 데이터 소스를 불러오지 못해 요약 값이 추정치로 표시될 수 있습니다.');
+        }
       })
       .finally(() => {
         if (!isMounted) return;
@@ -154,7 +175,14 @@ export default function StandingsPage() {
             <select
               value={selectedSeasonId ?? ''}
               disabled={seasons.length === 0}
-              onChange={(e) => setSelectedSeasonId(Number(e.target.value))}
+              onChange={(e) => {
+                const nextSeasonId = Number(e.target.value);
+                if (nextSeasonId === selectedSeasonId) return;
+                setError(null);
+                setWarning(null);
+                setLoading(true);
+                setSelectedSeasonId(nextSeasonId);
+              }}
               style={{
                 minWidth: '150px',
                 borderRadius: '10px',
@@ -220,6 +248,12 @@ export default function StandingsPage() {
       {error && (
         <section className="standing-chunk" style={{ padding: '30px', textAlign: 'center', color: '#f87171' }}>
           오류: {error}
+        </section>
+      )}
+
+      {!error && warning && (
+        <section className="standing-chunk" style={{ padding: '20px', textAlign: 'center', color: '#facc15' }}>
+          {warning}
         </section>
       )}
 

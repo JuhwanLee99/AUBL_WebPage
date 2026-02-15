@@ -1,32 +1,75 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getPitcherRankings, type PitcherRanking } from '../../shared/api/backendClient';
+import {
+  getPitcherRankings,
+  getSeasons,
+  type PitcherRanking,
+  type SeasonSummary,
+} from '../../shared/api/backendClient';
 
 type SortKey = 'era' | 'whip' | 'strikeouts' | 'wins' | 'saves';
 
 export default function PitcherRecordPage() {
+  const [seasons, setSeasons] = useState<SeasonSummary[]>([]);
+  const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null);
   const [data, setData] = useState<PitcherRanking[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [initializing, setInitializing] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState<SortKey>('era');
-  const [seasonIdInput, setSeasonIdInput] = useState('1');
-  const seasonId = Number(seasonIdInput);
-  const seasonIdValid = Number.isInteger(seasonId) && seasonId > 0;
 
   useEffect(() => {
-    if (!seasonIdValid) {
-      setData([]);
-      setLoading(false);
-      setError('seasonId는 1 이상의 정수여야 합니다.');
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    getPitcherRankings({ seasonId, sort, limit: 0 })
-      .then(setData)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [seasonId, seasonIdValid, sort]);
+    let isMounted = true;
+
+    getSeasons()
+      .then((items) => {
+        if (!isMounted) return;
+        setSeasons(items);
+        if (items.length === 0) {
+          setError('등록된 시즌이 없습니다.');
+          return;
+        }
+        setLoading(true);
+        setSelectedSeasonId((prev) => prev ?? items[0].id);
+      })
+      .catch((err: unknown) => {
+        if (!isMounted) return;
+        setError(err instanceof Error ? err.message : '시즌 목록을 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setInitializing(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (selectedSeasonId == null) return;
+    let isMounted = true;
+    getPitcherRankings({ seasonId: selectedSeasonId, sort, limit: 0 })
+      .then((rows) => {
+        if (!isMounted) return;
+        setData(rows);
+      })
+      .catch((err: unknown) => {
+        if (!isMounted) return;
+        setData([]);
+        setError(err instanceof Error ? err.message : '투수 랭킹을 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedSeasonId, sort]);
+
+  const selectedSeason = seasons.find((season) => season.id === selectedSeasonId) ?? null;
 
   const sortLabels: Record<SortKey, string> = {
     era: 'ERA ↑',
@@ -63,7 +106,9 @@ export default function PitcherRecordPage() {
         >
           투수 기록
         </span>
-        <h1 style={{ margin: 0, fontSize: '30px', fontWeight: 900 }}>시즌 투수 랭킹</h1>
+        <h1 style={{ margin: 0, fontSize: '30px', fontWeight: 900 }}>
+          {selectedSeason ? `${selectedSeason.year} 시즌 투수 랭킹` : '시즌 투수 랭킹'}
+        </h1>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
           <label
             style={{
@@ -75,15 +120,19 @@ export default function PitcherRecordPage() {
               fontSize: '12px',
             }}
           >
-            SEASON ID
-            <input
-              type="number"
-              min={1}
-              step={1}
-              value={seasonIdInput}
-              onChange={(e) => setSeasonIdInput(e.target.value)}
+            SEASON
+            <select
+              value={selectedSeasonId ?? ''}
+              disabled={seasons.length === 0}
+              onChange={(e) => {
+                const nextSeasonId = Number(e.target.value);
+                if (nextSeasonId === selectedSeasonId) return;
+                setError(null);
+                setLoading(true);
+                setSelectedSeasonId(nextSeasonId);
+              }}
               style={{
-                width: '88px',
+                minWidth: '150px',
                 borderRadius: '10px',
                 border: '1px solid rgba(148,163,184,0.35)',
                 background: 'rgba(15,23,42,0.85)',
@@ -91,15 +140,28 @@ export default function PitcherRecordPage() {
                 padding: '6px 10px',
                 fontWeight: 800,
               }}
-            />
+            >
+              {seasons.map((season) => (
+                <option key={season.id} value={season.id}>
+                  {season.year} 시즌 (ID: {season.id})
+                </option>
+              ))}
+            </select>
           </label>
-          <span style={{ color: '#94a3b8', fontSize: '12px' }}>요청: `GET /api/rankings/pitchers`</span>
+          <span style={{ color: '#94a3b8', fontSize: '12px' }}>
+            요청: `GET /api/rankings/pitchers` · 시즌별 선수/소속팀/등번호/년도
+          </span>
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           {(['era', 'whip', 'strikeouts', 'wins', 'saves'] as SortKey[]).map((key) => (
             <button
               key={key}
-              onClick={() => setSort(key)}
+              onClick={() => {
+                if (key === sort) return;
+                setError(null);
+                setLoading(true);
+                setSort(key);
+              }}
               style={{
                 padding: '6px 14px',
                 borderRadius: '999px',
@@ -117,7 +179,7 @@ export default function PitcherRecordPage() {
         </div>
       </header>
 
-      {loading && (
+      {(initializing || loading) && (
         <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>데이터를 불러오는 중...</div>
       )}
       {error && (
@@ -128,12 +190,12 @@ export default function PitcherRecordPage() {
         <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>기록 데이터가 없습니다.</div>
       )}
 
-      {!loading && !error && data.length > 0 && (
+      {!initializing && !loading && !error && data.length > 0 && (
         <div style={{ overflowX: 'auto', borderRadius: '18px', border: '1px solid rgba(148,163,184,0.18)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
             <thead>
               <tr style={{ background: 'rgba(30,41,59,0.7)' }}>
-                {['#', '이름', '팀', 'ERA', 'IP', 'WHIP', 'K', 'BB', 'W-L', 'SV', 'G'].map((col) => (
+                {['#', '이름', '팀', '등번호', '년도', 'ERA', 'IP', 'WHIP', 'K', 'BB', 'W-L', 'SV', 'G'].map((col) => (
                   <th
                     key={col}
                     style={{
@@ -172,6 +234,12 @@ export default function PitcherRecordPage() {
                     </Link>
                   </td>
                   <td style={{ padding: '10px', color: '#94a3b8', fontSize: '12px' }}>{row.teamName}</td>
+                  <td style={{ padding: '10px', textAlign: 'center', color: '#94a3b8', fontVariantNumeric: 'tabular-nums' }}>
+                    {row.jerseyNumber || '-'}
+                  </td>
+                  <td style={{ padding: '10px', textAlign: 'center', color: '#cbd5e1', fontVariantNumeric: 'tabular-nums' }}>
+                    {row.seasonYear ?? selectedSeason?.year ?? '-'}
+                  </td>
                   <td style={{ padding: '10px', textAlign: 'center', fontVariantNumeric: 'tabular-nums', color: '#60a5fa', fontWeight: 800 }}>{row.era?.toFixed(2) ?? '-'}</td>
                   <td style={{ padding: '10px', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{row.inningsPitched?.toFixed(1) ?? '-'}</td>
                   <td style={{ padding: '10px', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{row.whip?.toFixed(2) ?? '-'}</td>

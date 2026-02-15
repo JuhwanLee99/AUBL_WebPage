@@ -19,6 +19,11 @@ function toWinPct(value: number): number {
   return value <= 1 ? value * 100 : value;
 }
 
+function estimateGamesFromStandings(rows: TeamRecordStanding[]): number {
+  const teamGameSum = rows.reduce((sum, row) => sum + row.wins + row.losses + row.ties, 0);
+  return Math.floor(teamGameSum / 2);
+}
+
 export default function RecordPage() {
   const sectionRef = useRef<HTMLDivElement>(null);
   const [seasons, setSeasons] = useState<SeasonSummary[]>([]);
@@ -31,18 +36,17 @@ export default function RecordPage() {
   const [initializing, setInitializing] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
-
-    setInitializing(true);
-    setError(null);
 
     getSeasons()
       .then((items) => {
         if (!isMounted) return;
         setSeasons(items);
         if (items.length > 0) {
+          setLoading(true);
           setSelectedSeasonId((prev) => prev ?? items[0].id);
         } else {
           setError('등록된 시즌이 없습니다. 관리자에서 시즌을 먼저 생성해 주세요.');
@@ -66,29 +70,53 @@ export default function RecordPage() {
     if (selectedSeasonId == null) return;
 
     let isMounted = true;
-    setLoading(true);
-    setError(null);
 
-    Promise.all([
+    Promise.allSettled([
       getRecordOverview(selectedSeasonId),
       getTeamRecordStandings(selectedSeasonId),
       getBatterRankings({ seasonId: selectedSeasonId, limit: 5, sort: 'ops' }),
       getPitcherRankings({ seasonId: selectedSeasonId, limit: 5, sort: 'era' }),
     ])
-      .then(([overviewData, standingsData, battersData, pitchersData]) => {
+      .then(([overviewResult, standingsResult, battersResult, pitchersResult]) => {
         if (!isMounted) return;
+
+        const standingsData =
+          standingsResult.status === 'fulfilled' ? standingsResult.value : [];
+        const battersData =
+          battersResult.status === 'fulfilled' ? battersResult.value : [];
+        const pitchersData =
+          pitchersResult.status === 'fulfilled' ? pitchersResult.value : [];
+
+        const overviewData =
+          overviewResult.status === 'fulfilled'
+            ? overviewResult.value
+            : {
+                seasonId: selectedSeasonId,
+                totalGames: estimateGamesFromStandings(standingsData),
+                totalTeams: standingsData.length,
+                topBatter: battersData[0] ?? null,
+                topPitcher: pitchersData[0] ?? null,
+              };
+
         setOverview(overviewData);
         setTeamStandings(standingsData);
         setTopBatters(battersData);
         setTopPitchers(pitchersData);
-      })
-      .catch((err: unknown) => {
-        if (!isMounted) return;
-        setOverview(null);
-        setTeamStandings([]);
-        setTopBatters([]);
-        setTopPitchers([]);
-        setError(err instanceof Error ? err.message : '기록 데이터를 불러오지 못했습니다.');
+
+        const failedCount = [
+          overviewResult,
+          standingsResult,
+          battersResult,
+          pitchersResult,
+        ].filter((result) => result.status === 'rejected').length;
+
+        if (failedCount === 4) {
+          setError('기록 데이터를 불러오지 못했습니다.');
+          return;
+        }
+        if (failedCount > 0) {
+          setWarning('일부 데이터 소스를 불러오지 못해 표시 항목이 제한될 수 있습니다.');
+        }
       })
       .finally(() => {
         if (!isMounted) return;
@@ -174,7 +202,14 @@ export default function RecordPage() {
             <select
               value={selectedSeasonId ?? ''}
               disabled={seasons.length === 0}
-              onChange={(e) => setSelectedSeasonId(Number(e.target.value))}
+              onChange={(e) => {
+                const nextSeasonId = Number(e.target.value);
+                if (nextSeasonId === selectedSeasonId) return;
+                setError(null);
+                setWarning(null);
+                setLoading(true);
+                setSelectedSeasonId(nextSeasonId);
+              }}
               style={{
                 minWidth: '150px',
                 borderRadius: '10px',
@@ -272,6 +307,12 @@ export default function RecordPage() {
         </section>
       )}
 
+      {!error && warning && (
+        <section className="record-section" style={{ padding: '20px', textAlign: 'center', color: '#facc15' }}>
+          {warning}
+        </section>
+      )}
+
       {!initializing && !loading && !error && (
         <section
           className="record-section"
@@ -341,8 +382,8 @@ export default function RecordPage() {
               id: `batter-${row.playerId}`,
               rank: row.rank,
               name: row.playerName,
-              team: row.teamName,
-              value: `OPS ${row.ops.toFixed(3)} / AVG ${row.battingAverage.toFixed(3)}`,
+              team: `${row.teamName}${row.jerseyNumber ? ` · #${row.jerseyNumber}` : ''}`,
+              value: `${row.seasonYear ?? selectedSeason?.year ?? row.seasonId} · OPS ${row.ops.toFixed(3)} / AVG ${row.battingAverage.toFixed(3)}`,
               link: `/records/player/${row.playerId}`,
             }))}
           />
@@ -354,8 +395,8 @@ export default function RecordPage() {
               id: `pitcher-${row.playerId}`,
               rank: row.rank,
               name: row.playerName,
-              team: row.teamName,
-              value: `ERA ${row.era.toFixed(2)} / WHIP ${row.whip.toFixed(2)}`,
+              team: `${row.teamName}${row.jerseyNumber ? ` · #${row.jerseyNumber}` : ''}`,
+              value: `${row.seasonYear ?? selectedSeason?.year ?? row.seasonId} · ERA ${row.era.toFixed(2)} / WHIP ${row.whip.toFixed(2)}`,
               link: `/records/player/${row.playerId}`,
             }))}
           />

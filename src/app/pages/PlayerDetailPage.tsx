@@ -1,88 +1,299 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
+  getPlayerSearchIndex,
   getPlayerStats,
+  getSeasons,
   type BatterStat,
   type PitcherStat,
+  type PlayerLookup,
   type PlayerStatsSummary,
+  type SeasonSummary,
 } from '../../shared/api/backendClient';
 
+function toValidPlayerId(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function extractPlayerId(value: string | null | undefined): number | null {
+  const direct = toValidPlayerId(value);
+  if (direct != null) return direct;
+  if (!value) return null;
+  const matches = value.match(/\d+/g);
+  if (!matches || matches.length === 0) return null;
+  return toValidPlayerId(matches[matches.length - 1]);
+}
+
+function normalizeKeyword(value: string): string {
+  return value.replace(/\s+/g, '').toLowerCase();
+}
+
 export default function PlayerDetailPage() {
-  const { playerId } = useParams<{ playerId: string }>();
+  const { playerId: playerIdParam } = useParams<{ playerId: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
+  const queryPlayerId = toValidPlayerId(new URLSearchParams(location.search).get('id'));
+  const currentPlayerId = extractPlayerId(playerIdParam) ?? queryPlayerId;
+
+  const [seasons, setSeasons] = useState<SeasonSummary[]>([]);
+  const [searchSeasonId, setSearchSeasonId] = useState<number | null>(null);
+  const [viewSeasonId, setViewSeasonId] = useState<number | null>(null);
+  const [searchCandidates, setSearchCandidates] = useState<PlayerLookup[]>([]);
+  const [searchIndexLoading, setSearchIndexLoading] = useState<boolean>(false);
+  const [searchIndexError, setSearchIndexError] = useState<string | null>(null);
+  const [selectedTeamName, setSelectedTeamName] = useState<string>('ALL');
+  const [searchInput, setSearchInput] = useState<string>('');
+  const [selectedPlayerInput, setSelectedPlayerInput] = useState<string>(() =>
+    currentPlayerId != null ? String(currentPlayerId) : '',
+  );
+
   const [stats, setStats] = useState<PlayerStatsSummary | null>(null);
   const [selectedBatterSeasonId, setSelectedBatterSeasonId] = useState<number | null>(null);
   const [selectedPitcherSeasonId, setSelectedPitcherSeasonId] = useState<number | null>(null);
-  const [selectedPlayerInput, setSelectedPlayerInput] = useState<string>('');
-  const [visitedPlayers, setVisitedPlayers] = useState<{ playerId: number; playerName: string }[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [visitedPlayers, setVisitedPlayers] = useState<
+    { playerId: number; playerName: string; teamName: string; jerseyNumber: string }[]
+  >([]);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setSelectedPlayerInput(playerId ?? '');
-  }, [playerId]);
-
-  const navigateToPlayer = (nextPlayerId: number) => {
-    if (!Number.isInteger(nextPlayerId) || nextPlayerId <= 0) return;
-    navigate(`/records/player/${nextPlayerId}`);
-  };
+    let isMounted = true;
+    getSeasons()
+      .then((items) => {
+        if (!isMounted) return;
+        setSeasons(items);
+        if (items.length > 0) {
+          setSearchSeasonId((prev) => prev ?? items[0].id);
+        }
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setSeasons([]);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
-    if (!playerId) {
-      setError('유효하지 않은 선수 ID입니다.');
-      setLoading(false);
-      return;
-    }
+    if (searchSeasonId == null) return;
+    let isMounted = true;
+    setSearchIndexLoading(true);
+    setSearchIndexError(null);
+    getPlayerSearchIndex(searchSeasonId)
+      .then((items) => {
+        if (!isMounted) return;
+        setSearchCandidates(items);
+      })
+      .catch((err: unknown) => {
+        if (!isMounted) return;
+        setSearchCandidates([]);
+        setSearchIndexError(err instanceof Error ? err.message : '선수 검색 인덱스를 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setSearchIndexLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [searchSeasonId]);
 
+  useEffect(() => {
+    if (currentPlayerId == null) return;
+    let isMounted = true;
     setLoading(true);
     setError(null);
-    getPlayerStats(Number(playerId))
+    getPlayerStats(currentPlayerId, viewSeasonId ?? undefined)
       .then((data) => {
+        if (!isMounted) return;
         setStats(data);
+        setSelectedPlayerInput(String(currentPlayerId));
+        setSearchInput((prev) => prev || data.playerName || '');
         setVisitedPlayers((prev) => {
-          const currentPlayer = { playerId: Number(playerId), playerName: data.playerName };
-          const merged = [currentPlayer, ...prev.filter((item) => item.playerId !== currentPlayer.playerId)];
-          return merged.slice(0, 15);
+          const current = {
+            playerId: currentPlayerId,
+            playerName: data.playerName,
+            teamName: data.teamName,
+            jerseyNumber: data.jerseyNumber,
+          };
+          const merged = [current, ...prev.filter((item) => item.playerId !== current.playerId)];
+          return merged.slice(0, 20);
         });
         const batterSeasonIds = [...new Set(data.batterStats.map((item) => item.seasonId))].sort((a, b) => b - a);
         const pitcherSeasonIds = [...new Set(data.pitcherStats.map((item) => item.seasonId))].sort((a, b) => b - a);
-        setSelectedBatterSeasonId(batterSeasonIds[0] ?? null);
-        setSelectedPitcherSeasonId(pitcherSeasonIds[0] ?? batterSeasonIds[0] ?? null);
+        setSelectedBatterSeasonId((prev) =>
+          prev != null && batterSeasonIds.includes(prev) ? prev : (batterSeasonIds[0] ?? null),
+        );
+        setSelectedPitcherSeasonId((prev) =>
+          prev != null && pitcherSeasonIds.includes(prev) ? prev : (pitcherSeasonIds[0] ?? batterSeasonIds[0] ?? null),
+        );
       })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [playerId]);
+      .catch((err: unknown) => {
+        if (!isMounted) return;
+        setStats(null);
+        setError(err instanceof Error ? err.message : '선수 정보를 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [currentPlayerId, viewSeasonId]);
+
+  const seasonYearById = useMemo(() => new Map(seasons.map((season) => [season.id, season.year])), [seasons]);
+
+  const teamOptions = useMemo(() => {
+    return [...new Set(searchCandidates.map((item) => item.teamName).filter(Boolean))].sort((a, b) =>
+      a.localeCompare(b, 'ko'),
+    );
+  }, [searchCandidates]);
+
+  useEffect(() => {
+    if (selectedTeamName === 'ALL') return;
+    if (teamOptions.includes(selectedTeamName)) return;
+    setSelectedTeamName('ALL');
+  }, [selectedTeamName, teamOptions]);
+
+  const teamFilteredCandidates = useMemo(() => {
+    if (selectedTeamName === 'ALL') return searchCandidates;
+    return searchCandidates.filter((item) => item.teamName === selectedTeamName);
+  }, [searchCandidates, selectedTeamName]);
+
+  const nameFilteredCandidates = useMemo(() => {
+    const term = normalizeKeyword(searchInput);
+    if (!term) return teamFilteredCandidates;
+    return teamFilteredCandidates.filter((item) => {
+      const composite = normalizeKeyword(`${item.playerName} ${item.teamName} ${item.jerseyNumber}`);
+      return composite.includes(term);
+    });
+  }, [searchInput, teamFilteredCandidates]);
+
+  const currentLookup = useMemo(() => {
+    if (currentPlayerId == null) return null;
+    return (
+      searchCandidates.find((item) => item.playerId === currentPlayerId) ??
+      visitedPlayers.find((item) => item.playerId === currentPlayerId) ??
+      null
+    );
+  }, [currentPlayerId, searchCandidates, visitedPlayers]);
+
+  const displayPlayerName = useMemo(() => {
+    if (stats?.playerName && stats.playerName !== `선수 #${stats.playerId}`) return stats.playerName;
+    if (currentLookup?.playerName) return currentLookup.playerName;
+    return stats?.playerName || '-';
+  }, [currentLookup, stats]);
+
+  const displayTeamName = useMemo(() => {
+    if (stats?.teamName) return stats.teamName;
+    if (currentLookup?.teamName) return currentLookup.teamName;
+    return '-';
+  }, [currentLookup, stats]);
+
+  const displayJersey = useMemo(() => {
+    if (stats?.jerseyNumber) return stats.jerseyNumber;
+    if (currentLookup?.jerseyNumber) return currentLookup.jerseyNumber;
+    return '-';
+  }, [currentLookup, stats]);
 
   const selectedBatterStat = useMemo<BatterStat | null>(() => {
     if (!stats) return null;
     if (selectedBatterSeasonId == null) return stats.batterStats[0] ?? null;
     return stats.batterStats.find((item) => item.seasonId === selectedBatterSeasonId) ?? null;
-  }, [stats, selectedBatterSeasonId]);
+  }, [selectedBatterSeasonId, stats]);
 
   const selectedPitcherStat = useMemo<PitcherStat | null>(() => {
     if (!stats) return null;
     if (selectedPitcherSeasonId == null) return stats.pitcherStats[0] ?? null;
     return stats.pitcherStats.find((item) => item.seasonId === selectedPitcherSeasonId) ?? null;
-  }, [stats, selectedPitcherSeasonId]);
+  }, [selectedPitcherSeasonId, stats]);
 
-  const batterSeasonIds = useMemo<number[]>(() => {
+  const batterSeasonIds = useMemo(() => {
     if (!stats) return [];
     return [...new Set(stats.batterStats.map((item) => item.seasonId))].sort((a, b) => b - a);
   }, [stats]);
 
-  const pitcherSeasonIds = useMemo<number[]>(() => {
+  const pitcherSeasonIds = useMemo(() => {
     if (!stats) return [];
     return [...new Set(stats.pitcherStats.map((item) => item.seasonId))].sort((a, b) => b - a);
   }, [stats]);
 
-  const allSeasonIds = useMemo<number[]>(() => {
+  const allSeasonIds = useMemo(() => {
     return [...new Set([...batterSeasonIds, ...pitcherSeasonIds])].sort((a, b) => b - a);
   }, [batterSeasonIds, pitcherSeasonIds]);
 
-  const batterSeasonLabel =
-    selectedBatterSeasonId == null ? '시즌 미선택' : `시즌 ID ${selectedBatterSeasonId}`;
-  const pitcherSeasonLabel =
-    selectedPitcherSeasonId == null ? '시즌 미선택' : `시즌 ID ${selectedPitcherSeasonId}`;
+  const formatSeasonLabel = (seasonId: number | null): string => {
+    if (seasonId == null) return '시즌 미선택';
+    const year = seasonYearById.get(seasonId);
+    return year != null ? `${year}년 (ID ${seasonId})` : `시즌 ID ${seasonId}`;
+  };
+
+  const selectedRecordYears = useMemo(() => {
+    if (viewSeasonId != null) {
+      const year = seasonYearById.get(viewSeasonId);
+      return year != null ? `${year}년` : `ID ${viewSeasonId}`;
+    }
+    const ids = [selectedBatterSeasonId, selectedPitcherSeasonId].filter((id): id is number => id != null);
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0) return '-';
+    return uniqueIds
+      .map((id) => {
+        const year = seasonYearById.get(id);
+        return year != null ? `${year}년` : `ID ${id}`;
+      })
+      .join(' / ');
+  }, [selectedBatterSeasonId, selectedPitcherSeasonId, seasonYearById, viewSeasonId]);
+
+  const navigateToPlayer = (nextPlayerId: number) => {
+    if (!Number.isInteger(nextPlayerId) || nextPlayerId <= 0) return;
+    setError(null);
+    navigate(`/records/player/${nextPlayerId}`);
+  };
+
+  const handleNameSearch = () => {
+    const term = normalizeKeyword(searchInput);
+    if (!term) {
+      setError('검색어를 입력해 주세요.');
+      return;
+    }
+    const exactName = nameFilteredCandidates.filter((item) => normalizeKeyword(item.playerName) === term);
+    if (exactName.length === 1) {
+      navigateToPlayer(exactName[0].playerId);
+      return;
+    }
+    const exactComposite = nameFilteredCandidates.filter((item) => {
+      const composite = normalizeKeyword(`${item.playerName} ${item.teamName} ${item.jerseyNumber}`);
+      return composite === term;
+    });
+    if (exactComposite.length === 1) {
+      navigateToPlayer(exactComposite[0].playerId);
+      return;
+    }
+    if (nameFilteredCandidates.length === 1) {
+      navigateToPlayer(nameFilteredCandidates[0].playerId);
+      return;
+    }
+    if (nameFilteredCandidates.length > 1) {
+      setError('검색 결과가 여러 명입니다. 팀/등번호를 함께 입력하거나 팀을 먼저 선택해 주세요.');
+      return;
+    }
+    setError('입력한 이름으로 선수를 찾지 못했습니다.');
+  };
+
+  const handleIdSearch = () => {
+    const nextId = toValidPlayerId(selectedPlayerInput);
+    if (nextId == null) {
+      setError('선수 ID는 1 이상의 정수여야 합니다.');
+      return;
+    }
+    navigateToPlayer(nextId);
+  };
+
+  const invalidPlayerId = currentPlayerId == null;
 
   return (
     <div
@@ -114,167 +325,216 @@ export default function PlayerDetailPage() {
         ← 돌아가기
       </button>
 
-      {loading && (
-        <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
-          데이터를 불러오는 중...
+      <section
+        style={{
+          padding: '14px',
+          borderRadius: '14px',
+          border: '1px solid rgba(148, 163, 184, 0.22)',
+          background: 'rgba(255,255,255,0.02)',
+          display: 'grid',
+          gap: '10px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'end', gap: '10px', flexWrap: 'wrap' }}>
+          <label style={{ display: 'grid', gap: '6px', color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>
+            검색 시즌(년도)
+            <select
+              value={searchSeasonId ?? ''}
+              onChange={(e) => setSearchSeasonId(Number(e.target.value))}
+              disabled={seasons.length === 0}
+              style={inputStyle}
+            >
+              {seasons.map((season) => (
+                <option key={season.id} value={season.id}>
+                  {season.year}년 시즌
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label style={{ display: 'grid', gap: '6px', color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>
+            팀 선택
+            <select
+              value={selectedTeamName}
+              onChange={(e) => setSelectedTeamName(e.target.value)}
+              style={inputStyle}
+            >
+              <option value="ALL">전체 팀</option>
+              {teamOptions.map((teamName) => (
+                <option key={teamName} value={teamName}>
+                  {teamName}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label style={{ display: 'grid', gap: '6px', color: '#94a3b8', fontWeight: 800, fontSize: '12px', minWidth: '260px', flex: 1 }}>
+            선수 이름 검색
+            <input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                handleNameSearch();
+              }}
+              placeholder="예: 강대건 / 강대건 연세대학교 #27"
+              style={inputStyle}
+            />
+          </label>
+          <button type="button" onClick={handleNameSearch} style={primaryButtonStyle}>
+            이름으로 찾기
+          </button>
         </div>
-      )}
 
-      {!loading && error && (
-        <div style={{ padding: '40px', textAlign: 'center', color: '#f87171' }}>오류: {error}</div>
-      )}
-
-      {!loading && !error && stats && (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-            <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 900 }}>{stats.playerName}</h1>
-            {stats.teamName && <span style={{ color: '#94a3b8', fontWeight: 700 }}>{stats.teamName}</span>}
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'end', gap: '12px', flexWrap: 'wrap' }}>
-            <label
-              style={{
-                display: 'grid',
-                gap: '6px',
-                fontWeight: 800,
-                color: '#94a3b8',
-                fontSize: '12px',
-                width: 'fit-content',
-              }}
+        <div style={{ display: 'flex', alignItems: 'end', gap: '10px', flexWrap: 'wrap' }}>
+          <label style={{ display: 'grid', gap: '6px', color: '#94a3b8', fontWeight: 800, fontSize: '12px', minWidth: '210px' }}>
+            팀 선수 목록
+            <select
+              value=""
+              onChange={(e) => navigateToPlayer(Number(e.target.value))}
+              style={inputStyle}
+              disabled={teamFilteredCandidates.length === 0}
             >
-              선수 ID 선택
-              <input
-                value={selectedPlayerInput}
-                onChange={(e) => setSelectedPlayerInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key !== 'Enter') return;
-                  const nextPlayerId = Number(selectedPlayerInput);
-                  navigateToPlayer(nextPlayerId);
-                }}
-                inputMode="numeric"
-                placeholder="예: 1"
-                style={{
-                  background: '#0f172a',
-                  color: '#e2e8f0',
-                  padding: '11px 14px',
-                  borderRadius: '12px',
-                  border: '1px solid rgba(148,163,184,0.35)',
-                  fontWeight: 800,
-                  minWidth: '130px',
-                }}
-              />
-            </label>
-            <button
-              type="button"
-              onClick={() => navigateToPlayer(Number(selectedPlayerInput))}
-              style={{
-                background: 'rgba(37,99,235,0.18)',
-                color: '#dbeafe',
-                border: '1px solid rgba(96,165,250,0.45)',
-                borderRadius: '12px',
-                padding: '11px 14px',
-                fontWeight: 800,
-                cursor: 'pointer',
+              <option value="" disabled>
+                {teamFilteredCandidates.length > 0 ? '선수 선택' : '선수 목록 없음'}
+              </option>
+              {teamFilteredCandidates.map((item) => (
+                <option key={item.playerId} value={item.playerId}>
+                  {item.playerName} {item.jerseyNumber ? `#${item.jerseyNumber}` : ''} {item.teamName ? `· ${item.teamName}` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label style={{ display: 'grid', gap: '6px', color: '#94a3b8', fontWeight: 800, fontSize: '12px', minWidth: '140px' }}>
+            선수 ID
+            <input
+              value={selectedPlayerInput}
+              onChange={(e) => setSelectedPlayerInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                handleIdSearch();
               }}
-            >
-              선수 이동
-            </button>
-            {visitedPlayers.length > 0 && (
-              <label
+              inputMode="numeric"
+              placeholder="예: 42"
+              style={inputStyle}
+            />
+          </label>
+          <button type="button" onClick={handleIdSearch} style={secondaryButtonStyle}>
+            ID로 찾기
+          </button>
+        </div>
+
+        {searchIndexLoading && <span style={{ color: '#94a3b8', fontSize: '12px' }}>선수 검색 인덱스를 불러오는 중...</span>}
+        {!searchIndexLoading && searchIndexError && <span style={{ color: '#fca5a5', fontSize: '12px' }}>{searchIndexError}</span>}
+
+        {nameFilteredCandidates.length > 0 && (
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {nameFilteredCandidates.slice(0, 12).map((item) => (
+              <button
+                key={`${item.playerId}-${item.seasonId}`}
+                type="button"
+                onClick={() => navigateToPlayer(item.playerId)}
                 style={{
-                  display: 'grid',
-                  gap: '6px',
-                  fontWeight: 800,
-                  color: '#94a3b8',
+                  padding: '7px 10px',
+                  borderRadius: '999px',
+                  border: '1px solid rgba(148,163,184,0.3)',
+                  background: 'rgba(15,23,42,0.65)',
+                  color: '#cbd5e1',
+                  cursor: 'pointer',
+                  fontWeight: 700,
                   fontSize: '12px',
-                  width: 'fit-content',
                 }}
               >
-                최근 조회 선수
-                <select
-                  value={playerId ?? ''}
-                  onChange={(e) => navigateToPlayer(Number(e.target.value))}
-                  style={{
-                    background: '#0f172a',
-                    color: '#e2e8f0',
-                    padding: '11px 14px',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(148,163,184,0.35)',
-                    fontWeight: 800,
-                  }}
-                >
-                  {visitedPlayers.map((item) => (
-                    <option key={item.playerId} value={item.playerId}>
-                      #{item.playerId} {item.playerName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
+                {item.playerName}
+                {item.teamName ? ` · ${item.teamName}` : ''}
+                {item.jerseyNumber ? ` · #${item.jerseyNumber}` : ''}
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {loading && <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>데이터를 불러오는 중...</div>}
+      {!loading && invalidPlayerId && <div style={{ padding: '40px', textAlign: 'center', color: '#f87171' }}>오류: 유효하지 않은 선수 ID입니다.</div>}
+      {!loading && !invalidPlayerId && error && <div style={{ padding: '40px', textAlign: 'center', color: '#f87171' }}>오류: {error}</div>}
+
+      {!loading && !invalidPlayerId && !error && stats && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 900 }}>{displayPlayerName}</h1>
+            <span style={{ color: '#94a3b8', fontWeight: 700 }}>{displayTeamName}</span>
+            <span style={{ color: '#cbd5e1', fontWeight: 800 }}>#{displayJersey}</span>
+          </div>
+
+          <section
+            style={{
+              padding: '14px',
+              borderRadius: '14px',
+              border: '1px solid rgba(148, 163, 184, 0.22)',
+              background: 'rgba(255,255,255,0.02)',
+              display: 'grid',
+              gap: '10px',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+            }}
+          >
+            <InfoItem label="이름" value={displayPlayerName} />
+            <InfoItem label="등번호" value={displayJersey} />
+            <InfoItem label="소속팀" value={displayTeamName} />
+            <InfoItem label="기록년도" value={selectedRecordYears} />
+          </section>
+
+          <div style={{ display: 'flex', alignItems: 'end', gap: '12px', flexWrap: 'wrap' }}>
+            <label style={{ display: 'grid', gap: '6px', fontWeight: 800, color: '#94a3b8', fontSize: '12px' }}>
+              조회 년도(시즌)
+              <select
+                value={viewSeasonId ?? ''}
+                onChange={(e) => {
+                  const next = Number(e.target.value);
+                  setViewSeasonId(next > 0 ? next : null);
+                }}
+                style={inputStyle}
+              >
+                <option value="">전체 시즌</option>
+                {seasons.map((season) => (
+                  <option key={season.id} value={season.id}>
+                    {season.year}년 시즌
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'end', gap: '12px', flexWrap: 'wrap' }}>
             {batterSeasonIds.length > 0 && (
-              <label
-                style={{
-                  display: 'grid',
-                  gap: '6px',
-                  fontWeight: 800,
-                  color: '#94a3b8',
-                  fontSize: '12px',
-                  width: 'fit-content',
-                }}
-              >
+              <label style={{ display: 'grid', gap: '6px', fontWeight: 800, color: '#94a3b8', fontSize: '12px' }}>
                 타자 시즌 선택
                 <select
                   value={selectedBatterSeasonId ?? ''}
                   onChange={(e) => setSelectedBatterSeasonId(Number(e.target.value))}
-                  style={{
-                    background: '#0f172a',
-                    color: '#e2e8f0',
-                    padding: '11px 14px',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(148,163,184,0.35)',
-                    fontWeight: 800,
-                  }}
+                  style={inputStyle}
                 >
                   {batterSeasonIds.map((id) => (
                     <option key={id} value={id}>
-                      시즌 ID {id}
+                      {formatSeasonLabel(id)}
                     </option>
                   ))}
                 </select>
               </label>
             )}
-            <label
-              style={{
-                display: 'grid',
-                gap: '6px',
-                fontWeight: 800,
-                color: '#94a3b8',
-                fontSize: '12px',
-                width: 'fit-content',
-              }}
-            >
+
+            <label style={{ display: 'grid', gap: '6px', fontWeight: 800, color: '#94a3b8', fontSize: '12px' }}>
               투수 시즌 선택
               <select
                 value={selectedPitcherSeasonId ?? ''}
                 onChange={(e) => setSelectedPitcherSeasonId(Number(e.target.value))}
                 disabled={allSeasonIds.length === 0}
-                style={{
-                  background: '#0f172a',
-                  color: '#e2e8f0',
-                  padding: '11px 14px',
-                  borderRadius: '12px',
-                  border: '1px solid rgba(148,163,184,0.35)',
-                  fontWeight: 800,
-                  opacity: allSeasonIds.length === 0 ? 0.6 : 1,
-                }}
+                style={{ ...inputStyle, opacity: allSeasonIds.length === 0 ? 0.6 : 1 }}
               >
                 {allSeasonIds.length === 0 && <option value="">선택 가능한 시즌 없음</option>}
                 {allSeasonIds.map((id) => (
                   <option key={id} value={id}>
-                    시즌 ID {id}
+                    {formatSeasonLabel(id)}
                   </option>
                 ))}
               </select>
@@ -282,20 +542,11 @@ export default function PlayerDetailPage() {
           </div>
 
           {selectedBatterStat && (
-            <section
-              style={{
-                padding: '18px',
-                borderRadius: '14px',
-                border: '1px solid rgba(148, 163, 184, 0.25)',
-                background: 'rgba(255,255,255,0.02)',
-                display: 'grid',
-                gap: '14px',
-              }}
-            >
+            <section style={recordCardStyle}>
               <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#f472b6' }}>
-                타자 기록 - {batterSeasonLabel}
+                타자 기록 - {formatSeasonLabel(selectedBatterSeasonId)}
               </h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '12px' }}>
+              <div style={recordGridStyle}>
                 {([
                   ['AVG', selectedBatterStat.battingAverage.toFixed(3)],
                   ['OBP', selectedBatterStat.onBasePct.toFixed(3)],
@@ -310,30 +561,18 @@ export default function PlayerDetailPage() {
                   ['G', selectedBatterStat.gamesPlayed],
                   ['AB', selectedBatterStat.atBats],
                 ] as [string, string | number][]).map(([label, value]) => (
-                  <div key={label} style={{ display: 'grid', gap: '4px', textAlign: 'center' }}>
-                    <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 800 }}>{label}</span>
-                    <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: '16px' }}>{value}</span>
-                  </div>
+                  <StatItem key={label} label={label} value={value} />
                 ))}
               </div>
             </section>
           )}
 
           {selectedPitcherStat && (
-            <section
-              style={{
-                padding: '18px',
-                borderRadius: '14px',
-                border: '1px solid rgba(148, 163, 184, 0.25)',
-                background: 'rgba(255,255,255,0.02)',
-                display: 'grid',
-                gap: '14px',
-              }}
-            >
+            <section style={recordCardStyle}>
               <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#60a5fa' }}>
-                투수 기록 - {pitcherSeasonLabel}
+                투수 기록 - {formatSeasonLabel(selectedPitcherSeasonId)}
               </h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '12px' }}>
+              <div style={recordGridStyle}>
                 {([
                   ['ERA', selectedPitcherStat.era.toFixed(2)],
                   ['IP', selectedPitcherStat.inningsPitched.toFixed(1)],
@@ -348,10 +587,7 @@ export default function PlayerDetailPage() {
                   ['BB/9', selectedPitcherStat.bbPer9.toFixed(2)],
                   ['G', selectedPitcherStat.gamesPlayed],
                 ] as [string, string | number][]).map(([label, value]) => (
-                  <div key={label} style={{ display: 'grid', gap: '4px', textAlign: 'center' }}>
-                    <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 800 }}>{label}</span>
-                    <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: '16px' }}>{value}</span>
-                  </div>
+                  <StatItem key={label} label={label} value={value} />
                 ))}
               </div>
             </section>
@@ -364,6 +600,68 @@ export default function PlayerDetailPage() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+const inputStyle: React.CSSProperties = {
+  background: '#0f172a',
+  color: '#e2e8f0',
+  padding: '11px 14px',
+  borderRadius: '12px',
+  border: '1px solid rgba(148,163,184,0.35)',
+  fontWeight: 800,
+};
+
+const primaryButtonStyle: React.CSSProperties = {
+  background: 'rgba(37,99,235,0.18)',
+  color: '#dbeafe',
+  border: '1px solid rgba(96,165,250,0.45)',
+  borderRadius: '12px',
+  padding: '11px 14px',
+  fontWeight: 800,
+  cursor: 'pointer',
+};
+
+const secondaryButtonStyle: React.CSSProperties = {
+  background: 'rgba(15,23,42,0.82)',
+  color: '#cbd5e1',
+  border: '1px solid rgba(148,163,184,0.35)',
+  borderRadius: '12px',
+  padding: '11px 14px',
+  fontWeight: 800,
+  cursor: 'pointer',
+};
+
+const recordCardStyle: React.CSSProperties = {
+  padding: '18px',
+  borderRadius: '14px',
+  border: '1px solid rgba(148, 163, 184, 0.25)',
+  background: 'rgba(255,255,255,0.02)',
+  display: 'grid',
+  gap: '14px',
+};
+
+const recordGridStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+  gap: '12px',
+};
+
+function InfoItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: 'grid', gap: '4px' }}>
+      <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 800 }}>{label}</span>
+      <span style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '16px' }}>{value || '-'}</span>
+    </div>
+  );
+}
+
+function StatItem({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div style={{ display: 'grid', gap: '4px', textAlign: 'center' }}>
+      <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 800 }}>{label}</span>
+      <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: '16px' }}>{value}</span>
     </div>
   );
 }
