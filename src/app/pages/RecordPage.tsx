@@ -1,42 +1,337 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import gsap from 'gsap';
 import {
   getBatterRankings,
   getPitcherRankings,
+  getPlayoffSummaries,
+  getPowerRankings,
   getRecordOverview,
   getSeasons,
   getTeamRecordStandings,
   type BatterRanking,
+  type BatterRankingSort,
   type PitcherRanking,
+  type PitcherRankingSort,
+  type PlayoffSummaryRow,
+  type PowerRankingApiRow,
+  type RecordGroup,
+  type RecordPlayoffDivision,
+  type RecordRegulation,
+  type RecordScope,
   type RecordsOverview,
   type SeasonSummary,
   type TeamRecordStanding,
 } from '../../shared/api/backendClient';
+import {
+  DEFAULT_RECORD_FILTERS,
+  PLAYOFF_DIVISION_OPTIONS,
+  RECORD_GROUP_OPTIONS,
+  RECORD_SCOPE_OPTIONS,
+  RECORD_SCOPE_OPTIONS_NO_PLAYOFF,
+  matchesRecordFilters,
+  supportsPlayoffFiltering,
+  toRecordFilterParams,
+  type RecordFilterState,
+} from '../../shared/lib/recordFilters';
+import RecordsHubShell from '../../features/records/components/RecordsHubShell';
+import RecordsFilterBar from '../../features/records/components/RecordsFilterBar';
+import {
+  noticeCardStyle,
+  quickLinkStyle,
+} from '../../features/records/components/recordStyles';
+import type {
+  PlayoffStageSummaryRow,
+  RecordsTab,
+  TopFiveRow,
+} from '../../features/records/types';
+import OverviewTab from '../../features/records/tabs/OverviewTab';
+import StandingsTab from '../../features/records/tabs/StandingsTab';
+import BattersTab from '../../features/records/tabs/BattersTab';
+import PitchersTab from '../../features/records/tabs/PitchersTab';
+import PowerTab from '../../features/records/tabs/PowerTab';
+import { estimateGamesFromStandings, normalizeRound, normalizeTier, toWinPct } from '../../features/records/utils/recordView';
 
-function toWinPct(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return value <= 1 ? value * 100 : value;
+const TAB_OPTIONS: Array<{ value: RecordsTab; label: string }> = [
+  { value: 'overview', label: '개요' },
+  { value: 'standings', label: '팀순위' },
+  { value: 'batters', label: '타자기록' },
+  { value: 'pitchers', label: '투수기록' },
+  { value: 'power', label: '파워랭킹' },
+];
+
+const BATTER_SORT_OPTIONS: Array<{ value: BatterRankingSort; label: string }> = [
+  { value: 'battingAverage', label: 'AVG' },
+  { value: 'ops', label: 'OPS' },
+  { value: 'onBasePct', label: 'OBP' },
+  { value: 'sluggingPct', label: 'SLG' },
+  { value: 'hits', label: 'H' },
+  { value: 'homeRuns', label: 'HR' },
+  { value: 'rbi', label: 'RBI' },
+];
+
+const PITCHER_SORT_OPTIONS: Array<{ value: PitcherRankingSort; label: string }> = [
+  { value: 'era', label: 'ERA' },
+  { value: 'whip', label: 'WHIP' },
+  { value: 'strikeouts', label: 'K' },
+  { value: 'wins', label: 'W' },
+  { value: 'saves', label: 'SV' },
+];
+
+function parseTab(value: string | null): RecordsTab {
+  const raw = (value || '').toLowerCase();
+  if (raw === 'overview' || raw === 'standings' || raw === 'batters' || raw === 'pitchers' || raw === 'power') {
+    return raw;
+  }
+  return 'overview';
 }
 
-function estimateGamesFromStandings(rows: TeamRecordStanding[]): number {
-  const teamGameSum = rows.reduce((sum, row) => sum + row.wins + row.losses + row.ties, 0);
-  return Math.floor(teamGameSum / 2);
+function parseScope(value: string | null): RecordScope {
+  const raw = (value || '').toUpperCase();
+  if (raw === 'ALL' || raw === 'LEAGUE' || raw === 'PLAYOFF') return raw;
+  return DEFAULT_RECORD_FILTERS.scope;
+}
+
+function parseGroup(value: string | null): RecordGroup {
+  const raw = (value || '').toUpperCase();
+  if (raw === 'ALL' || raw === 'A' || raw === 'B' || raw === 'C' || raw === 'D' || raw === 'E' || raw === 'F' || raw === 'G' || raw === 'H') {
+    return raw;
+  }
+  return DEFAULT_RECORD_FILTERS.group;
+}
+
+function parsePlayoffDivision(value: string | null): RecordPlayoffDivision {
+  const raw = (value || '').toUpperCase();
+  if (raw === 'ALL' || raw === 'EUTTEUM' || raw === 'BEOGEUM') return raw;
+  return DEFAULT_RECORD_FILTERS.playoffDivision;
+}
+
+function parseRegulation(value: string | null): Exclude<RecordRegulation, 'ALL'> {
+  const raw = (value || 'IN').toUpperCase();
+  return raw === 'OUT' ? 'OUT' : 'IN';
+}
+
+function parsePositiveInt(value: string | null): number | null {
+  if (!value) return null;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n <= 0) return null;
+  return n;
+}
+
+function formatTopBatterValue(row: BatterRanking, sort: BatterRankingSort): string {
+  switch (sort) {
+    case 'battingAverage':
+      return `AVG ${row.battingAverage.toFixed(3)}`;
+    case 'hits':
+      return `H ${row.hits}`;
+    case 'homeRuns':
+      return `HR ${row.homeRuns}`;
+    case 'rbi':
+      return `RBI ${row.runsBattedIn}`;
+    case 'onBasePct':
+      return `OBP ${row.onBasePct.toFixed(3)}`;
+    case 'sluggingPct':
+      return `SLG ${row.sluggingPct.toFixed(3)}`;
+    case 'ops':
+    default:
+      return `OPS ${row.ops.toFixed(3)}`;
+  }
+}
+
+function formatTopPitcherValue(row: PitcherRanking, sort: PitcherRankingSort): string {
+  switch (sort) {
+    case 'whip':
+      return `WHIP ${row.whip.toFixed(2)}`;
+    case 'strikeouts':
+      return `K ${row.strikeouts}`;
+    case 'wins':
+      return `W ${row.wins}`;
+    case 'saves':
+      return `SV ${row.saves}`;
+    case 'era':
+    default:
+      return `ERA ${row.era.toFixed(2)}`;
+  }
 }
 
 export default function RecordPage() {
   const sectionRef = useRef<HTMLDivElement>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [seasons, setSeasons] = useState<SeasonSummary[]>([]);
-  const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null);
   const [overview, setOverview] = useState<RecordsOverview | null>(null);
   const [teamStandings, setTeamStandings] = useState<TeamRecordStanding[]>([]);
-  const [topBatters, setTopBatters] = useState<BatterRanking[]>([]);
-  const [topPitchers, setTopPitchers] = useState<PitcherRanking[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [batters, setBatters] = useState<BatterRanking[]>([]);
+  const [pitchers, setPitchers] = useState<PitcherRanking[]>([]);
+  const [topInBatters, setTopInBatters] = useState<BatterRanking[]>([]);
+  const [topInPitchers, setTopInPitchers] = useState<PitcherRanking[]>([]);
+  const [playoffRows, setPlayoffRows] = useState<PlayoffSummaryRow[]>([]);
+  const [powerRows, setPowerRows] = useState<PowerRankingApiRow[]>([]);
+
   const [initializing, setInitializing] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [powerLoading, setPowerLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  const [powerError, setPowerError] = useState<string | null>(null);
+  const [playoffFilterEnabled, setPlayoffFilterEnabled] = useState(false);
+  const [topBatterSort, setTopBatterSort] = useState<BatterRankingSort>('ops');
+  const [topPitcherSort, setTopPitcherSort] = useState<PitcherRankingSort>('era');
+
+  const tab = parseTab(searchParams.get('tab'));
+  const scope = parseScope(searchParams.get('scope'));
+  const group = parseGroup(searchParams.get('group'));
+  const playoffDivision = parsePlayoffDivision(searchParams.get('playoffDivision'));
+  const regulation = parseRegulation(searchParams.get('regulation'));
+  const seasonIdFromQuery = parsePositiveInt(searchParams.get('seasonId'));
+  const searchTerm = searchParams.get('search')?.trim() ?? '';
+  const rankingYearFromQuery = parsePositiveInt(searchParams.get('rankingYear'));
+  const powerLimit = parsePositiveInt(searchParams.get('powerLimit')) ?? 50;
+
+  const selectedSeason = useMemo(
+    () => seasons.find((season) => season.id === seasonIdFromQuery) ?? null,
+    [seasons, seasonIdFromQuery],
+  );
+
+  const rankingYear = useMemo(() => {
+    if (rankingYearFromQuery != null) return rankingYearFromQuery;
+    if (!selectedSeason) return null;
+    return selectedSeason.year + 1;
+  }, [rankingYearFromQuery, selectedSeason]);
+
+  const currentFilters = useMemo<RecordFilterState>(
+    () => ({ scope, group, playoffDivision }),
+    [scope, group, playoffDivision],
+  );
+
+  const updateParams = useCallback(
+    (patch: Record<string, string | null>) => {
+      const next = new URLSearchParams(searchParams);
+      let changed = false;
+
+      Object.entries(patch).forEach(([key, value]) => {
+        const current = next.get(key);
+        if (value == null || value === '') {
+          if (current != null) {
+            next.delete(key);
+            changed = true;
+          }
+          return;
+        }
+        if (current !== value) {
+          next.set(key, value);
+          changed = true;
+        }
+      });
+
+      if (changed) {
+        setSearchParams(next, { replace: true });
+      }
+    },
+    [searchParams, setSearchParams],
+  );
+
+  const setTab = useCallback(
+    (nextTab: RecordsTab) => {
+      updateParams({ tab: nextTab === 'overview' ? null : nextTab });
+    },
+    [updateParams],
+  );
+
+  const setSeasonId = useCallback(
+    (nextSeasonId: number) => {
+      updateParams({ seasonId: String(nextSeasonId) });
+    },
+    [updateParams],
+  );
+
+  const setScope = useCallback(
+    (nextScope: RecordScope) => {
+      const patch: Record<string, string | null> = {
+        scope: nextScope === 'ALL' ? null : nextScope,
+      };
+      if (nextScope !== 'PLAYOFF') {
+        patch.playoffDivision = null;
+      }
+      updateParams(patch);
+    },
+    [updateParams],
+  );
+
+  const setGroup = useCallback(
+    (nextGroup: RecordGroup) => {
+      updateParams({ group: nextGroup === 'ALL' ? null : nextGroup });
+    },
+    [updateParams],
+  );
+
+  const setPlayoffDivision = useCallback(
+    (nextDivision: RecordPlayoffDivision) => {
+      if (nextDivision === 'ALL') {
+        updateParams({ playoffDivision: null });
+        return;
+      }
+      updateParams({ playoffDivision: nextDivision, scope: 'PLAYOFF' });
+    },
+    [updateParams],
+  );
+
+  const setRegulation = useCallback(
+    (nextRegulation: Exclude<RecordRegulation, 'ALL'>) => {
+      updateParams({ regulation: nextRegulation });
+    },
+    [updateParams],
+  );
+
+  const toggleTeamSearch = useCallback(
+    (teamName: string) => {
+      const keyword = teamName.trim();
+      if (!keyword) return;
+      const current = searchTerm.trim().toLowerCase();
+      if (current === keyword.toLowerCase()) {
+        updateParams({ search: null });
+        return;
+      }
+      updateParams({ search: keyword });
+    },
+    [searchTerm, updateParams],
+  );
+
+  const toggleRegulationFromCell = useCallback(
+    (nextRegulation: Exclude<RecordRegulation, 'ALL'>) => {
+      if (regulation === nextRegulation) return;
+      setRegulation(nextRegulation);
+    },
+    [regulation, setRegulation],
+  );
+
+  const toggleGroupFromCell = useCallback(
+    (nextGroup: Exclude<RecordGroup, 'ALL'> | null) => {
+      if (!nextGroup) return;
+      setGroup(group === nextGroup ? 'ALL' : nextGroup);
+    },
+    [group, setGroup],
+  );
+
+  const toggleScopeFromCell = useCallback(
+    (nextScope: Exclude<RecordScope, 'ALL'> | null) => {
+      if (!nextScope) return;
+      setScope(scope === nextScope ? 'ALL' : nextScope);
+    },
+    [scope, setScope],
+  );
+
+  const toggleDivisionFromCell = useCallback(
+    (nextDivision: RecordPlayoffDivision | null) => {
+      if (!nextDivision || nextDivision === 'ALL') return;
+      if (scope === 'PLAYOFF' && playoffDivision === nextDivision) {
+        updateParams({ scope: null, playoffDivision: null });
+        return;
+      }
+      setPlayoffDivision(nextDivision);
+    },
+    [playoffDivision, scope, setPlayoffDivision, updateParams],
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -45,10 +340,7 @@ export default function RecordPage() {
       .then((items) => {
         if (!isMounted) return;
         setSeasons(items);
-        if (items.length > 0) {
-          setLoading(true);
-          setSelectedSeasonId((prev) => prev ?? items[0].id);
-        } else {
+        if (items.length === 0) {
           setError('등록된 시즌이 없습니다. 관리자에서 시즌을 먼저 생성해 주세요.');
         }
       })
@@ -67,55 +359,206 @@ export default function RecordPage() {
   }, []);
 
   useEffect(() => {
-    if (selectedSeasonId == null) return;
+    if (seasons.length === 0) return;
+    if (selectedSeason) return;
+    setSeasonId(seasons[0].id);
+  }, [seasons, selectedSeason, setSeasonId]);
 
+  useEffect(() => {
+    if (!selectedSeason) return;
     let isMounted = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoading(true);
+    setError(null);
+    setWarning(null);
+
+    const filterParams = toRecordFilterParams(currentFilters);
+    const battersMainPromise = getBatterRankings({
+      seasonId: selectedSeason.id,
+      limit: 0,
+      sort: 'battingAverage',
+      filters: filterParams,
+      regulation,
+    });
+    const pitchersMainPromise = getPitcherRankings({
+      seasonId: selectedSeason.id,
+      limit: 0,
+      sort: 'era',
+      filters: filterParams,
+      regulation,
+    });
+
+    const battersTopPromise = getBatterRankings({
+      seasonId: selectedSeason.id,
+      limit: 0,
+      sort: topBatterSort,
+      filters: filterParams,
+      regulation: 'IN',
+    });
+
+    const pitchersTopPromise = getPitcherRankings({
+      seasonId: selectedSeason.id,
+      limit: 0,
+      sort: topPitcherSort,
+      filters: filterParams,
+      regulation: 'IN',
+    });
 
     Promise.allSettled([
-      getRecordOverview(selectedSeasonId),
-      getTeamRecordStandings(selectedSeasonId),
-      getBatterRankings({ seasonId: selectedSeasonId, limit: 5, sort: 'ops' }),
-      getPitcherRankings({ seasonId: selectedSeasonId, limit: 5, sort: 'era' }),
+      getRecordOverview(selectedSeason.id, filterParams),
+      getTeamRecordStandings(selectedSeason.id, filterParams),
+      battersMainPromise,
+      pitchersMainPromise,
+      getPlayoffSummaries(selectedSeason.id, filterParams),
+      battersTopPromise,
+      pitchersTopPromise,
     ])
-      .then(([overviewResult, standingsResult, battersResult, pitchersResult]) => {
+      .then((results) => {
         if (!isMounted) return;
 
-        const standingsData =
-          standingsResult.status === 'fulfilled' ? standingsResult.value : [];
-        const battersData =
-          battersResult.status === 'fulfilled' ? battersResult.value : [];
-        const pitchersData =
-          pitchersResult.status === 'fulfilled' ? pitchersResult.value : [];
+        const [overviewResult, standingsResult, battersResult, pitchersResult, playoffResult, topBattersResult, topPitchersResult] = results;
 
-        const overviewData =
+        const standingsRows = standingsResult.status === 'fulfilled' ? standingsResult.value : [];
+        const batterRows = battersResult.status === 'fulfilled' ? battersResult.value : [];
+        const pitcherRows = pitchersResult.status === 'fulfilled' ? pitchersResult.value : [];
+        const playoffData = playoffResult.status === 'fulfilled' ? playoffResult.value : [];
+        const topBatterSource = topBattersResult.status === 'fulfilled' ? topBattersResult.value : [];
+        const topPitcherSource = topPitchersResult.status === 'fulfilled' ? topPitchersResult.value : [];
+
+        const playoffSupported = supportsPlayoffFiltering([
+          ...standingsRows.map((row) => ({ seasonType: row.seasonType, scope: row.scope })),
+          ...batterRows.map((row) => ({ seasonType: row.seasonType, scope: row.scope })),
+          ...pitcherRows.map((row) => ({ seasonType: row.seasonType, scope: row.scope })),
+          ...playoffData.map((row) => ({ seasonType: row.seasonType, scope: row.scope })),
+          ...topBatterSource.map((row) => ({ seasonType: row.seasonType, scope: row.scope })),
+          ...topPitcherSource.map((row) => ({ seasonType: row.seasonType, scope: row.scope })),
+        ]);
+
+        setPlayoffFilterEnabled(playoffSupported);
+
+        const effectiveFilters = playoffSupported
+          ? currentFilters
+          : {
+              ...currentFilters,
+              scope: currentFilters.scope === 'PLAYOFF' ? 'ALL' : currentFilters.scope,
+              playoffDivision: 'ALL',
+            };
+
+        const filteredStandingsRows = standingsRows.filter((row) =>
+          matchesRecordFilters(
+            {
+              teamName: row.teamName,
+              partCode: row.partCode,
+              seasonType: row.seasonType,
+              scope: row.scope,
+            },
+            effectiveFilters,
+          ),
+        );
+
+        const filteredBatterRows = batterRows.filter((row) =>
+          matchesRecordFilters(
+            {
+              teamName: row.teamName,
+              partCode: row.partCode,
+              seasonType: row.seasonType,
+              scope: row.scope,
+            },
+            effectiveFilters,
+          ),
+        );
+
+        const filteredPitcherRows = pitcherRows.filter((row) =>
+          matchesRecordFilters(
+            {
+              teamName: row.teamName,
+              partCode: row.partCode,
+              seasonType: row.seasonType,
+              scope: row.scope,
+            },
+            effectiveFilters,
+          ),
+        );
+
+        const filteredTopBatterRows = topBatterSource.filter((row) =>
+          matchesRecordFilters(
+            {
+              teamName: row.teamName,
+              partCode: row.partCode,
+              seasonType: row.seasonType,
+              scope: row.scope,
+            },
+            effectiveFilters,
+          ),
+        );
+
+        const filteredTopPitcherRows = topPitcherSource.filter((row) =>
+          matchesRecordFilters(
+            {
+              teamName: row.teamName,
+              partCode: row.partCode,
+              seasonType: row.seasonType,
+              scope: row.scope,
+            },
+            effectiveFilters,
+          ),
+        );
+
+        const filteredPlayoffRows = playoffData.filter((row) =>
+          matchesRecordFilters(
+            {
+              teamName: row.teamName,
+              partCode: row.partCode,
+              seasonType: row.seasonType,
+              scope: row.scope,
+            },
+            effectiveFilters,
+          ),
+        );
+
+        const fallbackOverview: RecordsOverview = {
+          seasonId: selectedSeason.id,
+          totalGames: estimateGamesFromStandings(filteredStandingsRows),
+          totalTeams: filteredStandingsRows.length,
+          topBatter: filteredTopBatterRows[0] ?? filteredBatterRows[0] ?? null,
+          topPitcher: filteredTopPitcherRows[0] ?? filteredPitcherRows[0] ?? null,
+        };
+
+        const mergedOverview =
           overviewResult.status === 'fulfilled'
-            ? overviewResult.value
-            : {
-                seasonId: selectedSeasonId,
-                totalGames: estimateGamesFromStandings(standingsData),
-                totalTeams: standingsData.length,
-                topBatter: battersData[0] ?? null,
-                topPitcher: pitchersData[0] ?? null,
-              };
+            ? {
+                ...overviewResult.value,
+                totalGames:
+                  effectiveFilters.scope === 'ALL' &&
+                  effectiveFilters.group === 'ALL' &&
+                  effectiveFilters.playoffDivision === 'ALL'
+                    ? overviewResult.value.totalGames
+                    : estimateGamesFromStandings(filteredStandingsRows),
+                totalTeams: filteredStandingsRows.length,
+                topBatter: filteredTopBatterRows[0] ?? filteredBatterRows[0] ?? null,
+                topPitcher: filteredTopPitcherRows[0] ?? filteredPitcherRows[0] ?? null,
+              }
+            : fallbackOverview;
 
-        setOverview(overviewData);
-        setTeamStandings(standingsData);
-        setTopBatters(battersData);
-        setTopPitchers(pitchersData);
+        setOverview(mergedOverview);
+        setTeamStandings(filteredStandingsRows);
+        setBatters(filteredBatterRows);
+        setPitchers(filteredPitcherRows);
+        setTopInBatters(filteredTopBatterRows);
+        setTopInPitchers(filteredTopPitcherRows);
+        setPlayoffRows(filteredPlayoffRows);
 
-        const failedCount = [
-          overviewResult,
-          standingsResult,
-          battersResult,
-          pitchersResult,
-        ].filter((result) => result.status === 'rejected').length;
+        const primaryFailures = [overviewResult, standingsResult, battersResult, pitchersResult, playoffResult].filter(
+          (result) => result.status === 'rejected',
+        ).length;
+        const allFailures = results.filter((result) => result.status === 'rejected').length;
 
-        if (failedCount === 4) {
+        if (primaryFailures === 5) {
           setError('기록 데이터를 불러오지 못했습니다.');
           return;
         }
-        if (failedCount > 0) {
-          setWarning('일부 데이터 소스를 불러오지 못해 표시 항목이 제한될 수 있습니다.');
+        if (allFailures > 0) {
+          setWarning('일부 데이터 소스를 불러오지 못해 일부 항목이 제한될 수 있습니다.');
         }
       })
       .finally(() => {
@@ -126,356 +569,291 @@ export default function RecordPage() {
     return () => {
       isMounted = false;
     };
-  }, [selectedSeasonId]);
+  }, [selectedSeason, currentFilters, regulation, topBatterSort, topPitcherSort]);
+
+  useEffect(() => {
+    if (playoffFilterEnabled) return;
+    if (scope !== 'PLAYOFF' && playoffDivision === 'ALL') return;
+    updateParams({ scope: scope === 'PLAYOFF' ? null : scope, playoffDivision: null });
+  }, [playoffFilterEnabled, scope, playoffDivision, updateParams]);
+
+  useEffect(() => {
+    if (tab !== 'power') return;
+    if (rankingYear == null) return;
+    let isMounted = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPowerLoading(true);
+    setPowerError(null);
+
+    getPowerRankings({ rankingYear, limit: powerLimit })
+      .then((rows) => {
+        if (!isMounted) return;
+        setPowerRows(rows);
+      })
+      .catch((err: unknown) => {
+        if (!isMounted) return;
+        setPowerRows([]);
+        setPowerError(err instanceof Error ? err.message : '파워랭킹 데이터를 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setPowerLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [tab, rankingYear, powerLimit]);
 
   useEffect(() => {
     const ctx = gsap.context(() => {
-      const nodes = sectionRef.current?.querySelectorAll('.record-section');
+      const nodes = sectionRef.current?.querySelectorAll('.record-hub-section');
       if (!nodes) return;
       gsap.fromTo(
         nodes,
-        { y: 24, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.75, stagger: 0.08, ease: 'power2.out' },
+        { y: 20, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.62, stagger: 0.05, ease: 'power2.out' },
       );
     });
 
     return () => ctx.revert();
-  }, [selectedSeasonId, loading]);
+  }, [tab, selectedSeason?.id, loading]);
 
-  const filteredStandings = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    if (!term) return teamStandings;
-    return teamStandings.filter((row) => row.teamName.toLowerCase().includes(term));
-  }, [searchTerm, teamStandings]);
+  const filteredStandingsBySearch = useMemo(() => {
+    if (!searchTerm) return teamStandings;
+    const keyword = searchTerm.toLowerCase();
+    return teamStandings.filter((row) => row.teamName.toLowerCase().includes(keyword));
+  }, [teamStandings, searchTerm]);
 
-  const selectedSeason = useMemo(
-    () => seasons.find((season) => season.id === selectedSeasonId) ?? null,
-    [seasons, selectedSeasonId],
+  const filteredBattersBySearch = useMemo(() => {
+    if (!searchTerm) return batters;
+    const keyword = searchTerm.toLowerCase();
+    return batters.filter((row) => `${row.playerName} ${row.teamName}`.toLowerCase().includes(keyword));
+  }, [batters, searchTerm]);
+
+  const filteredPitchersBySearch = useMemo(() => {
+    if (!searchTerm) return pitchers;
+    const keyword = searchTerm.toLowerCase();
+    return pitchers.filter((row) => `${row.playerName} ${row.teamName}`.toLowerCase().includes(keyword));
+  }, [pitchers, searchTerm]);
+
+  const topBatterRows = useMemo<TopFiveRow[]>(
+    () =>
+      topInBatters.slice(0, 5).map((row) => ({
+        id: `b-${row.playerId}-${row.seasonId}`,
+        rank: row.rank,
+        name: row.playerName,
+        team: `${row.teamName}${row.jerseyNumber ? ` · #${row.jerseyNumber}` : ''}`,
+        value: formatTopBatterValue(row, topBatterSort),
+        link: `/records/player/${row.playerId}`,
+      })),
+    [topBatterSort, topInBatters],
   );
 
-  const totalWins = useMemo(
-    () => teamStandings.reduce((sum, row) => sum + row.wins, 0),
-    [teamStandings],
+  const topPitcherRows = useMemo<TopFiveRow[]>(
+    () =>
+      topInPitchers.slice(0, 5).map((row) => ({
+        id: `p-${row.playerId}-${row.seasonId}`,
+        rank: row.rank,
+        name: row.playerName,
+        team: `${row.teamName}${row.jerseyNumber ? ` · #${row.jerseyNumber}` : ''}`,
+        value: formatTopPitcherValue(row, topPitcherSort),
+        link: `/records/player/${row.playerId}`,
+      })),
+    [topInPitchers, topPitcherSort],
   );
+
+  const playoffStageSummary = useMemo<PlayoffStageSummaryRow[]>(() => {
+    const map = new Map<string, PlayoffStageSummaryRow>();
+
+    playoffRows.forEach((row) => {
+      const tier = normalizeTier(row.playoffTier || row.seasonType);
+      const round = normalizeRound(row.playoffRound);
+      const key = `${tier}::${round}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          tier,
+          round,
+          count: 0,
+          teams: [],
+          points: row.finalsPoints,
+        });
+      }
+      const entry = map.get(key)!;
+      entry.count += 1;
+      entry.teams.push(row.teamName);
+      if (row.finalsPoints > entry.points) entry.points = row.finalsPoints;
+    });
+
+    return [...map.values()].sort((a, b) => {
+      if (a.tier !== b.tier) return a.tier.localeCompare(b.tier, 'ko');
+      if (b.points !== a.points) return b.points - a.points;
+      return a.round.localeCompare(b.round, 'ko');
+    });
+  }, [playoffRows]);
+
+  const averageWinPct = useMemo(() => {
+    if (filteredStandingsBySearch.length === 0) return 0;
+    const total = filteredStandingsBySearch.reduce((sum, row) => sum + toWinPct(row.winPct), 0);
+    return total / filteredStandingsBySearch.length;
+  }, [filteredStandingsBySearch]);
+
+  const scopeOptions = playoffFilterEnabled ? RECORD_SCOPE_OPTIONS : RECORD_SCOPE_OPTIONS_NO_PLAYOFF;
 
   return (
-    <div style={{ display: 'grid', gap: '24px' }} ref={sectionRef}>
-      <section
-        className="record-section"
-        style={{
-          borderRadius: '22px',
-          padding: '24px',
-          background:
-            'radial-gradient(circle at 15% 10%, rgba(59,130,246,0.16), transparent 34%), radial-gradient(circle at 85% 0%, rgba(234,179,8,0.16), transparent 28%), linear-gradient(135deg, #0f172a 0%, #111827 100%)',
-          border: '1px solid rgba(148, 163, 184, 0.24)',
-          boxShadow: '0 20px 50px rgba(0,0,0,0.28)',
-          display: 'grid',
-          gap: '14px',
-        }}
-      >
-        <span
-          style={{
-            width: 'fit-content',
-            padding: '6px 12px',
-            borderRadius: '999px',
-            border: '1px solid rgba(59,130,246,0.35)',
-            background: 'rgba(59,130,246,0.14)',
-            color: '#bfdbfe',
-            fontWeight: 800,
-            fontSize: '12px',
-          }}
-        >
-          시즌 기록 센터
-        </span>
-
-        <h2 style={{ margin: 0, fontWeight: 900, fontSize: '30px' }}>
-          {selectedSeason ? `${selectedSeason.year} 시즌 기록` : '시즌 기록'}
-        </h2>
-
-        <p style={{ margin: 0, color: '#cbd5e1', lineHeight: 1.6 }}>
-          실시간 경기 데이터는 Firebase에서 처리하고, 경기 종료 후 확정 통계는 백엔드 DB 집계를 기준으로 제공합니다.
-        </p>
-
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-          <label style={{ display: 'grid', gap: '6px', color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>
-            SEASON
-            <select
-              value={selectedSeasonId ?? ''}
-              disabled={seasons.length === 0}
-              onChange={(e) => {
-                const nextSeasonId = Number(e.target.value);
-                if (nextSeasonId === selectedSeasonId) return;
-                setError(null);
-                setWarning(null);
-                setLoading(true);
-                setSelectedSeasonId(nextSeasonId);
-              }}
-              style={{
-                minWidth: '150px',
-                borderRadius: '10px',
-                border: '1px solid rgba(148,163,184,0.35)',
-                background: '#0f172a',
-                color: '#e2e8f0',
-                padding: '10px 12px',
-                fontWeight: 800,
-              }}
-            >
-              {seasons.map((season) => (
-                <option key={season.id} value={season.id}>
-                  {season.year} 시즌 (ID: {season.id})
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label style={{ display: 'grid', gap: '6px', color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>
-            TEAM SEARCH
-            <input
-              type="text"
-              value={searchTerm}
-              placeholder="팀 이름 검색"
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{
-                minWidth: '220px',
-                borderRadius: '10px',
-                border: '1px solid rgba(148,163,184,0.35)',
-                background: '#0f172a',
-                color: '#e2e8f0',
-                padding: '10px 12px',
-                fontWeight: 700,
-              }}
-            />
-          </label>
-
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <Link
-              to="/records/batters"
-              style={{
-                padding: '10px 12px',
-                borderRadius: '10px',
-                border: '1px solid rgba(236,72,153,0.35)',
-                background: 'rgba(236,72,153,0.12)',
-                color: '#fbcfe8',
-                fontWeight: 800,
-              }}
-            >
-              타자 랭킹
-            </Link>
-            <Link
-              to="/records/pitchers"
-              style={{
-                padding: '10px 12px',
-                borderRadius: '10px',
-                border: '1px solid rgba(59,130,246,0.35)',
-                background: 'rgba(59,130,246,0.12)',
-                color: '#bfdbfe',
-                fontWeight: 800,
-              }}
-            >
-              투수 랭킹
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      <section className="record-section" style={{ display: 'grid', gap: '12px', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-        <Metric label="총 경기" value={`${overview?.totalGames ?? 0} G`} />
-        <Metric label="참여 팀" value={`${overview?.totalTeams ?? teamStandings.length} 팀`} />
-        <Metric label="등록 승수 합계" value={`${totalWins} 승`} />
-        <Metric
-          label="상위 팀 평균 승률"
-          value={
-            filteredStandings.length === 0
-              ? '-'
-              : `${(
-                  filteredStandings.reduce((sum, row) => sum + toWinPct(row.winPct), 0) /
-                  filteredStandings.length
-                ).toFixed(1)}%`
-          }
-        />
-      </section>
+    <div style={{ display: 'grid', gap: '22px' }} ref={sectionRef}>
+      <RecordsHubShell
+        yearLabel={selectedSeason ? `${selectedSeason.year} 시즌 기록 허브` : '기록 허브'}
+        tab={tab}
+        tabs={TAB_OPTIONS}
+        onTabChange={setTab}
+        playoffFilterEnabled={playoffFilterEnabled}
+        filterBar={
+          <RecordsFilterBar
+            seasons={seasons}
+            selectedSeasonId={selectedSeason?.id ?? null}
+            onSeasonChange={setSeasonId}
+            scope={scope}
+            scopeOptions={scopeOptions}
+            onScopeChange={setScope}
+            group={group}
+            groupOptions={RECORD_GROUP_OPTIONS}
+            onGroupChange={setGroup}
+            playoffDivision={playoffDivision}
+            playoffDivisionOptions={PLAYOFF_DIVISION_OPTIONS}
+            playoffFilterEnabled={playoffFilterEnabled}
+            onPlayoffDivisionChange={setPlayoffDivision}
+            searchTerm={searchTerm}
+            onSearchChange={(value) => updateParams({ search: value || null })}
+            tab={tab}
+            rankingYear={rankingYear}
+            onRankingYearChange={(value) => {
+              const parsed = parsePositiveInt(value);
+              updateParams({ rankingYear: parsed ? String(parsed) : null });
+            }}
+            powerLimit={powerLimit}
+            onPowerLimitChange={(value) => {
+              const parsed = parsePositiveInt(value);
+              updateParams({ powerLimit: parsed ? String(parsed) : null });
+            }}
+            actions={
+              <>
+                <Link
+                  to="/records/player"
+                  style={quickLinkStyle('#e2e8f0', 'rgba(148,163,184,0.2)', 'rgba(148,163,184,0.36)')}
+                >
+                  선수 상세
+                </Link>
+                <Link
+                  to="/prediction"
+                  style={quickLinkStyle('#a7f3d0', 'rgba(16,185,129,0.14)', 'rgba(16,185,129,0.35)')}
+                >
+                  승부예측
+                </Link>
+              </>
+            }
+          />
+        }
+      />
 
       {(initializing || loading) && (
-        <section className="record-section" style={{ padding: '30px', textAlign: 'center', color: '#94a3b8' }}>
-          기록 데이터를 불러오는 중입니다...
+        <section className="record-hub-section" style={noticeCardStyle('#94a3b8')}>
+          데이터를 불러오는 중입니다...
         </section>
       )}
 
       {error && (
-        <section className="record-section" style={{ padding: '30px', textAlign: 'center', color: '#f87171' }}>
+        <section className="record-hub-section" style={noticeCardStyle('#f87171')}>
           오류: {error}
         </section>
       )}
 
       {!error && warning && (
-        <section className="record-section" style={{ padding: '20px', textAlign: 'center', color: '#facc15' }}>
+        <section className="record-hub-section" style={noticeCardStyle('#facc15')}>
           {warning}
         </section>
       )}
 
-      {!initializing && !loading && !error && (
-        <section
-          className="record-section"
-          style={{
-            borderRadius: '18px',
-            border: '1px solid rgba(148, 163, 184, 0.2)',
-            overflow: 'hidden',
-            background: 'rgba(15, 23, 42, 0.55)',
-          }}
-        >
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid rgba(148, 163, 184, 0.2)', color: '#cbd5e1', fontWeight: 800 }}>
-            팀 순위 요약
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '580px' }}>
-              <thead>
-                <tr style={{ color: '#94a3b8', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  <th style={{ padding: '12px 10px', textAlign: 'left' }}>#</th>
-                  <th style={{ padding: '12px 10px', textAlign: 'left' }}>팀</th>
-                  <th style={{ padding: '12px 10px', textAlign: 'center' }}>경기</th>
-                  <th style={{ padding: '12px 10px', textAlign: 'center' }}>승-무-패</th>
-                  <th style={{ padding: '12px 10px', textAlign: 'center' }}>승률</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredStandings.map((row, index) => {
-                  const games = row.wins + row.losses + row.ties;
-                  return (
-                    <tr key={row.teamId} style={{ borderTop: '1px solid rgba(148, 163, 184, 0.12)' }}>
-                      <td style={{ padding: '12px 10px', fontWeight: 900, color: '#cbd5e1' }}>{index + 1}</td>
-                      <td style={{ padding: '12px 10px', fontWeight: 800 }}>{row.teamName}</td>
-                      <td style={{ padding: '12px 10px', textAlign: 'center', color: '#cbd5e1' }}>{games}</td>
-                      <td style={{ padding: '12px 10px', textAlign: 'center', color: '#cbd5e1' }}>
-                        {row.wins}-{row.ties}-{row.losses}
-                      </td>
-                      <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 800, color: '#22c55e' }}>
-                        {toWinPct(row.winPct).toFixed(1)}%
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {filteredStandings.length === 0 && (
-            <p style={{ margin: 0, padding: '20px', textAlign: 'center', color: '#94a3b8' }}>
-              표시할 팀 기록이 없습니다.
-            </p>
-          )}
-        </section>
+      {!initializing && !loading && !error && tab === 'overview' && (
+        <OverviewTab
+          totalGames={overview?.totalGames ?? 0}
+          totalTeams={overview?.totalTeams ?? teamStandings.length}
+          averageWinPct={averageWinPct}
+          batterCount={batters.length}
+          pitcherCount={pitchers.length}
+          topBatters={topBatterRows}
+          topPitchers={topPitcherRows}
+          topBatterSort={topBatterSort}
+          topPitcherSort={topPitcherSort}
+          batterSortOptions={BATTER_SORT_OPTIONS}
+          pitcherSortOptions={PITCHER_SORT_OPTIONS}
+          onTopBatterSortChange={setTopBatterSort}
+          onTopPitcherSortChange={setTopPitcherSort}
+        />
       )}
 
-      {!initializing && !loading && !error && (
-        <section
-          className="record-section"
-          style={{
-            display: 'grid',
-            gap: '14px',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-          }}
-        >
-          <RankingCard
-            title="타자 TOP 5 (OPS)"
-            accent="#ec4899"
-            emptyMessage="타자 랭킹 데이터가 없습니다."
-            rows={topBatters.map((row) => ({
-              id: `batter-${row.playerId}`,
-              rank: row.rank,
-              name: row.playerName,
-              team: `${row.teamName}${row.jerseyNumber ? ` · #${row.jerseyNumber}` : ''}`,
-              value: `${row.seasonYear ?? selectedSeason?.year ?? row.seasonId} · OPS ${row.ops.toFixed(3)} / AVG ${row.battingAverage.toFixed(3)}`,
-              link: `/records/player/${row.playerId}`,
-            }))}
-          />
-          <RankingCard
-            title="투수 TOP 5 (ERA)"
-            accent="#3b82f6"
-            emptyMessage="투수 랭킹 데이터가 없습니다."
-            rows={topPitchers.map((row) => ({
-              id: `pitcher-${row.playerId}`,
-              rank: row.rank,
-              name: row.playerName,
-              team: `${row.teamName}${row.jerseyNumber ? ` · #${row.jerseyNumber}` : ''}`,
-              value: `${row.seasonYear ?? selectedSeason?.year ?? row.seasonId} · ERA ${row.era.toFixed(2)} / WHIP ${row.whip.toFixed(2)}`,
-              link: `/records/player/${row.playerId}`,
-            }))}
-          />
-        </section>
+      {!initializing && !loading && !error && tab === 'standings' && (
+        <StandingsTab
+          rows={filteredStandingsBySearch}
+          playoffStageSummary={playoffStageSummary}
+          scope={scope}
+          group={group}
+          playoffDivision={playoffDivision}
+          searchTerm={searchTerm}
+          onToggleScope={toggleScopeFromCell}
+          onToggleGroup={toggleGroupFromCell}
+          onToggleDivision={toggleDivisionFromCell}
+          onToggleTeamSearch={toggleTeamSearch}
+        />
       )}
-    </div>
-  );
-}
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      style={{
-        padding: '14px',
-        borderRadius: '14px',
-        border: '1px solid rgba(148, 163, 184, 0.22)',
-        background: 'rgba(255,255,255,0.02)',
-      }}
-    >
-      <p style={{ margin: 0, color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>{label}</p>
-      <p style={{ margin: '6px 0 0', fontWeight: 900, color: '#e2e8f0', fontSize: '22px' }}>{value}</p>
-    </div>
-  );
-}
+      {!initializing && !loading && !error && tab === 'batters' && (
+        <BattersTab
+          rows={filteredBattersBySearch}
+          topRows={topBatterRows}
+          seasonYear={selectedSeason?.year ?? null}
+          scope={scope}
+          group={group}
+          playoffDivision={playoffDivision}
+          regulation={regulation}
+          onRegulationChange={setRegulation}
+          onToggleScope={toggleScopeFromCell}
+          onToggleGroup={toggleGroupFromCell}
+          onToggleDivision={toggleDivisionFromCell}
+          searchTerm={searchTerm}
+          onToggleTeamSearch={toggleTeamSearch}
+          onToggleRegulationFromCell={toggleRegulationFromCell}
+          topSort={topBatterSort}
+          topSortOptions={BATTER_SORT_OPTIONS}
+          onTopSortChange={setTopBatterSort}
+        />
+      )}
 
-interface RankingCardRow {
-  id: string;
-  rank: number;
-  name: string;
-  team: string;
-  value: string;
-  link: string;
-}
+      {!initializing && !loading && !error && tab === 'pitchers' && (
+        <PitchersTab
+          rows={filteredPitchersBySearch}
+          topRows={topPitcherRows}
+          seasonYear={selectedSeason?.year ?? null}
+          scope={scope}
+          group={group}
+          playoffDivision={playoffDivision}
+          regulation={regulation}
+          onRegulationChange={setRegulation}
+          onToggleScope={toggleScopeFromCell}
+          onToggleGroup={toggleGroupFromCell}
+          onToggleDivision={toggleDivisionFromCell}
+          searchTerm={searchTerm}
+          onToggleTeamSearch={toggleTeamSearch}
+          onToggleRegulationFromCell={toggleRegulationFromCell}
+          topSort={topPitcherSort}
+          topSortOptions={PITCHER_SORT_OPTIONS}
+          onTopSortChange={setTopPitcherSort}
+        />
+      )}
 
-function RankingCard({
-  title,
-  accent,
-  rows,
-  emptyMessage,
-}: {
-  title: string;
-  accent: string;
-  rows: RankingCardRow[];
-  emptyMessage: string;
-}) {
-  return (
-    <div
-      style={{
-        borderRadius: '16px',
-        border: '1px solid rgba(148, 163, 184, 0.2)',
-        background: 'rgba(15, 23, 42, 0.55)',
-        overflow: 'hidden',
-      }}
-    >
-      <div style={{ padding: '14px 16px', fontWeight: 900, color: accent, borderBottom: '1px solid rgba(148, 163, 184, 0.15)' }}>
-        {title}
-      </div>
-      {rows.length === 0 && <p style={{ margin: 0, padding: '18px', color: '#94a3b8' }}>{emptyMessage}</p>}
-      {rows.map((row) => (
-        <div
-          key={row.id}
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '50px 1fr',
-            gap: '12px',
-            padding: '12px 16px',
-            borderTop: '1px solid rgba(148, 163, 184, 0.1)',
-          }}
-        >
-          <div style={{ fontWeight: 900, color: '#cbd5e1' }}>{row.rank}</div>
-          <div style={{ display: 'grid', gap: '4px' }}>
-            <Link to={row.link} style={{ color: '#e2e8f0', fontWeight: 800, textDecoration: 'none' }}>
-              {row.name}
-            </Link>
-            <span style={{ color: '#94a3b8', fontSize: '12px' }}>{row.team}</span>
-            <span style={{ color: '#cbd5e1', fontSize: '13px' }}>{row.value}</span>
-          </div>
-        </div>
-      ))}
+      {!initializing && !loading && !error && tab === 'power' && (
+        <PowerTab rows={powerRows} loading={powerLoading} error={powerError} rankingYear={rankingYear} />
+      )}
     </div>
   );
 }

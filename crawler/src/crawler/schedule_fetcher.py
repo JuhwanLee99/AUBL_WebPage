@@ -48,6 +48,7 @@ class GameSummary:
     game_idx: int
     status: str
     group_code: str | None
+    part_code: str | None = None
     phase: str | None = None
 
 
@@ -63,6 +64,13 @@ def _normalize_code(value: Any, default: str = "0") -> str:
         return default
     text = str(value).strip()
     return text if text else default
+
+
+def _nullable_code(value: Any) -> str | None:
+    text = _normalize_code(value, default="0")
+    if text in {"", "0", "-1"}:
+        return None
+    return text
 
 
 def _extract_games(payload: Any) -> Iterable[dict[str, Any]]:
@@ -134,6 +142,26 @@ def _extract_status_by_game(payload: Any) -> dict[int, str]:
     return status_by_game
 
 
+def _extract_select_options(html_text: str, select_name: str) -> set[str]:
+    select_pattern = re.compile(
+        rf"<select[^>]+(?:name|id)=[\"']{re.escape(select_name)}[\"'][^>]*>(?P<body>.*?)</select>",
+        re.IGNORECASE | re.DOTALL,
+    )
+    select_match = select_pattern.search(html_text)
+    if not select_match:
+        return set()
+    options: set[str] = set()
+    for match in re.finditer(
+        r"<option[^>]*value=[\"'](?P<value>[^\"']*)[\"'][^>]*>",
+        select_match.group("body"),
+        re.IGNORECASE | re.DOTALL,
+    ):
+        value = html.unescape(match.group("value")).strip()
+        if value:
+            options.add(_normalize_code(value))
+    return options
+
+
 def _discover_states_from_html(
     html_text: str,
     content_path: str,
@@ -172,12 +200,23 @@ def _discover_states_from_html(
         _normalize_code(m.group("code"))
         for m in GROUP_CODE_TOKEN_PATTERN.finditer(html_text)
     }
+    group_tokens.update(_extract_select_options(html_text, "group_code"))
+    concrete_groups = {code for code in group_tokens if code not in {"", "0", "-1"}}
+    if concrete_groups:
+        group_tokens = concrete_groups
     if group_filter is not None:
         group_tokens = {code for code in group_tokens if code in group_filter}
     part_tokens = {
         _normalize_code(m.group("code"))
         for m in PART_CODE_TOKEN_PATTERN.finditer(html_text)
     }
+    part_tokens.update(_extract_select_options(html_text, "part_code"))
+    part_tokens = {code for code in part_tokens if code not in {"", "0", "-1"}}
+
+    if group_tokens and part_tokens:
+        for group_code in group_tokens:
+            for part_code in part_tokens:
+                discovered.add(_PageState(group_code=group_code, part_code=part_code, page=1))
 
     for code in group_tokens:
         discovered.add(_PageState(group_code=code, part_code=current_state.part_code, page=1))
@@ -228,8 +267,7 @@ def _fetch_games_from_paginated_content(
         queue.append(_PageState(group_code="0", part_code="0", page=1))
 
     seen_states: set[_PageState] = set()
-    seen_games: set[int] = set()
-    games: list[GameSummary] = []
+    games_by_id: dict[int, GameSummary] = {}
 
     while queue:
         state = queue.popleft()
@@ -263,21 +301,24 @@ def _fetch_games_from_paginated_content(
 
         added = 0
         for game_idx in game_ids:
-            if game_idx in seen_games:
-                continue
             status = status_by_game.get(game_idx, "final")
             if not _is_final_status(status):
                 continue
-            seen_games.add(game_idx)
-            games.append(
-                GameSummary(
-                    game_idx=game_idx,
-                    status=status,
-                    group_code=state.group_code,
-                    phase=source,
-                )
+            summary = GameSummary(
+                game_idx=game_idx,
+                status=status,
+                group_code=_nullable_code(state.group_code),
+                part_code=_nullable_code(state.part_code),
+                phase=source,
             )
-            added += 1
+            existing = games_by_id.get(game_idx)
+            if existing is None:
+                games_by_id[game_idx] = summary
+                added += 1
+            else:
+                chosen = _prefer_game_summary(existing, summary)
+                if chosen is not existing:
+                    games_by_id[game_idx] = chosen
 
         for discovered in _discover_states_from_html(
             html_text,
@@ -290,7 +331,7 @@ def _fetch_games_from_paginated_content(
                 queue.append(discovered)
 
         # If pagination controls are not exposed, walk forward while games exist.
-        if game_ids and state.page < max_page:
+        if added > 0 and state.page < max_page:
             next_state = _PageState(
                 group_code=state.group_code,
                 part_code=state.part_code,
@@ -317,7 +358,27 @@ def _fetch_games_from_paginated_content(
             )
         )
 
-    return games
+    return list(games_by_id.values())
+
+
+def _summary_specificity(game: GameSummary) -> tuple[int, int, int]:
+    return (
+        1 if game.group_code is not None else 0,
+        1 if game.part_code is not None else 0,
+        1 if game.phase is not None else 0,
+    )
+
+
+def _prefer_game_summary(existing: GameSummary, incoming: GameSummary) -> GameSummary:
+    existing_final = _is_final_status(existing.status)
+    incoming_final = _is_final_status(incoming.status)
+    if incoming_final and not existing_final:
+        return incoming
+    if not incoming_final and existing_final:
+        return existing
+    if _summary_specificity(incoming) > _summary_specificity(existing):
+        return incoming
+    return existing
 
 
 def _dedupe_games(games: list[GameSummary]) -> list[GameSummary]:
@@ -327,10 +388,7 @@ def _dedupe_games(games: list[GameSummary]) -> list[GameSummary]:
         if existing is None:
             deduped[game.game_idx] = game
             continue
-        existing_final = _is_final_status(existing.status)
-        incoming_final = _is_final_status(game.status)
-        if incoming_final and not existing_final:
-            deduped[game.game_idx] = game
+        deduped[game.game_idx] = _prefer_game_summary(existing, game)
     return list(deduped.values())
 
 
@@ -398,7 +456,8 @@ def fetch_schedule_games(
                         GameSummary(
                             game_idx=game_idx,
                             status="final",
-                            group_code=group_code,
+                            group_code=_nullable_code(group_code),
+                            part_code=None,
                             phase=None,
                         )
                     )
@@ -414,7 +473,8 @@ def fetch_schedule_games(
                         GameSummary(
                             game_idx=int(game_idx),
                             status=str(status),
-                            group_code=group_code,
+                            group_code=_nullable_code(group_code),
+                            part_code=None,
                             phase=None,
                         )
                     )
@@ -439,7 +499,8 @@ def fetch_schedule_games(
                     GameSummary(
                         game_idx=int(game_idx),
                         status=str(status),
-                        group_code=group_code,
+                        group_code=_nullable_code(group_code),
+                        part_code=None,
                         phase=None,
                     )
                 )

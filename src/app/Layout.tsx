@@ -258,17 +258,15 @@ export default function Layout() {
         path: '/records',
         label: '기록',
         children: [
-          { path: '/records/pitchers', label: '투수 기록' },
-          { path: '/records/batters', label: '타자 기록' },
-          { path: '/records/player/1', label: '선수 상세' },
+          { path: '/records?tab=overview', label: '개요' },
+          { path: '/records?tab=standings', label: '팀 순위' },
+          { path: '/records?tab=pitchers', label: '투수 기록' },
+          { path: '/records?tab=batters', label: '타자 기록' },
+          { path: '/records?tab=power', label: '파워랭킹' },
+          { path: '/records/player', label: '선수 상세' },
         ],
       },
       { path: '/community', label: '커뮤니티' },
-      {
-        path: '/standings',
-        label: '순위',
-        children: [{ path: '/standings/power-ranking', label: '파워랭킹' }],
-      },
       { path: '/prediction', label: '승부예측' },
       // 기록원: 항상 보이지만 비관리자는 클릭 시 안내 버블만 노출
       { path: scorekeeperPath, label: '기록원', requiresAdmin: true, showWhenBlocked: true },
@@ -296,6 +294,8 @@ export default function Layout() {
   );
 
   const activeParentPath = useMemo(() => {
+    const normalizePath = (path: string) => path.split('?')[0];
+
     if (hoveredMenu) {
       const hoveredHasChildren = filteredNavItems.some((item) => item.path === hoveredMenu && item.children);
       if (hoveredHasChildren) return hoveredMenu;
@@ -305,8 +305,15 @@ export default function Layout() {
       // External link check
       if ((item as { isExternal?: boolean }).isExternal) return false;
 
-      if (item.children?.some((child) => location.pathname === child.path || location.pathname.startsWith(child.path))) return true;
-      if (item.children && location.pathname === item.path) return true; // 부모 경로 자체를 방문했을 때도 유지
+      if (
+        item.children?.some((child) => {
+          const childPath = normalizePath(child.path);
+          return location.pathname === childPath || location.pathname.startsWith(childPath);
+        })
+      ) {
+        return true;
+      }
+      if (item.children && location.pathname === normalizePath(item.path)) return true; // 부모 경로 자체를 방문했을 때도 유지
       return false;
     });
 
@@ -763,7 +770,18 @@ export default function Layout() {
                 }}
               >
                 {activeChildren.map((child) => {
-                  const isActiveChild = location.pathname === child.path;
+                  const [childPath, childQuery = ''] = child.path.split('?');
+                  const isPathMatch = location.pathname === childPath;
+                  const isQueryMatch = (() => {
+                    if (!childQuery) return true;
+                    const expected = new URLSearchParams(childQuery);
+                    const current = new URLSearchParams(location.search);
+                    for (const [key, value] of expected.entries()) {
+                      if (current.get(key) !== value) return false;
+                    }
+                    return true;
+                  })();
+                  const isActiveChild = isPathMatch && isQueryMatch;
                   const isHoveringChild = hoveredMenu === child.path;
                   return (
                     <Link

@@ -35,7 +35,7 @@ PAT_TEAM_PLAYER = re.compile(
     r"FROM PLAYER p WHERE p\.player_name = '((?:[^'\\]|\\.)*)'"
 )
 PAT_GAME = re.compile(
-    r"INSERT INTO GAME \(season_id, game_date, game_number, home_team, away_team, home_score, away_score, game_type\) "
+    r"INSERT INTO GAME \(season_id, game_date, game_number, home_team, away_team, home_score, away_score, game_type(?:, league_code, part_code)?\) "
     r"SELECT @season_id, CURDATE\(\), (\d+), (@[A-Za-z0-9_]+|NULL), (@[A-Za-z0-9_]+|NULL),"
 )
 

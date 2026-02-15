@@ -274,6 +274,7 @@ class JsonStorage:
                 "game_idx": game.game_idx,
                 "year": year,
                 "group_code": game.group_code,
+                "part_code": game.part_code,
                 "phase": game.phase,
                 "status": match_data.status or game.status,
                 "home_team_idx": match_data.home_team.team_idx if match_data.home_team else None,
@@ -339,6 +340,9 @@ class JsonStorage:
         return {
             "game_idx": game.game_idx,
             "year": year,
+            "group_code": game.group_code,
+            "part_code": game.part_code,
+            "phase": game.phase,
             "team_side": entry.team_side,
             "team_idx": team_idx,
             "player_idx": player.player_idx if player else None,
@@ -377,6 +381,9 @@ class JsonStorage:
         return {
             "game_idx": game.game_idx,
             "year": year,
+            "group_code": game.group_code,
+            "part_code": game.part_code,
+            "phase": game.phase,
             "team_side": entry.team_side,
             "team_idx": team_idx,
             "player_idx": player.player_idx if player else None,

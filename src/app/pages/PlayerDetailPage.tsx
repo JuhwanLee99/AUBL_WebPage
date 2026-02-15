@@ -30,6 +30,10 @@ function normalizeKeyword(value: string): string {
   return value.replace(/\s+/g, '').toLowerCase();
 }
 
+function normalizeTeamKey(value: string): string {
+  return normalizeKeyword(value);
+}
+
 export default function PlayerDetailPage() {
   const { playerId: playerIdParam } = useParams<{ playerId: string }>();
   const location = useLocation();
@@ -148,9 +152,8 @@ export default function PlayerDetailPage() {
   const seasonYearById = useMemo(() => new Map(seasons.map((season) => [season.id, season.year])), [seasons]);
 
   const teamOptions = useMemo(() => {
-    return [...new Set(searchCandidates.map((item) => item.teamName).filter(Boolean))].sort((a, b) =>
-      a.localeCompare(b, 'ko'),
-    );
+    const source = searchCandidates.map((item) => item.teamName).filter(Boolean);
+    return [...new Set(source)].sort((a, b) => a.localeCompare(b, 'ko'));
   }, [searchCandidates]);
 
   useEffect(() => {
@@ -161,7 +164,8 @@ export default function PlayerDetailPage() {
 
   const teamFilteredCandidates = useMemo(() => {
     if (selectedTeamName === 'ALL') return searchCandidates;
-    return searchCandidates.filter((item) => item.teamName === selectedTeamName);
+    const selectedKey = normalizeTeamKey(selectedTeamName);
+    return searchCandidates.filter((item) => normalizeTeamKey(item.teamName) === selectedKey);
   }, [searchCandidates, selectedTeamName]);
 
   const nameFilteredCandidates = useMemo(() => {
@@ -293,7 +297,7 @@ export default function PlayerDetailPage() {
     navigateToPlayer(nextId);
   };
 
-  const invalidPlayerId = currentPlayerId == null;
+  const hasSelectedPlayer = currentPlayerId != null;
 
   return (
     <div
@@ -456,10 +460,14 @@ export default function PlayerDetailPage() {
       </section>
 
       {loading && <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>데이터를 불러오는 중...</div>}
-      {!loading && invalidPlayerId && <div style={{ padding: '40px', textAlign: 'center', color: '#f87171' }}>오류: 유효하지 않은 선수 ID입니다.</div>}
-      {!loading && !invalidPlayerId && error && <div style={{ padding: '40px', textAlign: 'center', color: '#f87171' }}>오류: {error}</div>}
+      {!loading && !hasSelectedPlayer && (
+        <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+          팀/이름/ID로 조회할 선수를 먼저 선택해 주세요.
+        </div>
+      )}
+      {!loading && hasSelectedPlayer && error && <div style={{ padding: '40px', textAlign: 'center', color: '#f87171' }}>오류: {error}</div>}
 
-      {!loading && !invalidPlayerId && !error && stats && (
+      {!loading && hasSelectedPlayer && !error && stats && (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
             <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 900 }}>{displayPlayerName}</h1>

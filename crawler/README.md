@@ -141,10 +141,43 @@ PYTHONPATH=src python -m crawler.cli \
   --output-json /tmp/aubl_2015_2025_out
 ```
 
+중요:
+- 기존 결과 누적을 피하려면 매번 **새 출력 디렉터리**를 사용하세요.
+- 예: `/tmp/aubl_2015_2025_out_v2` (또는 기존 디렉터리 삭제 후 재수집)
+
 검증:
 
 ```bash
 PYTHONPATH=src python scripts/verify_collection.py --input-dir /tmp/aubl_2015_2025_out
+```
+
+컨텍스트(리그/조/플레이오프) 값 확인:
+
+```bash
+python - <<'PY'
+import json
+from collections import Counter
+from pathlib import Path
+
+base = Path("/tmp/aubl_2015_2025_out")
+phase = Counter()
+league = Counter()
+part = Counter()
+
+with (base / "matches.jsonl").open("r", encoding="utf-8") as f:
+    for line in f:
+        line = line.strip()
+        if not line:
+            continue
+        row = json.loads(line)
+        phase[row.get("phase")] += 1
+        league[row.get("group_code")] += 1
+        part[row.get("part_code")] += 1
+
+print("phase:", phase)
+print("group_code non-null:", sum(v for k, v in league.items() if k is not None))
+print("part_code non-null:", sum(v for k, v in part.items() if k is not None))
+PY
 ```
 
 SQL 생성:
@@ -190,6 +223,28 @@ python scripts/apply_team_code_normalization.py \
   --mapping-csv output/2015_2025/team_code_normalization_map.csv
 ```
 
+플레이오프(으뜸/버금) 정규화까지 함께 반영:
+
+```bash
+python scripts/apply_team_code_normalization.py \
+  output/2015_2025/import_2015_2025.sql \
+  output/2015_2025/import_2015_2025_team_normalized.sql \
+  --mapping-csv output/2015_2025/team_code_normalization_map.csv \
+  --playoff-xlsx "../2015~2025 플레이오프 정리.xlsx" \
+  --playoff-sheet "2004~2025 시즌 결과" \
+  --playoff-start-year 2015 \
+  --playoff-end-year 2025 \
+  --playoff-csv output/2015_2025/playoff_entries_normalized.csv \
+  --playoff-unresolved-csv output/2015_2025/playoff_entries_unresolved.csv
+```
+
+설명:
+- `--playoff-xlsx`를 주면 SQL 끝에 `PLAYOFF_TEAM_RESULT` 테이블 upsert 구문이 추가됩니다.
+- 플레이오프 티어 값은 `EUTTEUM`, `BEOGEUM`으로 저장됩니다.
+- `playoff_round`에는 `16강/8강/4강/준우승/우승` 등 원문 기준 라운드가 저장됩니다.
+- 매핑 실패 팀은 `--playoff-unresolved-csv`에서 검토 가능합니다.
+- 엄격 검증이 필요하면 `--strict-playoff-map` 옵션을 사용하세요(미매핑 존재 시 종료코드 2).
+
 연도별 정규화 SQL 생성:
 
 ```bash
@@ -213,6 +268,47 @@ done
 적재 권장:
 - 시즌 전체 적재 시 `import_2015_2025_team_normalized.sql` 사용
 - 연도별 적재 시 `import_<YEAR>_team_normalized.sql` 사용
+
+### NAS MariaDB clean import (컨테이너 내부)
+
+기존 데이터 초기화:
+
+```bash
+mariadb -u root -p aubl_db <<'SQL'
+SET FOREIGN_KEY_CHECKS=0;
+TRUNCATE TABLE BATTER_GAME_LOG;
+TRUNCATE TABLE PITCHER_GAME_LOG;
+TRUNCATE TABLE BATTER_STATS;
+TRUNCATE TABLE PITCHER_STATS;
+TRUNCATE TABLE GAME;
+TRUNCATE TABLE TEAM_PLAYER;
+TRUNCATE TABLE PLAYER;
+TRUNCATE TABLE TEAM;
+TRUNCATE TABLE SEASON;
+SET FOREIGN_KEY_CHECKS=1;
+SQL
+```
+
+SQL 적재:
+
+```bash
+mariadb -u root -p aubl_db < /var/lib/mysql/import_2015_2025_team_normalized.sql
+```
+
+적재 후 확인:
+
+```bash
+mariadb -u root -p aubl_db -e "
+SELECT COUNT(*) AS seasons FROM SEASON;
+SELECT COUNT(*) AS teams FROM TEAM;
+SELECT COUNT(*) AS players FROM PLAYER;
+SELECT COUNT(*) AS games FROM GAME;
+SELECT game_type, COUNT(*) AS cnt FROM GAME GROUP BY game_type ORDER BY cnt DESC;
+SELECT COUNT(*) AS game_league_nonnull FROM GAME WHERE league_code IS NOT NULL;
+SELECT COUNT(*) AS game_part_nonnull FROM GAME WHERE part_code IS NOT NULL;
+SELECT playoff_tier, COUNT(*) AS cnt FROM PLAYOFF_TEAM_RESULT GROUP BY playoff_tier ORDER BY cnt DESC;
+"
+```
 
 Run the crawler using HTML scraping mode:
 

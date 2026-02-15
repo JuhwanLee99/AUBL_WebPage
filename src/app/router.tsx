@@ -9,7 +9,6 @@ import TeamsPage from '../front/pages/TeamsPage';
 import TeamHubPage from '../front/pages/TeamHubPage';
 import TeamDetailPage from '../front/pages/TeamDetailPage';
 import TeamNoticeDetailPage from '../front/pages/TeamNoticeDetailPage';
-import StandingsPage from './pages/StandingPage';
 import PredictionPage from './pages/PredictionPage';
 import RecordPage from './pages/RecordPage';
 import CommunityPage from './pages/CommunityPage';
@@ -21,8 +20,6 @@ import ScoreboardPage from '../scoreboard/pages/ScoreboardPage';
 import ScoreboardTextPage from '../scoreboard/pages/ScoreboardTextPage';
 import ScoreboardLiveOverlayPage from '../scoreboard/pages/ScoreboardLiveOverlayPage';
 import ScorekeeperPage from '../scorekeeper/pages/ScorekeeperPage';
-import PitcherRecordPage from './pages/PitcherRecordPage';
-import BatterRecordPage from './pages/BatterRecordPage';
 import PlayerDetailPage from './pages/PlayerDetailPage';
 import MatchSchedulePage from './pages/MatchSchedulePage';
 import ScheduleResultsPage from './pages/ScheduleResultsPage';
@@ -30,7 +27,6 @@ import ScheduleGroupsPage from './pages/ScheduleGroupsPage';
 import ScheduleManagePage from './pages/ScheduleManagePage';
 import ScheduleLivePage from './pages/ScheduleLivePage';
 import SchedulePracticePage from './pages/SchedulePracticePage';
-import PowerRankingPage from './pages/PowerRankingPage';
 import LoginPage from './pages/LoginPage';
 import AccessDeniedPage from './pages/AccessDeniedPage';
 import AccountPage from './pages/AccountPage';
@@ -90,11 +86,11 @@ export const router = createBrowserRouter([
       },
       {
         path: 'standings',
-        element: <StandingsPage />,
+        element: <Navigate to="/records?tab=standings" replace />,
       },
       {
         path: 'standings/power-ranking',
-        element: <PowerRankingPage />,
+        element: <Navigate to="/records?tab=power" replace />,
       },
       {
         path: 'prediction',
@@ -152,11 +148,15 @@ export const router = createBrowserRouter([
       },
       {
         path: 'records/pitchers',
-        element: <PitcherRecordPage />,
+        element: <Navigate to="/records?tab=pitchers" replace />,
       },
       {
         path: 'records/batters',
-        element: <BatterRecordPage />,
+        element: <Navigate to="/records?tab=batters" replace />,
+      },
+      {
+        path: 'records/player',
+        element: <PlayerDetailPage />,
       },
       {
         path: 'records/player/:playerId',
@@ -217,6 +217,10 @@ export const router = createBrowserRouter([
           { path: 'teams', element: <AdminTeamsPage /> },
           { path: 'roles', element: <AdminRolesPage /> },
         ],
+      },
+      {
+        path: 'player',
+        element: <PlayerDetailPage />,
       },
       {
         path: 'player/:playerId',

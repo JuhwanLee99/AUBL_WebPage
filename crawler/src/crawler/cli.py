@@ -124,12 +124,6 @@ def run_sync() -> None:
             roster_entries = fetch_roster(roster_client, sync_settings, year)
             storage.store_roster(roster_entries, year)
             storage.set_team_registry(build_team_registry(roster_entries))
-            batting_payload, pitching_payload = fetch_league_records(
-                roster_client,
-                sync_settings,
-                year,
-            )
-            storage.store_league_records(year, batting_payload, pitching_payload)
             if data_source == "web":
                 web_pages = fetch_web_pages(client, sync_settings, year)
                 for page in web_pages:
@@ -146,6 +140,19 @@ def run_sync() -> None:
             discovered_group_codes = tuple(
                 sorted({game.group_code for game in schedule_games if game.group_code is not None})
             )
+            record_group_codes: tuple[str, ...]
+            if group_codes:
+                record_group_codes = tuple(group_codes)
+            else:
+                record_group_codes = discovered_group_codes
+            batting_payload, pitching_payload = fetch_league_records(
+                roster_client,
+                sync_settings,
+                year,
+                record_group_codes,
+            )
+            storage.store_league_records(year, batting_payload, pitching_payload)
+
             target_group_codes: tuple[str | None, ...]
             if group_codes:
                 target_group_codes = tuple(group_codes)
