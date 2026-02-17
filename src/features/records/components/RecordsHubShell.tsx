@@ -8,6 +8,7 @@ interface RecordsHubShellProps {
   onTabChange: (tab: RecordsTab) => void;
   filterBar: ReactNode;
   playoffFilterEnabled: boolean;
+  tabExtraBeforePower?: ReactNode;
 }
 
 export default function RecordsHubShell({
@@ -17,6 +18,7 @@ export default function RecordsHubShell({
   onTabChange,
   filterBar,
   playoffFilterEnabled,
+  tabExtraBeforePower,
 }: RecordsHubShellProps) {
   return (
     <section
@@ -56,25 +58,28 @@ export default function RecordsHubShell({
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
         {tabs.map((option) => {
+          const isPowerTab = option.value === 'power';
           const active = tab === option.value;
           return (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onTabChange(option.value)}
-              style={{
-                borderRadius: '999px',
-                border: active ? '1px solid rgba(96,165,250,0.7)' : '1px solid rgba(148,163,184,0.35)',
-                background: active ? 'rgba(59,130,246,0.2)' : 'rgba(15,23,42,0.6)',
-                color: active ? '#dbeafe' : '#cbd5e1',
-                padding: '8px 14px',
-                fontWeight: 800,
-                fontSize: '13px',
-                cursor: 'pointer',
-              }}
-            >
-              {option.label}
-            </button>
+            <span key={option.value} style={{ display: 'inline-flex', gap: '8px' }}>
+              {isPowerTab && tabExtraBeforePower}
+              <button
+                type="button"
+                onClick={() => onTabChange(option.value)}
+                style={{
+                  borderRadius: '999px',
+                  border: active ? '1px solid rgba(96,165,250,0.7)' : '1px solid rgba(148,163,184,0.35)',
+                  background: active ? 'rgba(59,130,246,0.2)' : 'rgba(15,23,42,0.6)',
+                  color: active ? '#dbeafe' : '#cbd5e1',
+                  padding: '8px 14px',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                }}
+              >
+                {option.label}
+              </button>
+            </span>
           );
         })}
       </div>

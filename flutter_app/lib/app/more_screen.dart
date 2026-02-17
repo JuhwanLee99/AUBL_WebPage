@@ -12,7 +12,7 @@ import '../features/intro/intro_screen.dart';
 import '../features/intro/rules_screen.dart';
 import '../features/legal/privacy_screen.dart';
 import '../features/legal/terms_screen.dart';
-import '../features/standings/standings_screen.dart';
+import '../features/records/records_screen.dart';
 import '../core/services/notification_service.dart';
 
 class MoreScreen extends StatefulWidget {
@@ -67,8 +67,10 @@ class _MoreScreenState extends State<MoreScreen> {
     final pref = await NotificationService.instance.getMatchPreference();
     final allEnabled =
         await NotificationService.instance.getAllNotificationsEnabled();
-    final community = await NotificationService.instance.getCommunityNoticeEnabled();
-    final teamNotice = await NotificationService.instance.getTeamNoticeEnabled();
+    final community =
+        await NotificationService.instance.getCommunityNoticeEnabled();
+    final teamNotice =
+        await NotificationService.instance.getTeamNoticeEnabled();
     if (!mounted) return;
     setState(() {
       _matchPref = pref;
@@ -144,7 +146,8 @@ class _MoreScreenState extends State<MoreScreen> {
                     title: const Text('전체 알림',
                         style: TextStyle(color: Colors.white)),
                     subtitle: const Text('긴급 공지 포함 전체 알림 (ON/OFF)',
-                        style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
+                        style:
+                            TextStyle(color: AppTheme.slate500, fontSize: 12)),
                   ),
                   SwitchListTile(
                     value: _communityNoticeOn,
@@ -157,11 +160,12 @@ class _MoreScreenState extends State<MoreScreen> {
                               setState(() => _communityNoticeOn = value);
                             }
                           },
-                      activeThumbColor: AppTheme.blue400,
-                      title: const Text('커뮤니티 공지',
-                          style: TextStyle(color: Colors.white)),
-                      subtitle: const Text('긴급 제외 공지 알림 (ON/OFF)',
-                          style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
+                    activeThumbColor: AppTheme.blue400,
+                    title: const Text('커뮤니티 공지',
+                        style: TextStyle(color: Colors.white)),
+                    subtitle: const Text('긴급 제외 공지 알림 (ON/OFF)',
+                        style:
+                            TextStyle(color: AppTheme.slate500, fontSize: 12)),
                   ),
                   SwitchListTile(
                     value: _teamNoticeOn,
@@ -178,7 +182,8 @@ class _MoreScreenState extends State<MoreScreen> {
                     title: const Text('홈팀 공지',
                         style: TextStyle(color: Colors.white)),
                     subtitle: const Text('소속 팀 공지 알림',
-                        style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
+                        style:
+                            TextStyle(color: AppTheme.slate500, fontSize: 12)),
                   ),
                   const SizedBox(height: 8),
                   IgnorePointer(
@@ -190,7 +195,8 @@ class _MoreScreenState extends State<MoreScreen> {
                         onChanged: (value) {
                           if (value == null || !tempAll) return;
                           setSheetState(() => temp = value);
-                          NotificationService.instance.setMatchPreference(value);
+                          NotificationService.instance
+                              .setMatchPreference(value);
                           if (mounted) {
                             setState(() => _matchPref = value);
                           }
@@ -283,8 +289,7 @@ class _MoreScreenState extends State<MoreScreen> {
             ),
             const SizedBox(width: 8),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(8),
@@ -315,7 +320,15 @@ class _MoreScreenState extends State<MoreScreen> {
           _MenuTile(
             icon: Icons.emoji_events,
             label: '순위',
-            onTap: () => _push(const StandingsScreen()),
+            onTap: () {
+              final shell = ShellController.of(context);
+              if (shell != null) {
+                shell.switchTab(3,
+                    recordsTabIndex: RecordsHubTab.standings.index);
+                return;
+              }
+              _push(const RecordsScreen(initialTab: RecordsHubTab.standings));
+            },
           ),
           _MenuTile(
             icon: Icons.person,
@@ -327,9 +340,7 @@ class _MoreScreenState extends State<MoreScreen> {
           _MenuTile(
             icon: Icons.notifications_active,
             label: '알림 설정',
-            value: _loadingNotif
-                ? '확인 중...'
-                : _notificationSummary(),
+            value: _loadingNotif ? '확인 중...' : _notificationSummary(),
             onTap: _openNotificationSettings,
           ),
           const Divider(height: 32),
@@ -360,7 +371,8 @@ class _MoreScreenState extends State<MoreScreen> {
               onTap: () {
                 final shell = ShellController.of(context);
                 if (shell != null) {
-                  shell.openEmbeddedWebView('/scorekeeper', '기록원', fullscreen: true);
+                  shell.openEmbeddedWebView('/scorekeeper', '기록원',
+                      fullscreen: true);
                 } else {
                   _push(const AppWebViewScreen(
                     path: '/scorekeeper',

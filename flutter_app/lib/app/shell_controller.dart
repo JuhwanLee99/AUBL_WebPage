@@ -10,9 +10,10 @@ class ShellController extends InheritedWidget {
     required super.child,
   });
 
-  final void Function(String path, String title, {bool fullscreen}) openEmbeddedWebView;
+  final void Function(String path, String title, {bool fullscreen})
+      openEmbeddedWebView;
   final VoidCallback closeEmbeddedWebView;
-  final void Function(int index) switchTab;
+  final void Function(int index, {int? recordsTabIndex}) switchTab;
 
   /// 앱이 foreground로 복귀할 때 값이 증가하는 노티파이어.
   /// 각 화면에서 이 값을 listen하여 데이터를 갱신.
