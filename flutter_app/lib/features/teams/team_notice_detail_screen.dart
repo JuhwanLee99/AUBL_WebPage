@@ -13,15 +13,16 @@ class TeamNoticeDetailScreen extends StatefulWidget {
     required this.teamId,
     required this.teamName,
     required this.notice,
+    required this.canManage,
   });
 
   final String teamId;
   final String teamName;
   final TeamNotice notice;
+  final bool canManage;
 
   @override
-  State<TeamNoticeDetailScreen> createState() =>
-      _TeamNoticeDetailScreenState();
+  State<TeamNoticeDetailScreen> createState() => _TeamNoticeDetailScreenState();
 }
 
 class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
@@ -117,6 +118,27 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
                   stream: _fs.watchTeamNoticeComments(
                       widget.teamId, widget.notice.id),
                   builder: (context, snap) {
+                    if (snap.hasError) {
+                      final err = snap.error;
+                      if (err is FirebaseException &&
+                          err.code == 'permission-denied') {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: Text(
+                            '댓글은 해당 팀 선수/감독만 열람할 수 있습니다.',
+                            style: TextStyle(color: AppTheme.red500),
+                          ),
+                        );
+                      }
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        child: Text(
+                          '댓글을 불러오지 못했습니다.',
+                          style: TextStyle(color: AppTheme.red500),
+                        ),
+                      );
+                    }
+
                     final comments = snap.data ?? [];
                     if (comments.isEmpty) {
                       return const Padding(
@@ -147,11 +169,9 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
                             comment.id,
                             FirebaseAuth.instance.currentUser!.uid,
                           ),
-                          onDelete: () => _fs.deleteTeamNoticeComment(
-                            widget.teamId,
-                            widget.notice.id,
-                            comment.id,
-                          ),
+                          canManage: widget.canManage,
+                          onDelete: (commentId) => _fs.deleteTeamNoticeComment(
+                              widget.teamId, widget.notice.id, commentId),
                         );
                       }).toList(),
                     );
@@ -227,6 +247,7 @@ class _CommentTile extends StatelessWidget {
     required this.comment,
     required this.replies,
     required this.currentUid,
+    required this.canManage,
     this.onReply,
     this.onLike,
     this.onDelete,
@@ -235,14 +256,16 @@ class _CommentTile extends StatelessWidget {
   final NoticeComment comment;
   final List<NoticeComment> replies;
   final String currentUid;
+  final bool canManage;
   final VoidCallback? onReply;
   final VoidCallback? onLike;
-  final VoidCallback? onDelete;
+  final ValueChanged<String>? onDelete;
 
   @override
   Widget build(BuildContext context) {
     final isLiked = comment.likedBy.contains(currentUid);
     final isMine = comment.uid == currentUid;
+    final canDelete = isMine || canManage;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -295,10 +318,10 @@ class _CommentTile extends StatelessWidget {
                 child: const Text('답글',
                     style: TextStyle(color: AppTheme.slate500, fontSize: 11)),
               ),
-              if (isMine) ...[
+              if (canDelete) ...[
                 const SizedBox(width: 16),
                 GestureDetector(
-                  onTap: onDelete,
+                  onTap: () => onDelete?.call(comment.id),
                   child: const Text('삭제',
                       style: TextStyle(color: AppTheme.red500, fontSize: 11)),
                 ),
@@ -330,16 +353,27 @@ class _CommentTile extends StatelessWidget {
                                             r.createdAt),
                                         locale: 'ko'),
                                     style: const TextStyle(
-                                        color: AppTheme.slate500,
-                                        fontSize: 10),
+                                        color: AppTheme.slate500, fontSize: 10),
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 2),
                               Text(r.content,
                                   style: const TextStyle(
-                                      color: AppTheme.slate400,
-                                      fontSize: 12)),
+                                      color: AppTheme.slate400, fontSize: 12)),
+                              if (r.uid == currentUid || canManage) ...[
+                                const SizedBox(height: 3),
+                                GestureDetector(
+                                  onTap: () => onDelete?.call(r.id),
+                                  child: const Text(
+                                    '삭제',
+                                    style: TextStyle(
+                                      color: AppTheme.red500,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ))

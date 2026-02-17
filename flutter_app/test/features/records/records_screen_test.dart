@@ -14,7 +14,7 @@ void main() {
       fakeApi = _FakeBackendApiService();
     });
 
-    testWidgets('renders 5 tabs and power ranking table', (tester) async {
+    testWidgets('renders 6 tabs and power ranking table', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.dark,
@@ -30,6 +30,7 @@ void main() {
       expect(find.text('투수기록'), findsOneWidget);
       expect(find.text('타자기록'), findsOneWidget);
       expect(find.text('파워랭킹'), findsOneWidget);
+      expect(find.text('선수상세'), findsOneWidget);
 
       await tester.tap(find.text('파워랭킹'));
       await tester.pump();
@@ -38,7 +39,7 @@ void main() {
       expect(find.text('테스트팀'), findsOneWidget);
     });
 
-    testWidgets('opens player detail screen from CTA', (tester) async {
+    testWidgets('shows player detail content in tab', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.dark,

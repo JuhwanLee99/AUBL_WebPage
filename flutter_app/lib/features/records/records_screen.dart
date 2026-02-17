@@ -9,7 +9,8 @@ enum RecordsHubTab {
   standings('팀순위'),
   pitchers('투수기록'),
   batters('타자기록'),
-  power('파워랭킹');
+  power('파워랭킹'),
+  playerDetail('선수상세');
 
   const RecordsHubTab(this.label);
   final String label;
@@ -153,62 +154,89 @@ class RecordsScreenState extends State<RecordsScreen>
 
     final filters = _toRecordFilterParams();
 
-    final futures = await Future.wait<_LoadResult<dynamic>>([
-      _capture(
-        _api.getBatterRankings(
-          seasonId: seasonId,
-          limit: 200,
-          sort: BatterRankingSort.ops,
-          filters: filters,
-          regulation: _regulation,
-        ),
+    final mainBattersFuture = _capture<List<BatterRanking>>(
+      _api.getBatterRankings(
+        seasonId: seasonId,
+        limit: 200,
+        sort: BatterRankingSort.ops,
+        filters: filters,
+        regulation: _regulation,
       ),
-      _capture(
-        _api.getPitcherRankings(
-          seasonId: seasonId,
-          limit: 200,
-          sort: PitcherRankingSort.era,
-          filters: filters,
-          regulation: _regulation,
-        ),
+    );
+    final mainPitchersFuture = _capture<List<PitcherRanking>>(
+      _api.getPitcherRankings(
+        seasonId: seasonId,
+        limit: 200,
+        sort: PitcherRankingSort.era,
+        filters: filters,
+        regulation: _regulation,
       ),
-      _capture(
-        _api.getBatterRankings(
-          seasonId: seasonId,
-          limit: 5,
-          sort: _topBatterSort,
-          filters: filters,
-          regulation: RecordRegulation.inRule,
-        ),
+    );
+    final topBattersFuture = _capture<List<BatterRanking>>(
+      _api.getBatterRankings(
+        seasonId: seasonId,
+        limit: 5,
+        sort: _topBatterSort,
+        filters: filters,
+        regulation: RecordRegulation.inRule,
       ),
-      _capture(
-        _api.getPitcherRankings(
-          seasonId: seasonId,
-          limit: 5,
-          sort: _topPitcherSort,
-          filters: filters,
-          regulation: RecordRegulation.inRule,
-        ),
+    );
+    final topPitchersFuture = _capture<List<PitcherRanking>>(
+      _api.getPitcherRankings(
+        seasonId: seasonId,
+        limit: 5,
+        sort: _topPitcherSort,
+        filters: filters,
+        regulation: RecordRegulation.inRule,
       ),
-      _capture(_api.getRecordOverview(seasonId, filters: filters)),
-      _capture(_api.getTeamRecordStandings(seasonId, filters: filters)),
-      _capture(_api.getPlayoffSummaries(seasonId, filters: filters)),
-      _capture(_api.getPlayerSearchIndex(seasonId)),
+    );
+    final overviewFuture = _capture<RecordsOverview>(
+      _api.getRecordOverview(seasonId, filters: filters),
+    );
+    final standingsFuture = _capture<List<TeamRecordStanding>>(
+      _api.getTeamRecordStandings(seasonId, filters: filters),
+    );
+    final playoffFuture = _capture<List<PlayoffSummaryRow>>(
+      _api.getPlayoffSummaries(seasonId, filters: filters),
+    );
+    final playerIndexFuture = _capture<List<PlayerLookup>>(
+      _api.getPlayerSearchIndex(seasonId),
+    );
+
+    await Future.wait<Object?>([
+      mainBattersFuture,
+      mainPitchersFuture,
+      topBattersFuture,
+      topPitchersFuture,
+      overviewFuture,
+      standingsFuture,
+      playoffFuture,
+      playerIndexFuture,
     ]);
 
     if (!mounted) return;
 
-    final mainBattersRes = futures[0] as _LoadResult<List<BatterRanking>>;
-    final mainPitchersRes = futures[1] as _LoadResult<List<PitcherRanking>>;
-    final topBattersRes = futures[2] as _LoadResult<List<BatterRanking>>;
-    final topPitchersRes = futures[3] as _LoadResult<List<PitcherRanking>>;
-    final overviewRes = futures[4] as _LoadResult<RecordsOverview>;
-    final standingsRes = futures[5] as _LoadResult<List<TeamRecordStanding>>;
-    final playoffRes = futures[6] as _LoadResult<List<PlayoffSummaryRow>>;
-    final playerIndexRes = futures[7] as _LoadResult<List<PlayerLookup>>;
+    final mainBattersRes = await mainBattersFuture;
+    final mainPitchersRes = await mainPitchersFuture;
+    final topBattersRes = await topBattersFuture;
+    final topPitchersRes = await topPitchersFuture;
+    final overviewRes = await overviewFuture;
+    final standingsRes = await standingsFuture;
+    final playoffRes = await playoffFuture;
+    final playerIndexRes = await playerIndexFuture;
+    final allResults = <_LoadResult<Object?>>[
+      mainBattersRes,
+      mainPitchersRes,
+      topBattersRes,
+      topPitchersRes,
+      overviewRes,
+      standingsRes,
+      playoffRes,
+      playerIndexRes,
+    ];
 
     final warnings = <String>[];
-    for (final result in futures) {
+    for (final result in allResults) {
       if (result.error != null) warnings.add(result.error!.toString());
     }
 
@@ -523,9 +551,12 @@ class RecordsScreenState extends State<RecordsScreen>
 
   RecordScope? _normalizeScope(String? value) {
     final raw = (value ?? '').trim().toUpperCase();
-    if (raw.isEmpty) return null;
-    if (raw.contains('PLAYOFF') || raw.contains('포스트'))
+    if (raw.isEmpty) {
+      return null;
+    }
+    if (raw.contains('PLAYOFF') || raw.contains('포스트')) {
       return RecordScope.playoff;
+    }
     if (raw.contains('LEAGUE') ||
         raw.contains('REGULAR') ||
         raw.contains('리그') ||
@@ -537,11 +568,15 @@ class RecordsScreenState extends State<RecordsScreen>
 
   RecordPlayoffDivision? _normalizeSeasonType(String? value) {
     final raw = (value ?? '').trim().toUpperCase();
-    if (raw.isEmpty) return null;
-    if (raw.contains('EUTTEUM') || raw.contains('으뜸'))
+    if (raw.isEmpty) {
+      return null;
+    }
+    if (raw.contains('EUTTEUM') || raw.contains('으뜸')) {
       return RecordPlayoffDivision.eutteum;
-    if (raw.contains('BEOGEUM') || raw.contains('버금'))
+    }
+    if (raw.contains('BEOGEUM') || raw.contains('버금')) {
       return RecordPlayoffDivision.beogeum;
+    }
     return null;
   }
 
@@ -559,13 +594,18 @@ class RecordsScreenState extends State<RecordsScreen>
           parsedScope == RecordScope.playoff;
     }
 
-    if (playoffRows.isNotEmpty) return true;
-    if (standings.any((e) => hasPlayoffMetadata(e.seasonType, e.scope)))
+    if (playoffRows.isNotEmpty) {
       return true;
-    if (batterRows.any((e) => hasPlayoffMetadata(e.seasonType, e.scope)))
+    }
+    if (standings.any((e) => hasPlayoffMetadata(e.seasonType, e.scope))) {
       return true;
-    if (pitcherRows.any((e) => hasPlayoffMetadata(e.seasonType, e.scope)))
+    }
+    if (batterRows.any((e) => hasPlayoffMetadata(e.seasonType, e.scope))) {
       return true;
+    }
+    if (pitcherRows.any((e) => hasPlayoffMetadata(e.seasonType, e.scope))) {
+      return true;
+    }
     return false;
   }
 
@@ -588,37 +628,13 @@ class RecordsScreenState extends State<RecordsScreen>
         title: const Text('기록'),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(kTextTabBarHeight),
-          child: Row(
-            children: [
-              Expanded(
-                child: TabBar(
-                  controller: _tabCtrl,
-                  isScrollable: true,
-                  tabs: RecordsHubTab.values
-                      .map((tab) => Tab(text: tab.label))
-                      .toList(),
-                ),
-              ),
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => _openPlayerDetail(),
-                  child: Container(
-                    height: kTextTabBarHeight,
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    alignment: Alignment.center,
-                    child: const Text(
-                      '선수상세',
-                      style: TextStyle(
-                        color: AppTheme.slate300,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+          child: TabBar(
+            controller: _tabCtrl,
+            isScrollable: false,
+            labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+            tabs: RecordsHubTab.values
+                .map((tab) => Tab(text: tab.label))
+                .toList(),
           ),
         ),
       ),
@@ -626,7 +642,8 @@ class RecordsScreenState extends State<RecordsScreen>
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                _buildFilterBar(),
+                if (_tabCtrl.index != RecordsHubTab.playerDetail.index)
+                  _buildFilterBar(),
                 if (_loading) const LinearProgressIndicator(minHeight: 1),
                 if (_error != null)
                   _Banner(
@@ -649,6 +666,12 @@ class RecordsScreenState extends State<RecordsScreen>
                       _buildPitchersTab(),
                       _buildBattersTab(),
                       _buildPowerTab(),
+                      PlayerDetailScreen(
+                        key: ValueKey<int?>(_seasonId),
+                        initialSeasonId: _seasonId,
+                        apiService: _api,
+                        embedded: true,
+                      ),
                     ],
                   ),
                 ),
@@ -807,7 +830,9 @@ class RecordsScreenState extends State<RecordsScreen>
                       onChanged: (value) {
                         if (!_playoffFilterEnabled ||
                             value == null ||
-                            value == _playoffDivision) return;
+                            value == _playoffDivision) {
+                          return;
+                        }
                         setState(() {
                           _playoffDivision = value;
                           if (_playoffDivision != RecordPlayoffDivision.all) {
@@ -1548,8 +1573,9 @@ class _FilterDropdown<T> extends StatelessWidget {
     return SizedBox(
       width: width,
       child: DropdownButtonFormField<T>(
+        key: ValueKey<Object?>(value),
         isExpanded: true,
-        value: value,
+        initialValue: value,
         decoration: InputDecoration(
           isDense: true,
           labelText: label,
@@ -1806,8 +1832,9 @@ class _SortDropdown<T> extends StatelessWidget {
     return SizedBox(
       width: 120,
       child: DropdownButtonFormField<T>(
+        key: ValueKey<Object?>(value),
         isExpanded: true,
-        value: value,
+        initialValue: value,
         decoration: InputDecoration(
           isDense: true,
           labelText: '기준',

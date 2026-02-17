@@ -9,11 +9,13 @@ class PlayerDetailScreen extends StatefulWidget {
     this.initialPlayerId,
     this.initialSeasonId,
     this.apiService,
+    this.embedded = false,
   });
 
   final int? initialPlayerId;
   final int? initialSeasonId;
   final BackendApiService? apiService;
+  final bool embedded;
 
   @override
   State<PlayerDetailScreen> createState() => _PlayerDetailScreenState();
@@ -377,6 +379,30 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final content = RefreshIndicator(
+      onRefresh: () async {
+        await _loadSearchIndex();
+        if (_currentPlayerId != null) {
+          await _loadPlayer(_currentPlayerId!);
+        }
+      },
+      child: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          _buildSearchCard(),
+          const SizedBox(height: 10),
+          _buildPlayerSummaryCard(),
+          const SizedBox(height: 10),
+          _buildGameLogCard(),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+
+    if (widget.embedded) {
+      return content;
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('선수 상세'),
@@ -388,29 +414,38 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await _loadSearchIndex();
-          if (_currentPlayerId != null) {
-            await _loadPlayer(_currentPlayerId!);
-          }
-        },
-        child: ListView(
-          padding: const EdgeInsets.all(12),
-          children: [
-            _buildSearchCard(),
-            const SizedBox(height: 10),
-            _buildPlayerSummaryCard(),
-            const SizedBox(height: 10),
-            _buildGameLogCard(),
-            const SizedBox(height: 24),
-          ],
-        ),
-      ),
+      body: content,
     );
   }
 
   Widget _buildSearchCard() {
+    final teamFilterValues = <String>['ALL', ..._teamOptions];
+    final teamFilterItems = teamFilterValues
+        .map(
+          (team) => DropdownMenuItem<String>(
+            value: team,
+            child: Text(
+              team == 'ALL' ? '전체 팀' : team,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        )
+        .toList();
+
+    final rosterItems = _teamFilteredCandidates
+        .map(
+          (item) => DropdownMenuItem<int>(
+            value: item.playerId,
+            child: Text(
+              '${item.playerName} (${item.teamName} #${item.jerseyNumber})',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        )
+        .toList();
+
     return _Card(
       title: '선수 검색',
       child: Column(
@@ -420,11 +455,19 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
             children: [
               Expanded(
                 child: DropdownButtonFormField<int>(
-                  value: _searchSeasonId,
+                  key: ValueKey<Object?>('search-season-$_searchSeasonId'),
+                  initialValue: _searchSeasonId,
+                  isExpanded: true,
                   decoration: const InputDecoration(labelText: '검색 기준 시즌'),
                   items: _seasons
                       .map((season) => DropdownMenuItem<int>(
-                          value: season.id, child: Text('${season.year} 시즌')))
+                            value: season.id,
+                            child: Text(
+                              '${season.year} 시즌',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ))
                       .toList(),
                   onChanged: (value) {
                     if (value == null || value == _searchSeasonId) return;
@@ -438,14 +481,25 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: _selectedTeamName,
+                  key: ValueKey<String>('team-filter-$_selectedTeamName'),
+                  initialValue: _selectedTeamName,
+                  isExpanded: true,
                   decoration: const InputDecoration(labelText: '팀 필터'),
-                  items: [
-                    const DropdownMenuItem<String>(
-                        value: 'ALL', child: Text('전체 팀')),
-                    ..._teamOptions.map((team) => DropdownMenuItem<String>(
-                        value: team, child: Text(team))),
-                  ],
+                  items: teamFilterItems,
+                  selectedItemBuilder: (context) {
+                    return teamFilterValues
+                        .map(
+                          (team) => Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              team == 'ALL' ? '전체 팀' : team,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList();
+                  },
                   onChanged: (value) {
                     if (value == null) return;
                     setState(() => _selectedTeamName = value);
@@ -479,17 +533,31 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
             children: [
               Expanded(
                 child: DropdownButtonFormField<int>(
-                  value: null,
+                  key: ValueKey<String>(
+                      'team-roster-${_searchSeasonId ?? 0}-$_selectedTeamName-${_teamFilteredCandidates.length}'),
+                  initialValue: null,
+                  isExpanded: true,
                   decoration: const InputDecoration(labelText: '팀 선수 목록'),
                   hint: Text(
-                      _teamFilteredCandidates.isEmpty ? '선수 목록 없음' : '선수 선택'),
-                  items: _teamFilteredCandidates
-                      .map((item) => DropdownMenuItem<int>(
-                            value: item.playerId,
+                    _teamFilteredCandidates.isEmpty ? '선수 목록 없음' : '선수 선택',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  items: rosterItems,
+                  selectedItemBuilder: (context) {
+                    return _teamFilteredCandidates
+                        .map(
+                          (item) => Align(
+                            alignment: Alignment.centerLeft,
                             child: Text(
-                                '${item.playerName} (${item.teamName} #${item.jerseyNumber})'),
-                          ))
-                      .toList(),
+                              '${item.playerName} (${item.teamName} #${item.jerseyNumber})',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList();
+                  },
                   onChanged: (value) {
                     if (value == null) return;
                     _navigateToPlayer(value);
@@ -626,7 +694,9 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
             children: [
               Expanded(
                 child: DropdownButtonFormField<int>(
-                  value: _viewSeasonId,
+                  key: ValueKey<Object?>(
+                      'view-season-${_viewSeasonId ?? 'all'}'),
+                  initialValue: _viewSeasonId,
                   decoration: const InputDecoration(labelText: '기록 조회 시즌(선택)'),
                   items: [
                     const DropdownMenuItem<int>(value: null, child: Text('전체')),
@@ -650,7 +720,9 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
           const SizedBox(height: 10),
           if (batterSeasonIds.isNotEmpty)
             DropdownButtonFormField<int>(
-              value: _selectedBatterSeasonId,
+              key: ValueKey<Object?>(
+                  'batter-season-${_selectedBatterSeasonId ?? 'none'}'),
+              initialValue: _selectedBatterSeasonId,
               decoration: const InputDecoration(labelText: '타자 시즌 선택'),
               items: batterSeasonIds
                   .map((seasonId) => DropdownMenuItem<int>(
@@ -663,7 +735,9 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
           if (pitcherSeasonIds.isNotEmpty) ...[
             const SizedBox(height: 8),
             DropdownButtonFormField<int>(
-              value: _selectedPitcherSeasonId,
+              key: ValueKey<Object?>(
+                  'pitcher-season-${_selectedPitcherSeasonId ?? 'none'}'),
+              initialValue: _selectedPitcherSeasonId,
               decoration: const InputDecoration(labelText: '투수 시즌 선택'),
               items: pitcherSeasonIds
                   .map((seasonId) => DropdownMenuItem<int>(
@@ -734,38 +808,52 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              SizedBox(
-                width: 140,
-                child: TextField(
-                  onChanged: (value) => _gameIdInput = value,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Game ID',
-                    hintText: '비우면 전체',
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 480;
+              final inputWidth = compact ? constraints.maxWidth : 140.0;
+
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  SizedBox(
+                    width: inputWidth,
+                    child: TextField(
+                      onChanged: (value) => _gameIdInput = value,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Game ID',
+                        hintText: '비우면 전체',
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton(onPressed: _applyGameId, child: const Text('적용')),
-              const SizedBox(width: 8),
-              OutlinedButton(
-                onPressed: () {
-                  setState(() {
-                    _gameIdInput = '';
-                    _selectedGameId = null;
-                  });
-                  _loadGameLogs();
-                },
-                child: const Text('초기화'),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                '현재 필터: ${_selectedGameId != null ? 'Game #$_selectedGameId' : '전체'}',
-                style: const TextStyle(color: AppTheme.slate400, fontSize: 12),
-              ),
-            ],
+                  OutlinedButton(
+                      onPressed: _applyGameId, child: const Text('적용')),
+                  OutlinedButton(
+                    onPressed: () {
+                      setState(() {
+                        _gameIdInput = '';
+                        _selectedGameId = null;
+                      });
+                      _loadGameLogs();
+                    },
+                    child: const Text('초기화'),
+                  ),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                    child: Text(
+                      '현재 필터: ${_selectedGameId != null ? 'Game #$_selectedGameId' : '전체'}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: AppTheme.slate400, fontSize: 12),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 10),
           if (_gameLogsLoading) const LinearProgressIndicator(minHeight: 1),

@@ -491,8 +491,9 @@ class BackendApiService {
     if (q != null && q.trim().isNotEmpty) query['q'] = q.trim();
     final safeLimit = limit == null ? 500 : limit.clamp(1, 500);
     query['limit'] = '$safeLimit';
-    if (cursor != null && cursor.trim().isNotEmpty)
+    if (cursor != null && cursor.trim().isNotEmpty) {
       query['cursor'] = cursor.trim();
+    }
 
     final raw = await _get('/api/players/roster', query: query);
     return _normalizePlayerRosterResponse(raw, seasonId);

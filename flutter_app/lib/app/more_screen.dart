@@ -103,6 +103,7 @@ class _MoreScreenState extends State<MoreScreen> {
   void _openNotificationSettings() {
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: AppTheme.slate900,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -112,112 +113,116 @@ class _MoreScreenState extends State<MoreScreen> {
         var tempAll = _allNotificationsOn;
         return StatefulBuilder(
           builder: (context, setSheetState) {
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    '경기 알림 설정',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+            final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+            return SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 24 + bottomInset),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '경기 알림 설정',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    '전체 알림을 끄면 긴급 공지를 포함해 모든 알림이 중단됩니다.',
-                    style: TextStyle(color: AppTheme.slate400, fontSize: 12),
-                  ),
-                  const SizedBox(height: 12),
-                  SwitchListTile(
-                    value: tempAll,
-                    onChanged: (value) async {
-                      setSheetState(() => tempAll = value);
-                      await NotificationService.instance
-                          .setAllNotificationsEnabled(value);
-                      if (mounted) {
-                        setState(() => _allNotificationsOn = value);
-                      }
-                    },
-                    activeThumbColor: AppTheme.blue400,
-                    title: const Text('전체 알림',
-                        style: TextStyle(color: Colors.white)),
-                    subtitle: const Text('긴급 공지 포함 전체 알림 (ON/OFF)',
-                        style:
-                            TextStyle(color: AppTheme.slate500, fontSize: 12)),
-                  ),
-                  SwitchListTile(
-                    value: _communityNoticeOn,
-                    onChanged: !tempAll
-                        ? null
-                        : (value) async {
-                            await NotificationService.instance
-                                .setCommunityNoticeEnabled(value);
+                    const SizedBox(height: 8),
+                    const Text(
+                      '전체 알림을 끄면 긴급 공지를 포함해 모든 알림이 중단됩니다.',
+                      style: TextStyle(color: AppTheme.slate400, fontSize: 12),
+                    ),
+                    const SizedBox(height: 12),
+                    SwitchListTile(
+                      value: tempAll,
+                      onChanged: (value) async {
+                        setSheetState(() => tempAll = value);
+                        await NotificationService.instance
+                            .setAllNotificationsEnabled(value);
+                        if (mounted) {
+                          setState(() => _allNotificationsOn = value);
+                        }
+                      },
+                      activeThumbColor: AppTheme.blue400,
+                      title: const Text('전체 알림',
+                          style: TextStyle(color: Colors.white)),
+                      subtitle: const Text('긴급 공지 포함 전체 알림 (ON/OFF)',
+                          style: TextStyle(
+                              color: AppTheme.slate500, fontSize: 12)),
+                    ),
+                    SwitchListTile(
+                      value: _communityNoticeOn,
+                      onChanged: !tempAll
+                          ? null
+                          : (value) async {
+                              await NotificationService.instance
+                                  .setCommunityNoticeEnabled(value);
+                              if (mounted) {
+                                setState(() => _communityNoticeOn = value);
+                              }
+                            },
+                      activeThumbColor: AppTheme.blue400,
+                      title: const Text('커뮤니티 공지',
+                          style: TextStyle(color: Colors.white)),
+                      subtitle: const Text('긴급 제외 공지 알림 (ON/OFF)',
+                          style: TextStyle(
+                              color: AppTheme.slate500, fontSize: 12)),
+                    ),
+                    SwitchListTile(
+                      value: _teamNoticeOn,
+                      onChanged: !tempAll
+                          ? null
+                          : (value) async {
+                              await NotificationService.instance
+                                  .setTeamNoticeEnabled(value);
+                              if (mounted) {
+                                setState(() => _teamNoticeOn = value);
+                              }
+                            },
+                      activeThumbColor: AppTheme.blue400,
+                      title: const Text('홈팀 공지',
+                          style: TextStyle(color: Colors.white)),
+                      subtitle: const Text('소속 팀 공지 알림',
+                          style: TextStyle(
+                              color: AppTheme.slate500, fontSize: 12)),
+                    ),
+                    const SizedBox(height: 8),
+                    IgnorePointer(
+                      ignoring: !tempAll,
+                      child: Opacity(
+                        opacity: tempAll ? 1 : 0.55,
+                        child: RadioGroup<MatchNotifyPreference>(
+                          groupValue: temp,
+                          onChanged: (value) {
+                            if (value == null || !tempAll) return;
+                            setSheetState(() => temp = value);
+                            NotificationService.instance
+                                .setMatchPreference(value);
                             if (mounted) {
-                              setState(() => _communityNoticeOn = value);
+                              setState(() => _matchPref = value);
                             }
                           },
-                    activeThumbColor: AppTheme.blue400,
-                    title: const Text('커뮤니티 공지',
-                        style: TextStyle(color: Colors.white)),
-                    subtitle: const Text('긴급 제외 공지 알림 (ON/OFF)',
-                        style:
-                            TextStyle(color: AppTheme.slate500, fontSize: 12)),
-                  ),
-                  SwitchListTile(
-                    value: _teamNoticeOn,
-                    onChanged: !tempAll
-                        ? null
-                        : (value) async {
-                            await NotificationService.instance
-                                .setTeamNoticeEnabled(value);
-                            if (mounted) {
-                              setState(() => _teamNoticeOn = value);
-                            }
-                          },
-                    activeThumbColor: AppTheme.blue400,
-                    title: const Text('홈팀 공지',
-                        style: TextStyle(color: Colors.white)),
-                    subtitle: const Text('소속 팀 공지 알림',
-                        style:
-                            TextStyle(color: AppTheme.slate500, fontSize: 12)),
-                  ),
-                  const SizedBox(height: 8),
-                  IgnorePointer(
-                    ignoring: !tempAll,
-                    child: Opacity(
-                      opacity: tempAll ? 1 : 0.55,
-                      child: RadioGroup<MatchNotifyPreference>(
-                        groupValue: temp,
-                        onChanged: (value) {
-                          if (value == null || !tempAll) return;
-                          setSheetState(() => temp = value);
-                          NotificationService.instance
-                              .setMatchPreference(value);
-                          if (mounted) {
-                            setState(() => _matchPref = value);
-                          }
-                        },
-                        child: Column(
-                          children: [
-                            for (final pref in MatchNotifyPreference.values)
-                              RadioListTile<MatchNotifyPreference>(
-                                value: pref,
-                                activeColor: AppTheme.blue400,
-                                title: Text(
-                                  _matchPrefLabel(pref),
-                                  style: const TextStyle(color: Colors.white),
+                          child: Column(
+                            children: [
+                              for (final pref in MatchNotifyPreference.values)
+                                RadioListTile<MatchNotifyPreference>(
+                                  value: pref,
+                                  activeColor: AppTheme.blue400,
+                                  title: Text(
+                                    _matchPrefLabel(pref),
+                                    style: const TextStyle(color: Colors.white),
+                                  ),
                                 ),
-                              ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             );
           },
