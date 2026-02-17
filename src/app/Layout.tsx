@@ -270,12 +270,8 @@ export default function Layout() {
       { path: '/prediction', label: '승부예측' },
       // 기록원: 항상 보이지만 비관리자는 클릭 시 안내 버블만 노출
       { path: scorekeeperPath, label: '기록원', requiresAdmin: true, showWhenBlocked: true },
-      // 사용설명서: 외부 링크
-      {
-        path: 'https://docs.google.com/document/d/e/2PACX-1vRYQNkS6wuqoYWokWN_rnPpmZuWLHcNyn_j5K5Vhw3g8voduO20VMJYFH_3FTjW9Whgk7nxywV8ps_9/pub',
-        label: '사용설명서',
-        isExternal: true,
-      },
+      // 사용설명서: 네이티브 페이지
+      { path: '/manual', label: '사용설명서' },
     ],
     [scorekeeperPath],
   );

@@ -11,6 +11,7 @@ import '../features/auth/login_webview_screen.dart';
 import '../features/intro/intro_screen.dart';
 import '../features/intro/rules_screen.dart';
 import '../features/legal/privacy_screen.dart';
+import '../features/help/user_manual_screen.dart';
 import '../features/legal/terms_screen.dart';
 import '../features/records/records_screen.dart';
 import '../core/services/notification_service.dart';
@@ -412,6 +413,13 @@ class _MoreScreenState extends State<MoreScreen> {
             ),
           ],
 
+          const Divider(height: 32),
+          const _SectionTitle('도움말'),
+          _MenuTile(
+            icon: Icons.help_outline,
+            label: '사용 설명서',
+            onTap: () => _push(const UserManualScreen()),
+          ),
           const Divider(height: 32),
           const _SectionTitle('앱 정보'),
           _MenuTile(
