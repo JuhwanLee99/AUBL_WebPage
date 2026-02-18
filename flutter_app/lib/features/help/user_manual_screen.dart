@@ -30,30 +30,33 @@ class _ManualSection {
 /* ─── 콘텐츠 데이터 ─── */
 
 const _roleLabels = ['방문자', '일반 회원', '관리자/기록원'];
-const _roleIcons = [Icons.people_outline, Icons.person_outline, Icons.shield_outlined];
-
+const _roleIcons = [
+  Icons.people_outline,
+  Icons.person_outline,
+  Icons.shield_outlined
+];
 
 final _guestSections = <_ManualSection>[
-  _ManualSection(
+  const _ManualSection(
     title: '메인 및 리그 정보',
     icon: Icons.home_outlined,
     accent: AppTheme.blue400,
     items: [
-      const _ManualItem(
+      _ManualItem(
         heading: '홈 탭',
         bullets: [
           '라이브 경기, 오늘 일정, 내일 일정, 최근 결과를 확인합니다.',
           '당겨서 새로고침으로 최신 데이터를 반영합니다.',
         ],
       ),
-      const _ManualItem(
+      _ManualItem(
         heading: '팀 탭',
         bullets: [
           '팀명 검색, 조(A~H) 필터, 조별/이름순 정렬',
           '팀 카드를 탭하여 팀 상세로 진입합니다.',
         ],
       ),
-      const _ManualItem(
+      _ManualItem(
         heading: '더보기 > 리그 정보',
         bullets: [
           '리그 소개, 회칙, 개인정보 처리방침, 이용약관을 확인합니다.',
@@ -61,12 +64,12 @@ final _guestSections = <_ManualSection>[
       ),
     ],
   ),
-  _ManualSection(
+  const _ManualSection(
     title: '경기 일정 및 결과',
     icon: Icons.calendar_today,
     accent: AppTheme.green500,
     items: [
-      const _ManualItem(
+      _ManualItem(
         heading: '일정 탭',
         bullets: [
           '전체: 전체 경기 일정 확인',
@@ -76,7 +79,7 @@ final _guestSections = <_ManualSection>[
           '연습경기: 연습경기만 별도 조회',
         ],
       ),
-      const _ManualItem(
+      _ManualItem(
         heading: '경기 카드 탭',
         bullets: [
           '경기 카드를 누르면 문자중계/결과 화면으로 이동합니다.',
@@ -84,12 +87,12 @@ final _guestSections = <_ManualSection>[
       ),
     ],
   ),
-  _ManualSection(
+  const _ManualSection(
     title: '순위 및 기록실',
     icon: Icons.bar_chart,
     accent: AppTheme.orange500,
     items: [
-      const _ManualItem(
+      _ManualItem(
         heading: '기록 탭',
         bullets: [
           '개요, 팀순위, 투수기록, 타자기록, 파워랭킹, 선수상세 탭 전환',
@@ -99,12 +102,12 @@ final _guestSections = <_ManualSection>[
       ),
     ],
   ),
-  _ManualSection(
+  const _ManualSection(
     title: '경기 중계 시청',
     icon: Icons.live_tv,
     accent: AppTheme.purple500,
     items: [
-      const _ManualItem(
+      _ManualItem(
         heading: '문자중계',
         bullets: [
           '일정/홈에서 경기 선택 시 문자중계 화면으로 이동합니다.',
@@ -116,24 +119,24 @@ final _guestSections = <_ManualSection>[
 ];
 
 final _memberSections = <_ManualSection>[
-  _ManualSection(
+  const _ManualSection(
     title: '로그인 및 계정 관리',
     icon: Icons.lock_outline,
     accent: AppTheme.blue400,
     items: [
-      const _ManualItem(
+      _ManualItem(
         heading: '첫 실행 온보딩',
         bullets: [
           '"로그인 / 회원가입" 또는 "그냥 사용하기" 선택',
         ],
       ),
-      const _ManualItem(
+      _ManualItem(
         heading: '로그인 방식',
         bullets: [
           'WebView 로그인 또는 네이티브 Google 로그인',
         ],
       ),
-      const _ManualItem(
+      _ManualItem(
         heading: '계정 화면',
         bullets: [
           'UID, 이메일, 로그인 제공자, 역할 확인',
@@ -143,12 +146,12 @@ final _memberSections = <_ManualSection>[
       ),
     ],
   ),
-  _ManualSection(
+  const _ManualSection(
     title: '커뮤니티 이용',
     icon: Icons.forum_outlined,
     accent: AppTheme.green500,
     items: [
-      const _ManualItem(
+      _ManualItem(
         heading: '커뮤니티 탭',
         bullets: [
           '카테고리 필터: 전체, 긴급, 경기공지, 징계, 일반',
@@ -159,18 +162,18 @@ final _memberSections = <_ManualSection>[
       ),
     ],
   ),
-  _ManualSection(
+  const _ManualSection(
     title: '팀 상세 및 팀 공지',
     icon: Icons.sports_baseball,
     accent: AppTheme.orange500,
     items: [
-      const _ManualItem(
+      _ManualItem(
         heading: '팀 상세',
         bullets: [
           '팀 소개, 로스터, 팀 공지, 예정/최근 경기 확인',
         ],
       ),
-      const _ManualItem(
+      _ManualItem(
         heading: '팀 공지 게시판',
         bullets: [
           '카테고리 필터(전체/일반/훈련/경기/긴급)',
@@ -180,12 +183,12 @@ final _memberSections = <_ManualSection>[
       ),
     ],
   ),
-  _ManualSection(
+  const _ManualSection(
     title: '알림 설정',
     icon: Icons.notifications_outlined,
     accent: AppTheme.amber400,
     items: [
-      const _ManualItem(
+      _ManualItem(
         heading: '더보기 > 알림 설정',
         bullets: [
           '전체 알림 ON/OFF (OFF 시 긴급 공지 포함 모든 알림 중단)',
@@ -196,32 +199,32 @@ final _memberSections = <_ManualSection>[
       ),
     ],
   ),
-  _ManualSection(
+  const _ManualSection(
     title: '감독(Coach) 팀 홈 관리',
     icon: Icons.manage_accounts,
     accent: AppTheme.purple500,
     items: [
-      const _ManualItem(
+      _ManualItem(
         heading: '팀 브랜딩/소개',
         bullets: [
           '웹 팀 홈에서 로고 변경, 팀 설명 추가/수정',
         ],
       ),
-      const _ManualItem(
+      _ManualItem(
         heading: '팀 일정 운영',
         bullets: [
           '앱에서 예정/진행/최근 경기 확인',
           '웹 일정 화면으로 이동해 일정 운영',
         ],
       ),
-      const _ManualItem(
+      _ManualItem(
         heading: '선수 로스터',
         bullets: [
           '웹 팀 홈에서 선수 추가/수정/정리',
           '등번호/포지션/투타/프로필 관리',
         ],
       ),
-      const _ManualItem(
+      _ManualItem(
         heading: '팀 공지 운영',
         bullets: [
           '앱에서 공지 작성(제목/내용/카테고리 + 고정 옵션)',
@@ -233,12 +236,12 @@ final _memberSections = <_ManualSection>[
 ];
 
 final _adminSections = <_ManualSection>[
-  _ManualSection(
+  const _ManualSection(
     title: '관리자 메뉴',
     icon: Icons.admin_panel_settings,
     accent: Colors.red,
     items: [
-      const _ManualItem(
+      _ManualItem(
         heading: '더보기 > 관리자 섹션',
         bullets: [
           '관리자 권한 계정에만 관리자 메뉴가 노출됩니다.',
@@ -247,12 +250,12 @@ final _adminSections = <_ManualSection>[
       ),
     ],
   ),
-  _ManualSection(
+  const _ManualSection(
     title: '경기 일정 관리',
     icon: Icons.edit_calendar,
     accent: AppTheme.orange500,
     items: [
-      const _ManualItem(
+      _ManualItem(
         heading: '더보기 > 일정 관리',
         bullets: [
           'WebView로 /schedule/manage 진입',
@@ -262,12 +265,12 @@ final _adminSections = <_ManualSection>[
       ),
     ],
   ),
-  _ManualSection(
+  const _ManualSection(
     title: '관리자 패널',
     icon: Icons.settings,
     accent: AppTheme.blue400,
     items: [
-      const _ManualItem(
+      _ManualItem(
         heading: '더보기 > 관리자 패널',
         bullets: [
           'WebView로 /admin 진입',
@@ -276,12 +279,12 @@ final _adminSections = <_ManualSection>[
       ),
     ],
   ),
-  _ManualSection(
+  const _ManualSection(
     title: '전자 기록지 작성',
     icon: Icons.fact_check,
     accent: AppTheme.green500,
     items: [
-      const _ManualItem(
+      _ManualItem(
         heading: '더보기 > 기록원',
         bullets: [
           'WebView 전체화면으로 /scorekeeper 진입',
@@ -293,12 +296,12 @@ final _adminSections = <_ManualSection>[
       ),
     ],
   ),
-  _ManualSection(
+  const _ManualSection(
     title: '라이브 방송 제어',
     icon: Icons.cast,
     accent: AppTheme.purple500,
     items: [
-      const _ManualItem(
+      _ManualItem(
         heading: '더보기 > 스코어보드',
         bullets: [
           'WebView로 /scoreboard 진입',
@@ -391,22 +394,26 @@ class _UserManualScreenState extends State<UserManualScreen>
                 indicatorColor: AppTheme.blue400,
                 indicatorSize: TabBarIndicatorSize.label,
                 dividerColor: AppTheme.slate700,
-                tabs: List.generate(3, (i) => Tab(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(_roleIcons[i], size: 16),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          _roleLabels[i],
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                )),
+                tabs: List.generate(
+                    3,
+                    (i) => Tab(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(_roleIcons[i], size: 16),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  _roleLabels[i],
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )),
               ),
             ),
           ),
@@ -420,9 +427,8 @@ class _UserManualScreenState extends State<UserManualScreen>
                 return Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                   child: Column(
-                    children: sections
-                        .map((s) => _SectionCard(section: s))
-                        .toList(),
+                    children:
+                        sections.map((s) => _SectionCard(section: s)).toList(),
                   ),
                 );
               },
@@ -452,7 +458,8 @@ class _UserManualScreenState extends State<UserManualScreen>
                 child: const Text(
                   '문서 버전: 2026-02-17\n앱 구조: 하단 탭 홈 · 팀 · 일정 · 기록 · 커뮤니티 · 더보기\n일부 관리 기능은 WebView로 웹 관리 화면에 연결됩니다.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: AppTheme.slate500, fontSize: 11, height: 1.6),
+                  style: TextStyle(
+                      color: AppTheme.slate500, fontSize: 11, height: 1.6),
                 ),
               ),
             ),
@@ -522,7 +529,8 @@ class _UserManualScreenState extends State<UserManualScreen>
           const SizedBox(height: 8),
           const Text(
             '방문자, 일반 회원, 관리자/기록원별로 사용 가능한 기능을 안내합니다. 탭을 전환하여 역할별 가이드를 확인하세요.',
-            style: TextStyle(color: AppTheme.slate300, fontSize: 13, height: 1.6),
+            style:
+                TextStyle(color: AppTheme.slate300, fontSize: 13, height: 1.6),
           ),
         ],
       ),
@@ -552,8 +560,8 @@ class _UserManualScreenState extends State<UserManualScreen>
               decoration: BoxDecoration(
                 color: AppTheme.slate800,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                    color: AppTheme.slate700.withValues(alpha: 0.5)),
+                border:
+                    Border.all(color: AppTheme.slate700.withValues(alpha: 0.5)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -616,9 +624,7 @@ class _SectionCardState extends State<_SectionCard> {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: _expanded
-            ? s.accent.withValues(alpha: 0.06)
-            : AppTheme.slate800,
+        color: _expanded ? s.accent.withValues(alpha: 0.06) : AppTheme.slate800,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: _expanded

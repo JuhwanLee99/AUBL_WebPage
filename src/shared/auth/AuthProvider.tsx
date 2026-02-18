@@ -2,6 +2,7 @@ import {
   GoogleAuthProvider,
   browserLocalPersistence,
   createUserWithEmailAndPassword,
+  getAdditionalUserInfo,
   getIdToken,
   onIdTokenChanged,
   setPersistence,
@@ -47,7 +48,7 @@ type AuthContextValue = {
   error: string | null;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   registerWithEmail: (email: string, password: string) => Promise<void>;
-  loginWithGoogle: () => Promise<void>;
+  loginWithGoogle: () => Promise<{ isNewUser: boolean }>;
   logout: () => Promise<void>;
   refreshIdToken: () => Promise<string | null>;
 };
@@ -165,12 +166,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const loginWithGoogle = useCallback(async () => {
     if (IS_TEST_MODE) {
       console.log('[TEST] 구글 로그인 시도');
-      return;
+      return { isNewUser: false };
     }
     setError(null);
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
-    await signInWithPopup(auth, provider);
+    const result = await signInWithPopup(auth, provider);
+    return { isNewUser: getAdditionalUserInfo(result)?.isNewUser ?? false };
   }, []);
 
   const logout = useCallback(async () => {
