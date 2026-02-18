@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import gsap from 'gsap';
-import { useContent } from '../../shared/state/contentProvider';
+import { useContent } from '@shared/state/contentProvider';
 
 const DEFAULT_TAGLINE = 'AUBL · LEAGUE INTRO';
 const DEFAULT_HERO_SUBTITLE = '46th Amateur University Baseball League · Hosted by Chung-Ang University (Seoul)';

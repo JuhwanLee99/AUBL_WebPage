@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, runTransaction } from 'firebase/firestore';
-import { firestore } from '../../shared/firebase/client';
-import { useAuth } from '../../shared/auth/AuthProvider';
-import { useAdmin } from '../../shared/auth/useAdmin';
-import { useTeamRole } from '../../shared/auth/useTeamRole';
-import { decodeTeamId } from '../../shared/lib/teamDirectory';
-import type { TeamNotice, TeamNoticeComment } from '../../shared/types';
+import { firestore } from '@shared/firebase/client';
+import { useAuth } from '@shared/auth/AuthProvider';
+import { useAdmin } from '@shared/auth/useAdmin';
+import { useTeamRole } from '@shared/auth/useTeamRole';
+import { decodeTeamId } from '@shared/lib/teamDirectory';
+import type { TeamNotice, TeamNoticeComment } from '@shared/types';
 
 const cardBase: React.CSSProperties = {
   borderRadius: '16px',
@@ -114,7 +114,7 @@ export default function TeamNoticeDetailPage() {
       },
     );
     return () => unsub();
-  }, [teamDocId, noticeId]);
+  }, [teamDocId, noticeId, pushLiveAlert]);
 
   const handleAddComment = async () => {
     if (!user || !teamDocId || !noticeId) return;

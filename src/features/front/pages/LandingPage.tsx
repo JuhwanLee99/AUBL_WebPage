@@ -2,16 +2,16 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
-import { useDemoStore } from '../../shared/state/demoStore';
-import type { MatchSchedule } from '../../shared/state/demoStore';
+import { useDemoStore } from '@shared/state/demoStore';
+import type { MatchSchedule } from '@shared/state/demoStore';
 import { collection, collectionGroup, doc, FieldPath, getDoc, getDocs, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
-import { firestore } from '../../shared/firebase/client';
-import { useContent } from '../../shared/state/contentProvider';
-import { useAdmin } from '../../shared/auth/useAdmin';
-import { useAuth } from '../../shared/auth/AuthProvider';
-import { useTeamRole } from '../../shared/auth/useTeamRole';
-import { decodeTeamId } from '../../shared/lib/teamDirectory';
-import type { TeamNotice } from '../../shared/types';
+import { firestore } from '@shared/firebase/client';
+import { useContent } from '@shared/state/contentProvider';
+import { useAdmin } from '@shared/auth/useAdmin';
+import { useAuth } from '@shared/auth/AuthProvider';
+import { useTeamRole } from '@shared/auth/useTeamRole';
+import { decodeTeamId } from '@shared/lib/teamDirectory';
+import type { TeamNotice } from '@shared/types';
 
 const formatLiveTime = (value: string) => {
   const date = new Date(value);

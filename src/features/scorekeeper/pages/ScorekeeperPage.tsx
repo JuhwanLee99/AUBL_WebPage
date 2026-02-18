@@ -1,21 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
-import { TEAMS } from '../../shared/lib/mockData';
-import { buildGameRecord, canPitcherBat, useDemoStore } from '../../shared/state/demoStore';
+import { TEAMS } from '@shared/lib/mockData';
+import { buildGameRecord, canPitcherBat, useDemoStore } from '@shared/state/demoStore';
 import type {
   BattedBallDetails,
   ErrorDetails,
   PlayEvent,
   RunnerAdvanceOutcome,
   RunnerAdvanceSelections,
-} from '../../shared/state/demoStore';
-import StatsTable from '../../shared/components/StatsTable';
-import RemovedPlayersPanel from '../../shared/components/RemovedPlayersPanel';
-import type { BatterStatLine, PitcherStatLine } from '../../shared/types/scoreStats';
-import { useAuth } from '../../shared/auth/AuthProvider';
-import { BoxScoreTable } from '../../scoreboard/components/ScoreboardPanel';
-import { GameTimerDisplay } from '../../shared/components/GameTimerDisplay';
+} from '@shared/state/demoStore';
+import StatsTable from '@shared/components/StatsTable';
+import RemovedPlayersPanel from '@shared/components/RemovedPlayersPanel';
+import type { BatterStatLine, PitcherStatLine } from '@shared/types/scoreStats';
+import { useAuth } from '@shared/auth/AuthProvider';
+import { BoxScoreTable } from '@features/scoreboard/components/ScoreboardPanel';
+import { GameTimerDisplay } from '@shared/components/GameTimerDisplay';
 
 // 동명이인 구분을 위한 고유 이름 생성 헬퍼 함수 추가
 // 이미 (등번호)가 붙어있으면 덧붙이지 않도록 안전장치 추가
@@ -118,6 +118,7 @@ const defaultZoneOptions = [
   '우익수 파울/라인',
   '우선(우익수 라인)',
 ];
+const HIT_WIZARD_LETTER_KEYS = ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'];
 const infieldGroundZoneOptions = [
   '선택 안 함',
   '포수 앞',
@@ -1278,7 +1279,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
   };
 
   const getActivePitcher = (defenseSide: 'home' | 'away') => {
-    let pitcherName = currentPitcher[defenseSide];
+    const pitcherName = currentPitcher[defenseSide];
     const roster = defenseSide === 'home' ? rosterHome : rosterAway;
     const hasValid =
       pitcherName &&
@@ -1950,10 +1951,13 @@ export default function ScorekeeperPage() {
 
   useEffect(() => {
     if (matchId) {
-      setSelectedMatchId(matchId);
+      const timer = setTimeout(() => setSelectedMatchId(matchId), 0);
+      return () => clearTimeout(timer);
     } else if (state.activeMatchId) {
-      setSelectedMatchId(state.activeMatchId);
+      const timer = setTimeout(() => setSelectedMatchId(state.activeMatchId), 0);
+      return () => clearTimeout(timer);
     }
+    return;
   }, [matchId, state.activeMatchId]);
 
   useEffect(() => {
@@ -6606,10 +6610,10 @@ function HitWizardModal({
 
   const primaryLabel = isZoneStep ? (isFinalStep ? '기록하기' : '다음') : isFinalStep ? '기록하기' : '다음';
   const primaryAction = isZoneStep ? onConfirm : isFinalStep ? onConfirm : onNext;
-  const formatShortcutHint = (index?: number | null) => {
+  const formatShortcutHint = useCallback((index?: number | null) => {
     if (index == null || index < 0 || index > 9) return null;
     return index === 9 ? '0' : String(index + 1);
-  };
+  }, []);
   const resultOptionsOrdered = (() => {
     const ordered: BattedBallResultAction[] = [];
     battedBallResultGroups.forEach((group) => {
@@ -6620,12 +6624,11 @@ function HitWizardModal({
     return ordered;
   })();
   const outFlyStartIndex = resultOptionsOrdered.findIndex((option) => option === 'out_fly');
-  const letterKeys = ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'];
   const resultShortcutMap = (() => {
     const map = new Map<BattedBallResultAction, string | null>();
     resultOptionsOrdered.forEach((option, idx) => {
       if (outFlyStartIndex !== -1 && idx >= outFlyStartIndex) {
-        const key = letterKeys[idx - outFlyStartIndex];
+        const key = HIT_WIZARD_LETTER_KEYS[idx - outFlyStartIndex];
         map.set(option, key ? key.toUpperCase() : null);
       } else {
         map.set(option, formatShortcutHint(idx));
@@ -6673,7 +6676,7 @@ function HitWizardModal({
             actionMap.set(numKey, () => onSelectResult(option));
           }
           if (outFlyStartIndex !== -1 && idx >= outFlyStartIndex) {
-            const letterKey = letterKeys[idx - outFlyStartIndex];
+            const letterKey = HIT_WIZARD_LETTER_KEYS[idx - outFlyStartIndex];
             if (letterKey) {
               actionMap.set(letterKey, () => onSelectResult(option));
             }
@@ -6722,7 +6725,6 @@ function HitWizardModal({
     onSelectZone,
     primaryAction,
     primaryDisabled,
-    letterKeys,
     resultOptionsOrdered,
     outFlyStartIndex,
     formatShortcutHint,
@@ -8315,7 +8317,7 @@ function TeamEditor({
     isOhtaniRule?: boolean;
     isElite?: boolean;
   };
-  const makeEmptySlot = (): TeamEditorSlot => ({
+  const makeEmptySlot = useCallback((): TeamEditorSlot => ({
     name: '',
     pos: '',
     number: '',
@@ -8323,7 +8325,7 @@ function TeamEditor({
     bats: 'R',
     isOhtaniRule: false,
     isElite: false,
-  });
+  }), []);
 
   // [수정] 빈 라인업을 받아도 UI 입력칸을 유지하기 위해 동적으로 빈 슬롯 생성
   const filledLineup = useMemo<TeamEditorSlot[]>(() => {
@@ -8364,7 +8366,7 @@ function TeamEditor({
     }
 
     return result;
-  }, [lineup, practiceMode]);
+  }, [lineup, practiceMode, makeEmptySlot]);
 
   // 선출(선수 출신) 유효성 검사
   const eliteWarnings = useMemo(() => {

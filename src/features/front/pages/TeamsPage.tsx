@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import gsap from 'gsap';
-import { TEAM_GROUPS, GROUP_LETTERS, GROUP_COLORS } from '../../shared/lib/teamGroups';
-import type { GroupLetter } from '../../shared/lib/teamGroups';
-import { useContent } from '../../shared/state/contentProvider';
+import { TEAM_GROUPS, GROUP_LETTERS, GROUP_COLORS } from '@shared/lib/teamGroups';
+import type { GroupLetter } from '@shared/lib/teamGroups';
+import { useContent } from '@shared/state/contentProvider';
 
 /* ─── 로컬 타입 ─── */
 

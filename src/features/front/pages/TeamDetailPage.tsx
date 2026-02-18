@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, orderBy, query, setDoc, where } from 'firebase/firestore';
-import { useContent } from '../../shared/state/contentProvider';
-import { buildTeamDirectory, decodeTeamId, encodeTeamId } from '../../shared/lib/teamDirectory';
-import { TEAM_GROUPS } from '../../shared/lib/teamGroups';
-import { useDemoStore } from '../../shared/state/demoStore';
-import type { MatchSchedule } from '../../shared/state/demoStore';
-import { firestore } from '../../shared/firebase/client';
-import { useTeamRole } from '../../shared/auth/useTeamRole';
-import { useAdmin } from '../../shared/auth/useAdmin';
-import { useAuth } from '../../shared/auth/AuthProvider';
-import type { TeamMember, TeamNotice, TeamNoticeCategory, UserProfile } from '../../shared/types';
+import { useContent } from '@shared/state/contentProvider';
+import { buildTeamDirectory, decodeTeamId, encodeTeamId } from '@shared/lib/teamDirectory';
+import { TEAM_GROUPS } from '@shared/lib/teamGroups';
+import { useDemoStore } from '@shared/state/demoStore';
+import type { MatchSchedule } from '@shared/state/demoStore';
+import { firestore } from '@shared/firebase/client';
+import { useTeamRole } from '@shared/auth/useTeamRole';
+import { useAdmin } from '@shared/auth/useAdmin';
+import { useAuth } from '@shared/auth/AuthProvider';
+import type { TeamMember, TeamNotice, TeamNoticeCategory, UserProfile } from '@shared/types';
 
 const cardBase: CSSProperties = {
   borderRadius: '16px',

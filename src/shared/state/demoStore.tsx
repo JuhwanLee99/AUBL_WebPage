@@ -3,126 +3,64 @@ import { getIdTokenResult, onIdTokenChanged } from 'firebase/auth';
 import {
   collection,
   doc,
-  getCountFromServer,
-  onSnapshot,
-  orderBy,
-  where,
-  limit,
-  query,
   setDoc,
   writeBatch,
-  deleteDoc,
-  deleteField,
-  getDoc,
   getDocs,
-  runTransaction,
 } from 'firebase/firestore';
 import { auth, firestore } from '../firebase/client';
-import { TEAMS } from '../lib/mockData';
 import type { LeagueDivision } from '../types';
+import {
+  ADMIN_EMAILS,
+  FEED_LIMIT,
+  SCORER_LOCK_TTL_MS,
+  TRASH_RETENTION_MS,
+} from './demoStore.constants';
+import { advanceBasesOnWalk, resolveAdvanceOutcome } from './demoStore.baseRunning';
+import {
+  addRunsToLineScore,
+  formatUniqueName,
+  getSpectatorFeedLimitForMatch,
+  pruneUndefined,
+} from './demoStore.helpers';
+import {
+  canPitcherBat,
+  cloneBenches,
+  cloneLineups,
+  demoLineups,
+  getBattingEntriesForLineup,
+  getBattingOrder,
+  hasActualPlayers,
+  isDemoLineups,
+  isPracticeMatch,
+} from './demoStore.lineup';
+import {
+  normalizeEvents,
+  normalizeFeed,
+  normalizeRunArray,
+} from './demoStore.normalize';
+import {
+  autoPurgeExpiredMatches,
+  syncGameStateWrite,
+  syncLiveScorePatch,
+  syncScheduleMatchesWrite,
+  syncOnlineViewerCount,
+  syncPresenceHeartbeat,
+  syncScorerLock,
+  syncScorerLockHeartbeat,
+  subscribeActiveMatchState,
+  subscribeCurrentMatchPointer,
+  subscribeFeedAndEvents,
+  subscribeMatchesSnapshot,
+} from './demoStore.effects';
+import { useGameActions } from './demoStore.gameActions';
+import { changeHalf as changeHalfState, nextBatter } from './demoStore.gameFlow';
+import { buildGameRecord } from './demoStore.record';
+import { createNewGame, resetGameForMatch, updateMatchSchedule } from './demoStore.reducerHelpers';
+import { useScheduleActions } from './demoStore.scheduleActions';
+import { normalizeState, shouldTrackHistory, snapshotState } from './demoStore.state';
 
-// 헬퍼 함수 추가
-const formatUniqueName = (name: string, number: string | number | undefined | null) => {
-  if (!name) return '';
-  return number ? `${name}(${number})` : name;
-};
-
-const extractRuns = (result: string): number => {
-  const match = result.match(/(\d+)\s*득점/);
-  if (match) {
-    const n = Number(match[1]);
-    return Number.isFinite(n) && n > 0 ? n : 1;
-  }
-  if (!result.includes('득점')) return 0;
-  const mentions = result.match(/득점/g);
-  return mentions?.length ? mentions.length : 1;
-};
-
-const addRunsToLineScore = (
-  lineScore: { home: number[]; away: number[] } | undefined,
-  side: Side,
-  inning: number,
-  runs: number,
-) => {
-  if (!runs) return lineScore ?? { home: [], away: [] };
-  const next = {
-    home: [...(lineScore?.home ?? [])],
-    away: [...(lineScore?.away ?? [])],
-  };
-  const idx = Math.max(0, inning - 1);
-  const target = side === 'home' ? next.home : next.away;
-  if (target.length <= idx) {
-    for (let i = target.length; i <= idx; i += 1) {
-      target[i] = 0;
-    }
-  }
-  target[idx] = Math.max(0, (target[idx] ?? 0) + runs);
-  return next;
-};
-
-const buildLineScoreFromFeed = (feed: PlayLog[]) => {
-  const groups = new Map<string, PlayLog[]>();
-  feed.forEach((entry, idx) => {
-    const key = entry.eventId ?? `idx-${idx}`;
-    const bucket = groups.get(key);
-    if (bucket) {
-      bucket.push(entry);
-    } else {
-      groups.set(key, [entry]);
-    }
-  });
-
-  let lineScore = { home: [] as number[], away: [] as number[] };
-
-  groups.forEach((entries) => {
-    const batterEntries = entries.filter((entry) => entry.order > 0);
-    const targetEntries = batterEntries.length ? batterEntries : entries;
-    const runs = targetEntries.reduce((sum, entry) => sum + extractRuns(entry.result), 0);
-    if (!runs) return;
-    const ref = batterEntries[0] ?? entries[0];
-    const side = ref.half === 'top' ? 'away' : 'home';
-    lineScore = addRunsToLineScore(lineScore, side, ref.inning, runs);
-  });
-
-  return lineScore;
-};
-
-const TRASH_RETENTION_MS = 1000 * 60 * 60 * 24 * 30; // 30일 보관
-const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
-  .split(',')
-  .map((email: string) => email.trim().toLowerCase())
-  .filter(Boolean);
-const FEED_LIMIT = 50; // 관중 뷰 기본 구독 크기 (최신 50개)
-const SCORER_FEED_LIMIT = 200; // 기록원 재접속 시 충분한 버퍼
-const SPECTATOR_EXPANDED_FEED_LIMIT = 1000; // 더보기 클릭 시 확장 구독 크기
-const WRITE_DEBOUNCE_MS = 1_000; // 기록원 상태 동기화 디바운스 (쓰기 폭주 방지)
-const SCORER_LOCK_TTL_MS = 300_000; // 5분 후 락 만료 (이닝 교대 대비 여유)
-const SCORER_LOCK_HEARTBEAT_MS = 60_000; // 60초마다 하트비트 갱신
-const PRESENCE_TTL_MS = 300_000; // 5분 후 동접자 만료
-const PRESENCE_HEARTBEAT_MS = 120_000; // 120초마다 동접자 하트비트 갱신
-const PRESENCE_POLL_INTERVAL_MS = 12_000; // 접속자 집계 폴링 주기
-
-const isCompletedMatch = (match?: MatchSchedule | null) =>
-  match?.status === 'completed' || match?.status === 'canceled';
-
-const getSpectatorFeedLimitForMatch = (match?: MatchSchedule | null, gameOver?: boolean) =>
-  isCompletedMatch(match) || gameOver ? SPECTATOR_EXPANDED_FEED_LIMIT : FEED_LIMIT;
-
-// Firestore는 undefined를 허용하지 않으므로 중첩 객체/배열에서 undefined를 제거한다.
-function pruneUndefined<T>(value: T): T {
-  if (Array.isArray(value)) {
-    return value.map((v) => pruneUndefined(v)) as unknown as T;
-  }
-  if (value && typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>).reduce<Record<string, unknown>>((acc, [k, v]) => {
-      if (v === undefined) return acc;
-      acc[k] = pruneUndefined(v);
-      return acc;
-    }, {});
-    return entries as unknown as T;
-  }
-  return value;
-}
+export { canPitcherBat };
+export { buildGameRecord };
 
 type Half = 'top' | 'bottom';
 
@@ -291,7 +229,7 @@ export interface PlayEvent {
   eventId?: string;
 }
 
-interface DemoSnapshot {
+export interface DemoSnapshot {
   inning: number;
   half: Half;
   balls: number;
@@ -334,11 +272,11 @@ interface DemoSnapshot {
   onlineViewerCount: number;
 }
 
-interface DemoState extends DemoSnapshot {
+export interface DemoState extends DemoSnapshot {
   history: DemoSnapshot[];
 }
 
-type SharedGameState = Pick<
+export type SharedGameState = Pick<
   DemoSnapshot,
   | 'inning'
   | 'half'
@@ -447,239 +385,10 @@ type Action =
   | { type: 'resumeGameTimer' }
   | { type: 'setOnlineViewerCount'; count: number };
 
-const demoLineups: { home: PlayerSlot[]; away: PlayerSlot[] } = {
-  home: [
-    { name: '김지찬', pos: '2B', number: '1', throws: 'R', bats: 'L' },
-    { name: '구자욱', pos: 'LF', number: '5', throws: 'R', bats: 'L' },
-    { name: '피렐라', pos: 'DH', number: '39', throws: 'R', bats: 'L' },
-    { name: '오재일', pos: '1B', number: '16', throws: 'R', bats: 'L' },
-    { name: '강민호', pos: 'C', number: '47', throws: 'R', bats: 'R' },
-    { name: '김헌곤', pos: 'RF', number: '7', throws: 'R', bats: 'L' },
-    { name: '류지혁', pos: '3B', number: '13', throws: 'R', bats: 'L' },
-    { name: '김영웅', pos: 'SS', number: '24', throws: 'R', bats: 'R' },
-    { name: '김성윤', pos: 'CF', number: '65', throws: 'R', bats: 'L' },
-    { name: '원태인', pos: 'P', number: '18', throws: 'R', bats: 'R' },
-  ],
-  away: [
-    { name: '정수빈', pos: 'CF', number: '31', throws: 'R', bats: 'L' },
-    { name: '허경민', pos: '3B', number: '13', throws: 'R', bats: 'R' },
-    { name: '양석환', pos: '1B', number: '53', throws: 'R', bats: 'R' },
-    { name: '양의지', pos: 'C', number: '25', throws: 'R', bats: 'R' },
-    { name: '김재환', pos: 'DH', number: '32', throws: 'R', bats: 'L' },
-    { name: '강승호', pos: '2B', number: '52', throws: 'R', bats: 'R' },
-    { name: '조수행', pos: 'LF', number: '25', throws: 'R', bats: 'L' },
-    { name: '박준영', pos: 'SS', number: '4', throws: 'R', bats: 'R' },
-    { name: '김인태', pos: 'RF', number: '17', throws: 'R', bats: 'L' },
-    { name: '곽빈', pos: 'P', number: '47', throws: 'R', bats: 'R' },
-  ],
-};
-
-const cloneLineups = (lineups: { home: PlayerSlot[]; away: PlayerSlot[] }) => ({
-  home: lineups.home.map((player) => ({ ...player })),
-  away: lineups.away.map((player) => ({ ...player })),
-});
-
-const cloneBenches = (benches: { home: PlayerSlot[]; away: PlayerSlot[] }) => ({
-  home: benches.home.map((player) => ({ ...player })),
-  away: benches.away.map((player) => ({ ...player })),
-});
-
-const emptyPlayerSlot: PlayerSlot = { name: '', pos: '', number: '', throws: 'R', bats: 'R', order: null };
-
-const slotSignature = (slot: PlayerSlot) =>
-  `${slot.name}|${slot.pos}|${slot.number}|${slot.throws}|${slot.bats}`;
-
-const lineupMatches = (left: PlayerSlot[], right: PlayerSlot[]) =>
-  left.length === right.length && left.every((slot, idx) => slotSignature(slot) === slotSignature(right[idx]));
-
-const isDemoLineups = (lineups?: { home: PlayerSlot[]; away: PlayerSlot[] } | null) => {
-  if (!lineups) return false;
-  return lineupMatches(lineups.home, demoLineups.home) && lineupMatches(lineups.away, demoLineups.away);
-};
-
-// 게임 로직용 슬롯 정규화 함수 (isOhtaniRule 보존 추가)
-const normalizePlayerSlotForGame = (player: PlayerSlot): PlayerSlot => ({
-  name: typeof player.name === 'string' ? player.name : '',
-  pos: typeof player.pos === 'string' ? player.pos : '',
-  number: typeof player.number === 'string' ? player.number : '',
-  throws: player.throws === 'L' ? 'L' : 'R',
-  bats: player.bats === 'L' ? 'L' : 'R',
-  order: typeof player.order === 'number' ? player.order : null,
-  // [수정] 오타니룰 플래그 보존
-  isOhtaniRule: !!player.isOhtaniRule,
-  // [수정] 교체 유형 보존 (추가됨: 이 부분이 없으면 게임 로직 진행 중 정보가 사라질 수 있음)
-  substitutionType: player.substitutionType,
-  // [수정] 선출 플래그 보존
-  isElite: !!player.isElite,
-});
-
-// 라인업 채움 로직 (UI 9칸 유지 보장 수정)
-const ensureLineupFilled = (lineup: PlayerSlot[]) => {
-  const normalized = lineup.map(normalizePlayerSlotForGame);
-  const hasPitcher = normalized.some((slot) => slot.pos.toUpperCase() === 'P');
-
-  // [수정] DH 유무와 관계없이 항상 "투수가 아닌 타자 9명"을 확보하여 UI(TeamEditor) 입력칸 9개를 유지함.
-  // TeamEditor에서는 pos !== 'P' 인 슬롯들만 상단 타자 리스트에 표시하므로,
-  // 여기서 투수가 아닌 슬롯이 9개가 되도록 맞춰줍니다.
-  let battingCount = normalized.reduce((count, slot) =>
-    (slot.pos.toUpperCase() === 'P' ? count : count + 1), 0);
-
-  while (battingCount < 9) {
-    normalized.push({ ...emptyPlayerSlot });
-    battingCount += 1;
-  }
-
-  // 투수가 명시적으로 없으면 별도 슬롯 추가 (TeamEditor 하단 투수칸용)
-  if (!hasPitcher) {
-    normalized.push({ ...emptyPlayerSlot, pos: 'P' });
-  }
-
-  return normalized;
-};
-
-const ensureCompleteLineups = (lineups: { home: PlayerSlot[]; away: PlayerSlot[] }) => ({
-  home: ensureLineupFilled(lineups.home),
-  away: ensureLineupFilled(lineups.away),
-});
-
-const hasActualPlayers = (lineup: PlayerSlot[]) =>
-  lineup.some((slot) => slot.name && slot.name.trim() !== '');
-
-function applyLineupVisibility(
-  data: SharedGameState,
-  match: MatchSchedule | null | undefined,
-  isAdmin: boolean,
-): SharedGameState {
-  if (!match) return data;
-  const lineupVisible =
-    Boolean(match.lineupPublic) ||
-    data.gameStarted === true ||
-    match.status === 'inProgress' ||
-    match.status === 'completed';
-
-  if (!isAdmin && !lineupVisible) {
-    return {
-      ...data,
-      lineups: { home: [], away: [] },
-      benches: { home: [], away: [] },
-    };
-  }
-
-  if (isAdmin && match.lineups) {
-    const dataLineups = data.lineups ?? { home: [], away: [] };
-    const dataIsDemo = isDemoLineups(dataLineups);
-    const dataHasPlayers =
-      !dataIsDemo && (hasActualPlayers(dataLineups.home) || hasActualPlayers(dataLineups.away));
-    const matchHasPlayers =
-      hasActualPlayers(match.lineups.home) || hasActualPlayers(match.lineups.away);
-    if (matchHasPlayers && match.status === 'scheduled' && !data.scorerUid) {
-      const preparedLineups = isPracticeMatch(match)
-        ? cloneLineups(match.lineups)
-        : ensureCompleteLineups(match.lineups);
-      return {
-        ...data,
-        lineups: preparedLineups,
-        benches: match.benches ? cloneBenches(match.benches) : data.benches,
-      };
-    }
-    if (!dataHasPlayers && matchHasPlayers) {
-      const preparedLineups = isPracticeMatch(match)
-        ? cloneLineups(match.lineups)
-        : ensureCompleteLineups(match.lineups);
-      return {
-        ...data,
-        lineups: preparedLineups,
-        benches: match.benches ? cloneBenches(match.benches) : data.benches,
-      };
-    }
-  }
-
-  return data;
-}
-
-function mergeOwnerLineups(
-  data: SharedGameState,
-  matchId: string | null,
-  localState: DemoState,
-): SharedGameState {
-  const currentUid = auth.currentUser?.uid ?? null;
-  if (!currentUid || !matchId) return data;
-  if (data.scorerUid && data.scorerUid !== currentUid) return data;
-
-  const localIsDemo = isDemoLineups(localState.lineups);
-  const localHasPlayers =
-    !localIsDemo && (hasActualPlayers(localState.lineups.home) || hasActualPlayers(localState.lineups.away));
-  if (!localHasPlayers) return data;
-
-  return {
-    ...data,
-    lineups: cloneLineups(localState.lineups),
-    benches: cloneBenches(localState.benches),
-  };
-}
-
-// 오타니룰 관련 헬퍼 함수
-// 투수가 타석에 들어갈 수 있는지 확인 (오타니룰 적용 투수 또는 DH가 없는 경우)
-export const canPitcherBat = (player: PlayerSlot, lineup: PlayerSlot[]): boolean => {
-  if (player.pos.toUpperCase() !== 'P') return false;
-  // 오타니룰 플래그가 설정된 경우
-  if (player.isOhtaniRule) return true;
-  // DH가 없는 리그인 경우 투수도 타석에 들어감
-  const normalizePosToken = (value: string) => value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const hasDH = lineup.some((slot) => {
-    const norm = normalizePosToken(slot.pos ?? '');
-    return norm === 'DH' || (slot.pos ?? '').includes('지명');
-  });
-  return !hasDH;
-};
-
-const teamDivisionById = (teamId?: string): LeagueDivision | undefined => TEAMS.find((team) => team.id === teamId)?.division;
-const deriveMatchDivision = (
-  division: unknown,
-  homeTeamId?: string,
-  awayTeamId?: string,
-): LeagueDivision | undefined => {
-  const normalized =
-    typeof division === 'string' ? division.trim().toUpperCase() : undefined;
-  if (normalized === 'EUTTEUM' || normalized === 'BEOGEUM') return normalized;
-  const homeDiv = teamDivisionById(homeTeamId);
-  const awayDiv = teamDivisionById(awayTeamId);
-  if (homeDiv && awayDiv && homeDiv === awayDiv) return homeDiv;
-  if (homeDiv && !awayDiv) return homeDiv;
-  if (awayDiv && !homeDiv) return awayDiv;
-  return undefined;
-};
-
-function isPracticeMatch(match?: MatchSchedule | null) {
-  return match?.recordMode === 'practice';
-}
-
 function isPracticeActiveMatch(state: DemoState) {
   if (!state.activeMatchId) return false;
   const activeMatch = state.matches.find((m) => m.id === state.activeMatchId);
   return isPracticeMatch(activeMatch);
-}
-
-function getPracticePitcherIndex(lineup: PlayerSlot[]) {
-  if (!lineup.length) return -1;
-  const lastIndex = lineup.length - 1;
-  return lineup[lastIndex].pos.toUpperCase() === 'P' ? lastIndex : -1;
-}
-
-function getBattingEntriesForLineup(
-  lineup: PlayerSlot[],
-  allowExtendedBattingOrder: boolean,
-) {
-  if (allowExtendedBattingOrder) {
-    const pitcherIndex = getPracticePitcherIndex(lineup);
-    return lineup.filter((_, idx) => idx !== pitcherIndex);
-  }
-  return lineup.filter((slot, idx) => {
-    if (idx >= 9) return false;
-    const isPitcher = slot.pos.toUpperCase() === 'P';
-    const pitcherAllowed = isPitcher ? canPitcherBat(slot, lineup) : true;
-    return pitcherAllowed;
-  });
 }
 
 const initialState: DemoState = {
@@ -733,807 +442,6 @@ const initialState: DemoState = {
   gamePausedDuration: 0,
   onlineViewerCount: 0,
 };
-
-function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }): PlayLog[] {
-  if (!Array.isArray(feed)) return [];
-  const normalized = feed.map((entry) => {
-    if (typeof entry === 'string') {
-      return {
-        inning: fallback.inning,
-        half: fallback.half,
-        order: 0,
-        batter: '',
-        pitch: 0,
-        result: entry,
-      };
-    }
-    if (entry && typeof entry === 'object') {
-      const e = entry as Partial<PlayLog>;
-      const half = e.half === 'top' || e.half === 'bottom' ? e.half : fallback.half;
-      return {
-        inning: typeof e.inning === 'number' ? e.inning : fallback.inning,
-        half,
-        order: typeof e.order === 'number' ? e.order : 0,
-        batter: typeof e.batter === 'string' ? e.batter : '',
-        pitch: typeof e.pitch === 'number' ? e.pitch : 0,
-        result: typeof e.result === 'string' ? e.result : '',
-        // [수정] createdAt 보존
-        createdAt: typeof e.createdAt === 'number' ? e.createdAt : undefined,
-        eventId: typeof e.eventId === 'string' ? e.eventId : undefined,
-      };
-    }
-    return {
-      inning: fallback.inning,
-      half: fallback.half,
-      order: 0,
-      batter: '',
-      pitch: 0,
-      result: String(entry),
-    };
-  });
-
-  // [수정] 정렬 로직 개선: createdAt이 있으면 최우선으로 사용하여 교체 로그 위치 보정
-  return normalized.sort((a, b) => {
-    if (a.inning !== b.inning) return a.inning - b.inning;
-    if (a.half !== b.half) return a.half === 'top' ? -1 : 1;
-    
-    // createdAt이 둘 다 있으면 시간순 정렬 (교체 로그가 제자리 찾아감)
-    if (a.createdAt !== undefined && b.createdAt !== undefined) {
-      return a.createdAt - b.createdAt;
-    }
-    // 하나만 있으면 없는 쪽(로컬/최신)을 뒤로
-    if (a.createdAt === undefined && b.createdAt !== undefined) return 1;
-    if (a.createdAt !== undefined && b.createdAt === undefined) return -1;
-
-    // 기존 fallback 정렬
-    if (a.order !== b.order) return a.order - b.order;
-    return a.pitch - b.pitch;
-  });
-}
-
-function normalizeEvents(events: unknown, fallback: { inning: number; half: Half }): PlayEvent[] {
-  if (!Array.isArray(events)) return [];
-  return events.map((entry) => {
-    if (typeof entry === 'string') {
-      return {
-        inning: fallback.inning,
-        half: fallback.half,
-        order: 0,
-        batter: '',
-        pitch: 0,
-        type: 'note',
-        runners: [],
-        notes: entry,
-      };
-    }
-    if (entry && typeof entry === 'object') {
-      const e = entry as Partial<PlayEvent>;
-      const half = e.half === 'top' || e.half === 'bottom' ? e.half : fallback.half;
-      const battedBall =
-        e.battedBall && typeof e.battedBall === 'object'
-          ? (e.battedBall as BattedBallDetails)
-          : typeof e.battedBall === 'string'
-            ? { type: e.battedBall, zone: '' }
-            : null;
-      return {
-        inning: typeof e.inning === 'number' ? e.inning : fallback.inning,
-        half,
-        order: typeof e.order === 'number' ? e.order : 0,
-        batter: typeof e.batter === 'string' ? e.batter : '',
-        pitch: typeof e.pitch === 'number' ? e.pitch : 0,
-        type: typeof e.type === 'string' ? e.type : 'play',
-        runners: Array.isArray(e.runners) ? e.runners.filter((r): r is string => typeof r === 'string') : [],
-        battedBall,
-        error: e.error ?? null,
-        notes: typeof e.notes === 'string' ? e.notes : undefined,
-        strikeType: e.strikeType === 'swinging' || e.strikeType === 'looking' ? e.strikeType : undefined,
-        rbi: typeof e.rbi === 'number' ? e.rbi : undefined,
-        dpRoute: Array.isArray(e.dpRoute) ? e.dpRoute.filter((v): v is number => typeof v === 'number') : undefined,
-        earnedRunsBy:
-          e.earnedRunsBy && typeof e.earnedRunsBy === 'object'
-            ? (e.earnedRunsBy as Record<string, number>)
-            : undefined,
-        createdAt: typeof e.createdAt === 'number' ? e.createdAt : undefined,
-        eventId: typeof e.eventId === 'string' ? e.eventId : undefined,
-      };
-    }
-    return {
-      inning: fallback.inning,
-      half: fallback.half,
-      order: 0,
-      batter: '',
-      pitch: 0,
-      type: 'play',
-      runners: [],
-      notes: String(entry),
-    };
-  });
-}
-
-// 데이터 로딩 시 사용되는 정규화 함수 (isOhtaniRule 보존 추가)
-function normalizePlayerSlot(slot: unknown): PlayerSlot | null {
-  if (!slot || typeof slot !== 'object') return null;
-  const s = slot as Partial<PlayerSlot>;
-  return {
-    name: typeof s.name === 'string' ? s.name : '미정',
-    pos: typeof s.pos === 'string' ? s.pos : 'UT',
-    number: typeof s.number === 'string' ? s.number : '',
-    throws: typeof s.throws === 'string' ? s.throws : 'R',
-    bats: typeof s.bats === 'string' ? s.bats : 'R',
-    order: typeof s.order === 'number' ? s.order : s.order ?? null,
-    // [수정] 오타니룰 플래그 보존
-    isOhtaniRule: typeof s.isOhtaniRule === 'boolean' ? s.isOhtaniRule : undefined,
-    // [수정] 교체 유형 보존 (추가됨: 이 부분이 없으면 새로고침 시 정보가 사라짐)
-    substitutionType:
-      typeof s.substitutionType === 'string' &&
-      ['대수비', '대타', '대주자'].includes(s.substitutionType)
-        ? (s.substitutionType as '대수비' | '대타' | '대주자')
-        : undefined,
-    // [수정] 선출(선수 출신) 플래그 보존
-    isElite: typeof s.isElite === 'boolean' ? s.isElite : undefined,
-  };
-}
-
-function normalizeLineups(lineups: unknown): { home: PlayerSlot[]; away: PlayerSlot[] } | undefined {
-  if (!lineups || typeof lineups !== 'object') return undefined;
-  const l = lineups as { home?: unknown; away?: unknown };
-  const home = Array.isArray(l.home) ? l.home.map(normalizePlayerSlot).filter((p): p is PlayerSlot => Boolean(p)) : [];
-  const away = Array.isArray(l.away) ? l.away.map(normalizePlayerSlot).filter((p): p is PlayerSlot => Boolean(p)) : [];
-  if (!home.length && !away.length) return undefined;
-  return { home, away };
-}
-
-function normalizeBenches(benches: unknown): { home: PlayerSlot[]; away: PlayerSlot[] } | undefined {
-  if (!benches || typeof benches !== 'object') return undefined;
-  const b = benches as { home?: unknown; away?: unknown };
-  const home = Array.isArray(b.home) ? b.home.map(normalizePlayerSlot).filter((p): p is PlayerSlot => Boolean(p)) : [];
-  const away = Array.isArray(b.away) ? b.away.map(normalizePlayerSlot).filter((p): p is PlayerSlot => Boolean(p)) : [];
-  if (!home.length && !away.length) return undefined;
-  return { home, away };
-}
-
-const asNumber = (value: unknown) => {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim() !== '') {
-    const n = Number(value);
-    if (Number.isFinite(n)) return n;
-  }
-  return undefined;
-};
-
-const normalizeRunArray = (value: unknown): number[] =>
-  Array.isArray(value)
-    ? Array.from({ length: value.length }, (_v, i) => asNumber((value as unknown[])[i]) ?? 0)
-    : [];
-
-function normalizeLineScore(lineScore: unknown): PostGameLineScore | undefined {
-  if (!lineScore || typeof lineScore !== 'object') return undefined;
-  const ls = lineScore as Partial<PostGameLineScore>;
-  const innings = Array.isArray(ls.innings) ? ls.innings.map(asNumber).filter((n): n is number => n !== undefined) : [];
-  const home = Array.isArray(ls.home) ? ls.home.map(asNumber).filter((n): n is number => n !== undefined) : [];
-  const away = Array.isArray(ls.away) ? ls.away.map(asNumber).filter((n): n is number => n !== undefined) : [];
-  if (!innings.length || !home.length || !away.length) return undefined;
-  return { innings, home, away };
-}
-
-function normalizeTotals(totals: unknown): PostGameTotals | undefined {
-  if (!totals || typeof totals !== 'object') return undefined;
-  const t = totals as PostGameTotals;
-  const pick = (side: 'home' | 'away') => {
-    const src = (t as Record<'home' | 'away', Partial<PostGameTotals['home']>>)[side] ?? {};
-    const runs = asNumber(src.runs);
-    const hits = asNumber(src.hits);
-    const errors = asNumber(src.errors);
-    if (runs === undefined || hits === undefined || errors === undefined) return undefined;
-    const lob = asNumber(src.lob);
-    return lob !== undefined ? { runs, hits, errors, lob } : { runs, hits, errors };
-  };
-  const home = pick('home');
-  const away = pick('away');
-  if (!home || !away) return undefined;
-  return { home, away };
-}
-
-function normalizePitcherLine(entry: unknown): PostGamePitcherLine | null {
-  if (!entry || typeof entry !== 'object') return null;
-  const p = entry as Partial<PostGamePitcherLine>;
-  if (typeof p.name !== 'string' || !p.name.trim()) return null;
-  const fields: (keyof PostGamePitcherLine)[] = [
-    'name',
-    'result',
-    'ip',
-    'bf',
-    'ab',
-    'h',
-    'hr',
-    'bb',
-    'hbp',
-    'so',
-    'r',
-    'er',
-    'pitches',
-    'wp',
-    'bk',
-    'sh',
-    'sf',
-    'era',
-  ];
-  const out: Partial<PostGamePitcherLine> = { name: p.name.trim() };
-  fields.forEach((key) => {
-    if (key === 'name' || key === 'result') return;
-    const val = asNumber((p as Record<string, unknown>)[key]);
-    if (val !== undefined) (out as Record<string, unknown>)[key] = val;
-  });
-  if (typeof p.result === 'string' && p.result.trim()) out.result = p.result.trim();
-  return out as PostGamePitcherLine;
-}
-
-function normalizePitchers(pitchers: unknown): PostGameRecord['pitchers'] | undefined {
-  if (!pitchers || typeof pitchers !== 'object') return undefined;
-  const src = pitchers as { home?: unknown; away?: unknown };
-  const normalizeSide = (side: unknown) =>
-    Array.isArray(side)
-      ? side
-          .map(normalizePitcherLine)
-          .filter((p): p is PostGamePitcherLine => Boolean(p && p.name))
-      : [];
-  const home = normalizeSide(src.home);
-  const away = normalizeSide(src.away);
-  if (!home.length && !away.length) return undefined;
-  return { home, away };
-}
-
-function normalizeBatterLine(entry: unknown): PostGameBatterLine | null {
-  if (!entry || typeof entry !== 'object') return null;
-  const b = entry as Partial<PostGameBatterLine>;
-  if (typeof b.name !== 'string' || !b.name.trim()) return null;
-  const out: Partial<PostGameBatterLine> = { name: b.name.trim() };
-  if (typeof b.pos === 'string' && b.pos.trim()) out.pos = b.pos.trim();
-  if (typeof b.slot === 'string' && b.slot.trim()) out.slot = b.slot.trim();
-  if (typeof b.order === 'number' && Number.isFinite(b.order)) out.order = b.order;
-  if (Array.isArray(b.innings)) {
-    out.innings = b.innings.map((v) => (typeof v === 'string' ? v : v == null ? null : String(v)));
-  }
-  ['ab', 'h', 'rbi', 'r', 'sb', 'avg', 'seasonAvg'].forEach((k) => {
-    const key = k as keyof PostGameBatterLine;
-    const val = asNumber((b as Record<string, unknown>)[key]);
-    if (val !== undefined) (out as Record<string, unknown>)[key] = val;
-  });
-  return out as PostGameBatterLine;
-}
-
-function normalizeBatters(batters: unknown): PostGameRecord['batters'] | undefined {
-  if (!batters || typeof batters !== 'object') return undefined;
-  const src = batters as { home?: unknown; away?: unknown };
-  const normalizeSide = (side: unknown) =>
-    Array.isArray(side)
-      ? side
-          .map(normalizeBatterLine)
-          .filter((b): b is PostGameBatterLine => Boolean(b && b.name))
-      : [];
-  const home = normalizeSide(src.home);
-  const away = normalizeSide(src.away);
-  if (!home.length && !away.length) return undefined;
-  return { home, away };
-}
-
-function normalizePostGame(pg: unknown): PostGameRecord | undefined {
-  if (!pg || typeof pg !== 'object') return undefined;
-  const record = pg as Partial<PostGameRecord>;
-  const lineScore = normalizeLineScore(record.lineScore);
-  const totals = normalizeTotals(record.totals);
-  if (!lineScore || !totals) return undefined;
-  const teamBatterSummary = record.teamBatterSummary;
-  const batters = normalizeBatters(record.batters);
-  const pitchers = normalizePitchers(record.pitchers);
-  const note = typeof record.note === 'string' ? record.note : undefined;
-  return {
-    lineScore,
-    totals,
-    teamBatterSummary,
-    batters,
-    pitchers,
-    note,
-  };
-}
-
-function normalizeMatches(matches: unknown): MatchSchedule[] {
-  if (!Array.isArray(matches)) return [];
-  return matches.map((entry) => {
-    if (!entry || typeof entry !== 'object') {
-      return {
-        id: `match-${Math.random().toString(36).slice(2, 8)}`,
-        homeTeamName: '미정',
-        awayTeamName: '미정',
-        startTime: new Date().toISOString(),
-        venue: '미정',
-        status: 'scheduled',
-        division: undefined,
-      } satisfies MatchSchedule;
-    }
-    const match = entry as Partial<MatchSchedule>;
-    return {
-      id: typeof match.id === 'string' ? match.id : `match-${Math.random().toString(36).slice(2, 8)}`,
-      homeTeamId: typeof match.homeTeamId === 'string' ? match.homeTeamId : undefined,
-      awayTeamId: typeof match.awayTeamId === 'string' ? match.awayTeamId : undefined,
-      homeTeamName: typeof match.homeTeamName === 'string' ? match.homeTeamName : '미정',
-      awayTeamName: typeof match.awayTeamName === 'string' ? match.awayTeamName : '미정',
-      startTime: typeof match.startTime === 'string' ? match.startTime : new Date().toISOString(),
-      venue: typeof match.venue === 'string' ? match.venue : '미정',
-      status: match.status === 'completed' || match.status === 'inProgress' ? match.status : 'scheduled',
-      recordMode: match.recordMode === 'practice' ? 'practice' : 'official',
-      liveVideoUrl: typeof match.liveVideoUrl === 'string' ? match.liveVideoUrl : undefined,
-      liveDelaySeconds: typeof match.liveDelaySeconds === 'number' ? match.liveDelaySeconds : undefined,
-      division: deriveMatchDivision(match.division, match.homeTeamId, match.awayTeamId),
-      homeScore: typeof match.homeScore === 'number' ? match.homeScore : null,
-      awayScore: typeof match.awayScore === 'number' ? match.awayScore : null,
-      lineupPublic: typeof match.lineupPublic === 'boolean' ? match.lineupPublic : false,
-      lineups: normalizeLineups(match.lineups),
-      benches: normalizeBenches(match.benches),
-      notes: typeof match.notes === 'string' ? match.notes : undefined,
-      postGame: normalizePostGame(match.postGame),
-      deleted: match.deleted === true,
-      deletedAt: typeof match.deletedAt === 'number' ? match.deletedAt : undefined,
-      purgeAt: typeof match.purgeAt === 'number' ? match.purgeAt : undefined,
-      deletedBy: typeof match.deletedBy === 'string' ? match.deletedBy : undefined,
-    };
-  });
-}
-
-function projectSpectatorMatch(match: MatchSchedule): MatchSchedule {
-  const lineupVisible = Boolean(match.lineupPublic) || match.status === 'inProgress' || match.status === 'completed';
-  return {
-    id: match.id,
-    homeTeamId: match.homeTeamId,
-    awayTeamId: match.awayTeamId,
-    homeTeamName: match.homeTeamName,
-    awayTeamName: match.awayTeamName,
-    startTime: match.startTime,
-    venue: match.venue,
-    status: match.status,
-    recordMode: match.recordMode ?? 'official',
-    liveVideoUrl: match.liveVideoUrl,
-    liveDelaySeconds: match.liveDelaySeconds,
-    division: match.division,
-    homeScore: match.homeScore,
-    awayScore: match.awayScore,
-    lineupPublic: Boolean(match.lineupPublic),
-    lineups: lineupVisible ? match.lineups : undefined,
-    benches: lineupVisible ? match.benches : undefined,
-    deleted: match.deleted,
-    deletedAt: match.deletedAt,
-    purgeAt: match.purgeAt,
-    deletedBy: match.deletedBy,
-  };
-}
-
-function mergeMatches(base: MatchSchedule[], incoming: MatchSchedule[]) {
-  const map = new Map<string, MatchSchedule>();
-  base.forEach((m) => map.set(m.id, m));
-  incoming.forEach((m) => {
-    const existing = map.get(m.id);
-    map.set(m.id, existing ? { ...existing, ...m } : m);
-  });
-  return Array.from(map.values());
-}
-
-function normalizeState(base: DemoState, incoming: DemoState): DemoState {
-  const merged = { ...base, ...incoming } as DemoState;
-  const feed = normalizeFeed(merged.feed, { inning: merged.inning, half: merged.half });
-  const events = normalizeEvents(merged.events, { inning: merged.inning, half: merged.half });
-  const matches = normalizeMatches(merged.matches ?? base.matches);
-  const hasIncomingLineScore = Object.prototype.hasOwnProperty.call(incoming, 'lineScore');
-  const lineScore =
-    hasIncomingLineScore && merged.lineScore && typeof merged.lineScore === 'object'
-      ? {
-          home: normalizeRunArray((merged.lineScore as { home?: unknown }).home),
-          away: normalizeRunArray((merged.lineScore as { away?: unknown }).away),
-        }
-      : buildLineScoreFromFeed(feed);
-  // [수정] 라인업이 완전히 비어있는 경우 자동 채움을 하지 않음
-  // 실제 선수가 있는지 확인 (name이 비어있지 않은 슬롯)
-  const hasActualPlayers = (lineup: PlayerSlot[]) =>
-    lineup.some(slot => slot.name && slot.name.trim() !== '');
-
-  let rawLineups = merged.lineups ?? base.lineups;
-  const hasLineups = hasActualPlayers(rawLineups.home) || hasActualPlayers(rawLineups.away);
-  const isDemo = isDemoLineups(rawLineups);
-  if ((!hasLineups || isDemo) && merged.activeMatchId) {
-    const active = matches.find((m) => m.id === merged.activeMatchId);
-    const activeLineups = active?.lineups;
-    const activeHasPlayers = activeLineups
-      ? hasActualPlayers(activeLineups.home) || hasActualPlayers(activeLineups.away)
-      : false;
-    if (activeLineups && activeHasPlayers) {
-      rawLineups = activeLineups;
-    }
-  }
-  const safeLineups = hasActualPlayers(rawLineups.home) || hasActualPlayers(rawLineups.away)
-    ? ensureCompleteLineups(rawLineups)
-    : rawLineups;
-  const history = Array.isArray(merged.history)
-    ? merged.history.map((snap) => {
-        const normalizedHistoryFeed = normalizeFeed((snap as DemoSnapshot).feed, { inning: snap.inning, half: snap.half });
-        const normalizedHistoryEvents = normalizeEvents((snap as DemoSnapshot).events, {
-          inning: snap.inning,
-          half: snap.half,
-        });
-        const normalizedGameStarted =
-          typeof (snap as DemoSnapshot).gameStarted === 'boolean'
-            ? (snap as DemoSnapshot).gameStarted
-            : normalizedHistoryFeed.length > 0;
-        return {
-          ...base,
-          ...snap,
-          pitchCount: typeof snap.pitchCount === 'number' ? snap.pitchCount : 0,
-          feed: normalizedHistoryFeed,
-          events: normalizedHistoryEvents,
-          gameOver: Boolean((snap as DemoSnapshot).gameOver),
-          endedAt: typeof (snap as DemoSnapshot).endedAt === 'string' ? (snap as DemoSnapshot).endedAt : null,
-          gameStarted: normalizedGameStarted,
-        };
-      })
-    : [];
-  const gameStarted = typeof incoming.gameStarted === 'boolean' ? incoming.gameStarted : feed.length > 0;
-  const gameLimitMinutes =
-    typeof merged.gameLimitMinutes === 'number' ? merged.gameLimitMinutes : merged.gameLimitMinutes === null ? null : null;
-  const gameStartTimestamp =
-    typeof merged.gameStartTimestamp === 'number'
-      ? merged.gameStartTimestamp
-      : gameStarted && gameLimitMinutes !== null
-        ? Date.now()
-        : null;
-  return {
-    ...merged,
-    pitchCount: merged.pitchCount ?? 0,
-    feed,
-    events,
-    matches,
-    lineScore,
-    history,
-    lineups: safeLineups,
-    gameOver: Boolean(merged.gameOver),
-    endedAt: typeof merged.endedAt === 'string' ? merged.endedAt : null,
-    removed: merged.removed ?? base.removed,
-    gameStarted,
-    gameLimitMinutes,
-    gameStartTimestamp,
-    liveVideoUrl: typeof merged.liveVideoUrl === 'string' ? merged.liveVideoUrl : base.liveVideoUrl,
-    liveDelaySeconds: typeof merged.liveDelaySeconds === 'number' ? merged.liveDelaySeconds : base.liveDelaySeconds,
-    activeMatchId: typeof merged.activeMatchId === 'string' ? merged.activeMatchId : merged.activeMatchId === null ? null : base.activeMatchId,
-    scorerUid: typeof merged.scorerUid === 'string' ? merged.scorerUid : null,
-    scorerName: typeof merged.scorerName === 'string' ? merged.scorerName : null,
-    scorerEmail: typeof merged.scorerEmail === 'string' ? merged.scorerEmail : null,
-    scorerLockedAt: typeof merged.scorerLockedAt === 'number' ? merged.scorerLockedAt : null,
-    scorerRole: typeof merged.scorerRole === 'string' ? merged.scorerRole : null,
-    scorerPaused: typeof merged.scorerPaused === 'boolean' ? merged.scorerPaused : false,
-    followCurrent: typeof merged.followCurrent === 'boolean' ? merged.followCurrent : true,
-  };
-}
-
-export interface GameRecord {
-  meta: {
-    homeTeamId: string;
-    awayTeamId: string;
-    homeTeamName: string;
-    awayTeamName: string;
-    inning: number;
-    half: Half;
-    gameStarted: boolean;
-    gameOver: boolean;
-    endedAt: string | null;
-    scorerUid: string | null;
-    scorerName: string | null;
-    scorerEmail: string | null;
-    scorerRole: string | null;
-  };
-  score: DemoState['score'];
-  counts: { balls: number; strikes: number; outs: number; pitchCount: number };
-  bases: Bases;
-  batterIndex: DemoState['batterIndex'];
-  lineups: DemoState['lineups'];
-  benches: DemoState['benches'];
-  removed: DemoState['removed'];
-  feed: PlayLog[];
-  events: PlayEvent[];
-  lastPlay: string;
-  liveStats: {
-    lineScore: { home: number[]; away: number[] };
-    hits: { home: number; away: number };
-    errors: { home: number; away: number };
-  };
-}
-
-// [추가] 통계 집계 로직을 demoStore 내부에 추가합니다.
-function calculateGameStats(record: GameRecord) {
-  const stats: Record<'home' | 'away', Map<string, {
-    pa: number; ab: number; h: number; singles: number; doubles: number;
-    triples: number; hr: number; bb: number; hbp: number; so: number;
-    sac: number; fc: number; ci: number; rbi: number; r: number;
-  }>> = {
-    home: new Map(),
-    away: new Map(),
-  };
-
-  const buildRoster = (side: 'home' | 'away') => {
-    const roster = new Map<string, PlayerSlot>();
-    const add = (p: PlayerSlot) => {
-      const name = p.name?.trim();
-      if (!name) return;
-      roster.set(name, p);
-    };
-    record.lineups[side].forEach(add);
-    record.benches[side].forEach(add);
-    record.removed?.[side]?.forEach(add);
-    return roster;
-  };
-
-  const rosters = {
-    home: buildRoster('home'),
-    away: buildRoster('away'),
-  };
-
-  const resolveName = (raw: string, side: 'home' | 'away') => {
-    let name = raw.trim();
-    if (!name) return name;
-    const roster = rosters[side];
-    if (roster.has(name)) return name;
-    const base = name.replace(/\([^)]*\)/g, '').trim();
-    if (base && roster.has(base)) return base;
-    for (const key of roster.keys()) {
-      if (key.startsWith(`${name}(`) || (base && key.startsWith(`${base}(`))) return key;
-    }
-    return name;
-  };
-
-  const ensureStat = (side: 'home' | 'away', name: string) => {
-    const store = stats[side];
-    if (!store.has(name)) {
-      store.set(name, {
-        pa: 0, ab: 0, h: 0, singles: 0, doubles: 0, triples: 0,
-        hr: 0, bb: 0, hbp: 0, so: 0, sac: 0, fc: 0, ci: 0, rbi: 0, r: 0
-      });
-    }
-    return store.get(name)!;
-  };
-
-  const extractRunnerName = (summary: string) => {
-    if (!summary.includes('득점')) return null;
-    const parts = summary.split('·').map((part) => part.trim()).filter(Boolean);
-    if (parts.length >= 2) {
-      return parts[parts.length - 1];
-    }
-    const match = summary.match(/(.+?)\s*득점/);
-    return match ? match[1].trim() : null;
-  };
-
-  // record.feed는 이미 오래된 순(oldest → newest)으로 정렬되어 있음
-  const chronological = record.feed;
-  
-  chronological.forEach((entry) => {
-    const side: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
-    const rawName = entry.batter?.trim();
-    if (!rawName) return;
-    const name = resolveName(rawName, side);
-    
-    // 결과 텍스트 분석 (ScorekeeperPage의 classifyResult 로직과 동일)
-    const normalized = entry.result.replace(/\s+/g, '');
-    let kind = '';
-    
-    if (normalized.includes('홈런')) kind = 'hr';
-    else if (normalized.includes('3루타')) kind = 'triple';
-    else if (normalized.includes('2루타')) kind = 'double';
-    else if (normalized.includes('1루타')) kind = 'single';
-    else if (normalized.includes('고의') || normalized.toUpperCase().includes('IB')) kind = 'bb';
-    else if (normalized.includes('볼넷')) kind = 'bb';
-    else if (normalized.includes('몸에맞는공')) kind = 'hbp';
-    else if (normalized.includes('타격방해')) kind = 'ci';
-    else if (normalized.includes('야수선택') || normalized.toUpperCase().includes('F.C')) kind = 'fc';
-    else if (normalized.includes('희생플라이') || normalized.includes('희생번트')) kind = 'sac';
-    else if (normalized.includes('낫아웃')) kind = 'so_reach'; // 낫아웃 출루도 삼진으로 카운트
-    else if (normalized.includes('삼진')) kind = 'so';
-    else if (normalized.includes('아웃') && !normalized.includes('도루')) kind = 'out';
-    
-    if (!kind) return;
-    
-    const s = ensureStat(side, name);
-    
-    switch (kind) {
-      case 'single': s.pa++; s.ab++; s.h++; s.singles++; break;
-      case 'double': s.pa++; s.ab++; s.h++; s.doubles++; break;
-      case 'triple': s.pa++; s.ab++; s.h++; s.triples++; break;
-      case 'hr':     s.pa++; s.ab++; s.h++; s.hr++; break;
-      case 'bb':     s.pa++; s.bb++; break;
-      case 'ci':     s.pa++; s.ci++; break; // 타격방해는 타석엔 포함, 타수엔 미포함
-      case 'fc':     s.pa++; s.ab++; s.fc++; break; // 야수선택은 타수 포함
-      case 'hbp':    s.pa++; s.hbp++; break;
-      case 'so':     s.pa++; s.ab++; s.so++; break;
-      case 'so_reach': s.pa++; s.ab++; s.so++; break; // 낫아웃도 삼진
-      case 'out':    s.pa++; s.ab++; break;
-      case 'sac':    s.pa++; s.sac++; break;
-    }
-  });
-
-  // events에서 RBI/득점 집계
-  if (record.events) {
-    record.events.forEach((event) => {
-      const side: 'home' | 'away' = event.half === 'top' ? 'away' : 'home';
-      if (event.rbi && event.rbi > 0 && event.batter) {
-        const batterName = resolveName(event.batter.trim(), side);
-        const s = ensureStat(side, batterName);
-        s.rbi += event.rbi;
-      }
-      if (Array.isArray(event.runners)) {
-        event.runners.forEach((runnerSummary) => {
-          const rawRunner = extractRunnerName(runnerSummary);
-          if (!rawRunner) return;
-          const runnerName = resolveName(rawRunner, side);
-          const s = ensureStat(side, runnerName);
-          s.r += 1;
-        });
-      }
-    });
-  }
-
-  return stats;
-}
-
-export function buildGameRecord(state: DemoState): GameRecord {
-  // [추가] 선수 객체의 이름을 '이름(등번호)'로 변환하는 내부 함수
-  const transformPlayer = (p: PlayerSlot) => ({
-    ...p,
-    name: formatUniqueName(p.name, p.number),
-  });
-
-  // [추가] 실시간 라인스코어 및 집계 로직
-  // state.feed는 이미 오래된 순(oldest → newest)으로 정렬되어 있음
-  const chronologicalFeed = state.feed;
-
-  const liveHits = chronologicalFeed.reduce(
-    (acc, entry) => {
-      const offense = entry.half === 'top' ? 'away' : 'home';
-      const txt = entry.result.replace(/\s+/g, '');
-      if (txt.includes('1루타') || txt.includes('2루타') || txt.includes('3루타') || txt.includes('홈런')) {
-        acc[offense] += 1;
-      }
-      return acc;
-    },
-    { home: 0, away: 0 },
-  );
-
-  const liveErrors = chronologicalFeed.reduce(
-    (acc, entry) => {
-      const txt = entry.result.replace(/\s+/g, '');
-      const hasError = txt.includes('실책') || /\bE[1-6]\b/i.test(txt);
-      if (hasError) {
-        const side = entry.half === 'top' ? 'home' : 'away';
-        acc[side] += 1;
-      }
-      return acc;
-    },
-    { home: 0, away: 0 },
-  );
-
-  const baseLineScore =
-    (state.lineScore?.home?.length || state.lineScore?.away?.length)
-      ? state.lineScore
-      : buildLineScoreFromFeed(chronologicalFeed);
-  const maxInning = Math.max(state.inning, baseLineScore.home.length, baseLineScore.away.length);
-  const padLine = (arr: number[]) => Array.from({ length: maxInning }, (_, i) => arr[i] ?? 0);
-  const liveLine = { home: padLine(baseLineScore.home), away: padLine(baseLineScore.away) };
-
-  return {
-    meta: {
-      homeTeamId: state.homeTeamId,
-      awayTeamId: state.awayTeamId,
-      homeTeamName: state.teamNames.home,
-      awayTeamName: state.teamNames.away,
-      inning: state.inning,
-      half: state.half,
-      gameStarted: state.gameStarted,
-      gameOver: state.gameOver,
-      endedAt: state.endedAt,
-      scorerUid: state.scorerUid,
-      scorerName: state.scorerName,
-      scorerEmail: state.scorerEmail,
-      scorerRole: state.scorerRole,
-    },
-    score: { ...state.score },
-    counts: {
-      balls: state.balls,
-      strikes: state.strikes,
-      outs: state.outs,
-      pitchCount: state.pitchCount,
-    },
-    bases: [...state.bases],
-    batterIndex: { ...state.batterIndex },
-    
-    // [수정] 아래 lineups, benches, removed 부분에 transformPlayer 적용
-    lineups: {
-      home: state.lineups.home.map(transformPlayer),
-      away: state.lineups.away.map(transformPlayer),
-    },
-    benches: {
-      home: state.benches.home.map(transformPlayer),
-      away: state.benches.away.map(transformPlayer),
-    },
-    removed: {
-      home: state.removed.home.map(transformPlayer),
-      away: state.removed.away.map(transformPlayer),
-    },
-    
-    feed: state.feed.map((entry) => ({ ...entry })),
-    events: state.events.map((entry) => ({
-      ...entry,
-      runners: [...entry.runners],
-      battedBall: entry.battedBall ? { ...entry.battedBall } : null,
-      error: entry.error
-        ? typeof entry.error === 'string'
-          ? entry.error
-          : {
-              ...entry.error,
-              advanceResults: {
-                batter: entry.error.advanceResults.batter,
-                runners: { ...entry.error.advanceResults.runners },
-              },
-            }
-        : null,
-    })),
-    lastPlay: state.lastPlay,
-    liveStats: {
-      lineScore: liveLine,
-      hits: liveHits,
-      errors: liveErrors,
-    },
-  };
-}
-
-function snapshotState(state: DemoState): DemoSnapshot {
-  const { history: _history, ...snapshot } = state;
-  const activeMatch = state.activeMatchId
-    ? state.matches.find((m) => m.id === state.activeMatchId)
-    : null;
-  const preserveEmptySlots = isPracticeMatch(activeMatch);
-  // [수정] 기본적으로는 빈 슬롯을 제외하여 깜빡임을 줄이되, 연습경기는 추가 타자 슬롯 유지를 위해 보존
-  const filterEmptySlots = (lineup: PlayerSlot[]) =>
-    lineup.filter(slot => slot.name && slot.name.trim() !== '');
-
-  return {
-    ...snapshot,
-    lineups: preserveEmptySlots
-      ? snapshot.lineups
-      : {
-          home: filterEmptySlots(snapshot.lineups.home),
-          away: filterEmptySlots(snapshot.lineups.away),
-        },
-  };
-}
-
-function shouldTrackHistory(actionType: Action['type']) {
-  return ![
-    'setTeamName',
-    'setLineup',
-    'addBench',
-    'removeBench',
-    'substitute',
-    'addMatch',
-    'updateMatch',
-    'deleteMatch',
-    'saveMatchLineups',
-    'selectMatch',
-    'setMatches',
-    'moveMatchToTrash',
-    'restoreMatch',
-    'purgeTrash',
-    'syncActiveMatch',
-    'hydrate',
-    'resetGame',
-    'startGame',
-    'setLiveVideoUrl',
-    'setFeed',
-    'setEvents',
-  ].includes(actionType);
-}
 
 function syncActiveMatchScore(nextState: DemoState): DemoState {
   const matchId = nextState.activeMatchId;
@@ -3435,204 +2343,8 @@ function applyEndGame(state: DemoState, endedAt: string): DemoState {
   };
 }
 
-function updateMatchSchedule(matches: MatchSchedule[], matchId: string, updates: Partial<MatchSchedule>) {
-  return matches.map((match) => (match.id === matchId ? { ...match, ...updates } : match));
-}
-
-function resetGameForMatch(state: DemoState, match: MatchSchedule): DemoState {
-  // [수정] 경기에 저장된 라인업이 없으면(null/undefined) state.lineups(이전 경기 또는 mock)를 쓰는 대신 빈 라인업으로 초기화
-  // [수정] 라인업이 완전히 비어있는 경우(공유 링크 등) 자동 채움을 하지 않음
-  // 실제 선수가 있는지 확인 (name이 비어있지 않은 슬롯)
-  const hasActualPlayers = (lineup: PlayerSlot[]) =>
-    lineup.some(slot => slot.name && slot.name.trim() !== '');
-
-  const rawLineups = match.lineups ?? { home: [], away: [] };
-  const hasLineups = hasActualPlayers(rawLineups.home) || hasActualPlayers(rawLineups.away);
-  const lineups =
-    hasLineups
-      ? isPracticeMatch(match)
-        ? cloneLineups(rawLineups)
-        : ensureCompleteLineups(rawLineups)
-      : rawLineups;
-  const benches = match.benches ?? { home: [], away: [] };
-  return {
-    inning: 1,
-    half: 'top',
-    balls: 0,
-    strikes: 0,
-    outs: 0,
-    pitchCount: 0,
-    bases: [null, null, null],
-    runnerResponsiblePitcher: { 0: null, 1: null, 2: null },
-    score: { home: 0, away: 0 },
-    lineScore: { home: [], away: [] },
-    lastPlay: '경기 대기 중',
-    feed: [],
-    events: [],
-    homeTeamId: match.homeTeamId ?? state.homeTeamId,
-    awayTeamId: match.awayTeamId ?? state.awayTeamId,
-    batterIndex: { home: 0, away: 0 },
-    lineups: cloneLineups(lineups),
-    benches: cloneBenches(benches),
-    teamNames: { home: match.homeTeamName, away: match.awayTeamName },
-    gameStarted: false,
-    gameOver: false,
-    endedAt: null,
-    liveVideoUrl: state.liveVideoUrl,
-    liveDelaySeconds: state.liveDelaySeconds,
-    history: [],
-    removed: { home: [], away: [] },
-    matches: state.matches,
-    activeMatchId: match.id,
-  scorerUid: state.scorerUid,
-  scorerName: state.scorerName,
-  scorerEmail: state.scorerEmail,
-  scorerLockedAt: state.scorerLockedAt,
-  scorerRole: state.scorerRole,
-  scorerPaused: false,
-  followCurrent: state.followCurrent,
-  gameLimitMinutes: null,
-  gameStartTimestamp: null,
-  gamePausedAt: null,
-  gamePausedDuration: 0,
-  onlineViewerCount: state.onlineViewerCount,
-  };
-}
-
-function createNewGame(state: DemoState): DemoState {
-  const preparedLineups = isPracticeActiveMatch(state)
-    ? cloneLineups(state.lineups)
-    : ensureCompleteLineups(state.lineups);
-  return {
-    inning: 1,
-    half: 'top',
-    balls: 0,
-    strikes: 0,
-    outs: 0,
-    pitchCount: 0,
-    bases: [null, null, null],
-    runnerResponsiblePitcher: { 0: null, 1: null, 2: null },
-    score: { home: 0, away: 0 },
-    lineScore: { home: [], away: [] },
-    lastPlay: '경기 대기 중',
-    feed: [],
-    events: [],
-    homeTeamId: state.homeTeamId,
-    awayTeamId: state.awayTeamId,
-    batterIndex: { home: 0, away: 0 },
-    lineups: cloneLineups(preparedLineups),
-    benches: {
-      home: state.benches.home.map((p) => ({ ...p })),
-      away: state.benches.away.map((p) => ({ ...p })),
-    },
-    teamNames: { ...state.teamNames },
-    gameStarted: false,
-    gameOver: false,
-    endedAt: null,
-    liveVideoUrl: state.liveVideoUrl,
-    liveDelaySeconds: state.liveDelaySeconds,
-    history: [],
-    removed: { home: [], away: [] },
-    matches: state.matches,
-    activeMatchId: state.activeMatchId,
-  scorerUid: state.scorerUid,
-  scorerName: state.scorerName,
-  scorerEmail: state.scorerEmail,
-  scorerLockedAt: state.scorerLockedAt,
-    scorerRole: state.scorerRole,
-    scorerPaused: false,
-    followCurrent: state.followCurrent,
-    gameLimitMinutes: null,
-    gameStartTimestamp: null,
-    gamePausedAt: null,
-    gamePausedDuration: 0,
-    onlineViewerCount: state.onlineViewerCount,
-  };
-}
-
 function changeHalf(state: DemoState, message: string, pitchNumber = 0, logState?: DemoState): DemoState {
-  const nextHalf: Half = state.half === 'top' ? 'bottom' : 'top';
-  const nextInning = nextHalf === 'top' ? state.inning + 1 : state.inning;
-  const logSource = logState ?? state;
-  const inningLabel = `${state.inning}회${state.half === 'top' ? '초' : '말'}`;
-  const endMarker = `${inningLabel} 종료`;
-  const hasEndMarker = state.feed.some(
-    (entry) => entry.inning === state.inning && entry.half === state.half && entry.result.includes('종료'),
-  );
-  const shouldAddEndMarker = !hasEndMarker;
-  const feed = shouldAddEndMarker ? pushFeed(state.feed, createLogEntry(logSource, endMarker, pitchNumber)) : state.feed;
-  return {
-    ...state,
-    inning: nextInning,
-    half: nextHalf,
-    outs: 0,
-    balls: 0,
-    strikes: 0,
-    pitchCount: 0,
-    bases: [null, null, null],
-    runnerResponsiblePitcher: { 0: null, 1: null, 2: null },
-    lastPlay: message,
-    feed,
-  };
-}
-
-function resolveAdvanceOutcome(
-  outcome: RunnerAdvanceOutcome | undefined,
-  fromBase: number,
-  defaultSteps: number,
-): { type: 'hold' | 'advance' | 'score' | 'out'; targetBaseIndex: number } {
-  if (outcome === 'out') return { type: 'out', targetBaseIndex: fromBase };
-  if (outcome === 'score') return { type: 'score', targetBaseIndex: 3 };
-  if (outcome === 'hold') return { type: 'hold', targetBaseIndex: fromBase };
-  if (typeof outcome === 'number') {
-    if (outcome >= 4) return { type: 'score', targetBaseIndex: 3 };
-    const targetBaseIndex = Math.max(0, outcome - 1);
-    if (targetBaseIndex <= fromBase) {
-      return { type: 'hold', targetBaseIndex: fromBase };
-    }
-    return { type: 'advance', targetBaseIndex };
-  }
-  const targetBaseIndex = fromBase + defaultSteps;
-  if (targetBaseIndex >= 3) {
-    return { type: 'score', targetBaseIndex: 3 };
-  }
-  return { type: 'advance', targetBaseIndex };
-}
-
-function advanceBasesOnWalk(currentBases: Bases, batterName: string) {
-  const bases = [...currentBases] as Bases;
-  let runs = 0;
-
-  if (bases[0]) {
-    if (bases[1] && bases[2]) {
-      runs += 1;
-      bases[2] = null;
-    }
-    if (bases[1]) {
-      bases[2] = bases[1];
-      bases[1] = null;
-    }
-    bases[1] = bases[0];
-    bases[0] = null;
-  }
-
-  bases[0] = batterName;
-
-  return { bases, runs };
-}
-
-function nextBatter(state: DemoState) {
-  const side = hittingSide(state);
-  const lineup = state.lineups[side];
-  const battingLineup = getBattingEntriesForLineup(lineup, isPracticeActiveMatch(state));
-
-  const activeLineup = battingLineup.length ? battingLineup : lineup;
-  const safeLength = activeLineup.length || 1;
-  const idx = state.batterIndex[side] % safeLength;
-  const batterSlot = activeLineup[idx];
-  const batterName = batterSlot ? formatUniqueName(batterSlot.name, batterSlot.number) : '타자';
-  const batterIndex = { ...state.batterIndex, [side]: (idx + 1) % safeLength };
-  return { batterName, batterIndex };
+  return changeHalfState(state, message, createLogEntry, pushFeed, pitchNumber, logState);
 }
 
 const normalizePositionCode = (value: string) => {
@@ -3942,40 +2654,6 @@ function substitutePlayer(
   };
 }
 
-function getBattingOrder(lineup: PlayerSlot[], lineupIndex: number, allowExtendedBattingOrder = false) {
-  const slot = lineup[lineupIndex];
-  if (!slot) return null;
-  const practicePitcherIndex = allowExtendedBattingOrder ? getPracticePitcherIndex(lineup) : -1;
-  if (allowExtendedBattingOrder && lineupIndex === practicePitcherIndex) return null;
-  const isBatter =
-    (allowExtendedBattingOrder ? true : lineupIndex < 9) ||
-    slot.pos.toUpperCase() !== 'P' ||
-    canPitcherBat(slot, lineup);
-
-  if (!isBatter) {
-    return null;
-  }
-
-  let order = 0;
-  for (let i = 0; i < lineup.length; i += 1) {
-    const player = lineup[i];
-    if (allowExtendedBattingOrder && i === practicePitcherIndex) {
-      if (i === lineupIndex) return null;
-      continue;
-    }
-    const isCountable =
-      (allowExtendedBattingOrder ? true : i < 9) ||
-      player.pos.toUpperCase() !== 'P' ||
-      canPitcherBat(player, lineup);
-    
-    if (isCountable) {
-      order += 1;
-    }
-    if (i === lineupIndex) return order;
-  }
-  return order || null;
-}
-
 interface DemoStoreValue {
   state: DemoState;
   actions: {
@@ -4089,8 +2767,9 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     const activeMatch = state.matches.find((match) => match.id === state.activeMatchId);
     const nextLimit = getSpectatorFeedLimitForMatch(activeMatch, state.gameOver);
     if (spectatorFeedLimitRef.current === nextLimit) return;
-    setSpectatorFeedLimit(nextLimit);
+    const timer = setTimeout(() => setSpectatorFeedLimit(nextLimit), 0);
     spectatorFeedLimitRef.current = nextLimit;
+    return () => clearTimeout(timer);
   }, [state.activeMatchId, state.matches, state.gameOver]);
 
   // [수정 1] 상태 변경 시 로컬 스토리지에 저장하던 로직을 주석 처리 또는 삭제
@@ -4228,69 +2907,15 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
 
   // Subscribe to schedule for everyone; non-admin은 민감 필드만 제거한 projected 데이터를 사용.
   useEffect(() => {
-    const matchesCol = collection(firestore, 'matches');
-    const liveQuery = query(matchesCol, orderBy('startTime', 'asc'));
-
-    const unsub = onSnapshot(
-      liveQuery,
-      (snap) => {
-        const incoming = snap.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...(docSnap.data() as Partial<MatchSchedule>),
-        }));
-        const normalized = normalizeMatches(incoming);
-        const projected = isAdmin ? normalized : normalized.map(projectSpectatorMatch);
-        const merged = isAdmin
-          ? projected
-          : mergeMatches(
-              stateRef.current.matches.filter((m) => m.status !== 'inProgress'),
-              projected,
-            );
-
-        skipMatchesWriteRef.current = true;
-        matchesReadyRef.current = true;
-        dispatch({ type: 'setMatches', matches: merged });
-
-        // If spectators can't read app/current (권한 제한), auto-follow 첫 진행중 경기.
-        if (!stateRef.current.activeMatchId) {
-          const live = merged.find((m) => m.status === 'inProgress');
-          if (live) {
-            skipFirestoreWriteRef.current = true;
-            dispatch({ type: 'syncActiveMatch', matchId: live.id });
-          }
-        }
-
-        // Notify locally when a 경기 status becomes inProgress (start).
-        if (typeof window !== 'undefined' && typeof Notification !== 'undefined') {
-          const started = projected.filter((m) => m.status === 'inProgress');
-          started.forEach((match) => {
-            if (notifiedMatchStartRef.current.has(match.id)) return;
-            const permission = Notification.permission;
-            const show = () => {
-              const title = '경기 시작';
-              const body = `${match.homeTeamName} vs ${match.awayTeamName} · ${new Date(match.startTime).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`;
-              try {
-                new Notification(title, { body });
-                notifiedMatchStartRef.current.add(match.id);
-              } catch {
-                // ignore notification failures
-              }
-            };
-            if (permission === 'granted') {
-              show();
-            } else if (permission === 'default') {
-              void Notification.requestPermission().then((result) => {
-                if (result === 'granted') show();
-              });
-            }
-          });
-        }
-      },
-      (error) => {
-        console.error('[firestore] matches snapshot error', error);
-      },
-    );
-    return () => unsub();
+    return subscribeMatchesSnapshot({
+      isAdmin,
+      stateRef,
+      skipMatchesWriteRef,
+      matchesReadyRef,
+      skipFirestoreWriteRef,
+      notifiedMatchStartRef,
+      dispatch,
+    });
   }, [isAdmin]);
 
   // Admin: if active match lineups exist in schedule but local game state is empty, resync once.
@@ -4312,1183 +2937,175 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
 
   // Listen to current active match pointer so spectators know which match to watch.
   useEffect(() => {
-    const currentRef = doc(firestore, 'app', 'current');
-    const unsub = onSnapshot(
-      currentRef,
-      (snap) => {
-        const data = snap.data();
-        if (!data) return;
-        const nextId = typeof data.activeMatchId === 'string' ? data.activeMatchId : null;
-        if (nextId === stateRef.current.activeMatchId) return;
-        skipFirestoreWriteRef.current = true;
-        dispatch({ type: 'syncActiveMatch', matchId: nextId });
-      },
-      () => {
-        // ignore errors
-      },
-    );
-    return () => unsub();
+    return subscribeCurrentMatchPointer({
+      stateRef,
+      skipFirestoreWriteRef,
+      dispatch,
+    });
   }, []);
 
   // Live subscribe to the active match state.
   useEffect(() => {
-    const matchId = state.activeMatchId;
-    if (!matchId) return;
-    const stateDoc = doc(firestore, 'matchStates', matchId);
-    const sanitizeSpectatorState = (data: SharedGameState): SharedGameState => {
-      const active = stateRef.current.matches.find((m) => m.id === matchId);
-      return applyLineupVisibility(data, active, isAdmin);
-    };
-    const shouldSkipSnapshotForScorer = () => {
-      if (!scorerMode) return false;
-      const currentUid = auth.currentUser?.uid ?? null;
-      if (!currentUid) return false;
-      const isScorer = stateRef.current.scorerUid === currentUid;
-      if (!isScorer) return false;
-      return hasActualPlayers(stateRef.current.lineups.home) || hasActualPlayers(stateRef.current.lineups.away);
-    };
-
-    // 1) Fetch the latest state once immediately so spectators see current data without waiting for the next update.
-    void getDoc(stateDoc)
-      .then((snap) => {
-        if (!snap.exists()) return;
-        if (stateRef.current.activeMatchId !== matchId) return;
-        if (shouldSkipSnapshotForScorer()) return;
-        const raw = snap.data() as SharedGameState;
-        const merged = mergeOwnerLineups(raw, matchId, stateRef.current);
-        const data = sanitizeSpectatorState(merged);
-        const { feed: _feed, events: _events, ...core } = data as SharedGameState & { feed?: unknown; events?: unknown };
-        skipFirestoreWriteRef.current = true;
-        dispatch({
-          type: 'hydrate',
-          state: normalizeState(initialState, {
-            ...stateRef.current,
-            ...core,
-            matches: stateRef.current.matches,
-          }),
-        });
-      })
-      .catch(() => {
-        // ignore initial fetch errors; real-time listener below will retry on updates
-      });
-
-    // 2) Subscribe for real-time updates.
-    const unsub = onSnapshot(
-      stateDoc,
-      (snap) => {
-        if (!snap.exists()) return;
-        if (stateRef.current.activeMatchId !== matchId) return;
-        if (shouldSkipSnapshotForScorer()) return;
-        const raw = snap.data() as SharedGameState;
-        const merged = mergeOwnerLineups(raw, matchId, stateRef.current);
-        const data = sanitizeSpectatorState(merged);
-        const { feed: _feed, events: _events, ...core } = data as SharedGameState & { feed?: unknown; events?: unknown };
-        skipFirestoreWriteRef.current = true;
-        dispatch({
-          type: 'hydrate',
-          state: normalizeState(initialState, {
-            ...stateRef.current,
-            ...core,
-            matches: stateRef.current.matches,
-          }),
-        });
-      },
-      () => {
-        // ignore snapshot errors
-      },
-    );
-    return () => unsub();
+    return subscribeActiveMatchState({
+      activeMatchId: state.activeMatchId,
+      isAdmin,
+      scorerMode,
+      stateRef,
+      skipFirestoreWriteRef,
+      dispatch,
+      initialState,
+    });
   }, [state.activeMatchId, isAdmin, scorerMode]);
 
   // Subscribe to feed/events subcollections (최근 N개만).
   useEffect(() => {
-    const matchId = state.activeMatchId;
-    if (!matchId) return;
-
-    const isScorer = stateRef.current.scorerUid && stateRef.current.scorerUid === (auth.currentUser?.uid ?? null);
-    // 기록원이면 구독하지 않음 (로컬 상태가 Firestore 구독으로 덮어써지는 것을 방지)
-    if (isScorer && scorerMode) return;
-
-    const activeMatch = stateRef.current.matches.find((m) => m.id === matchId);
-    const completed = isCompletedMatch(activeMatch) || stateRef.current.gameOver;
-    const maxEntries = isScorer && scorerMode ? SCORER_FEED_LIMIT : spectatorFeedLimit;
-
-    const feedQuery = completed
-      ? query(
-          collection(firestore, 'matchStates', matchId, 'feed'),
-          orderBy('createdAt', 'asc'),
-        )
-      : query(
-          collection(firestore, 'matchStates', matchId, 'feed'),
-          orderBy('createdAt', 'desc'),
-          limit(maxEntries),
-        );
-    const eventsQuery = completed
-      ? query(
-          collection(firestore, 'matchStates', matchId, 'events'),
-          orderBy('createdAt', 'asc'),
-        )
-      : query(
-          collection(firestore, 'matchStates', matchId, 'events'),
-          orderBy('createdAt', 'desc'),
-          limit(maxEntries),
-        );
-
-    // One-time fetch to prefill feed/events for spectators so 기존 기록이 즉시 보임.
-    const prime = async () => {
-      try {
-        const [feedSnap, eventsSnap] = await Promise.all([getDocs(feedQuery), getDocs(eventsQuery)]);
-        const fallback = { inning: stateRef.current.inning, half: stateRef.current.half as Half };
-        const feedEntries = normalizeFeed(
-          feedSnap.docs.map((d) => d.data()),
-          fallback,
-        );
-        const eventEntries = normalizeEvents(
-          eventsSnap.docs.map((d) => d.data()),
-          fallback,
-        );
-        if (stateRef.current.activeMatchId !== matchId) return;
-        skipFirestoreWriteRef.current = true;
-        lastFeedLengthRef.current = feedEntries.length;
-        lastEventsLengthRef.current = eventEntries.length;
-        dispatch({ type: 'setFeed', feed: feedEntries });
-        dispatch({ type: 'setEvents', events: eventEntries });
-      } catch {
-        // ignore prefetch errors; realtime listener below will retry on updates
-      }
-    };
-    void prime();
-
-    if (completed) {
-      return () => {};
-    }
-
-    const unsubFeed = onSnapshot(
-      feedQuery,
-      (snap) => {
-        const fallback = { inning: stateRef.current.inning, half: stateRef.current.half as Half };
-        const feedEntries = normalizeFeed(
-          snap.docs.map((d) => d.data()),
-          fallback,
-        );
-        if (stateRef.current.activeMatchId !== matchId) return;
-        skipFirestoreWriteRef.current = true;
-        lastFeedLengthRef.current = feedEntries.length;
-        dispatch({ type: 'setFeed', feed: feedEntries });
-      },
-      () => {
-        // ignore feed snapshot errors
-      },
-    );
-
-    const unsubEvents = onSnapshot(
-      eventsQuery,
-      (snap) => {
-        const fallback = { inning: stateRef.current.inning, half: stateRef.current.half as Half };
-        const eventsEntries = normalizeEvents(
-          snap.docs.map((d) => d.data()),
-          fallback,
-        );
-        if (stateRef.current.activeMatchId !== matchId) return;
-        skipFirestoreWriteRef.current = true;
-        lastEventsLengthRef.current = eventsEntries.length;
-        dispatch({ type: 'setEvents', events: eventsEntries });
-      },
-      () => {
-        // ignore events snapshot errors
-      },
-    );
-
-    return () => {
-      unsubFeed();
-      unsubEvents();
-    };
+    return subscribeFeedAndEvents({
+      activeMatchId: state.activeMatchId,
+      scorerMode,
+      spectatorFeedLimit,
+      stateRef,
+      skipFirestoreWriteRef,
+      lastFeedLengthRef,
+      lastEventsLengthRef,
+      dispatch,
+    });
   }, [state.activeMatchId, state.scorerUid, spectatorFeedLimit, scorerMode]);
 
   // Attempt to acquire scorer lock for the active match.
   useEffect(() => {
-    if (!scorerMode) return;
-    const matchId = state.activeMatchId;
-    const user = auth.currentUser;
-    if (!matchId || !user) return;
-    const run = async () => {
-      const stateDoc = doc(firestore, 'matchStates', matchId);
-      const now = Date.now();
-      const roleLabel = await resolveUserRole(user);
-      await runTransaction(firestore, async (tx) => {
-        const snap = await tx.get(stateDoc);
-        const data = snap.exists()
-          ? (snap.data() as SharedGameState & { scorerUid?: string | null; scorerName?: string | null; scorerEmail?: string | null; scorerLockedAt?: number | null; scorerRole?: string | null })
-          : null;
-        const owner = data?.scorerUid;
-        const lockedAt = data?.scorerLockedAt ?? 0;
-        const expired = !lockedAt || now - lockedAt > SCORER_LOCK_TTL_MS;
-        if (owner && owner !== user.uid && !expired) {
-          return;
-        }
-        tx.set(
-          stateDoc,
-          {
-            scorerUid: user.uid,
-            scorerName: user.displayName ?? null,
-            scorerEmail: user.email ?? null,
-            scorerLockedAt: now,
-            scorerRole: data?.scorerRole ?? roleLabel,
-          },
-          { merge: true },
-        );
-      });
-      if (stateRef.current.activeMatchId !== matchId) return;
-      skipFirestoreWriteRef.current = true;
-      dispatch({
-        type: 'hydrate',
-        state: normalizeState(initialState, {
-          ...stateRef.current,
-          scorerUid: user.uid,
-          scorerName: user.displayName ?? null,
-          scorerEmail: user.email ?? null,
-          scorerLockedAt: stateRef.current.scorerLockedAt ?? now,
-          scorerRole: stateRef.current.scorerRole ?? roleLabel,
-          matches: stateRef.current.matches,
-        }),
-      });
-    };
-    void run().catch(() => {
-      // ignore lock acquisition errors
+    syncScorerLock({
+      scorerMode,
+      activeMatchId: state.activeMatchId,
+      stateRef,
+      skipFirestoreWriteRef,
+      dispatch,
+      initialState,
     });
   }, [state.activeMatchId, scorerMode]);
 
   // Heartbeat to keep scorer lock fresh; expires automatically when stopped.
   useEffect(() => {
-    if (!scorerMode) return;
-    const matchId = state.activeMatchId;
-    const user = auth.currentUser;
-    const isOwner = matchId && user && state.scorerUid === user.uid;
-    const expired = !state.scorerLockedAt || Date.now() - state.scorerLockedAt > SCORER_LOCK_TTL_MS;
-    if (!isOwner || !matchId) return;
-
-    // If somehow expired but still owner, refresh immediately.
-    if (expired) {
-      void setDoc(
-        doc(firestore, 'matchStates', matchId),
-        { scorerUid: user!.uid, scorerLockedAt: Date.now() },
-        { merge: true },
-      ).catch(() => {});
-    }
-
-    heartbeatTimerRef.current = setInterval(() => {
-      const now = Date.now();
-      void setDoc(
-        doc(firestore, 'matchStates', matchId),
-        { scorerUid: user!.uid, scorerLockedAt: now },
-        { merge: true },
-      ).catch(() => {});
-    }, SCORER_LOCK_HEARTBEAT_MS);
-
-    return () => {
-      if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
-      heartbeatTimerRef.current = null;
-    };
+    return syncScorerLockHeartbeat({
+      scorerMode,
+      activeMatchId: state.activeMatchId,
+      scorerUid: state.scorerUid,
+      scorerLockedAt: state.scorerLockedAt,
+      heartbeatTimerRef,
+    });
   }, [state.activeMatchId, state.scorerUid, state.scorerLockedAt, scorerMode]);
 
   // 동접자 집계: onSnapshot fan-out 대신 count 쿼리 폴링 사용
   useEffect(() => {
-    const matchId = state.activeMatchId;
-    if (!matchId) {
-      dispatch({ type: 'setOnlineViewerCount', count: 0 });
-      return;
-    }
-
-    const presenceCol = collection(firestore, 'matchStates', matchId, 'presence');
-    let cancelled = false;
-
-    const pollViewerCount = async () => {
-      try {
-        const now = Date.now();
-        const countQuery = query(presenceCol, where('expiresAt', '>=', now));
-        const aggregate = await getCountFromServer(countQuery);
-        if (cancelled) return;
-        dispatch({ type: 'setOnlineViewerCount', count: aggregate.data().count });
-      } catch {
-        // ignore count errors
-      }
-    };
-
-    void pollViewerCount();
-    const timer = setInterval(() => {
-      void pollViewerCount();
-    }, PRESENCE_POLL_INTERVAL_MS);
-
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
+    return syncOnlineViewerCount({
+      activeMatchId: state.activeMatchId,
+      dispatch,
+    });
   }, [state.activeMatchId]);
 
   // 동접자 Heartbeat: 익명/로그인 모두 포함, hidden 상태에서는 heartbeat 중지
   useEffect(() => {
-    const matchId = state.activeMatchId;
-    if (!matchId) return;
-
-    const getVisitorId = (): string => {
-      if (visitorIdRef.current) return visitorIdRef.current;
-      const user = auth.currentUser;
-      if (user) {
-        visitorIdRef.current = user.uid;
-        return user.uid;
-      }
-      const storageKey = 'aubl-visitor-id';
-      let vid = sessionStorage.getItem(storageKey);
-      if (!vid) {
-        vid = `anon_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-        sessionStorage.setItem(storageKey, vid);
-      }
-      visitorIdRef.current = vid;
-      return vid;
-    };
-
-    const visitorId = getVisitorId();
-    const presenceDocRef = doc(firestore, 'matchStates', matchId, 'presence', visitorId);
-
-    const updatePresence = () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      const now = Date.now();
-      void setDoc(
-        presenceDocRef,
-        {
-          visitorId,
-          isAnonymous: auth.currentUser == null,
-          lastHeartbeat: now,
-          expiresAt: now + PRESENCE_TTL_MS,
-        },
-        { merge: true },
-      ).catch(() => {});
-    };
-
-    const stopHeartbeat = () => {
-      if (!presenceTimerRef.current) return;
-      clearInterval(presenceTimerRef.current);
-      presenceTimerRef.current = null;
-    };
-
-    const startHeartbeat = () => {
-      stopHeartbeat();
-      presenceTimerRef.current = setInterval(() => {
-        updatePresence();
-      }, PRESENCE_HEARTBEAT_MS);
-    };
-
-    const handleVisibilityChange = () => {
-      if (typeof document === 'undefined') return;
-      if (document.visibilityState === 'hidden') {
-        stopHeartbeat();
-        return;
-      }
-      updatePresence();
-      startHeartbeat();
-    };
-
-    updatePresence();
-    startHeartbeat();
-
-    const handleBeforeUnload = () => {
-      void deleteDoc(presenceDocRef).catch(() => {});
-    };
-
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-    }
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    return () => {
-      stopHeartbeat();
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      if (typeof document !== 'undefined') {
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-      }
-      void deleteDoc(presenceDocRef).catch(() => {});
-    };
+    return syncPresenceHeartbeat({
+      activeMatchId: state.activeMatchId,
+      visitorIdRef,
+      presenceTimerRef,
+    });
   }, [state.activeMatchId]);
 
   // Push game state to Firestore when admin updates locally.
   useEffect(() => {
-    if (!scorerMode) return;
-    if (!isAdmin) return;
-    const matchId = state.activeMatchId;
-    const currentUid = auth.currentUser?.uid ?? null;
-    if (!matchId || !currentUid) return;
-    if (state.scorerUid && state.scorerUid !== currentUid) return;
-    if (skipFirestoreWriteRef.current) {
-      skipFirestoreWriteRef.current = false;
-      lastStateKeyRef.current = '';
-      lastFeedLengthRef.current = state.feed.length;
-      lastEventsLengthRef.current = state.events.length;
-      return;
-    }
-    // 디바운스: 잦은 pitch 입력 시 write 폭주 방지
-    if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
-
-    writeTimerRef.current = setTimeout(() => {
-      const run = async () => {
-        const snapshot = snapshotState(stateRef.current);
-        const { matches: _matches, feed: _feed, events: _events, onlineViewerCount: _onlineViewerCount, ...core } = snapshot;
-        const key = JSON.stringify({ matchId, core });
-
-        if (key !== lastStateKeyRef.current) {
-          lastStateKeyRef.current = key;
-
-          const payload = {
-            ...pruneUndefined({
-              ...core,
-              updatedAt: Date.now(),
-            }),
-            // Ensure stale feed/events fields are removed from matchStates doc.
-            feed: deleteField(),
-            events: deleteField(),
-          };
-
-          await setDoc(doc(firestore, 'matchStates', matchId), payload, { merge: true });
-        }
-
-        const newFeedCount = stateRef.current.feed.length - lastFeedLengthRef.current;
-        const newEventCount = stateRef.current.events.length - lastEventsLengthRef.current;
-        const needsFeedDelete = newFeedCount < 0;
-        const needsEventDelete = newEventCount < 0;
-        const needsFeedAdd = newFeedCount > 0;
-        const needsEventAdd = newEventCount > 0;
-
-        if (!needsFeedDelete && !needsEventDelete && !needsFeedAdd && !needsEventAdd) {
-          lastFeedLengthRef.current = stateRef.current.feed.length;
-          lastEventsLengthRef.current = stateRef.current.events.length;
-          return;
-        }
-
-        const deleteLatest = async (collectionName: 'feed' | 'events', count: number) => {
-          if (count <= 0) return;
-          const q = query(
-            collection(firestore, 'matchStates', matchId, collectionName),
-            orderBy('createdAt', 'desc'),
-            limit(count),
-          );
-          const snap = await getDocs(q);
-          if (snap.empty) return;
-          const batch = writeBatch(firestore);
-          snap.docs.forEach((docSnap) => {
-            batch.delete(docSnap.ref);
-          });
-          await batch.commit();
-        };
-
-        if (needsFeedDelete) {
-          await deleteLatest('feed', Math.abs(newFeedCount));
-        }
-        if (needsEventDelete) {
-          await deleteLatest('events', Math.abs(newEventCount));
-        }
-
-        if (needsFeedAdd || needsEventAdd) {
-          const batch = writeBatch(firestore);
-          const now = Date.now();
-
-          if (needsFeedAdd) {
-            const newEntries = stateRef.current.feed.slice(-newFeedCount);
-            newEntries.forEach((entry, idx) => {
-              const createdAt =
-                typeof entry.createdAt === 'number' && Number.isFinite(entry.createdAt)
-                  ? entry.createdAt
-                  : now + idx;
-              batch.set(
-                doc(collection(firestore, 'matchStates', matchId, 'feed')),
-                pruneUndefined({ ...entry, createdAt }),
-              );
-            });
-          }
-
-          if (needsEventAdd) {
-            const newEntries = stateRef.current.events.slice(0, newEventCount);
-            newEntries.forEach((entry, idx) => {
-              const createdAt =
-                typeof entry.createdAt === 'number' && Number.isFinite(entry.createdAt)
-                  ? entry.createdAt
-                  : now + idx;
-              batch.set(
-                doc(collection(firestore, 'matchStates', matchId, 'events')),
-                pruneUndefined({ ...entry, createdAt }),
-              );
-            });
-          }
-
-          await batch.commit();
-        }
-
-        lastFeedLengthRef.current = stateRef.current.feed.length;
-        lastEventsLengthRef.current = stateRef.current.events.length;
-      };
-
-      void run().catch(() => {
-        // ignore sync errors; will retry on next state change
-      });
-    }, WRITE_DEBOUNCE_MS);
-
-    return () => {
-      if (writeTimerRef.current) {
-        clearTimeout(writeTimerRef.current);
-        writeTimerRef.current = null;
-      }
-    };
+    return syncGameStateWrite({
+      state,
+      scorerMode,
+      isAdmin,
+      stateRef,
+      skipFirestoreWriteRef,
+      lastStateKeyRef,
+      lastFeedLengthRef,
+      lastEventsLengthRef,
+      writeTimerRef,
+    });
   }, [state, isAdmin, scorerMode]);
 
   // Sync schedule changes to Firestore (admin routes only; spectators skip via flag/auth).
   useEffect(() => {
-    if (!isAdmin) return;
-    if (!matchesReadyRef.current) return;
-    if (skipMatchesWriteRef.current) {
-      skipMatchesWriteRef.current = false;
-      return;
-    }
-    const key = JSON.stringify(
-      state.matches.map((m) => ({
-        id: m.id,
-        status: m.status,
-        startTime: m.startTime,
-        notes: m.notes ?? null,
-        division: m.division ?? null,
-        venue: m.venue,
-        recordMode: m.recordMode ?? 'official',
-        homeTeamName: m.homeTeamName,
-        awayTeamName: m.awayTeamName,
-        liveVideoUrl: m.liveVideoUrl ?? null,
-        liveDelaySeconds: m.liveDelaySeconds ?? null,
-        deleted: m.deleted ?? false,
-        deletedAt: m.deletedAt ?? null,
-        purgeAt: m.purgeAt ?? null,
-        lineupPublic: m.lineupPublic ?? false,
-        lineups: m.lineups ?? null,
-        benches: m.benches ?? null,
-        postGame: m.postGame ?? null,
-      })),
-    );
-    if (key === lastMatchesKeyRef.current) return;
-    lastMatchesKeyRef.current = key;
-    const syncMatches = async () => {
-      const batch = writeBatch(firestore);
-      const filterEmptySlots = (lineup: PlayerSlot[]) =>
-        lineup.filter(slot => slot.name && slot.name.trim() !== '');
-
-      state.matches.forEach((match) => {
-        const preserveEmptySlots = (match.recordMode ?? 'official') === 'practice';
-        // [수정] 기본적으로는 빈 슬롯 필터링, 연습경기는 추가 타자 슬롯 유지를 위해 보존
-        const cleanedMatch = {
-          ...match,
-          lineups: match.lineups
-            ? preserveEmptySlots
-              ? match.lineups
-              : {
-                  home: filterEmptySlots(match.lineups.home),
-                  away: filterEmptySlots(match.lineups.away),
-                }
-            : undefined,
-        };
-        batch.set(doc(firestore, 'matches', match.id), pruneUndefined(cleanedMatch), { merge: true });
-      });
-      await batch.commit();
-    };
-    void syncMatches().catch(() => {});
+    syncScheduleMatchesWrite({
+      matches: state.matches,
+      isAdmin,
+      matchesReadyRef,
+      skipMatchesWriteRef,
+      lastMatchesKeyRef,
+    });
   }, [state.matches, isAdmin]);
 
   // 진행 중인 경기 점수는 active match 1건만 patch 저장
   useEffect(() => {
-    if (!isAdmin) return;
-    const matchId = state.activeMatchId;
-    if (!matchId) return;
-    const activeMatch = state.matches.find((m) => m.id === matchId);
-    if (!activeMatch || activeMatch.status !== 'inProgress') return;
-    const homeScore = state.score.home;
-    const awayScore = state.score.away;
-    const scoreKey = `${matchId}:${homeScore}:${awayScore}`;
-    if (scoreKey === lastLiveScoreSyncKeyRef.current) return;
-    lastLiveScoreSyncKeyRef.current = scoreKey;
-    void pushMatchUpdate(matchId, { homeScore, awayScore }).catch(() => {});
+    syncLiveScorePatch({
+      isAdmin,
+      activeMatchId: state.activeMatchId,
+      matches: state.matches,
+      homeScore: state.score.home,
+      awayScore: state.score.away,
+      lastLiveScoreSyncKeyRef,
+      pushMatchUpdate,
+    });
   }, [isAdmin, state.activeMatchId, state.matches, state.score.home, state.score.away, pushMatchUpdate]);
 
   // Auto purge expired trashed matches (deleted flag) from matches collection.
   useEffect(() => {
-    const now = Date.now();
-    const expired = state.matches.filter((m) => m.deleted && m.purgeAt && m.purgeAt <= now);
-    if (!expired.length) return;
-    expired.forEach((entry) => {
-      void purgeMatchFromFirestore(entry.id).catch(() => {});
+    autoPurgeExpiredMatches({
+      matches: state.matches,
+      purgeMatchFromFirestore,
     });
   }, [state.matches, purgeMatchFromFirestore]);
 
   const updateCurrentMatchPointer = (matchId: string | null) => {
     void setDoc(
       doc(firestore, 'app', 'current'),
-      { activeMatchId: matchId, updatedAt: Date.now() },
+      { activeMatchId: matchId },
       { merge: true },
     ).catch(() => {});
   };
 
+  const scheduleActions = useScheduleActions({
+    dispatch,
+    getState: () => stateRef.current,
+    isAdmin,
+    markMatchesReady: () => {
+      matchesReadyRef.current = true;
+    },
+    markSkipMatchesWrite: () => {
+      skipMatchesWriteRef.current = true;
+    },
+    markSkipFirestoreWrite: () => {
+      skipFirestoreWriteRef.current = true;
+    },
+    setLastFeedLength: (length: number) => {
+      lastFeedLengthRef.current = length;
+    },
+    setLastEventsLength: (length: number) => {
+      lastEventsLengthRef.current = length;
+    },
+    pushMatchUpdate,
+    purgeMatchFromFirestore,
+    updateCurrentMatchPointer,
+    initialState,
+  });
+
+  const gameActions = useGameActions({
+    dispatch,
+    stateRef,
+    spectatorFeedLimitRef,
+    setSpectatorFeedLimit,
+    pushMatchUpdate,
+  });
+
   const actions = useMemo(
     () => ({
-      addBall: () => dispatch({ type: 'ball' }),
-      addStrike: (strikeType?: 'swinging' | 'looking') => dispatch({ type: 'strike', strikeType }),
-      addFoul: (isBunt?: boolean) => dispatch({ type: 'foul', isBunt }),
-      strikeOut: (strikeType?: 'swinging' | 'looking') => dispatch({ type: 'strikeOut', strikeType }),
-      droppedThirdStrike: (variant?: 'strikeout' | 'reach' | 'tag_out' | 'force_out', strikeType?: 'swinging' | 'looking', runnerOuts?: string[]) =>
-        dispatch({ type: 'droppedThirdStrike', variant, strikeType, runnerOuts }),
-      addOut: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'out', battedBall }),
-      hitSingle: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) =>
-        dispatch({ type: 'hit', bases: 1, advances, battedBall }),
-      hitDouble: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) =>
-        dispatch({ type: 'hit', bases: 2, advances, battedBall }),
-      hitTriple: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) =>
-        dispatch({ type: 'hit', bases: 3, advances, battedBall }),
-      homeRun: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'hit', bases: 4, battedBall }),
-      fielderChoice: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null, context?: string) =>
-        dispatch({ type: 'fielderChoice', advances, battedBall, context }),
-      walk: () => dispatch({ type: 'walk' }),
-      intentionalWalk: () => dispatch({ type: 'intentionalWalk' }),
-      catcherInterference: () => dispatch({ type: 'catcherInterference' }),
-      hbp: () => dispatch({ type: 'hbp' }),
-      sacFly: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'sac', battedBall, sacType: 'fly' }),
-      sacBunt: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'sac', battedBall, sacType: 'bunt' }),
-      recordError: (details: ErrorDetails) => dispatch({ type: 'error', details }),
-      stealSuccess: () => dispatch({ type: 'stealSuccess' }),
-      stealFail: () => dispatch({ type: 'stealFail' }),
-      runnerRundownOut: (base: 0 | 1 | 2) => dispatch({ type: 'runnerRundownOut', base }),
-      runnerInterference: (base: 0 | 1 | 2) => dispatch({ type: 'runnerInterference', base }),
-      resetCount: () => dispatch({ type: 'resetCount' }),
-      clearBases: () => dispatch({ type: 'clearBases' }),
-      nextHalf: () => dispatch({ type: 'nextHalf' }),
-      loadMoreFeed: () => {
-        const current = spectatorFeedLimitRef.current;
-        const next = current >= SPECTATOR_EXPANDED_FEED_LIMIT ? current : SPECTATOR_EXPANDED_FEED_LIMIT;
-        spectatorFeedLimitRef.current = next;
-        setSpectatorFeedLimit(next);
-      },
-      advanceRunners: (selections: RunnerAdvanceSelections, message: string, preserveLastPlay?: boolean) =>
-        dispatch({ type: 'advanceRunners', selections, message, preserveLastPlay }),
-      runnerStealSuccess: (base: 0 | 1 | 2) => dispatch({ type: 'runnerStealSuccess', base }),
-      runnerCaught: (base: 0 | 1 | 2) => dispatch({ type: 'runnerCaught', base }),
-      runnerPickoff: (base: 0 | 1 | 2) => dispatch({ type: 'runnerPickoff', base }),
-      runnerOut: (base: 0 | 1 | 2) => dispatch({ type: 'runnerOut', base }),
-      multipleRunnersOut: (bases: number[], label?: string) => dispatch({ type: 'multipleRunnersOut', bases, label }),
-      addManualLog: (message: string) => dispatch({ type: 'manualLog', message }),
-      setLiveVideoUrl: (url: string) => {
-        dispatch({ type: 'setLiveVideoUrl', url });
-        const matchId = stateRef.current.activeMatchId;
-        if (!matchId) return;
-        const trimmed = url.trim();
-        // persist to matches collection so 일정/오버레이 버튼이 올바르게 판단
-        void setDoc(
-          doc(firestore, 'matches', matchId),
-          { liveVideoUrl: trimmed },
-          { merge: true },
-        ).catch(() => {});
-      },
-      setLiveDelaySeconds: (seconds: number) => {
-        dispatch({ type: 'setLiveDelaySeconds', seconds });
-        const matchId = stateRef.current.activeMatchId;
-        if (!matchId) return;
-        const validSeconds = Math.max(0, seconds);
-        // persist to matches collection
-        void setDoc(
-          doc(firestore, 'matches', matchId),
-          { liveDelaySeconds: validSeconds },
-          { merge: true },
-        ).catch(() => {});
-      },
-      addOutWithMessage: (note: string, battedBall?: BattedBallDetails | null) =>
-        dispatch({ type: 'outWithMessage', note, battedBall }),
-      doublePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[], route?: number[], runnerAdvancements?: Record<number, number>) =>
-        dispatch({ type: 'doublePlay', battedBall, selectedRunners, route, runnerAdvancements }),
-      triplePlay: (battedBall?: BattedBallDetails | null, selectedRunners?: number[], route?: number[], runnerAdvancements?: Record<number, number>) =>
-        dispatch({ type: 'triplePlay', battedBall, selectedRunners, route, runnerAdvancements }),
-      setTeamName: (side: Side, name: string) => dispatch({ type: 'setTeamName', side, name }),
-      setLineup: (side: Side, index: number, updates: Partial<PlayerSlot>) =>
-        dispatch({ type: 'setLineup', side, index, updates }),
-      removeLineupSlot: (side: Side, index: number) =>
-        dispatch({ type: 'removeLineupSlot', side, index }),
-      removePracticeBatter: (side: Side, battingOrderIndex: number) =>
-        dispatch({ type: 'removePracticeBatter', side, battingOrderIndex }),
-      swapPositions: (side: Side, swaps: { index: number; newPos: string }[], benchSwaps?: { index: number; newPos: string }[]) =>
-        dispatch({ type: 'swapPositions', side, swaps, benchSwaps }),
-      addBench: (side: Side, player: PlayerSlot) => dispatch({ type: 'addBench', side, player }),
-      removeBench: (side: Side, benchIndex: number) => dispatch({ type: 'removeBench', side, benchIndex }),
-      substitute: (side: Side, benchIndex: number, lineupIndex: number, substitutionType?: '대수비' | '대타' | '대주자') =>
-        dispatch({ type: 'substitute', side, benchIndex, lineupIndex, substitutionType }),
-      setPlay: (message: string) => dispatch({ type: 'setPlay', message }),
-      startGame: () => {
-        dispatch({ type: 'startGame' });
-        const matchId = stateRef.current.activeMatchId;
-        if (matchId) {
-          void pushMatchUpdate(matchId, { status: 'inProgress', lineupPublic: true }).catch(() => {});
-        }
-      },
-     // [수정] endGame 액션에서 상세 스탯을 계산하여 저장하도록 수정
-      endGame: (endedAt: string) => {
-        dispatch({ type: 'endGame', endedAt });
-        const matchId = stateRef.current.activeMatchId;
-        if (matchId) {
-          const snapshot = stateRef.current;
-          const activeMatch = snapshot.matches.find((m) => m.id === matchId);
-          const isPractice = isPracticeMatch(activeMatch);
-
-          if (isPractice) {
-            void pushMatchUpdate(matchId, {
-              status: 'completed',
-              homeScore: snapshot.score.home,
-              awayScore: snapshot.score.away,
-              postGame: undefined,
-            }).catch(() => {});
-            return;
-          }
-          
-          // 상세 기록 산출
-          const gameRecord = buildGameRecord(snapshot);
-          const statsMap = calculateGameStats(gameRecord);
-
-          const buildRosterMap = (side: 'home' | 'away') => {
-            const roster = new Map<string, PlayerSlot>();
-            const add = (p: PlayerSlot) => {
-              const name = formatUniqueName(p.name, p.number);
-              if (!name) return;
-              roster.set(name, p);
-            };
-            snapshot.lineups[side].forEach(add);
-            snapshot.removed[side].forEach(add);
-            snapshot.benches[side].forEach(add);
-            return roster;
-          };
-
-          const rosterBySide = {
-            home: buildRosterMap('home'),
-            away: buildRosterMap('away'),
-          };
-
-          const buildOrderMap = (side: 'home' | 'away') => {
-            const orderMap = new Map<number, string[]>();
-            const lineup = snapshot.lineups[side];
-            lineup.forEach((p, idx) => {
-              const order = getBattingOrder(lineup, idx, isPractice);
-              if (!order) return;
-              const name = formatUniqueName(p.name, p.number);
-              if (!name) return;
-              const list = orderMap.get(order) ?? [];
-              if (!list.includes(name)) list.push(name);
-              orderMap.set(order, list);
-            });
-
-            // 교체된 선수는 먼저 등장하도록 역순으로 추가
-            [...snapshot.removed[side]].reverse().forEach((p) => {
-              const order = typeof p.order === 'number' && p.order > 0 ? p.order : null;
-              if (!order) return;
-              const name = formatUniqueName(p.name, p.number);
-              if (!name) return;
-              const list = orderMap.get(order) ?? [];
-              if (!list.includes(name)) list.unshift(name);
-              orderMap.set(order, list);
-            });
-
-            return orderMap;
-          };
-
-          // PostGameRecord 형식으로 변환 함수 (교체/대주자/대수비 포함)
-          const toBatterLines = (side: 'home' | 'away'): PostGameBatterLine[] => {
-            const sideStats = statsMap[side];
-            const roster = rosterBySide[side];
-            const orderMap = buildOrderMap(side);
-            const rows: PostGameBatterLine[] = [];
-            const included = new Set<string>();
-            const baseName = (name: string) => name.replace(/\([^)]*\)/g, '').trim();
-
-            const pushLine = (name: string, order?: number | null) => {
-              if (!name || included.has(name)) return;
-              included.add(name);
-              const stat = sideStats.get(name) ?? (baseName(name) ? sideStats.get(baseName(name)) : undefined);
-              const pos = roster.get(name)?.pos;
-              const ab = stat?.ab ?? 0;
-              const h = stat?.h ?? 0;
-              const avg = ab > 0 ? Number((h / ab).toFixed(3)) : undefined;
-
-              rows.push({
-                name,
-                pos,
-                order: order ?? undefined,
-                pa: stat?.pa ?? 0,
-                ab,
-                h,
-                r: stat?.r ?? 0,
-                rbi: stat?.rbi ?? 0,
-                singles: stat?.singles ?? 0,
-                doubles: stat?.doubles ?? 0,
-                triples: stat?.triples ?? 0,
-                hr: stat?.hr ?? 0,
-                bb: stat?.bb ?? 0,
-                hbp: stat?.hbp ?? 0,
-                so: stat?.so ?? 0,
-                sac: stat?.sac ?? 0,
-                fc: stat?.fc ?? 0,
-                avg,
-              });
-            };
-
-            const orders = [...orderMap.keys()].sort((a, b) => a - b);
-            orders.forEach((order) => {
-              const players = orderMap.get(order) ?? [];
-              players.forEach((name) => pushLine(name, order));
-            });
-
-            // 타순 정보 없이 집계된 선수도 포함
-            sideStats.forEach((_stat, name) => {
-              if (!included.has(name)) pushLine(name, null);
-            });
-
-            return rows;
-          };
-
-          const summarizeBatters = (side: 'home' | 'away') => {
-            let ab = 0;
-            let h = 0;
-            let r = 0;
-            let rbi = 0;
-            statsMap[side].forEach((stat) => {
-              ab += stat.ab;
-              h += stat.h;
-              r += stat.r;
-              rbi += stat.rbi;
-            });
-            return { ab, h, r, rbi };
-          };
-
-          const lineScoreBase = snapshot.lineScore ?? { home: [], away: [] };
-          const maxInning = Math.max(lineScoreBase.home.length, lineScoreBase.away.length);
-          const innings = Array.from({ length: maxInning }, (_v, idx) => idx + 1);
-          const fillLine = (arr: number[]) => Array.from({ length: maxInning }, (_v, idx) => arr[idx] ?? 0);
-
-          const postGame: PostGameRecord = {
-            lineScore: { innings, home: fillLine(lineScoreBase.home), away: fillLine(lineScoreBase.away) },
-            totals: { // 팀 합계 (간단 계산)
-              home: { runs: snapshot.score.home, hits: 0, errors: 0 },
-              away: { runs: snapshot.score.away, hits: 0, errors: 0 }
-            },
-            teamBatterSummary: {
-              home: summarizeBatters('home'),
-              away: summarizeBatters('away'),
-            },
-            batters: {
-              home: toBatterLines('home'),
-              away: toBatterLines('away'),
-            },
-            // 투수 기록 등도 필요하면 여기서 추가 (현재는 타자 위주)
-          };
-
-          void pushMatchUpdate(matchId, {
-            status: 'completed',
-            homeScore: snapshot.score.home,
-            awayScore: snapshot.score.away,
-            postGame, // 상세 기록 저장
-          }).catch(() => {});
-        }
-      },
-      resetGame: () => dispatch({ type: 'resetGame' }),
-      undo: () => dispatch({ type: 'undo' }),
-      addMatch: (match: MatchSchedule) => {
-        matchesReadyRef.current = true;
-
-        // [수정] ID 생성 로직 추가 (날짜-홈팀-어웨이팀)
-        // 기존의 랜덤 ID(match-xxxx) 대신 읽기 편한 포맷으로 변경합니다.
-        const dateObj = new Date(match.startTime);
-        const yyyy = dateObj.getFullYear();
-        const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
-        const dd = String(dateObj.getDate()).padStart(2, '0');
-        
-        // 팀 이름에서 공백 제거 (예: "LG 트윈스" -> "LG트윈스")
-        const cleanName = (name: string) => name.trim().replace(/\s+/g, '');
-        const home = cleanName(match.homeTeamName || 'Home');
-        const away = cleanName(match.awayTeamName || 'Away');
-
-        // 최종 ID: 20260130-Home-Away
-        const customId = `${yyyy}${mm}${dd}-${home}-${away}`;
-        const matchWithId = { ...match, id: customId };
-
-        dispatch({ type: 'addMatch', match: matchWithId });
-        
-        // Firestore 저장 (새로운 ID 사용)
-        void setDoc(doc(firestore, 'matches', matchWithId.id), pruneUndefined(matchWithId), { merge: true });
-
-        // 라인업이 포함된 새 일정은 matchStates에도 저장 (경기 전 기록원 확인용)
-        if (
-          matchWithId.lineups &&
-          (hasActualPlayers(matchWithId.lineups.home) || hasActualPlayers(matchWithId.lineups.away))
-        ) {
-          void setDoc(
-            doc(firestore, 'matchStates', matchWithId.id),
-            pruneUndefined({
-              lineups: cloneLineups(matchWithId.lineups),
-              benches: matchWithId.benches ? cloneBenches(matchWithId.benches) : undefined,
-              updatedAt: Date.now(),
-            }),
-            { merge: true },
-          ).catch(() => {});
-        }
-      },
-      updateMatch: (matchId: string, updates: Partial<MatchSchedule>) => {
-        matchesReadyRef.current = true;
-        dispatch({ type: 'updateMatch', matchId, updates });
-      },
-      deleteMatch: (matchId: string) => {
-        matchesReadyRef.current = true;
-        dispatch({ type: 'deleteMatch', matchId });
-        if (stateRef.current.activeMatchId === matchId) {
-          updateCurrentMatchPointer(null);
-        }
-      },
-      moveMatchToTrash: (matchId: string) => {
-        const target = stateRef.current.matches.find((m) => m.id === matchId);
-        if (!target) return;
-        const deletedAt = Date.now();
-        const payload: MatchSchedule = {
-          ...target,
-          deleted: true,
-          deletedAt,
-          purgeAt: deletedAt + TRASH_RETENTION_MS,
-          deletedBy: auth.currentUser?.uid,
-        };
-        matchesReadyRef.current = true;
-        dispatch({ type: 'moveMatchToTrash', matchId, entry: payload });
-        void setDoc(doc(firestore, 'matches', matchId), pruneUndefined(payload), { merge: true }).catch(() => {
-          // rollback locally if write fails
-          dispatch({ type: 'restoreMatch', matchId });
-          if (typeof window !== 'undefined') window.alert('삭제 권한을 확인해주세요. (휴지통 이동 실패)');
-        });
-        if (stateRef.current.activeMatchId === matchId) {
-          updateCurrentMatchPointer(null);
-        }
-      },
-      restoreMatch: (matchId: string) => {
-        const entry = stateRef.current.matches.find((t) => t.id === matchId && t.deleted);
-        if (!entry) return;
-        matchesReadyRef.current = true;
-        dispatch({ type: 'restoreMatch', matchId });
-        const restored = { ...entry };
-        delete restored.deleted;
-        delete restored.deletedAt;
-        delete restored.purgeAt;
-        delete restored.deletedBy;
-        void setDoc(doc(firestore, 'matches', matchId), pruneUndefined(restored), { merge: true }).catch(() => {
-          // rollback locally if write fails
-          dispatch({ type: 'moveMatchToTrash', matchId, entry });
-          if (typeof window !== 'undefined') window.alert('복원 권한을 확인해주세요. (복원 실패)');
-        });
-      },
-      purgeTrash: (matchId: string) => {
-        matchesReadyRef.current = true;
-        dispatch({ type: 'purgeTrash', matchId });
-        if (stateRef.current.activeMatchId === matchId) {
-          updateCurrentMatchPointer(null);
-        }
-
-        // matches + matchStates + 하위 컬렉션(feed/events/presence)까지 완전 삭제
-        void (async () => {
-          try {
-            await purgeMatchFromFirestore(matchId);
-          } catch (error) {
-            console.error('Purge error:', error);
-            if (typeof window !== 'undefined') window.alert('영구 삭제 권한을 확인해주세요. (삭제 실패)');
-          }
-        })();
-      },
-      saveMatchLineups: (
-        matchId: string,
-        lineups: { home: PlayerSlot[]; away: PlayerSlot[] },
-        benches: { home: PlayerSlot[]; away: PlayerSlot[] },
-      ) => {
-        matchesReadyRef.current = true;
-        dispatch({ type: 'saveMatchLineups', matchId, lineups, benches });
-        void pushMatchUpdate(matchId, { lineups: cloneLineups(lineups), benches: cloneBenches(benches) }).catch(() => {});
-        const match = stateRef.current.matches.find((m) => m.id === matchId);
-        const isActiveMatch = stateRef.current.activeMatchId === matchId;
-        const shouldSyncState =
-          match?.status === 'scheduled' && (!isActiveMatch || !stateRef.current.gameStarted);
-        if (shouldSyncState) {
-          void setDoc(
-            doc(firestore, 'matchStates', matchId),
-            pruneUndefined({
-              lineups: cloneLineups(lineups),
-              benches: cloneBenches(benches),
-              updatedAt: Date.now(),
-            }),
-            { merge: true },
-          ).catch(() => {});
-        }
-      },
-      selectMatch: (matchId: string | null) => {
-        const followCurrent = isAdmin;
-        skipFirestoreWriteRef.current = true;
-        dispatch({ type: 'selectMatch', matchId, followCurrent });
-        if (isAdmin) updateCurrentMatchPointer(matchId);
-        if (!matchId) return;
-        const matchIdLocal = matchId;
-        void (async () => {
-          try {
-            // Prime matchStates document
-            const stateDoc = doc(firestore, 'matchStates', matchIdLocal);
-            const snap = await getDoc(stateDoc);
-            if (snap.exists()) {
-              const data = snap.data() as SharedGameState & { feed?: PlayLog[]; events?: PlayEvent[] };
-              const mergedOwner = mergeOwnerLineups(data, matchIdLocal, stateRef.current);
-              const active = stateRef.current.matches.find((m) => m.id === matchIdLocal);
-              const sanitized = applyLineupVisibility(mergedOwner, active, isAdmin);
-              const { feed: _feed, events: _events, ...core } = sanitized as SharedGameState & { feed?: unknown; events?: unknown };
-              skipFirestoreWriteRef.current = true;
-              dispatch({
-                type: 'hydrate',
-                state: normalizeState(initialState, {
-                  ...stateRef.current,
-                  ...core,
-                  matches: stateRef.current.matches,
-                }),
-              });
-            }
-            // Prime feed/events subcollections
-            const isScorer = stateRef.current.scorerUid && stateRef.current.scorerUid === (auth.currentUser?.uid ?? null);
-            const matchForLimit = stateRef.current.matches.find((m) => m.id === matchIdLocal);
-            const completed = isCompletedMatch(matchForLimit) || stateRef.current.gameOver;
-            const maxEntries = isScorer
-              ? SCORER_FEED_LIMIT
-              : getSpectatorFeedLimitForMatch(matchForLimit, stateRef.current.gameOver);
-            const fallback = { inning: stateRef.current.inning, half: stateRef.current.half as Half };
-            const [feedSnap, eventsSnap] = await Promise.all([
-              getDocs(
-                completed
-                  ? query(
-                      collection(firestore, 'matchStates', matchIdLocal, 'feed'),
-                      orderBy('createdAt', 'asc'),
-                    )
-                  : query(
-                      collection(firestore, 'matchStates', matchIdLocal, 'feed'),
-                      orderBy('createdAt', 'desc'),
-                      limit(maxEntries),
-                    ),
-              ),
-              getDocs(
-                completed
-                  ? query(
-                      collection(firestore, 'matchStates', matchIdLocal, 'events'),
-                      orderBy('createdAt', 'asc'),
-                    )
-                  : query(
-                      collection(firestore, 'matchStates', matchIdLocal, 'events'),
-                      orderBy('createdAt', 'desc'),
-                      limit(maxEntries),
-                    ),
-              ),
-            ]);
-            const feedEntries = normalizeFeed(
-              feedSnap.docs.map((d) => d.data()),
-              fallback,
-            );
-            const eventEntries = normalizeEvents(
-              eventsSnap.docs.map((d) => d.data()),
-              fallback,
-            );
-            skipFirestoreWriteRef.current = true;
-            lastFeedLengthRef.current = feedEntries.length;
-            lastEventsLengthRef.current = eventEntries.length;
-            dispatch({ type: 'setFeed', feed: feedEntries });
-            dispatch({ type: 'setEvents', events: eventEntries });
-          } catch {
-            // ignore; realtime listener will still try
-          }
-        })();
-      },
-      loadFullSchedule: async () => {
-        try {
-          const snap = await getDocs(
-            query(
-              collection(firestore, 'matches'),
-              where('status', 'in', ['scheduled', 'inProgress', 'completed', 'canceled']),
-            ),
-          );
-          const incoming = snap.docs.map((docSnap) => ({
-            id: docSnap.id,
-            ...(docSnap.data() as Partial<MatchSchedule>),
-          }));
-          const normalized = normalizeMatches(incoming);
-          const projected = isAdmin ? normalized : normalized.map(projectSpectatorMatch);
-          skipMatchesWriteRef.current = true;
-          matchesReadyRef.current = true;
-          dispatch({
-            type: 'setMatches',
-            matches: mergeMatches(stateRef.current.matches, projected),
-          });
-        } catch {
-          // ignore fetch errors for spectators; manual retry via action
-        }
-      },
-      releaseLock: () => {
-        dispatch({ type: 'releaseLock' });
-        const matchId = stateRef.current.activeMatchId;
-        const user = auth.currentUser;
-        if (!matchId || !user) return;
-        void setDoc(
-          doc(firestore, 'matchStates', matchId),
-          {
-            scorerUid: null,
-            scorerName: null,
-            scorerEmail: null,
-            scorerLockedAt: null,
-            scorerRole: null,
-            scorerPaused: true,
-            updatedAt: Date.now(),
-          },
-          { merge: true },
-        ).catch(() => {});
-      },
-      resumeLock: () => {
-        const matchId = stateRef.current.activeMatchId;
-        const user = auth.currentUser;
-        if (!matchId || !user) return;
-        const lockedAt = Date.now();
-        const payload = {
-          scorerUid: user.uid,
-          scorerName: user.displayName ?? null,
-          scorerEmail: user.email ?? null,
-          scorerLockedAt: lockedAt,
-          scorerRole: stateRef.current.scorerRole ?? null,
-          scorerPaused: false,
-        };
-        void runTransaction(firestore, async (tx) => {
-          const ref = doc(firestore, 'matchStates', matchId);
-          const snap = await tx.get(ref);
-          const data = snap.exists() ? (snap.data() as SharedGameState) : null;
-          const owner = data?.scorerUid ?? null;
-          const locked = data?.scorerLockedAt ?? 0;
-          const expired = !locked || Date.now() - locked > SCORER_LOCK_TTL_MS;
-          if (owner && owner !== user.uid && !expired) {
-            return;
-          }
-          tx.set(ref, { ...payload, updatedAt: Date.now() }, { merge: true });
-        }).catch(() => {});
-        dispatch({
-          type: 'resumeLock',
-          payload: {
-            scorerUid: user.uid,
-            scorerName: user.displayName ?? null,
-            scorerEmail: user.email ?? null,
-            scorerRole: stateRef.current.scorerRole ?? null,
-            lockedAt,
-          },
-        });
-      },
+      ...gameActions,
+      ...scheduleActions,
       setScorerMode: (enabled: boolean) => setScorerMode(enabled),
-      setGameLimit: (minutes: number | null) => dispatch({ type: 'setGameLimit', minutes }),
-      pauseGameTimer: () => dispatch({ type: 'pauseGameTimer' }),
-      resumeGameTimer: () => dispatch({ type: 'resumeGameTimer' }),
     }),
-    [isAdmin, pushMatchUpdate],
+    [gameActions, scheduleActions],
   );
 
   // Preload 전체 일정(예정/종료) once per actions ref to avoid 빈 목록 when 첫 진입.
@@ -5515,16 +3132,4 @@ export function useDemoStore() {
     throw new Error('DemoStoreProvider가 설정되지 않았습니다.');
   }
   return ctx;
-}
-async function resolveUserRole(user: typeof auth.currentUser): Promise<string | null> {
-  if (!user) return null;
-  try {
-    const token = await getIdTokenResult(user, true);
-    if ((token.claims as Record<string, unknown>).admin) return '관리자';
-  } catch {
-    // ignore token fetch errors; fall back to email list
-  }
-  const email = user.email?.toLowerCase();
-  if (email && ADMIN_EMAILS.includes(email)) return '관리자';
-  return '일반';
 }

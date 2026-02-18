@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { useDemoStore } from '../../shared/state/demoStore';
+import { useDemoStore } from '@shared/state/demoStore';
 
 type Props = {
   summaryTime: string;

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { doc, onSnapshot, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
-import { firestore } from '../../shared/firebase/client';
-import type { PlayerSlot, Half, Bases, PlayLog, PlayEvent } from '../../shared/state/demoStore';
+import { firestore } from '@shared/firebase/client';
+import type { PlayerSlot, Half, Bases, PlayLog, PlayEvent } from '@shared/state/demoStore';
 
 interface GameState {
   inning: number;

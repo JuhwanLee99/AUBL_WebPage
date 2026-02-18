@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
 import type { CSSProperties } from 'react';
-import { TEAMS } from '../../shared/lib/mockData';
-import { useDemoStore, buildGameRecord } from '../../shared/state/demoStore';
+import { TEAMS } from '@shared/lib/mockData';
+import { useDemoStore, buildGameRecord } from '@shared/state/demoStore';
 import MatchSelectorBar from './MatchSelectorBar';
-import { GameTimerDisplay } from '../../shared/components/GameTimerDisplay';
-import { useAdmin } from '../../shared/auth/useAdmin';
+import { GameTimerDisplay } from '@shared/components/GameTimerDisplay';
+import { useAdmin } from '@shared/auth/useAdmin';
 
 // 타입 정의
 type BatterLine = {

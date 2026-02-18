@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import gsap from 'gsap';
 import { collection, getDocs } from 'firebase/firestore';
-import { GROUP_LETTERS, GROUP_COLORS, TEAM_GROUPS } from '../../shared/lib/teamGroups';
-import type { GroupLetter } from '../../shared/lib/teamGroups';
-import { useContent } from '../../shared/state/contentProvider';
-import { buildTeamDirectory, encodeTeamId } from '../../shared/lib/teamDirectory';
-import { firestore } from '../../shared/firebase/client';
+import { GROUP_LETTERS, GROUP_COLORS, TEAM_GROUPS } from '@shared/lib/teamGroups';
+import type { GroupLetter } from '@shared/lib/teamGroups';
+import { useContent } from '@shared/state/contentProvider';
+import { buildTeamDirectory, encodeTeamId } from '@shared/lib/teamDirectory';
+import { firestore } from '@shared/firebase/client';
 
 /* ─── 로컬 타입 ─── */
 

@@ -6,8 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../core/config/app_config.dart';
+import '../../core/contracts/flutter_bridge_contract.dart';
+import '../../core/contracts/web_contracts.dart';
 import '../../core/services/auth_bridge_service.dart';
-import '../../core/webview/flutter_bridge_message.dart';
+import '../../core/webview/auth_sync/webview_auth_sync_controller.dart';
+import '../../core/webview/auth_sync/webview_auth_sync_state.dart';
 
 class ScorekeeperWebViewScreen extends StatefulWidget {
   const ScorekeeperWebViewScreen({
@@ -18,7 +21,8 @@ class ScorekeeperWebViewScreen extends StatefulWidget {
   final bool isAdmin;
 
   @override
-  State<ScorekeeperWebViewScreen> createState() => _ScorekeeperWebViewScreenState();
+  State<ScorekeeperWebViewScreen> createState() =>
+      _ScorekeeperWebViewScreenState();
 }
 
 class _ScorekeeperWebViewScreenState extends State<ScorekeeperWebViewScreen> {
@@ -34,6 +38,7 @@ class _ScorekeeperWebViewScreenState extends State<ScorekeeperWebViewScreen> {
 
   final AuthBridgeService _authBridgeService = AuthBridgeService();
   late final WebViewController _controller;
+  final WebViewAuthSyncState _authSyncState = WebViewAuthSyncState();
 
   bool _loading = true;
   bool _authenticating = false;
@@ -48,14 +53,13 @@ class _ScorekeeperWebViewScreenState extends State<ScorekeeperWebViewScreen> {
     SystemChrome.setSystemUIOverlayStyle(_overlayStyle);
   }
 
-  Uri get _scorekeeperUri => AppConfig.webUri('/scorekeeper');
+  Uri get _scorekeeperUri => AppConfig.webUri(WebRouteContracts.scorekeeper);
 
   Uri get _loginFallbackUri => AppConfig.webUri(
-        '/login',
-        queryParameters: const {
-          'embedded': 'flutter',
-          'next': '/scorekeeper',
-        },
+        WebRouteContracts.login,
+        queryParameters: WebQueryContracts.embeddedParams(
+          nextPath: WebRouteContracts.scorekeeper,
+        ),
       );
 
   @override
@@ -67,7 +71,7 @@ class _ScorekeeperWebViewScreenState extends State<ScorekeeperWebViewScreen> {
       ..setBackgroundColor(_chromeColor)
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..addJavaScriptChannel(
-        'FlutterBridge',
+        FlutterBridgeContracts.channelName,
         onMessageReceived: (message) {
           _onBridgeMessage(message.message);
         },
@@ -101,7 +105,7 @@ class _ScorekeeperWebViewScreenState extends State<ScorekeeperWebViewScreen> {
 
             final webHost = Uri.parse(AppConfig.webBaseUrl).host;
             final isSameHost = uri.host.isEmpty || uri.host == webHost;
-            final isLoginRoute = uri.path == '/login';
+            final isLoginRoute = uri.path == WebRouteContracts.login;
 
             if (isSameHost && isLoginRoute && !_redirectedToFallbackLogin) {
               _redirectedToFallbackLogin = true;
@@ -123,27 +127,19 @@ class _ScorekeeperWebViewScreenState extends State<ScorekeeperWebViewScreen> {
   }
 
   Future<void> _onBridgeMessage(String raw) async {
-    final payload = FlutterBridgeMessage.fromRaw(raw);
-
-    switch (payload.type) {
-      case BridgeMessageType.loginSuccess:
-      case BridgeMessageType.tokenRefresh:
-        final idToken = payload.idToken;
-        if (idToken != null && idToken.isNotEmpty) {
-          await _signInWithCustomToken(idToken);
-        }
-        return;
-      case BridgeMessageType.logout:
+    await WebViewAuthSyncController.handleBridgeMessage(
+      rawMessage: raw,
+      onWebToken: _signInWithCustomToken,
+      onLogout: () async {
+        _authSyncState.clearConsumedWebIdToken();
         await FirebaseAuth.instance.signOut();
-        return;
-      case BridgeMessageType.requestNativeGoogle:
-        return;
-      case BridgeMessageType.unknown:
-        return;
-    }
+      },
+      onRequestNativeGoogle: () async {},
+    );
   }
 
   Future<void> _signInWithCustomToken(String webIdToken) async {
+    if (_authSyncState.shouldSkipConsumedWebIdToken(webIdToken)) return;
     if (_authenticating) return;
 
     setState(() {
@@ -152,8 +148,12 @@ class _ScorekeeperWebViewScreenState extends State<ScorekeeperWebViewScreen> {
     });
 
     try {
-      final customToken = await _authBridgeService.exchangeWebIdToken(webIdToken);
-      await FirebaseAuth.instance.signInWithCustomToken(customToken);
+      await WebViewAuthSyncController.signInWithWebToken(
+        webIdToken: webIdToken,
+        auth: FirebaseAuth.instance,
+        authBridgeService: _authBridgeService,
+        syncState: _authSyncState,
+      );
       if (!mounted) return;
       setState(() {
         _error = null;

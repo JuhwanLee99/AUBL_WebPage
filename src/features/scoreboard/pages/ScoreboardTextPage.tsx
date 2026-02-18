@@ -1,14 +1,14 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ScoreboardFrame from '../components/ScoreboardFrame';
-import { useDemoStore, buildGameRecord } from '../../shared/state/demoStore';
-import type { PlayEvent, ErrorDetails, RunnerAdvanceOutcome, BattedBallDetails, PlayerSlot } from '../../shared/state/demoStore';
-import StatsTable from '../../shared/components/StatsTable';
-import RemovedPlayersPanel from '../../shared/components/RemovedPlayersPanel';
-import { GameTimerDisplay } from '../../shared/components/GameTimerDisplay';
-import type { BatterStatLine, PitcherStatLine } from '../../shared/types/scoreStats';
-import type { MatchSchedule } from '../../shared/state/demoStore';
-import { useAdmin } from '../../shared/auth/useAdmin';
+import { useDemoStore, buildGameRecord } from '@shared/state/demoStore';
+import type { PlayEvent, ErrorDetails, RunnerAdvanceOutcome, BattedBallDetails, PlayerSlot } from '@shared/state/demoStore';
+import StatsTable from '@shared/components/StatsTable';
+import RemovedPlayersPanel from '@shared/components/RemovedPlayersPanel';
+import { GameTimerDisplay } from '@shared/components/GameTimerDisplay';
+import type { BatterStatLine, PitcherStatLine } from '@shared/types/scoreStats';
+import type { MatchSchedule } from '@shared/state/demoStore';
+import { useAdmin } from '@shared/auth/useAdmin';
 import './ScoreboardTextPage.css';
 
 type Half = 'top' | 'bottom';
@@ -138,9 +138,12 @@ export default function ScoreboardTextPage() {
   }, [matchId, state.activeMatchId, navigate]);
 
   useEffect(() => {
-    setFeedExpanded(false);
-    setShowReplay(false);
+    const timer = setTimeout(() => {
+      setFeedExpanded(false);
+      setShowReplay(false);
+    }, 0);
     replayLoadRef.current = false;
+    return () => clearTimeout(timer);
   }, [state.activeMatchId]);
 
   useEffect(() => {
@@ -150,8 +153,9 @@ export default function ScoreboardTextPage() {
     }
     if (replayLoadRef.current) return;
     replayLoadRef.current = true;
-    setShowReplay(true);
+    const timer = setTimeout(() => setShowReplay(true), 0);
     actions.loadMoreFeed();
+    return () => clearTimeout(timer);
   }, [actions, state.gameOver]);
 
   useEffect(() => {
@@ -719,21 +723,18 @@ function CsvRecordPreview({
   const kboSections = useMemo(() => extractKboSections(sections), [sections]);
   const defaultSide = kboSections.away ? 'away' : kboSections.home ? 'home' : null;
   const [selectedSide, setSelectedSide] = useState<'away' | 'home'>(defaultSide ?? 'away');
-
-  useEffect(() => {
-    if (!defaultSide) return;
-    if (selectedSide === 'away' && !kboSections.away) {
-      setSelectedSide(defaultSide);
-      return;
-    }
-    if (selectedSide === 'home' && !kboSections.home) {
-      setSelectedSide(defaultSide);
-    }
-  }, [defaultSide, kboSections.away, kboSections.home, selectedSide]);
+  const displaySide =
+    selectedSide === 'away' && !kboSections.away
+      ? defaultSide
+      : selectedSide === 'home' && !kboSections.home
+        ? defaultSide
+        : selectedSide;
 
   if (!defaultSide) return null;
 
-  const section = kboSections[selectedSide] ?? (defaultSide === 'away' ? kboSections.away : kboSections.home);
+  const section =
+    kboSections[displaySide ?? defaultSide] ??
+    (defaultSide === 'away' ? kboSections.away : kboSections.home);
   if (!section) return null;
 
   const visibleRows = section.rows.filter((row) => !isBlankCsvRow(row));
@@ -759,7 +760,7 @@ function CsvRecordPreview({
         <div className="csv-preview__tabs">
           <button
             type="button"
-            className={`csv-preview__tab ${selectedSide === 'away' ? 'is-active' : ''}`}
+            className={`csv-preview__tab ${displaySide === 'away' ? 'is-active' : ''}`}
             onClick={() => setSelectedSide('away')}
             disabled={!kboSections.away}
           >
@@ -767,7 +768,7 @@ function CsvRecordPreview({
           </button>
           <button
             type="button"
-            className={`csv-preview__tab ${selectedSide === 'home' ? 'is-active' : ''}`}
+            className={`csv-preview__tab ${displaySide === 'home' ? 'is-active' : ''}`}
             onClick={() => setSelectedSide('home')}
             disabled={!kboSections.home}
           >
@@ -2602,7 +2603,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
   };
 
   const getActivePitcher = (defenseSide: 'home' | 'away') => {
-    let pitcherName = currentPitcher[defenseSide];
+    const pitcherName = currentPitcher[defenseSide];
     const roster = defenseSide === 'home' ? rosterHome : rosterAway;
     const hasValid =
       pitcherName &&

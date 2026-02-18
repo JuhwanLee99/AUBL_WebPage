@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ScoreboardFrame from '../components/ScoreboardFrame';
-import { useDemoStore } from '../../shared/state/demoStore';
+import { useDemoStore } from '@shared/state/demoStore';
 
 export default function ScoreboardPage() {
   const { state, actions } = useDemoStore();

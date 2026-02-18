@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import gsap from 'gsap';
-import { useContent } from '../../shared/state/contentProvider';
-import { DEFAULT_RULE_CHAPTERS, DEFAULT_RULE_HOST_ORDER } from '../../shared/content/defaultRules';
+import { useContent } from '@shared/state/contentProvider';
+import { DEFAULT_RULE_CHAPTERS, DEFAULT_RULE_HOST_ORDER } from '@shared/content/defaultRules';
 
 /* ─── 회칙 데이터 ─── */
 

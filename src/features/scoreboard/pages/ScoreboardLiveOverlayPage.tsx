@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useDemoStore } from '../../shared/state/demoStore';
-import { useAdmin } from '../../shared/auth/useAdmin';
+import { useDemoStore } from '@shared/state/demoStore';
+import { useAdmin } from '@shared/auth/useAdmin';
 
 const defaultLiveSrc = 'https://www.youtube.com/embed/live_stream?channel=YOUR_CHANNEL_ID';
 
@@ -109,8 +109,8 @@ export default function ScoreboardLiveOverlayPage() {
   useEffect(() => {
     // 음소거가 해제되었으면 카운트다운 초기화
     if (!isMuted) {
-      setUnmuteCountdown(10);
-      return;
+      const resetTimer = setTimeout(() => setUnmuteCountdown(10), 0);
+      return () => clearTimeout(resetTimer);
     }
 
     // 카운트다운이 0이면 종료
@@ -128,7 +128,6 @@ export default function ScoreboardLiveOverlayPage() {
 
   // 우측 상단 음소거 해제 안내 메시지 (5초 표시)
   useEffect(() => {
-    setShowUnmuteHint(true);
     const timer = setTimeout(() => setShowUnmuteHint(false), 5000);
     return () => clearTimeout(timer);
   }, []);
@@ -170,8 +169,8 @@ export default function ScoreboardLiveOverlayPage() {
 
     // 지연시간이 0이면 즉시 업데이트
     if (delayMs === 0) {
-      setDelayedState(state);
-      return;
+      const immediateTimer = setTimeout(() => setDelayedState(state), 0);
+      return () => clearTimeout(immediateTimer);
     }
 
     // 지연시간만큼 기다린 후 업데이트
@@ -285,7 +284,7 @@ export default function ScoreboardLiveOverlayPage() {
       strikeouts,
       avg: atBats > 0 ? (hits / atBats).toFixed(3).substring(1) : '.000',
     };
-  }, [delayedState.lineups, delayedState.batterIndex, delayedState.events, battingSide, lineupVisible]);
+  }, [delayedState.lineups, delayedState.batterIndex, delayedState.feed, battingSide, lineupVisible]);
 
   const toggleFullscreen = () => {
     if (isIOS || !supportsFullscreen) {
