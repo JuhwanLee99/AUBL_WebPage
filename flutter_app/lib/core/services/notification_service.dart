@@ -12,10 +12,12 @@ class NotificationService {
   static final NotificationService instance = NotificationService._();
 
   static const String _teamKey = 'notif_team_id';
+  static const String _userUidKey = 'notif_user_uid';
   static const String _matchPrefKey = 'notif_match_pref';
   static const String _allNotificationsKey = 'notif_all_enabled';
   static const String _communityNoticeKey = 'notif_community_notice';
   static const String _teamNoticeKey = 'notif_team_notice';
+  static const String _inquiryNotifKey = 'notif_inquiry';
   static const String _topicCommunityUrgent = 'community_urgent';
   static const String _topicCommunityNotices = 'community_notices';
   static const String _topicMatchesAll = 'matches_all';
@@ -57,7 +59,8 @@ class NotificationService {
 
     final prefs = await SharedPreferences.getInstance();
     final storedTeam = prefs.getString(_teamKey);
-    await _syncSubscriptions(prefs, teamId: storedTeam);
+    final storedUid = prefs.getString(_userUidKey);
+    await _syncSubscriptions(prefs, teamId: storedTeam, uid: storedUid);
     _initialized = true;
   }
 
@@ -81,16 +84,23 @@ class NotificationService {
     return _readBoolPref(prefs, _teamNoticeKey, true);
   }
 
+  Future<bool> getInquiryNotifEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return _readBoolPref(prefs, _inquiryNotifKey, true);
+  }
+
   Future<void> setAllNotificationsEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_allNotificationsKey, enabled);
-    await _syncSubscriptions(prefs);
+    final uid = prefs.getString(_userUidKey);
+    await _syncSubscriptions(prefs, uid: uid);
   }
 
   Future<void> setCommunityNoticeEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_communityNoticeKey, enabled);
-    await _syncSubscriptions(prefs);
+    final uid = prefs.getString(_userUidKey);
+    await _syncSubscriptions(prefs, uid: uid);
   }
 
   Future<void> setTeamNoticeEnabled(
@@ -100,7 +110,15 @@ class NotificationService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_teamNoticeKey, enabled);
     final storedTeam = teamId ?? prefs.getString(_teamKey);
-    await _syncSubscriptions(prefs, teamId: storedTeam);
+    final uid = prefs.getString(_userUidKey);
+    await _syncSubscriptions(prefs, teamId: storedTeam, uid: uid);
+  }
+
+  Future<void> setInquiryNotifEnabled(bool enabled, {String? uid}) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_inquiryNotifKey, enabled);
+    final storedUid = uid ?? prefs.getString(_userUidKey);
+    await _syncSubscriptions(prefs, uid: storedUid);
   }
 
   Future<void> setMatchPreference(
@@ -110,12 +128,14 @@ class NotificationService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_matchPrefKey, pref.name);
     final storedTeam = teamId ?? prefs.getString(_teamKey);
-    await _syncSubscriptions(prefs, teamId: storedTeam);
+    final uid = prefs.getString(_userUidKey);
+    await _syncSubscriptions(prefs, teamId: storedTeam, uid: uid);
   }
 
   Future<void> updateTeamSubscriptions(String? teamId) async {
     final prefs = await SharedPreferences.getInstance();
     final prev = prefs.getString(_teamKey);
+    final uid = prefs.getString(_userUidKey);
 
     if (!Platform.isAndroid) {
       if (teamId != null && teamId.isNotEmpty) {
@@ -137,7 +157,34 @@ class NotificationService {
       await prefs.remove(_teamKey);
     }
 
-    await _syncSubscriptions(prefs, teamId: teamId);
+    await _syncSubscriptions(prefs, teamId: teamId, uid: uid);
+  }
+
+  /// 로그인/로그아웃 시 호출 — uid가 null이면 구독 해제
+  Future<void> updateUserInquiryTopic(String? uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    final prev = prefs.getString(_userUidKey);
+
+    if (!Platform.isAndroid) {
+      if (uid != null && uid.isNotEmpty) {
+        await prefs.setString(_userUidKey, uid);
+      } else {
+        await prefs.remove(_userUidKey);
+      }
+      return;
+    }
+
+    if (prev != null && prev.isNotEmpty && prev != uid) {
+      await _messaging.unsubscribeFromTopic('inquiry_$prev');
+    }
+
+    if (uid != null && uid.isNotEmpty) {
+      await prefs.setString(_userUidKey, uid);
+    } else {
+      await prefs.remove(_userUidKey);
+    }
+
+    await _syncSubscriptions(prefs, uid: uid);
   }
 
   MatchNotifyPreference _readMatchPreference(SharedPreferences prefs) {
@@ -157,13 +204,15 @@ class NotificationService {
   Future<void> _syncSubscriptions(
     SharedPreferences prefs, {
     String? teamId,
+    String? uid,
   }) async {
     if (!Platform.isAndroid) return;
 
     final currentTeamId = teamId ?? prefs.getString(_teamKey);
+    final currentUid = uid ?? prefs.getString(_userUidKey);
     final allEnabled = _readBoolPref(prefs, _allNotificationsKey, true);
     if (!allEnabled) {
-      await _unsubscribeAllTopics(currentTeamId);
+      await _unsubscribeAllTopics(currentTeamId, uid: currentUid);
       return;
     }
 
@@ -199,15 +248,27 @@ class NotificationService {
         await _messaging.unsubscribeFromTopic('team_${currentTeamId}_matches');
       }
     }
+
+    final inquiryNotifOn = _readBoolPref(prefs, _inquiryNotifKey, true);
+    if (currentUid != null && currentUid.isNotEmpty) {
+      if (inquiryNotifOn) {
+        await _messaging.subscribeToTopic('inquiry_$currentUid');
+      } else {
+        await _messaging.unsubscribeFromTopic('inquiry_$currentUid');
+      }
+    }
   }
 
-  Future<void> _unsubscribeAllTopics(String? teamId) async {
+  Future<void> _unsubscribeAllTopics(String? teamId, {String? uid}) async {
     await _messaging.unsubscribeFromTopic(_topicCommunityUrgent);
     await _messaging.unsubscribeFromTopic(_topicCommunityNotices);
     await _messaging.unsubscribeFromTopic(_topicMatchesAll);
     if (teamId != null && teamId.isNotEmpty) {
       await _messaging.unsubscribeFromTopic('team_${teamId}_notices');
       await _messaging.unsubscribeFromTopic('team_${teamId}_matches');
+    }
+    if (uid != null && uid.isNotEmpty) {
+      await _messaging.unsubscribeFromTopic('inquiry_$uid');
     }
   }
 

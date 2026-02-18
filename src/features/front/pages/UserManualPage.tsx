@@ -454,6 +454,7 @@ const APP_MEMBER_SECTIONS: ManualSection[] = [
           '전체 알림 ON/OFF (OFF 시 긴급 공지 포함 모든 알림 중단)',
           '커뮤니티 공지 알림 ON/OFF',
           '홈팀 공지 알림 ON/OFF',
+          '건의/문의 알림 ON/OFF — 내 글의 처리 상태 변경 및 새 댓글 알림 (로그인 시 동작)',
           '경기 알림: 전체 경기 / 소속팀 경기 / 받지 않음',
         ],
       },

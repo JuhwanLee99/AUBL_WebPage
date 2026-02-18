@@ -4,6 +4,7 @@ import os
 import urllib.request
 
 from firebase_admin import auth as admin_auth
+from firebase_admin import firestore as admin_firestore
 from firebase_admin import messaging
 from firebase_admin import initialize_app
 from firebase_functions import firestore_fn, https_fn
@@ -173,3 +174,54 @@ def import_completed_match(event: firestore_fn.Event[firestore_fn.Change[firesto
             logger.info("import_completed_match: %s -> %s (HTTP %s)", match_id, new_status, resp.status)
     except Exception:
         logger.exception("import_completed_match failed for %s", match_id)
+
+
+@firestore_fn.on_document_updated(document="inquiries/{inquiryId}", region="asia-northeast3")
+def notify_inquiry_status(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]]) -> None:
+    """Notify the inquiry author when processing status changes."""
+    before = event.data.before.to_dict() if event.data and event.data.before else {}
+    after = event.data.after.to_dict() if event.data and event.data.after else {}
+    if not after:
+        return
+    if before.get("status") == after.get("status"):
+        return
+    uid = after.get("uid")
+    if not uid:
+        return
+    inquiry_id = event.params.get("inquiryId")
+    title = (after.get("title") or "건의/문의").strip()
+    new_status = after.get("status") or "미처리"
+    _send_topic_notification(
+        f"inquiry_{uid}",
+        "처리 상태 변경",
+        f'"{title}" 글이 {new_status} 상태로 변경되었습니다.',
+        {"inquiryId": str(inquiry_id or ""), "type": "status"},
+    )
+
+
+@firestore_fn.on_document_created(document="inquiries/{inquiryId}/comments/{commentId}", region="asia-northeast3")
+def notify_inquiry_comment(event: firestore_fn.Event[firestore_fn.DocumentSnapshot]) -> None:
+    """Notify the inquiry author when a new comment is posted."""
+    comment_data = event.data.to_dict() if event.data else {}
+    inquiry_id = event.params.get("inquiryId")
+    if not inquiry_id:
+        return
+    db = admin_firestore.client()
+    inquiry_snap = db.collection("inquiries").document(inquiry_id).get()
+    if not inquiry_snap.exists:
+        return
+    inquiry_data = inquiry_snap.to_dict() or {}
+    uid = inquiry_data.get("uid")
+    if not uid:
+        return
+    commenter_uid = comment_data.get("uid")
+    if commenter_uid == uid:
+        return
+    inquiry_title = (inquiry_data.get("title") or "건의/문의").strip()
+    author = (comment_data.get("author") or "누군가").strip()
+    _send_topic_notification(
+        f"inquiry_{uid}",
+        "새 댓글",
+        f'"{inquiry_title}"에 {author}님이 댓글을 남겼습니다.',
+        {"inquiryId": str(inquiry_id), "type": "comment"},
+    )

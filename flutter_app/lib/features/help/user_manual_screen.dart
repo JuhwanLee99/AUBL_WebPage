@@ -153,12 +153,23 @@ final _memberSections = <_ManualSection>[
     accent: AppTheme.green500,
     items: [
       _ManualItem(
-        heading: '커뮤니티 탭',
+        heading: '공지사항',
         bullets: [
           '카테고리 필터: 전체, 긴급, 경기공지, 징계, 일반',
           '제목/내용/작성자 기준 검색',
           '공지 상세에서 댓글 작성/조회/삭제(본인 댓글)',
           '갤러리 배너로 외부 커뮤니티 이동',
+        ],
+      ),
+      _ManualItem(
+        heading: '건의/문의 게시판',
+        bullets: [
+          '커뮤니티 탭에서 건의/문의 게시판 배너로 진입',
+          '플랫폼(앱/웹), 말머리(5종), 처리상태 필터',
+          '말머리: 기능 개선 / 버그 신고 / 사용 문의 / 경기·기록 오류 / 기타',
+          '처리상태: 미처리 / 처리 중 / 처리 완료',
+          '비밀글은 목록에 표시되지만 작성자만 열람 가능',
+          '로그인 후 글쓰기 가능 / 본인 글 수정·삭제 / 댓글 작성·삭제',
         ],
       ),
     ],
@@ -195,6 +206,7 @@ final _memberSections = <_ManualSection>[
           '전체 알림 ON/OFF (OFF 시 긴급 공지 포함 모든 알림 중단)',
           '커뮤니티 공지 알림 ON/OFF',
           '홈팀 공지 알림 ON/OFF',
+          '건의/문의 알림 ON/OFF — 내 글의 처리 상태 변경 및 새 댓글 알림 (로그인 시 동작)',
           '경기 알림: 전체 경기 / 소속팀 경기 / 받지 않음',
         ],
       ),
@@ -457,7 +469,7 @@ class _UserManualScreenState extends State<UserManualScreen>
                       color: AppTheme.slate700.withValues(alpha: 0.5)),
                 ),
                 child: const Text(
-                  '문서 버전: 2026-02-17\n앱 구조: 하단 탭 홈 · 팀 · 일정 · 기록 · 커뮤니티 · 더보기\n일부 관리 기능은 WebView로 웹 관리 화면에 연결됩니다.',
+                  '문서 버전: 2026-02-18\n앱 구조: 하단 탭 홈 · 팀 · 일정 · 기록 · 커뮤니티 · 더보기\n일부 관리 기능은 WebView로 웹 관리 화면에 연결됩니다.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                       color: AppTheme.slate500, fontSize: 11, height: 1.6),

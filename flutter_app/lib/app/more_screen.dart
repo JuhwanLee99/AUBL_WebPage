@@ -26,6 +26,7 @@ class _MoreScreenState extends State<MoreScreen> {
   bool _allNotificationsOn = true;
   bool _communityNoticeOn = true;
   bool _teamNoticeOn = true;
+  bool _inquiryNotifOn = true;
 
   @override
   void initState() {
@@ -46,6 +47,7 @@ class _MoreScreenState extends State<MoreScreen> {
       return;
     }
     _loggedIn = true;
+    await NotificationService.instance.updateUserInquiryTopic(user.uid);
     try {
       final token = await user.getIdTokenResult(true);
       if (!mounted) return;
@@ -66,12 +68,15 @@ class _MoreScreenState extends State<MoreScreen> {
         await NotificationService.instance.getCommunityNoticeEnabled();
     final teamNotice =
         await NotificationService.instance.getTeamNoticeEnabled();
+    final inquiry =
+        await NotificationService.instance.getInquiryNotifEnabled();
     if (!mounted) return;
     setState(() {
       _matchPref = pref;
       _allNotificationsOn = allEnabled;
       _communityNoticeOn = community;
       _teamNoticeOn = teamNotice;
+      _inquiryNotifOn = inquiry;
       _loadingNotif = false;
     });
   }
@@ -87,7 +92,8 @@ class _MoreScreenState extends State<MoreScreen> {
   String _noticePrefLabel() {
     final community = _communityNoticeOn ? '커뮤니티' : '커뮤니티 off';
     final team = _teamNoticeOn ? '홈팀' : '홈팀 off';
-    return '$community · $team';
+    final inquiry = _inquiryNotifOn ? '건의/문의' : '건의/문의 off';
+    return '$community · $team · $inquiry';
   }
 
   String _notificationSummary() {
@@ -106,6 +112,7 @@ class _MoreScreenState extends State<MoreScreen> {
       builder: (context) {
         var temp = _matchPref;
         var tempAll = _allNotificationsOn;
+        var tempInquiry = _inquiryNotifOn;
         return StatefulBuilder(
           builder: (context, setSheetState) {
             final bottomInset = MediaQuery.of(context).viewInsets.bottom;
@@ -118,7 +125,7 @@ class _MoreScreenState extends State<MoreScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      '경기 알림 설정',
+                      '알림 설정',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 16,
@@ -184,7 +191,39 @@ class _MoreScreenState extends State<MoreScreen> {
                           style: TextStyle(
                               color: AppTheme.slate500, fontSize: 12)),
                     ),
-                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      value: tempInquiry,
+                      onChanged: !tempAll
+                          ? null
+                          : (value) async {
+                              setSheetState(() => tempInquiry = value);
+                              await NotificationService.instance
+                                  .setInquiryNotifEnabled(value);
+                              if (mounted) {
+                                setState(() => _inquiryNotifOn = value);
+                              }
+                            },
+                      activeThumbColor: AppTheme.blue400,
+                      title: const Text('건의/문의 알림',
+                          style: TextStyle(color: Colors.white)),
+                      subtitle: const Text('내 글의 처리 상태 변경 및 새 댓글 알림',
+                          style: TextStyle(
+                              color: AppTheme.slate500, fontSize: 12)),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                      child: Text(
+                        '경기 알림 설정',
+                        style: TextStyle(
+                          color: AppTheme.slate400,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1, color: AppTheme.slate700),
+                    const SizedBox(height: 4),
                     IgnorePointer(
                       ignoring: !tempAll,
                       child: Opacity(
@@ -241,6 +280,7 @@ class _MoreScreenState extends State<MoreScreen> {
   }
 
   Future<void> _logout() async {
+    await NotificationService.instance.updateUserInquiryTopic(null);
     try {
       await GoogleSignIn().signOut();
     } catch (_) {}
