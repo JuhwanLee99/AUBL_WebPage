@@ -3,18 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../core/contracts/web_contracts.dart';
+import '../core/services/notification_service.dart';
 import '../core/theme/app_theme.dart';
 import '../core/webview/app_webview_screen.dart';
-import '../features/account/account_screen.dart';
+import '../features/feature_entries.dart';
 import 'shell_controller.dart';
-import '../features/auth/login_webview_screen.dart';
-import '../features/intro/intro_screen.dart';
-import '../features/intro/rules_screen.dart';
-import '../features/legal/privacy_screen.dart';
-import '../features/help/user_manual_screen.dart';
-import '../features/legal/terms_screen.dart';
-import '../features/records/records_screen.dart';
-import '../core/services/notification_service.dart';
 
 class MoreScreen extends StatefulWidget {
   const MoreScreen({super.key});
@@ -377,11 +371,12 @@ class _MoreScreenState extends State<MoreScreen> {
               onTap: () {
                 final shell = ShellController.of(context);
                 if (shell != null) {
-                  shell.openEmbeddedWebView('/scorekeeper', '기록원',
+                  shell.openEmbeddedWebView(
+                      WebRouteContracts.scorekeeper, '기록원',
                       fullscreen: true);
                 } else {
                   _push(const AppWebViewScreen(
-                    path: '/scorekeeper',
+                    path: WebRouteContracts.scorekeeper,
                     title: '기록원',
                   ));
                 }
@@ -391,7 +386,7 @@ class _MoreScreenState extends State<MoreScreen> {
               icon: Icons.scoreboard,
               label: '스코어보드',
               onTap: () => _push(const AppWebViewScreen(
-                path: '/scoreboard',
+                path: WebRouteContracts.scoreboard,
                 title: '스코어보드',
               )),
             ),
@@ -399,7 +394,7 @@ class _MoreScreenState extends State<MoreScreen> {
               icon: Icons.admin_panel_settings,
               label: '관리자 패널',
               onTap: () => _push(const AppWebViewScreen(
-                path: '/admin',
+                path: WebRouteContracts.admin,
                 title: '관리자',
               )),
             ),
@@ -407,7 +402,7 @@ class _MoreScreenState extends State<MoreScreen> {
               icon: Icons.edit_calendar,
               label: '일정 관리',
               onTap: () => _push(const AppWebViewScreen(
-                path: '/schedule/manage',
+                path: WebRouteContracts.scheduleManage,
                 title: '일정 관리',
               )),
             ),

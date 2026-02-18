@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/contracts/web_contracts.dart';
 import '../../core/theme/app_theme.dart';
 
 /* ─── 데이터 모델 ─── */
@@ -258,7 +259,7 @@ final _adminSections = <_ManualSection>[
       _ManualItem(
         heading: '더보기 > 일정 관리',
         bullets: [
-          'WebView로 /schedule/manage 진입',
+          'WebView로 ${WebRouteContracts.scheduleManage} 진입',
           '일정 생성/수정, 상태 변경(예정/진행 중/종료/취소)',
           '연습경기 운영',
         ],
@@ -273,7 +274,7 @@ final _adminSections = <_ManualSection>[
       _ManualItem(
         heading: '더보기 > 관리자 패널',
         bullets: [
-          'WebView로 /admin 진입',
+          'WebView로 ${WebRouteContracts.admin} 진입',
           '랜딩 문구/티커, 리그 소개, 회칙, 팀/조 편성, 감독 권한 관리',
         ],
       ),
@@ -287,7 +288,7 @@ final _adminSections = <_ManualSection>[
       _ManualItem(
         heading: '더보기 > 기록원',
         bullets: [
-          'WebView 전체화면으로 /scorekeeper 진입',
+          'WebView 전체화면으로 ${WebRouteContracts.scorekeeper} 진입',
           '경기 선택 및 라인업 입력',
           '타석/주루/수비 이벤트 기록',
           'Lock 점유/해제, 단축키 모드',
@@ -304,7 +305,7 @@ final _adminSections = <_ManualSection>[
       _ManualItem(
         heading: '더보기 > 스코어보드',
         bullets: [
-          'WebView로 /scoreboard 진입',
+          'WebView로 ${WebRouteContracts.scoreboard} 진입',
           '기록원 데이터가 문자중계/오버레이에 반영되는 상태 점검',
         ],
       ),

@@ -7,8 +7,12 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../core/config/app_config.dart';
+import '../../core/contracts/flutter_bridge_contract.dart';
+import '../../core/contracts/web_contracts.dart';
 import '../../core/services/auth_bridge_service.dart';
-import '../../core/webview/flutter_bridge_message.dart';
+import '../../core/webview/auth_sync/webview_auth_scripts.dart';
+import '../../core/webview/auth_sync/webview_auth_sync_controller.dart';
+import '../../core/webview/auth_sync/webview_auth_sync_state.dart';
 
 class LoginWebViewScreen extends StatefulWidget {
   const LoginWebViewScreen({
@@ -22,7 +26,8 @@ class LoginWebViewScreen extends StatefulWidget {
   State<LoginWebViewScreen> createState() => _LoginWebViewScreenState();
 }
 
-class _LoginWebViewScreenState extends State<LoginWebViewScreen> with WidgetsBindingObserver {
+class _LoginWebViewScreenState extends State<LoginWebViewScreen>
+    with WidgetsBindingObserver {
   static const Color _chromeColor = Color(0xFF0F172A);
   static const SystemUiOverlayStyle _overlayStyle = SystemUiOverlayStyle(
     statusBarColor: _chromeColor,
@@ -32,25 +37,12 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> with WidgetsBin
     systemNavigationBarIconBrightness: Brightness.light,
     systemNavigationBarDividerColor: _chromeColor,
   );
-  static const String _webTokenProbeScript = '''
-(async () => {
-  try {
-    const getter = window.__flutterGetIdToken;
-    const bridge = window.FlutterBridge;
-    if (!getter || !bridge) return;
-    const token = await getter();
-    if (token) {
-      bridge.postMessage(JSON.stringify({ type: 'TOKEN_REFRESH', idToken: token }));
-    }
-  } catch (_) {}
-})();
-''';
-
   final AuthBridgeService _authBridgeService = AuthBridgeService();
   final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: const ['email']);
   late final WebViewController _controller;
   StreamSubscription<User?>? _authSub;
   bool _loginCompleted = false;
+  final WebViewAuthSyncState _authSyncState = WebViewAuthSyncState();
 
   bool _pageLoading = true;
   bool _authenticating = false;
@@ -74,7 +66,8 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> with WidgetsBin
 
   bool _isGoogleOAuthRequest(Uri uri) {
     final host = uri.host.toLowerCase();
-    final isGoogleHost = host.contains('accounts.google.com') || host.contains('oauth2.googleapis.com');
+    final isGoogleHost = host.contains('accounts.google.com') ||
+        host.contains('oauth2.googleapis.com');
     if (isGoogleHost) return true;
 
     // Firebase Auth redirect handler for Google provider.
@@ -105,7 +98,7 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> with WidgetsBin
       ..setBackgroundColor(_chromeColor)
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..addJavaScriptChannel(
-        'FlutterBridge',
+        FlutterBridgeContracts.channelName,
         onMessageReceived: (message) {
           _onBridgeMessage(message.message);
         },
@@ -165,50 +158,42 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> with WidgetsBin
   }
 
   Uri _loginUri() {
-    final query = <String, String>{
-      'embedded': 'flutter',
-      'nativeGoogle': '1',
-      'forceLogout': '1',
-    };
-    if (widget.nextPath != null && widget.nextPath!.startsWith('/')) {
-      query['next'] = widget.nextPath!;
-    }
-    return AppConfig.webUri('/login', queryParameters: query);
+    return AppConfig.webUri(
+      WebRouteContracts.login,
+      queryParameters: WebQueryContracts.embeddedParams(
+        nextPath: widget.nextPath,
+        includeForceLogout: true,
+      ),
+    );
   }
 
   Future<void> _requestWebIdTokenIfNeeded() async {
     if (_authenticating) return;
     if (FirebaseAuth.instance.currentUser != null) return;
     final uri = _loginUri();
-    if (uri.queryParameters['forceLogout'] == '1') return;
+    if (uri.queryParameters[WebQueryContracts.forceLogout] ==
+        WebQueryContracts.enabled) {
+      return;
+    }
     try {
-      await _controller.runJavaScript(_webTokenProbeScript);
+      await _controller.runJavaScript(WebViewAuthScripts.probeWebIdToken);
     } catch (_) {}
   }
 
   Future<void> _onBridgeMessage(String raw) async {
-    final payload = FlutterBridgeMessage.fromRaw(raw);
-
-    switch (payload.type) {
-      case BridgeMessageType.loginSuccess:
-      case BridgeMessageType.tokenRefresh:
-        final idToken = payload.idToken;
-        if (idToken != null && idToken.isNotEmpty) {
-          await _signInWithCustomToken(idToken);
-        }
-        return;
-      case BridgeMessageType.logout:
+    await WebViewAuthSyncController.handleBridgeMessage(
+      rawMessage: raw,
+      onWebToken: _signInWithCustomToken,
+      onLogout: () async {
+        _authSyncState.clearConsumedWebIdToken();
         await FirebaseAuth.instance.signOut();
-        return;
-      case BridgeMessageType.requestNativeGoogle:
-        await _signInWithNativeGoogle();
-        return;
-      case BridgeMessageType.unknown:
-        return;
-    }
+      },
+      onRequestNativeGoogle: _signInWithNativeGoogle,
+    );
   }
 
   Future<void> _signInWithCustomToken(String webIdToken) async {
+    if (_authSyncState.shouldSkipConsumedWebIdToken(webIdToken)) return;
     if (_authenticating) return;
 
     setState(() {
@@ -217,8 +202,12 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> with WidgetsBin
     });
 
     try {
-      final customToken = await _authBridgeService.exchangeWebIdToken(webIdToken);
-      await FirebaseAuth.instance.signInWithCustomToken(customToken);
+      await WebViewAuthSyncController.signInWithWebToken(
+        webIdToken: webIdToken,
+        auth: FirebaseAuth.instance,
+        authBridgeService: _authBridgeService,
+        syncState: _authSyncState,
+      );
       _finishLogin();
       if (!mounted) return;
       setState(() {
