@@ -3,11 +3,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../features/community/community_screen.dart';
-import '../features/home/home_screen.dart';
-import '../features/records/records_screen.dart';
-import '../features/schedule/schedule_screen.dart';
-import '../features/teams/team_hub_screen.dart';
+import '../features/feature_entries.dart';
 import 'embedded_webview_panel.dart';
 import 'more_screen.dart';
 import 'shell_controller.dart';

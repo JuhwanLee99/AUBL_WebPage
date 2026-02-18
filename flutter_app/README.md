@@ -271,6 +271,15 @@ flutter run \
   --dart-define=AUBL_AUTH_BRIDGE_URL=https://...cloudfunctions.net/exchange_web_id_token
 ```
 
+### 품질 체크
+
+```bash
+cd flutter_app
+dart analyze
+flutter test
+dart run tool/layer_dependency_checker.dart
+```
+
 ### Firebase 모바일 설정
 
 다음 파일을 프로젝트에 배치해야 합니다.

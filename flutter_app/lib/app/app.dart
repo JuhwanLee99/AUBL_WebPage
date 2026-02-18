@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/theme/app_theme.dart';
-import '../features/onboarding/onboarding_screen.dart';
+import '../features/feature_entries.dart';
 import 'main_shell.dart';
 
 class AublApp extends StatelessWidget {
