@@ -15,9 +15,8 @@ export function useAdmin() {
 
   useEffect(() => {
     let cancelled = false;
-    // user가 변경될 때 loading을 즉시 true로 리셋하여
-    // RequireAdmin이 권한 확인 완료 전에 access-denied로 리다이렉트하지 않도록 방지
-    setLoading(true);
+    // user 변경 직후 로딩 상태를 다음 tick에 반영한다.
+    const loadingTimer = setTimeout(() => setLoading(true), 0);
     const run = async () => {
       if (FORCE_ADMIN) {
         setIsAdmin(true);
@@ -117,6 +116,7 @@ export function useAdmin() {
     void run();
     return () => {
       cancelled = true;
+      clearTimeout(loadingTimer);
     };
   }, [user]);
 
