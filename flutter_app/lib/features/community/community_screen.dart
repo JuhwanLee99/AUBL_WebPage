@@ -8,6 +8,7 @@ import '../../core/services/cache_service.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/background_logo.dart';
+import 'inquiry_board_screen.dart';
 import 'notice_detail_screen.dart';
 
 class CommunityScreen extends StatefulWidget {
@@ -119,6 +120,10 @@ class _CommunityScreenState extends State<CommunityScreen> {
                 children: [
                   // ── 갤러리 배너 ──
                   _buildGalleryBanner(),
+                  const Divider(height: 1),
+
+                  // ── 건의/문의 배너 ──
+                  _buildInquiryBanner(),
                   const Divider(height: 1),
 
                   // ── 카테고리 필터 ──
@@ -283,6 +288,52 @@ class _CommunityScreenState extends State<CommunityScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildInquiryBanner() {
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push<void>(
+          MaterialPageRoute(builder: (_) => const InquiryBoardScreen()),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppTheme.indigo500.withValues(alpha: 0.15),
+              AppTheme.slate800.withValues(alpha: 0.5),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.slate700),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.chat_bubble_outline, color: Color(0xFF818CF8), size: 28),
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('건의/문의 게시판',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600)),
+                  SizedBox(height: 2),
+                  Text('기능 개선, 버그 신고, 사용 문의를 남겨주세요',
+                      style: TextStyle(color: AppTheme.slate400, fontSize: 12)),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: AppTheme.slate500, size: 20),
+          ],
+        ),
       ),
     );
   }

@@ -4,14 +4,12 @@ import {
   deleteField,
   deleteDoc,
   doc,
-  getCountFromServer,
   getDoc,
   getDocs,
   limit,
   onSnapshot,
   orderBy,
   query,
-  runTransaction,
   setDoc,
   writeBatch,
   where,
@@ -350,35 +348,35 @@ export function syncScorerLock(params: {
     const stateDoc = doc(firestore, 'matchStates', matchId);
     const now = Date.now();
     const roleLabel = await resolveUserRole(user, ADMIN_EMAILS);
-    await runTransaction(firestore, async (tx) => {
-      const snap = await tx.get(stateDoc);
-      const data = snap.exists()
-        ? (snap.data() as SharedGameState & {
-            scorerUid?: string | null;
-            scorerName?: string | null;
-            scorerEmail?: string | null;
-            scorerLockedAt?: number | null;
-            scorerRole?: string | null;
-          })
-        : null;
-      const owner = data?.scorerUid;
-      const lockedAt = data?.scorerLockedAt ?? 0;
-      const expired = !lockedAt || now - lockedAt > SCORER_LOCK_TTL_MS;
-      if (owner && owner !== user.uid && !expired) {
-        return;
-      }
-      tx.set(
-        stateDoc,
-        {
-          scorerUid: user.uid,
-          scorerName: user.displayName ?? null,
-          scorerEmail: user.email ?? null,
-          scorerLockedAt: now,
-          scorerRole: data?.scorerRole ?? roleLabel,
-        },
-        { merge: true },
-      );
-    });
+    // runTransaction은 BatchGetDocuments REST 요청을 사용하는데 한글 document ID에서
+    // Firebase SDK가 잘못 처리하므로 getDoc + 조건부 setDoc으로 대체
+    const snap = await getDoc(stateDoc);
+    const data = snap.exists()
+      ? (snap.data() as SharedGameState & {
+          scorerUid?: string | null;
+          scorerName?: string | null;
+          scorerEmail?: string | null;
+          scorerLockedAt?: number | null;
+          scorerRole?: string | null;
+        })
+      : null;
+    const owner = data?.scorerUid;
+    const lockedAt = data?.scorerLockedAt ?? 0;
+    const expired = !lockedAt || now - lockedAt > SCORER_LOCK_TTL_MS;
+    if (owner && owner !== user.uid && !expired) {
+      return;
+    }
+    await setDoc(
+      stateDoc,
+      {
+        scorerUid: user.uid,
+        scorerName: user.displayName ?? null,
+        scorerEmail: user.email ?? null,
+        scorerLockedAt: now,
+        scorerRole: data?.scorerRole ?? roleLabel,
+      },
+      { merge: true },
+    );
     if (stateRef.current.activeMatchId !== matchId) return;
     skipFirestoreWriteRef.current = true;
     dispatch({
@@ -455,9 +453,9 @@ export function syncOnlineViewerCount(params: {
     try {
       const now = Date.now();
       const countQuery = query(presenceCol, where('expiresAt', '>=', now));
-      const aggregate = await getCountFromServer(countQuery);
+      const snap = await getDocs(countQuery);
       if (cancelled) return;
-      dispatch({ type: 'setOnlineViewerCount', count: aggregate.data().count });
+      dispatch({ type: 'setOnlineViewerCount', count: snap.size });
     } catch {
       // ignore count errors
     }

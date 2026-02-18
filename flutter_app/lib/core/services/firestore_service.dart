@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../models/inquiry_post.dart';
 import '../models/match.dart';
 import '../models/match_state.dart';
 import '../models/notice.dart';
@@ -300,6 +301,64 @@ class FirestoreService {
     return _db
         .collection('notices')
         .doc(noticeId)
+        .collection('comments')
+        .doc(commentId)
+        .delete();
+  }
+
+  // ────────────────────────────────────────────
+  // Inquiries (건의/문의 게시판)
+  // ────────────────────────────────────────────
+
+  Future<List<InquiryPost>> getInquiries({int limit = 50}) async {
+    final snap = await _db
+        .collection('inquiries')
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .get();
+    return snap.docs.map(InquiryPost.fromFirestore).toList();
+  }
+
+  Future<InquiryPost?> getInquiry(String inquiryId) async {
+    final doc = await _db.collection('inquiries').doc(inquiryId).get();
+    if (!doc.exists) return null;
+    return InquiryPost.fromFirestore(doc);
+  }
+
+  Future<void> addInquiry(InquiryPost post) {
+    return _db.collection('inquiries').add(post.toFirestore());
+  }
+
+  Future<void> updateInquiry(String inquiryId, Map<String, dynamic> data) {
+    return _db.collection('inquiries').doc(inquiryId).update(data);
+  }
+
+  Future<void> deleteInquiry(String inquiryId) {
+    return _db.collection('inquiries').doc(inquiryId).delete();
+  }
+
+  Stream<List<InquiryComment>> watchInquiryComments(String inquiryId) {
+    return _db
+        .collection('inquiries')
+        .doc(inquiryId)
+        .collection('comments')
+        .orderBy('createdAt')
+        .snapshots()
+        .map((snap) => snap.docs.map(InquiryComment.fromFirestore).toList());
+  }
+
+  Future<void> addInquiryComment(String inquiryId, InquiryComment comment) {
+    return _db
+        .collection('inquiries')
+        .doc(inquiryId)
+        .collection('comments')
+        .add(comment.toFirestore());
+  }
+
+  Future<void> deleteInquiryComment(String inquiryId, String commentId) {
+    return _db
+        .collection('inquiries')
+        .doc(inquiryId)
         .collection('comments')
         .doc(commentId)
         .delete();

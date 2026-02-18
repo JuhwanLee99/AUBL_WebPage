@@ -114,6 +114,32 @@ export interface TeamNoticeComment {
   likeCount?: number;
 }
 
+export type InquiryPlatform = 'app' | 'web';
+export type InquiryCategory = '기능 개선' | '버그 신고' | '사용 문의' | '경기/기록 오류' | '기타';
+export type InquiryStatus = '미처리' | '처리 중' | '처리 완료';
+
+export interface InquiryPost {
+  id: string;
+  title: string;
+  content: string;
+  author: string;
+  uid: string;
+  platform: InquiryPlatform;
+  category: InquiryCategory;
+  isPrivate: boolean;
+  status: InquiryStatus;
+  createdAt: number;
+  updatedAt?: number;
+}
+
+export interface InquiryComment {
+  id: string;
+  content: string;
+  author: string;
+  uid: string;
+  createdAt: number;
+}
+
 export interface UserProfile {
   uid: string;
   email?: string | null;

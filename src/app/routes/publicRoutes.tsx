@@ -17,6 +17,9 @@ import CommunityGalleryPage from '../pages/CommunityGalleryPage';
 import CommunityNoticesPage from '../pages/CommunityNoticesPage';
 import NoticeWritePage from '../pages/NoticeWritePage';
 import NoticeDetailPage from '../pages/NoticeDetailPage';
+import InquiryBoardPage from '../pages/InquiryBoardPage';
+import InquiryWritePage from '../pages/InquiryWritePage';
+import InquiryDetailPage from '../pages/InquiryDetailPage';
 import PlayerDetailPage from '../pages/PlayerDetailPage';
 import MatchSchedulePage from '../pages/MatchSchedulePage';
 import ScheduleResultsPage from '../pages/ScheduleResultsPage';
@@ -97,6 +100,9 @@ export const publicRoutes: RouteObject[] = [
         ),
       },
       { path: 'notices/:noticeId', element: <NoticeDetailPage /> },
+      { path: 'inquiry', element: <InquiryBoardPage /> },
+      { path: 'inquiry/new', element: <InquiryWritePage /> },
+      { path: 'inquiry/:inquiryId', element: <InquiryDetailPage /> },
     ],
   },
   {

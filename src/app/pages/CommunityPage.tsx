@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { firestore } from '../../shared/firebase/client';
-import type { Notice } from '../../shared/types';
+import type { Notice, InquiryPost } from '../../shared/types';
 
 // 스타일 상수
 const cardStyle = {
@@ -43,6 +43,20 @@ const linkStyle = {
 
 export default function CommunityPage() {
   const [displayNotices, setDisplayNotices] = useState<Notice[]>([]);
+  const [recentInquiries, setRecentInquiries] = useState<InquiryPost[]>([]);
+
+  useEffect(() => {
+    const fetchInquiries = async () => {
+      try {
+        const q = query(collection(firestore, 'inquiries'), orderBy('createdAt', 'desc'), limit(5));
+        const snap = await getDocs(q);
+        setRecentInquiries(snap.docs.map((d) => ({ id: d.id, ...d.data() } as InquiryPost)));
+      } catch (err) {
+        console.error('건의/문의 불러오기 실패', err);
+      }
+    };
+    void fetchInquiries();
+  }, []);
 
   useEffect(() => {
     const fetchAndSortNotices = async () => {
@@ -69,7 +83,8 @@ export default function CommunityPage() {
   }, []);
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '24px', minHeight: '60vh' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', minHeight: '60vh' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '24px' }}>
       
       {/* 왼쪽: AUBL 갤러리 미리보기 */}
       <section style={cardStyle}>
@@ -163,7 +178,83 @@ export default function CommunityPage() {
         </div>
       </section>
     </div>
+
+    {/* 건의/문의 게시판 */}
+    <section style={cardStyle}>
+      <div style={headerStyle}>
+        <h2 style={titleStyle}>💬 건의/문의 게시판</h2>
+        <Link to="inquiry" style={linkStyle}>
+          더보기 &rarr;
+        </Link>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {recentInquiries.length === 0 ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', padding: '24px 0' }}>
+            아직 게시글이 없습니다.
+          </div>
+        ) : (
+          recentInquiries.map((post) => (
+            <Link
+              key={post.id}
+              to={`inquiry/${post.id}`}
+              style={{
+                textDecoration: 'none',
+                background: 'rgba(255,255,255,0.03)',
+                padding: '12px 16px',
+                borderRadius: '10px',
+                border: '1px solid rgba(148,163,184,0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                pointerEvents: post.isPrivate ? 'none' : 'auto',
+                opacity: post.isPrivate ? 0.65 : 1,
+              }}
+            >
+              <span style={{
+                fontSize: '11px',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontWeight: 800,
+                background: post.platform === 'app' ? '#818cf8' : '#34d399',
+                color: '#0f172a',
+                minWidth: 'fit-content',
+              }}>
+                {post.platform === 'app' ? '앱' : '웹'}
+              </span>
+              <span style={{
+                fontSize: '11px',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontWeight: 800,
+                background: getInquiryCategoryColor(post.category),
+                color: '#0f172a',
+                minWidth: 'fit-content',
+              }}>
+                {post.category}
+              </span>
+              {post.isPrivate && <span style={{ fontSize: '12px' }}>🔒</span>}
+              <span style={{ color: '#e2e8f0', fontWeight: 600, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {post.isPrivate ? '비밀글입니다.' : post.title}
+              </span>
+              <span style={{ color: '#64748b', fontSize: '12px', minWidth: 'fit-content' }}>
+                {new Date(post.createdAt).toLocaleDateString()}
+              </span>
+            </Link>
+          ))
+        )}
+      </div>
+    </section>
+    </div>
   );
+}
+
+function getInquiryCategoryColor(category: string) {
+  switch (category) {
+    case '기능 개선': return '#60a5fa';
+    case '버그 신고': return '#f87171';
+    case '사용 문의': return '#4ade80';
+    default: return '#94a3b8';
+  }
 }
 
 function getCategoryColor(category: string) {

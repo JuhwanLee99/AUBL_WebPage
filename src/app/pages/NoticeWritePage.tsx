@@ -41,7 +41,7 @@ export default function NoticeWritePage() {
   };
 
   return (
-    <div style={{ maxWidth: '600px', margin: '0 auto', color: '#f8fafc', padding: '20px' }}>
+    <div style={{ maxWidth: '1100px', margin: '0 auto', color: '#f8fafc', padding: '20px' }}>
       <h2 style={{ fontSize: '24px', fontWeight: 900, marginBottom: '24px' }}>공지사항 작성</h2>
       
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

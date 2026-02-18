@@ -152,7 +152,7 @@ export default function NoticeDetailPage() {
   const isCommentsAllowed = notice.allowComments ?? true;
 
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', color: '#f8fafc', paddingBottom: '40px' }}>
+    <div style={{ maxWidth: '1100px', margin: '0 auto', color: '#f8fafc', paddingBottom: '40px' }}>
       {/* 상단 네비게이션 & 관리자 버튼 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <button

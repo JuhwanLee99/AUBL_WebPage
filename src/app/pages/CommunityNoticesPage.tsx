@@ -54,7 +54,7 @@ export default function CommunityNoticesPage() {
   }, [notices, activeFilter, searchQuery]);
 
   return (
-    <div style={{ color: '#f8fafc', maxWidth: '800px', margin: '0 auto', paddingBottom: '40px' }}>
+    <div style={{ color: '#f8fafc', maxWidth: '1100px', margin: '0 auto', paddingBottom: '40px' }}>
       
       {/* 상단 헤더 및 글쓰기 버튼 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
