@@ -1,19 +1,19 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/contracts/web_contracts.dart';
 import '../../core/data/team_groups.dart';
 import '../../core/models/match.dart' as m;
 import '../../core/models/team.dart';
 import '../../core/models/team_member.dart';
 import '../../core/models/team_notice.dart';
-import '../../core/services/firestore_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/webview/app_webview_screen.dart';
 import '../../core/widgets/match_status_badge.dart';
 import '../../core/widgets/section_header.dart';
 import 'team_notice_detail_screen.dart';
+import 'team_detail_view_model.dart';
 import 'widgets/member_card.dart';
 import 'widgets/notice_card.dart';
 
@@ -34,7 +34,7 @@ class TeamDetailScreen extends StatefulWidget {
 class _TeamDetailScreenState extends State<TeamDetailScreen> {
   static const List<String> _noticeCategories = ['일반', '훈련', '경기', '긴급'];
 
-  final _fs = FirestoreService();
+  final _viewModel = TeamDetailViewModel();
   final TextEditingController _noticeSearchController = TextEditingController();
   Team? _team;
   bool _loading = true;
@@ -61,7 +61,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
   }
 
   Future<void> _loadTeam() async {
-    final team = await _fs.getTeam(widget.teamId);
+    final team = await _viewModel.loadTeam(widget.teamId);
     if (mounted) {
       setState(() {
         _team = team;
@@ -71,34 +71,14 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
   }
 
   Future<void> _loadMatches() async {
-    final matches = await _fs.getMatchesByTeam(widget.teamName);
+    final matches = await _viewModel.loadMatches(widget.teamName);
     if (mounted) setState(() => _matches = matches);
   }
 
   Future<void> _checkCoachRole() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
-    // 관리자 체크
-    try {
-      final token =
-          await FirebaseAuth.instance.currentUser!.getIdTokenResult(true);
-      if (token.claims?['admin'] == true) {
-        if (mounted) setState(() => _isCoach = true);
-        return;
-      }
-    } catch (_) {}
-
-    // 코치 역할 체크
-    final roleDoc =
-        await FirebaseFirestore.instance.collection('roles').doc(uid).get();
+    final isCoach = await _viewModel.checkCoachRole(widget.teamId);
     if (!mounted) return;
-    if (roleDoc.exists) {
-      final data = roleDoc.data();
-      if (data?['role'] == 'coach' && data?['teamId'] == widget.teamId) {
-        setState(() => _isCoach = true);
-      }
-    }
+    setState(() => _isCoach = isCoach);
   }
 
   String get _groupLabel {
@@ -115,6 +95,13 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     };
   }
 
+  void _applyNoticeActionResult(TeamDetailActionResult result) {
+    setState(() {
+      _noticeStatus = result.statusMessage;
+      _noticeError = result.errorMessage;
+    });
+  }
+
   Future<void> _toggleNoticePinned(TeamNotice notice) async {
     if (!_isCoach || _noticeBusy) return;
     setState(() {
@@ -123,24 +110,12 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
       _noticeError = null;
     });
     try {
-      final nextPinned = !notice.pinned;
-      await _fs.toggleTeamNoticePin(widget.teamId, notice.id, nextPinned);
+      final result = await _viewModel.toggleNoticePinned(
+        teamId: widget.teamId,
+        notice: notice,
+      );
       if (!mounted) return;
-      setState(() {
-        _noticeStatus = nextPinned ? '공지 고정을 설정했습니다.' : '공지 고정을 해제했습니다.';
-      });
-    } on FirebaseException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _noticeError = e.code == 'permission-denied'
-            ? '팀 공지 수정 권한이 없습니다.'
-            : '공지 고정 변경 중 문제가 발생했습니다.';
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _noticeError = '공지 고정 변경 중 문제가 발생했습니다.';
-      });
+      _applyNoticeActionResult(result);
     } finally {
       if (mounted) {
         setState(() => _noticeBusy = false);
@@ -180,23 +155,12 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
       _noticeError = null;
     });
     try {
-      await _fs.deleteTeamNotice(widget.teamId, notice.id);
+      final result = await _viewModel.deleteNotice(
+        teamId: widget.teamId,
+        notice: notice,
+      );
       if (!mounted) return;
-      setState(() {
-        _noticeStatus = '팀 공지를 삭제했습니다.';
-      });
-    } on FirebaseException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _noticeError = e.code == 'permission-denied'
-            ? '팀 공지 삭제 권한이 없습니다.'
-            : '팀 공지 삭제 중 문제가 발생했습니다.';
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _noticeError = '팀 공지 삭제 중 문제가 발생했습니다.';
-      });
+      _applyNoticeActionResult(result);
     } finally {
       if (mounted) {
         setState(() => _noticeBusy = false);
@@ -387,7 +351,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
 
   Widget _buildNotices() {
     return StreamBuilder<List<TeamNotice>>(
-      stream: _fs.watchTeamNotices(widget.teamId),
+      stream: _viewModel.watchTeamNotices(widget.teamId),
       builder: (context, snap) {
         if (snap.hasError) {
           final err = snap.error;
@@ -745,21 +709,21 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
         if (match.isLive) {
           Navigator.of(context).push(MaterialPageRoute<void>(
             builder: (_) => AppWebViewScreen(
-              path: '/scoreboard-text/${match.id}',
+              path: WebRouteContracts.scoreboardText(match.id),
               title: '문자중계',
             ),
           ));
         } else if (match.isCompleted) {
           Navigator.of(context).push(MaterialPageRoute<void>(
             builder: (_) => AppWebViewScreen(
-              path: '/scoreboard-text/${match.id}',
+              path: WebRouteContracts.scoreboardText(match.id),
               title: '경기 결과',
             ),
           ));
         } else {
           Navigator.of(context).push(MaterialPageRoute<void>(
             builder: (_) => AppWebViewScreen(
-              path: '/scoreboard-text/${match.id}',
+              path: WebRouteContracts.scoreboardText(match.id),
               title: '경기 정보',
             ),
           ));
@@ -770,7 +734,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
 
   Widget _buildRoster() {
     return StreamBuilder<List<TeamMember>>(
-      stream: _fs.watchTeamMembers(widget.teamId),
+      stream: _viewModel.watchTeamMembers(widget.teamId),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Padding(
@@ -864,43 +828,19 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                 }
 
                 setDialogState(() => saving = true);
-                final user = FirebaseAuth.instance.currentUser;
                 try {
-                  await _fs.addTeamNotice(
-                    widget.teamId,
-                    TeamNotice(
-                      id: '',
-                      title: title,
-                      content: content,
-                      createdAt: DateTime.now().millisecondsSinceEpoch,
-                      createdByUid: user?.uid,
-                      createdByName: user?.email?.split('@').first,
-                      category: category,
-                      pinned: pinned,
-                    ),
+                  final result = await _viewModel.addNotice(
+                    teamId: widget.teamId,
+                    title: title,
+                    content: content,
+                    category: category,
+                    pinned: pinned,
                   );
                   if (mounted) {
-                    setState(() {
-                      _noticeStatus = '팀 공지를 등록했습니다.';
-                      _noticeError = null;
-                    });
+                    _applyNoticeActionResult(result);
                   }
-                  if (ctx.mounted) Navigator.pop(ctx);
-                } on FirebaseException catch (e) {
-                  if (mounted) {
-                    setState(() {
-                      _noticeError = e.code == 'permission-denied'
-                          ? '팀 공지 작성 권한이 없습니다.'
-                          : '공지 등록 중 문제가 발생했습니다.';
-                      _noticeStatus = null;
-                    });
-                  }
-                } catch (_) {
-                  if (mounted) {
-                    setState(() {
-                      _noticeError = '공지 등록 중 문제가 발생했습니다.';
-                      _noticeStatus = null;
-                    });
+                  if (result.errorMessage == null && ctx.mounted) {
+                    Navigator.pop(ctx);
                   }
                 } finally {
                   if (ctx.mounted) {
