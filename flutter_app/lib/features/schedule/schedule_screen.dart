@@ -5,13 +5,13 @@ import 'package:intl/intl.dart';
 
 import '../../core/models/match.dart' as m;
 import '../../app/shell_controller.dart';
-import '../../core/services/cache_service.dart';
-import '../../core/services/firestore_service.dart';
+import '../../core/contracts/web_contracts.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/background_logo.dart';
 import '../../core/widgets/match_status_badge.dart';
 import '../../core/data/team_groups.dart';
 import '../../core/webview/app_webview_screen.dart';
+import 'schedule_view_model.dart';
 
 class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({super.key});
@@ -23,10 +23,8 @@ class ScheduleScreen extends StatefulWidget {
 class _ScheduleScreenState extends State<ScheduleScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabCtrl;
-  final _fs = FirestoreService();
+  final _viewModel = ScheduleViewModel();
 
-  List<m.Match> _allMatches = [];
-  bool _loading = true;
   String? _groupFilter;
   ValueNotifier<int>? _refreshNotifier;
 
@@ -34,7 +32,7 @@ class _ScheduleScreenState extends State<ScheduleScreen>
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 6, vsync: this);
-    _loadMatches();
+    _refreshMatches();
   }
 
   @override
@@ -42,71 +40,34 @@ class _ScheduleScreenState extends State<ScheduleScreen>
     super.didChangeDependencies();
     final notifier = ShellController.of(context)?.refreshNotifier;
     if (notifier != _refreshNotifier) {
-      _refreshNotifier?.removeListener(_loadMatches);
+      _refreshNotifier?.removeListener(_handleRefreshSignal);
       _refreshNotifier = notifier;
-      _refreshNotifier?.addListener(_loadMatches);
+      _refreshNotifier?.addListener(_handleRefreshSignal);
     }
   }
 
   @override
   void dispose() {
-    _refreshNotifier?.removeListener(_loadMatches);
+    _refreshNotifier?.removeListener(_handleRefreshSignal);
     _tabCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _loadMatches() async {
-    // 캐시에서 즉시 로드
-    final cached = await CacheService.instance.getCachedMatches();
-    if (cached != null && _loading) {
-      if (mounted) {
-        setState(() {
-          _allMatches = cached;
-          _loading = false;
-        });
-      }
-    }
-
-    // 네트워크에서 최신 데이터
-    try {
-      final matches = await _fs.getAllMatches();
-      if (mounted) {
-        setState(() {
-          _allMatches = matches;
-          _loading = false;
-        });
-      }
-      CacheService.instance.cacheMatches(matches);
-    } catch (_) {
-      if (mounted && _loading) setState(() => _loading = false);
-    }
+  void _handleRefreshSignal() {
+    _refreshMatches();
   }
 
-  List<m.Match> get _liveMatches =>
-      _allMatches.where((m) => m.isLive).toList();
-
-  List<m.Match> get _completedMatches => _allMatches
-      .where((m) => m.isCompleted)
-      .toList()
-    ..sort((a, b) => (b.startTime ?? '').compareTo(a.startTime ?? ''));
-
-  List<m.Match> get _practiceMatches =>
-      _allMatches.where((m) => m.isPractice).toList();
-
-  List<m.Match> _groupMatches() {
-    if (_groupFilter == null) return _allMatches;
-    return _allMatches.where((match) {
-      final homeGroup = teamNameToGroup[match.homeTeamName];
-      final awayGroup = teamNameToGroup[match.awayTeamName];
-      return homeGroup == _groupFilter || awayGroup == _groupFilter;
-    }).toList();
+  Future<void> _refreshMatches() async {
+    await _viewModel.loadMatches();
+    if (!mounted) return;
+    setState(() {});
   }
 
   void _openMatchDetail(m.Match match) {
     final title = match.isLive ? '문자중계' : '경기 결과';
     Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (_) => AppWebViewScreen(
-        path: '/scoreboard-text/${match.id}',
+        path: WebRouteContracts.scoreboardText(match.id),
         title: title,
       ),
     ));
@@ -134,54 +95,55 @@ class _ScheduleScreenState extends State<ScheduleScreen>
       body: Stack(
         children: [
           const BackgroundLogo(verticalOffset: -(kTextTabBarHeight / 2)),
-          _loading
-          ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
-              controller: _tabCtrl,
-              children: [
-                _AllMatchesTab(
-                  matches: _allMatches,
-                  onRefresh: _loadMatches,
-                  onMatchTap: _openMatchDetail,
-                ),
-                // 라이브
-                StreamBuilder<List<m.Match>>(
-                  stream: _fs.watchLiveMatches(),
-                  builder: (context, snap) {
-                    final live = snap.data ?? _liveMatches;
-                    return _MatchList(
-                      matches: live,
-                      emptyMessage: '현재 진행 중인 경기가 없습니다.',
-                      onRefresh: _loadMatches,
-                      onMatchTap: (match) {
-                        Navigator.of(context).push(MaterialPageRoute<void>(
-                          builder: (_) => AppWebViewScreen(
-                            path: '/scoreboard-text/${match.id}',
-                            title: '문자중계',
-                          ),
-                        ));
+          _viewModel.isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : TabBarView(
+                  controller: _tabCtrl,
+                  children: [
+                    _AllMatchesTab(
+                      matches: _viewModel.allMatches,
+                      onRefresh: _refreshMatches,
+                      onMatchTap: _openMatchDetail,
+                    ),
+                    // 라이브
+                    StreamBuilder<List<m.Match>>(
+                      stream: _viewModel.watchLiveMatches(),
+                      builder: (context, snap) {
+                        final live = snap.data ?? _viewModel.liveMatches;
+                        return _MatchList(
+                          matches: live,
+                          emptyMessage: '현재 진행 중인 경기가 없습니다.',
+                          onRefresh: _refreshMatches,
+                          onMatchTap: (match) {
+                            Navigator.of(context).push(MaterialPageRoute<void>(
+                              builder: (_) => AppWebViewScreen(
+                                path:
+                                    WebRouteContracts.scoreboardText(match.id),
+                                title: '문자중계',
+                              ),
+                            ));
+                          },
+                        );
                       },
-                    );
-                  },
+                    ),
+                    _MatchList(
+                      matches: _viewModel.completedMatches,
+                      emptyMessage: '완료된 경기가 없습니다.',
+                      onRefresh: _refreshMatches,
+                      onMatchTap: _openMatchDetail,
+                    ),
+                    // 조별
+                    _buildGroupTab(),
+                    // 순위
+                    const _StandingsTab(),
+                    _MatchList(
+                      matches: _viewModel.practiceMatches,
+                      emptyMessage: '연습경기가 없습니다.',
+                      onRefresh: _refreshMatches,
+                      onMatchTap: _openMatchDetail,
+                    ),
+                  ],
                 ),
-                _MatchList(
-                  matches: _completedMatches,
-                  emptyMessage: '완료된 경기가 없습니다.',
-                  onRefresh: _loadMatches,
-                  onMatchTap: _openMatchDetail,
-                ),
-                // 조별
-                _buildGroupTab(),
-                // 순위
-                const _StandingsTab(),
-                _MatchList(
-                  matches: _practiceMatches,
-                  emptyMessage: '연습경기가 없습니다.',
-                  onRefresh: _loadMatches,
-                  onMatchTap: _openMatchDetail,
-                ),
-              ],
-            ),
         ],
       ),
     );
@@ -219,9 +181,9 @@ class _ScheduleScreenState extends State<ScheduleScreen>
         ),
         Expanded(
           child: _MatchList(
-            matches: _groupMatches(),
+            matches: _viewModel.groupMatches(_groupFilter),
             emptyMessage: '해당 조의 경기가 없습니다.',
-            onRefresh: _loadMatches,
+            onRefresh: _refreshMatches,
             onMatchTap: _openMatchDetail,
           ),
         ),
@@ -278,8 +240,8 @@ class _AllMatchesTabState extends State<_AllMatchesTab> {
   Widget build(BuildContext context) {
     if (widget.matches.isEmpty) {
       return const Center(
-        child: Text('등록된 일정이 없습니다.',
-            style: TextStyle(color: AppTheme.slate500)),
+        child:
+            Text('등록된 일정이 없습니다.', style: TextStyle(color: AppTheme.slate500)),
       );
     }
 
@@ -574,14 +536,14 @@ class _MatchCard extends StatelessWidget {
             if (match.venue != null && match.venue!.isNotEmpty) ...[
               const SizedBox(height: 6),
               Text(match.venue!,
-                  style: const TextStyle(
-                      color: AppTheme.slate500, fontSize: 11)),
+                  style:
+                      const TextStyle(color: AppTheme.slate500, fontSize: 11)),
             ],
             if (match.notes != null && match.notes!.isNotEmpty) ...[
               const SizedBox(height: 4),
               Text(match.notes!,
-                  style: const TextStyle(
-                      color: AppTheme.slate500, fontSize: 11),
+                  style:
+                      const TextStyle(color: AppTheme.slate500, fontSize: 11),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis),
             ],
