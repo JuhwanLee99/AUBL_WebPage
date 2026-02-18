@@ -71,14 +71,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
   // Flutter 앱에서 로그인 상태를 주입받기 위한 글로벌 핸들러
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    (window as any).__flutterAuthInject = async (customToken: string) => {
+    window.__flutterAuthInject = async (customToken: string) => {
       try {
         await signInWithCustomToken(auth, customToken);
       } catch (e) {
         console.error('[FlutterBridge] Auth inject failed:', e);
       }
     };
-    (window as any).__flutterGetIdToken = async () => {
+    window.__flutterGetIdToken = async () => {
       try {
         if (!auth.currentUser) return null;
         return await getIdToken(auth.currentUser, true);
@@ -88,8 +88,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
     };
     return () => {
-      delete (window as any).__flutterAuthInject;
-      delete (window as any).__flutterGetIdToken;
+      delete window.__flutterAuthInject;
+      delete window.__flutterGetIdToken;
     };
   }, []);
 

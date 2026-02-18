@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from './AuthProvider';
 import { useAdmin } from './useAdmin';
-import MaintenancePage from '../../app/pages/MaintenancePage';
+import MaintenancePage from '@features/auth/pages/MaintenancePage';
 
 // ========================================
 // 유지보수 모드 설정
