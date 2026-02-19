@@ -1401,6 +1401,7 @@ function Base({
         zIndex: occupied ? 5 : 4,
       }}
     >
+      {/* 다이아몬드 (시각 + 인터랙션) */}
       <div
         style={{
           width: '100%',
@@ -1409,8 +1410,6 @@ function Base({
           background: occupied ? '#facc15' : '#f4f4f5',
           borderRadius: '4px',
           border: occupied ? '2px solid #f59e0b' : '2px solid #e5e7eb',
-          display: 'grid',
-          placeItems: 'center',
           boxShadow: occupied ? '0 0 0 8px rgba(250, 204, 21, 0.3), 0 8px 18px rgba(245, 158, 11, 0.35)' : undefined,
           cursor: clickable ? 'pointer' : 'default',
           transition: 'transform 120ms ease, box-shadow 120ms ease',
@@ -1429,39 +1428,40 @@ function Base({
             (e.currentTarget as HTMLDivElement).style.transform = 'rotate(45deg)';
           }
         }}
+      />
+      {/* 이름/등번호: 다이아몬드 중앙에 절대 위치 */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: 'clamp(44px, 8vw, 58px)',
+          display: 'grid',
+          justifyItems: 'center',
+          gap: '1px',
+          userSelect: 'none',
+          pointerEvents: 'none',
+        }}
       >
-        <div
+        <span
           style={{
-            transform: 'rotate(-45deg)',
-            width: '94%',
-            display: 'grid',
-            justifyItems: 'center',
-            alignContent: 'center',
-            marginTop: '2px',
-            gap: '1px',
-            userSelect: 'none',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            fontWeight: 900,
+            color: occupied ? '#1f2937' : '#6b7280',
+            fontSize: '9px',
+            lineHeight: 1.1,
+            maxWidth: '100%',
           }}
+          title={runnerName}
         >
+          {parsedRunner.name || ' '}
+        </span>
+        {parsedRunner.number ? (
           <span
             style={{
-              maxWidth: '100%',
-              minHeight: '9px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              fontWeight: 900,
-              color: occupied ? '#1f2937' : '#6b7280',
-              fontSize: '11px',
-              lineHeight: 1.1,
-            }}
-            title={runnerName}
-          >
-            {parsedRunner.name || ' '}
-          </span>
-          <span
-            style={{
-              maxWidth: '100%',
-              minHeight: '8px',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
@@ -1469,13 +1469,13 @@ function Base({
               color: occupied ? '#1f2937' : '#6b7280',
               fontSize: '8px',
               lineHeight: 1,
-              opacity: parsedRunner.number ? 1 : 0.6,
+              maxWidth: '100%',
             }}
-            title={parsedRunner.number || undefined}
+            title={parsedRunner.number}
           >
-            {parsedRunner.number || ' '}
+            {parsedRunner.number}
           </span>
-        </div>
+        ) : null}
       </div>
     </div>
   );
@@ -1571,31 +1571,35 @@ function DefenseLayer({
 }) {
   return (
     <>
-      {assignments.map((player) => (
+      {assignments.map((player) => {
+        const isOutfielder = ['LF', 'CF', 'RF'].includes(player.pos.toUpperCase());
+        return (
         <div
           key={player.name + player.pos}
           role={onSelectFielder ? 'button' : undefined}
           onClick={() => onSelectFielder?.({ name: player.name, pos: player.pos })}
           style={{
             position: 'absolute',
-            top: `${player.y}%`,
+            top: `${isOutfielder ? player.y + 3 : player.y}%`,
             left: `${player.x}%`,
             transform: 'translate(-50%, -50%)',
-            padding: '6px 8px',
-            borderRadius: '12px',
+            padding: '3px 5px',
+            borderRadius: '8px',
             background: 'rgba(15,23,42,0.75)',
             border: '1px solid rgba(148,163,184,0.3)',
             color: '#e2e8f0',
             fontWeight: 800,
-            fontSize: '11px',
+            fontSize: '10px',
             cursor: onSelectFielder ? 'pointer' : 'default',
             boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
             pointerEvents: onSelectFielder ? 'auto' : 'none',
+            whiteSpace: 'nowrap',
           }}
         >
           {player.pos} · {player.name}
         </div>
-      ))}
+        );
+      })}
     </>
   );
 }
@@ -1610,16 +1614,17 @@ function BatterBadge({ name, top, left, onClick }: { name: string; top: string; 
         top,
         left,
         transform: 'translate(-50%, -50%)',
-        padding: '10px 12px',
-        borderRadius: '12px',
+        padding: '5px 8px',
+        borderRadius: '10px',
         border: '1px solid rgba(148,163,184,0.35)',
         background: 'rgba(99,102,241,0.18)',
         color: '#e2e8f0',
         fontWeight: 900,
-        fontSize: '12px',
+        fontSize: '10px',
         cursor: onClick ? 'pointer' : 'default',
         boxShadow: '0 6px 16px rgba(0,0,0,0.3)',
         pointerEvents: onClick ? 'auto' : 'none',
+        whiteSpace: 'nowrap',
       }}
     >
       타석 · {name}
@@ -1647,16 +1652,17 @@ function PitcherBadge({
         top,
         left,
         transform: 'translate(-50%, -50%)',
-        padding: '8px 10px',
-        borderRadius: '12px',
+        padding: '4px 7px',
+        borderRadius: '10px',
         border: '1px solid rgba(148,163,184,0.3)',
         background: 'rgba(15,23,42,0.75)',
         color: '#e2e8f0',
         fontWeight: 900,
-        fontSize: '12px',
+        fontSize: '10px',
         cursor: onClick ? 'pointer' : 'default',
         boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
         pointerEvents: onClick ? 'auto' : 'none',
+        whiteSpace: 'nowrap',
       }}
     >
       투수 · {name}

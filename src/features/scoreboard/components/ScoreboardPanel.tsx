@@ -482,8 +482,8 @@ export default function ScoreboardPanel({
           style={{
             display: 'grid',
             gridTemplateColumns: hideBases
-              ? 'minmax(0, 0.55fr) minmax(min(360px, 60vw), 1.8fr)'
-              : 'minmax(0, 0.9fr) minmax(min(360px, 60vw), 1.35fr)',
+              ? 'minmax(0, 0.55fr) minmax(0, 1.8fr)'
+              : 'minmax(0, 0.9fr) minmax(0, 1.35fr)',
             gap: 'clamp(10px, 1.6vw, 14px)',
             alignItems: 'stretch',
           }}
@@ -677,6 +677,85 @@ export function BoxScoreTable({
     }[];
   };
 }) {
+  const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches;
+
+  // ── 모바일: sticky 이니셜 + R/H/E 고정 ──
+  if (isMobile) {
+    const getInitial = (name: string) => name.trim().slice(0, 2) || '?';
+    const rhe = 26;
+    const teamW = 34;
+    const innings = data.innings;
+    const rows = data.rows;
+    const inningGridCols = innings.map(() => 'minmax(20px, 26px)').join(' ');
+    const gridCols = `${teamW}px ${inningGridCols} ${rhe}px ${rhe}px ${rhe}px`;
+    const stickyBg = '#0b1220';
+    const headerBg = '#0f172a';
+    const divider = '1px solid rgba(148,163,184,0.2)';
+    const cell: CSSProperties = { padding: '2px 1px', textAlign: 'center', fontWeight: 800, fontSize: '12px' };
+    const stickyTeam: CSSProperties = { ...cell, position: 'sticky', left: 0, background: stickyBg, zIndex: 2, borderRight: divider };
+    const stickyR: CSSProperties = { ...cell, position: 'sticky', right: `${rhe * 2}px`, background: stickyBg, zIndex: 2, borderLeft: divider };
+    const stickyH: CSSProperties = { ...cell, position: 'sticky', right: `${rhe}px`, background: stickyBg, zIndex: 2 };
+    const stickyE: CSSProperties = { ...cell, position: 'sticky', right: '0px', background: stickyBg, zIndex: 2 };
+
+    return (
+      <div
+        style={{
+          border: divider,
+          borderRadius: '12px',
+          overflow: 'hidden',
+          background: 'rgba(255,255,255,0.02)',
+          height: 'fit-content',
+          minHeight: '0',
+          alignSelf: 'center',
+          width: '100%',
+          minWidth: 0,
+        }}
+      >
+        <div style={{ overflowX: 'auto' }}>
+          {/* 헤더 행 */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: gridCols,
+              background: headerBg,
+              borderBottom: divider,
+              minWidth: 'max-content',
+            }}
+          >
+            <div style={{ ...stickyTeam, background: headerBg, color: '#e2e8f0' }}>팀</div>
+            {innings.map((inn) => (
+              <div key={inn} style={{ ...cell, color: '#e2e8f0' }}>{String(inn)}</div>
+            ))}
+            <div style={{ ...stickyR, background: headerBg, color: '#e2e8f0' }}>R</div>
+            <div style={{ ...stickyH, background: headerBg, color: '#e2e8f0' }}>H</div>
+            <div style={{ ...stickyE, background: headerBg, color: '#e2e8f0' }}>E</div>
+          </div>
+          {/* 데이터 행 */}
+          {rows.map((row, idx) => (
+            <div
+              key={row.name}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: gridCols,
+                borderTop: idx === 0 ? 'none' : divider,
+                minWidth: 'max-content',
+              }}
+            >
+              <div style={{ ...stickyTeam, color: row.color, fontWeight: 900 }}>{getInitial(row.name)}</div>
+              {row.innings.map((val, vIdx) => (
+                <div key={`${row.name}-inn-${vIdx}`} style={{ ...cell, color: '#cbd5e1', fontSize: '13px' }}>{val}</div>
+              ))}
+              <div style={{ ...stickyR, color: '#cbd5e1', fontSize: '13px' }}>{row.runs}</div>
+              <div style={{ ...stickyH, color: '#cbd5e1', fontSize: '13px' }}>{row.hits}</div>
+              <div style={{ ...stickyE, color: '#cbd5e1', fontSize: '13px' }}>{row.errors}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ── PC: 전체 팀명 + direction:rtl 스크롤 ──
   const headers = ['팀', ...data.innings.map(String), 'R', 'H', 'E'];
   const rows = data.rows;
   const gridColumns = `minmax(96px, 1.6fr) repeat(${Math.max(1, headers.length - 1)}, minmax(24px, 0.7fr))`;
@@ -690,7 +769,8 @@ export function BoxScoreTable({
         height: 'fit-content',
         minHeight: '0',
         alignSelf: 'center',
-        marginLeft: 'auto',
+        width: '100%',
+        minWidth: 0,
       }}
     >
       <div style={{ overflowX: 'auto', direction: 'rtl' }}>
