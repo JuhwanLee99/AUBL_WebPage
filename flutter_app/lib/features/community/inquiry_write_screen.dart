@@ -108,7 +108,10 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
           TextButton(
             onPressed: canSubmit ? _submit : null,
             child: _submitting
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
                 : Text(
                     _isEditMode ? '수정' : '완료',
                     style: TextStyle(
@@ -124,6 +127,27 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.blue500.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+                border:
+                    Border.all(color: AppTheme.blue500.withValues(alpha: 0.35)),
+              ),
+              child: const Text(
+                '스크린샷 등 첨부파일이 필요한 경우, 게시글 등록 후 aublcau@gmail.com으로 전송해 주세요.',
+                style: TextStyle(
+                  color: AppTheme.blue400,
+                  fontSize: 12,
+                  height: 1.6,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
             // ── 플랫폼 선택 ──
             _sectionLabel('플랫폼'),
             const SizedBox(height: 8),
@@ -146,7 +170,8 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
               items: _categories
                   .map((c) => DropdownMenuItem(
                         value: c,
-                        child: Text(c, style: const TextStyle(color: Colors.white)),
+                        child: Text(c,
+                            style: const TextStyle(color: Colors.white)),
                       ))
                   .toList(),
               onChanged: (v) => setState(() => _category = v!),
@@ -188,7 +213,9 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
                 value: _isPrivate,
                 onChanged: (v) => setState(() => _isPrivate = v),
                 activeThumbColor: AppTheme.blue400,
-                title: const Text('비밀글', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                title: const Text('비밀글',
+                    style: TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.w600)),
                 subtitle: const Text(
                   '작성자와 관리자만 내용을 볼 수 있습니다',
                   style: TextStyle(color: AppTheme.slate500, fontSize: 12),
@@ -207,7 +234,10 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
 
   Widget _sectionLabel(String label) => Text(
         label,
-        style: const TextStyle(color: AppTheme.slate400, fontSize: 13, fontWeight: FontWeight.w700),
+        style: const TextStyle(
+            color: AppTheme.slate400,
+            fontSize: 13,
+            fontWeight: FontWeight.w700),
       );
 
   Widget _platformBtn(String value, String label, Color color) {
@@ -220,11 +250,15 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
         decoration: BoxDecoration(
           color: selected ? color.withValues(alpha: 0.2) : AppTheme.slate800,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: selected ? color : AppTheme.slate700, width: selected ? 1.5 : 1),
+          border: Border.all(
+              color: selected ? color : AppTheme.slate700,
+              width: selected ? 1.5 : 1),
         ),
         child: Text(
           label,
-          style: TextStyle(color: selected ? color : AppTheme.slate400, fontWeight: FontWeight.w700),
+          style: TextStyle(
+              color: selected ? color : AppTheme.slate400,
+              fontWeight: FontWeight.w700),
         ),
       ),
     );
@@ -235,7 +269,8 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
         hintStyle: const TextStyle(color: AppTheme.slate500),
         filled: true,
         fillColor: AppTheme.slate800.withValues(alpha: 0.6),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: AppTheme.slate700),

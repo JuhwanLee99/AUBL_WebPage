@@ -35,10 +35,14 @@
   - Email Address
   - Name
   - User ID
+  - User Content (건의/문의 게시글, 댓글)
+  - Identifiers (푸시 토큰 등)
 - Data use purpose:
   - App Functionality
 - Tracking:
   - No
+- 제출 전 재검증:
+  - App Store Connect에서 `User Content`, `Identifiers` 항목이 실제 수집/처리와 일치하는지 최종 확인
 
 ## Google Play Data safety 입력 가이드
 

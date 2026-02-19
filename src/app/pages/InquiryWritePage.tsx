@@ -71,6 +71,22 @@ export default function InquiryWritePage() {
     <div style={{ maxWidth: '1100px', margin: '0 auto', color: '#f8fafc', padding: '20px' }}>
       <h2 style={{ fontSize: '24px', fontWeight: 900, marginBottom: '24px' }}>💬 건의/문의 작성</h2>
 
+      <div
+        style={{
+          marginBottom: '16px',
+          padding: '12px 14px',
+          borderRadius: '10px',
+          border: '1px solid rgba(59,130,246,0.35)',
+          background: 'rgba(59,130,246,0.12)',
+          color: '#bfdbfe',
+          fontSize: '13px',
+          lineHeight: 1.7,
+          fontWeight: 600,
+        }}
+      >
+        스크린샷 등 첨부파일이 필요한 경우, 게시글 등록 후 `aublcau@gmail.com`으로 전송해 주세요.
+      </div>
+
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
         {/* 플랫폼 선택 */}

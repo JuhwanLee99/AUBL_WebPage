@@ -25,7 +25,14 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
   String _statusFilter = '전체';
 
   static const _platforms = ['전체', '앱', '웹'];
-  static const _categories = ['전체', '기능 개선', '버그 신고', '사용 문의', '경기/기록 오류', '기타'];
+  static const _categories = [
+    '전체',
+    '기능 개선',
+    '버그 신고',
+    '사용 문의',
+    '경기/기록 오류',
+    '기타'
+  ];
   static const _statuses = ['전체', '미처리', '처리 중', '처리 완료'];
 
   @override
@@ -37,9 +44,16 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
   Future<void> _load() async {
     try {
       final posts = await _fs.getInquiries();
-      if (mounted) setState(() { _posts = posts; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _posts = posts;
+          _loading = false;
+        });
+      }
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -104,17 +118,45 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
                   onRefresh: _load,
                   child: ListView(
                     children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppTheme.blue500.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: AppTheme.blue500.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: const Text(
+                            '첨부파일 업로드는 현재 지원하지 않습니다. 스크린샷 등 첨부가 필요하면 게시글 작성 후 aublcau@gmail.com으로 전송해 주세요.',
+                            style: TextStyle(
+                              color: AppTheme.blue400,
+                              fontSize: 12,
+                              height: 1.6,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+
                       // ── 필터 행 ──
-                      _buildFilterRow(_platforms, _platformFilter, (v) => setState(() => _platformFilter = v)),
-                      _buildFilterRow(_categories, _categoryFilter, (v) => setState(() => _categoryFilter = v)),
+                      _buildFilterRow(_platforms, _platformFilter,
+                          (v) => setState(() => _platformFilter = v)),
+                      _buildFilterRow(_categories, _categoryFilter,
+                          (v) => setState(() => _categoryFilter = v)),
                       _buildStatusFilterRow(),
 
                       // ── 게시글 수 ──
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 4),
                         child: Text(
                           '${filtered.length}개 게시글',
-                          style: const TextStyle(color: AppTheme.slate500, fontSize: 12),
+                          style: const TextStyle(
+                              color: AppTheme.slate500, fontSize: 12),
                         ),
                       ),
 
@@ -123,7 +165,8 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
                         const Padding(
                           padding: EdgeInsets.all(32),
                           child: Center(
-                            child: Text('게시글이 없습니다.', style: TextStyle(color: AppTheme.slate500)),
+                            child: Text('게시글이 없습니다.',
+                                style: TextStyle(color: AppTheme.slate500)),
                           ),
                         )
                       else
@@ -134,23 +177,28 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
                             locale: 'ko',
                           );
                           return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 3),
                             child: Material(
-                              color: AppTheme.slate800.withValues(alpha: accessible ? 0.5 : 0.3),
+                              color: AppTheme.slate800
+                                  .withValues(alpha: accessible ? 0.5 : 0.3),
                               borderRadius: BorderRadius.circular(10),
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(10),
                                 onTap: accessible
                                     ? () => Navigator.of(context).push<void>(
                                           MaterialPageRoute(
-                                            builder: (_) => InquiryDetailScreen(post: post),
+                                            builder: (_) =>
+                                                InquiryDetailScreen(post: post),
                                           ),
                                         )
                                     : null,
                                 child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 14, vertical: 12),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       // 뱃지 행
                                       Row(
@@ -160,15 +208,22 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
                                             _platformColor(post.platform),
                                           ),
                                           const SizedBox(width: 6),
-                                          _badge(post.category, _categoryColor(post.category)),
+                                          _badge(post.category,
+                                              _categoryColor(post.category)),
                                           const SizedBox(width: 6),
-                                          _badge(post.status, _statusColor(post.status)),
+                                          _badge(post.status,
+                                              _statusColor(post.status)),
                                           if (post.isPrivate) ...[
                                             const SizedBox(width: 6),
-                                            const Icon(Icons.lock_outline, size: 13, color: AppTheme.slate500),
+                                            const Icon(Icons.lock_outline,
+                                                size: 13,
+                                                color: AppTheme.slate500),
                                           ],
                                           const Spacer(),
-                                          Text(ago, style: const TextStyle(color: AppTheme.slate500, fontSize: 11)),
+                                          Text(ago,
+                                              style: const TextStyle(
+                                                  color: AppTheme.slate500,
+                                                  fontSize: 11)),
                                         ],
                                       ),
                                       const SizedBox(height: 6),
@@ -178,18 +233,23 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
                                             ? '🔒 비밀글입니다.'
                                             : post.title,
                                         style: TextStyle(
-                                          color: accessible ? Colors.white : AppTheme.slate500,
+                                          color: accessible
+                                              ? Colors.white
+                                              : AppTheme.slate500,
                                           fontSize: 14,
                                           fontWeight: FontWeight.w600,
                                         ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
-                                      if (accessible && post.author.isNotEmpty) ...[
+                                      if (accessible &&
+                                          post.author.isNotEmpty) ...[
                                         const SizedBox(height: 2),
                                         Text(
                                           post.author,
-                                          style: const TextStyle(color: AppTheme.slate500, fontSize: 12),
+                                          style: const TextStyle(
+                                              color: AppTheme.slate500,
+                                              fontSize: 12),
                                         ),
                                       ],
                                     ],
@@ -208,7 +268,8 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
     );
   }
 
-  Widget _buildFilterRow(List<String> items, String selected, ValueChanged<String> onSelect) {
+  Widget _buildFilterRow(
+      List<String> items, String selected, ValueChanged<String> onSelect) {
     return SizedBox(
       height: 44,
       child: ListView(
@@ -219,11 +280,15 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
           return Padding(
             padding: const EdgeInsets.only(right: 6),
             child: ChoiceChip(
-              label: Text(item, style: TextStyle(color: isSelected ? Colors.white : AppTheme.slate400, fontSize: 12)),
+              label: Text(item,
+                  style: TextStyle(
+                      color: isSelected ? Colors.white : AppTheme.slate400,
+                      fontSize: 12)),
               selected: isSelected,
               selectedColor: AppTheme.blue500,
               backgroundColor: AppTheme.slate800,
-              side: BorderSide(color: isSelected ? AppTheme.blue500 : AppTheme.slate700),
+              side: BorderSide(
+                  color: isSelected ? AppTheme.blue500 : AppTheme.slate700),
               onSelected: (_) => onSelect(item),
             ),
           );
@@ -244,7 +309,9 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
           return Padding(
             padding: const EdgeInsets.only(right: 6),
             child: ChoiceChip(
-              label: Text(s, style: TextStyle(color: isSelected ? Colors.white : color, fontSize: 12)),
+              label: Text(s,
+                  style: TextStyle(
+                      color: isSelected ? Colors.white : color, fontSize: 12)),
               selected: isSelected,
               selectedColor: color,
               backgroundColor: AppTheme.slate800,
@@ -271,7 +338,9 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
         color: color.withValues(alpha: 0.18),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700)),
+      child: Text(label,
+          style: TextStyle(
+              color: color, fontSize: 11, fontWeight: FontWeight.w700)),
     );
   }
 }

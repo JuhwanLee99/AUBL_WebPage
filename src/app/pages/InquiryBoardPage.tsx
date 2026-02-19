@@ -129,6 +129,23 @@ export default function InquiryBoardPage() {
         )}
       </div>
 
+      <div
+        style={{
+          marginBottom: '14px',
+          padding: '11px 13px',
+          borderRadius: '10px',
+          border: '1px solid rgba(59,130,246,0.35)',
+          background: 'rgba(59,130,246,0.12)',
+          color: '#bfdbfe',
+          fontSize: '12px',
+          lineHeight: 1.7,
+          fontWeight: 600,
+        }}
+      >
+        첨부파일 업로드는 현재 지원하지 않습니다. 스크린샷 등 첨부가 필요하면 게시글 작성 후
+        `aublcau@gmail.com`으로 전송해 주세요.
+      </div>
+
       {/* 필터 행 */}
       <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
         {PLATFORM_FILTERS.map((f) =>

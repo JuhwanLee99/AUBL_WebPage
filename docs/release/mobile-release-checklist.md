@@ -16,6 +16,7 @@
 - [ ] 외부 삭제 안내 URL 검증 (`https://aubl.club/account-deletion`)
 - [ ] 개인정보처리방침/이용약관 문구와 실제 동작 일치 확인
 - [ ] App Store App Privacy와 Play Data safety 입력값 최신화
+- [ ] App Store App Privacy에서 `User Content`/`Identifiers` 항목 포함 여부 최종 검증
 
 ## 3) Android 빌드/배포
 
