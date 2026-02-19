@@ -11,13 +11,13 @@ void main() {
 
     test('returns fallback uri when login query is missing embedded flags', () {
       final uri = Uri.https(
-        'aubl-backup.web.app',
+        'aubl.club',
         WebRouteContracts.login,
         {WebQueryContracts.next: WebRouteContracts.scorekeeper},
       );
       final result = WebViewNavigationGuard.resolveLoginNavigation(
         uri: uri,
-        webHost: 'aubl-backup.web.app',
+        webHost: 'aubl.club',
         defaultNextPath: WebRouteContracts.scoreboard,
         hasCurrentUser: false,
       );
@@ -36,7 +36,7 @@ void main() {
     test('returns pending redirect when current user exists on embedded login',
         () {
       final uri = Uri.https(
-        'aubl-backup.web.app',
+        'aubl.club',
         WebRouteContracts.login,
         {
           WebQueryContracts.embedded: WebQueryContracts.embeddedFlutter,
@@ -46,7 +46,7 @@ void main() {
       );
       final result = WebViewNavigationGuard.resolveLoginNavigation(
         uri: uri,
-        webHost: 'aubl-backup.web.app',
+        webHost: 'aubl.club',
         defaultNextPath: WebRouteContracts.scoreboard,
         hasCurrentUser: true,
       );

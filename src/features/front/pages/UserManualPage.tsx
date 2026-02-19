@@ -120,8 +120,18 @@ const WEB_MEMBER_SECTIONS: ManualSection[] = [
     icon: '🔐',
     accent: '#60A5FA',
     items: [
-      { heading: '로그인/회원가입 (/login)', bullets: ['이메일 또는 소셜(구글) 계정으로 로그인/회원가입합니다.'] },
-      { heading: '계정 페이지 (/account)', bullets: ['계정 기본 정보(UID, 이메일, 역할)를 확인합니다.', '역할/권한 확인 및 로그아웃이 가능합니다.'] },
+      {
+        heading: '로그인/회원가입 (/login)',
+        bullets: ['이메일 또는 소셜(구글) 계정으로 로그인/회원가입합니다.', 'Apple 로그인은 iOS 앱에서 지원합니다.'],
+      },
+      {
+        heading: '계정 페이지 (/account)',
+        bullets: [
+          '계정 기본 정보(UID, 이메일, 역할)를 확인합니다.',
+          '역할/권한 확인, 로그아웃, 회원 탈퇴(재인증 후 처리)가 가능합니다.',
+          '계정 삭제 안내 페이지(/account-deletion)에서 웹/앱 삭제 절차를 확인할 수 있습니다.',
+        ],
+      },
     ],
   },
   {
@@ -384,7 +394,7 @@ const APP_MEMBER_SECTIONS: ManualSection[] = [
       },
       {
         heading: '로그인 방식',
-        bullets: ['WebView 로그인 또는 네이티브 Google 로그인'],
+        bullets: ['WebView 로그인, 네이티브 Google 로그인, 네이티브 Apple 로그인(iOS)'],
       },
       {
         heading: '계정 화면',
@@ -392,6 +402,8 @@ const APP_MEMBER_SECTIONS: ManualSection[] = [
           'UID, 이메일, 로그인 제공자, 역할 확인',
           '계정 생성일, 최근 로그인 시각 표시',
           '로그아웃: Firebase 세션 및 WebView 쿠키 정리',
+          '회원 탈퇴: 더보기 → 계정 → 회원 탈퇴 (재인증 후 처리)',
+          '외부 삭제 안내: https://aubl.club/account-deletion',
         ],
       },
     ],
@@ -563,7 +575,12 @@ const APP_ADMIN_SECTIONS: ManualSection[] = [
 const APP_TROUBLESHOOTING = [
   {
     title: '로그인이 안 될 때',
-    steps: ['앱 완전 종료 후 재실행', '로그아웃 후 재로그인', 'Google 로그인 문제 시 기기 Google 계정 상태 확인'],
+    steps: [
+      '앱 완전 종료 후 재실행',
+      '로그아웃 후 재로그인',
+      'Google 로그인 문제 시 기기 Google 계정 상태 확인',
+      'iOS Apple 로그인 문제 시 Apple ID 로그인 상태 및 Face ID/Touch ID 설정 확인',
+    ],
   },
   {
     title: '데이터가 오래된 것 같을 때',

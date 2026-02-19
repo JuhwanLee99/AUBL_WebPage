@@ -5,7 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_theme.dart';
-import '../features/auth/maintenance_screen.dart';
+import '../features/feature_entries.dart';
 
 // ========================================
 // 코드 레벨 비상 override (Firestore 장애 시)
@@ -47,31 +47,31 @@ class _MaintenanceGuardState extends State<MaintenanceGuard> {
         .doc('maintenance')
         .snapshots()
         .listen(
-          (snap) {
-            if (!mounted) return;
-            if (snap.exists) {
-              final data = snap.data() ?? {};
-              setState(() {
-                _enabled =
-                    _kMaintenanceFallback || (data['enabled'] as bool? ?? false);
-                _resumeDate =
-                    (data['resumeDate'] as String?) ?? _kResumeDateFallback;
-                _message = (data['message'] as String?) ?? _kMessageFallback;
-                _loading = false;
-              });
-            } else {
-              setState(() {
-                _enabled = _kMaintenanceFallback;
-                _resumeDate = _kResumeDateFallback;
-                _message = _kMessageFallback;
-                _loading = false;
-              });
-            }
-          },
-          onError: (_) {
-            if (mounted) setState(() => _loading = false);
-          },
-        );
+      (snap) {
+        if (!mounted) return;
+        if (snap.exists) {
+          final data = snap.data() ?? {};
+          setState(() {
+            _enabled =
+                _kMaintenanceFallback || (data['enabled'] as bool? ?? false);
+            _resumeDate =
+                (data['resumeDate'] as String?) ?? _kResumeDateFallback;
+            _message = (data['message'] as String?) ?? _kMessageFallback;
+            _loading = false;
+          });
+        } else {
+          setState(() {
+            _enabled = _kMaintenanceFallback;
+            _resumeDate = _kResumeDateFallback;
+            _message = _kMessageFallback;
+            _loading = false;
+          });
+        }
+      },
+      onError: (_) {
+        if (mounted) setState(() => _loading = false);
+      },
+    );
   }
 
   Future<void> _checkAdmin() async {

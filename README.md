@@ -119,7 +119,7 @@ npm run dev
 | **순위** | Elo 기반 파워랭킹, 승률·전적 비교 |
 | **커뮤니티** | 전체 공지(긴급/경기/징계/일반), 댓글 |
 | **알림** | FCM 푸시 알림, 경기·공지·팀별 구독 설정 |
-| **인증** | 네이티브 Google 로그인 + WebView 토큰 브리지 동기화 |
+| **인증** | 네이티브 Google/Apple(iOS) 로그인 + WebView 토큰 브리지 동기화 |
 | **관리자** | 기록원(Scorekeeper), 스코어보드, 일정 관리, 어드민 패널 (WebView) |
 
 ### 기술 스택
@@ -138,6 +138,11 @@ flutter run --dart-define-from-file=env/dev.json
 ```
 
 자세한 아키텍처, 디렉토리 구조, 설정 방법은 [`flutter_app/README.md`](flutter_app/README.md)를 참고하세요.
+
+출시 준비 문서:
+* [`docs/release/mobile-release-checklist.md`](docs/release/mobile-release-checklist.md)
+* [`docs/release/mobile-store-metadata.md`](docs/release/mobile-store-metadata.md)
+* [`docs/release/mobile-data-disclosure-mapping.md`](docs/release/mobile-data-disclosure-mapping.md)
 
 ---
 

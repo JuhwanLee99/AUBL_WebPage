@@ -5,6 +5,7 @@ import IntroPage from '@features/front/pages/IntroPage';
 import RulePage from '@features/front/pages/RulePage';
 import PrivacyPage from '@features/front/pages/PrivacyPage';
 import TermsPage from '@features/front/pages/TermsPage';
+import AccountDeletionPage from '@features/front/pages/AccountDeletionPage';
 import UserManualPage from '@features/front/pages/UserManualPage';
 import TeamsPage from '@features/front/pages/TeamsPage';
 import TeamHubPage from '@features/front/pages/TeamHubPage';
@@ -52,6 +53,10 @@ export const publicRoutes: RouteObject[] = [
   {
     path: 'terms',
     element: <TermsPage />,
+  },
+  {
+    path: 'account-deletion',
+    element: <AccountDeletionPage />,
   },
   {
     path: 'manual',

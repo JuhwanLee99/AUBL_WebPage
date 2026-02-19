@@ -101,6 +101,7 @@ Flutter 네이티브 UI와 WebView를 결합한 하이브리드 아키텍처로 
 - 첫 실행 환영 화면 및 로그인 유도
 - WebView 기반 로그인 (이메일/비밀번호)
 - 네이티브 Google Sign-In
+- 네이티브 Apple Sign-In (iOS)
 - 토큰 브리지를 통한 웹 ↔ 네이티브 인증 동기화
 
 ---
@@ -122,6 +123,14 @@ WebView에서 Google OAuth 트리거 감지
   → Flutter가 GoogleSignIn.signIn() 호출
   → Firebase credential 생성
   → 인증 후 WebView에 토큰 주입
+```
+
+### 네이티브 Apple 로그인 (iOS)
+```
+Flutter 화면에서 Apple Sign-In 버튼 선택
+  → SignInWithApple.getAppleIDCredential() 호출
+  → Firebase OAuthProvider('apple.com') credential 생성
+  → Firebase 인증 완료
 ```
 
 ### 브리지 메시지 계약
@@ -180,7 +189,7 @@ flutter_app/lib/
     ├── records/                     # 타자/투수 시즌 기록 테이블
     ├── standings/                   # Elo 순위, 파워랭킹
     ├── community/                   # 전체 공지, 댓글
-    ├── auth/                        # 로그인 WebView, Google 로그인 버튼
+    ├── auth/                        # 로그인 WebView, Google/Apple 로그인 버튼
     ├── account/                     # 사용자 프로필, 역할 표시
     ├── intro/                       # 리그 소개, 회칙
     ├── onboarding/                  # 첫 실행 환영 화면
@@ -232,10 +241,12 @@ flutter_app/lib/
 | `cloud_firestore` | 5.6.0 | 실시간 데이터베이스 |
 | `firebase_messaging` | 15.1.0 | 푸시 알림 |
 | `google_sign_in` | 6.2.2 | Google OAuth |
+| `sign_in_with_apple` | 6.1.4 | iOS Apple 로그인 |
 | `webview_flutter` | 4.8.0 | WebView 컨테이너 |
 | `shared_preferences` | 2.3.0 | 로컬 설정 저장 |
 | `cached_network_image` | 3.4.1 | 이미지 캐싱 |
 | `flutter_local_notifications` | 17.1.2 | 로컬 알림 표시 |
+| `crypto` | 3.0.6 | Apple 로그인 nonce 해시 |
 | `intl` | 0.20.2 | 한국어 날짜/시간 포맷 |
 | `timeago` | 3.7.1 | 상대 시간 표시 |
 | `url_launcher` | 6.3.2 | 외부 URL 열기 |
@@ -249,8 +260,9 @@ flutter_app/lib/
 | 키 | 설명 | 예시 |
 |----|------|------|
 | `AUBL_ENV` | 실행 환경 | `dev`, `stage`, `prod` |
-| `AUBL_WEB_BASE_URL` | 웹 서비스 베이스 URL | `https://aubl-backup.web.app` |
+| `AUBL_WEB_BASE_URL` | 웹 서비스 베이스 URL | `https://aubl.club` |
 | `AUBL_AUTH_BRIDGE_URL` | 토큰 교환 Cloud Function URL | `https://...cloudfunctions.net/exchange_web_id_token` |
+| `AUBL_ACCOUNT_DELETION_URL` | 외부 계정 삭제 안내 URL | `https://aubl.club/account-deletion` |
 
 ### 실행 방법
 
@@ -267,8 +279,9 @@ flutter run --dart-define-from-file=env/prod.json
 # 개별 dart-define 방식
 flutter run \
   --dart-define=AUBL_ENV=dev \
-  --dart-define=AUBL_WEB_BASE_URL=https://aubl-backup.web.app \
-  --dart-define=AUBL_AUTH_BRIDGE_URL=https://...cloudfunctions.net/exchange_web_id_token
+  --dart-define=AUBL_WEB_BASE_URL=https://aubl.club \
+  --dart-define=AUBL_AUTH_BRIDGE_URL=https://...cloudfunctions.net/exchange_web_id_token \
+  --dart-define=AUBL_ACCOUNT_DELETION_URL=https://aubl.club/account-deletion
 ```
 
 ### 품질 체크
@@ -289,8 +302,21 @@ dart run tool/layer_dependency_checker.dart
 
 ### 네이티브 Google 로그인 체크포인트
 
-- **Android:** Firebase Console에 앱 `com.aubl.aubl_flutter_app` 등록 + 디버그/릴리즈 SHA-1 등록
+- **Android:** Firebase Console에 앱 `com.aubl.app` 등록 + 디버그/릴리즈 SHA-1 등록
 - **iOS:** `GoogleService-Info.plist` 포함 + `Info.plist` URL Scheme(`REVERSED_CLIENT_ID`) 등록
+
+### Apple 로그인 체크포인트 (iOS)
+
+- Apple Developer > Identifiers에서 `Sign In with Apple` capability 활성화
+- Runner target에 `Runner.entitlements` 포함 여부 확인
+- Firebase Auth 콘솔에서 Apple provider 활성화
+- Apple 로그인 실패 시 App Store Review Notes에 테스트 계정/재현 방법 명시
+
+### 릴리즈 서명 체크포인트
+
+- Android release 빌드는 `android/key.properties`가 없으면 실패하도록 구성
+- `android/key.properties.example`을 복사해 실제 값 주입 후 `flutter build appbundle --release --dart-define-from-file=env/prod.json`
+- iOS는 Xcode에서 Runner Signing(Team/Bundle ID) 설정 후 Archive → TestFlight 업로드
 
 ---
 

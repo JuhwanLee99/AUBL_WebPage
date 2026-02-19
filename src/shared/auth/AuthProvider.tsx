@@ -1,10 +1,13 @@
 import {
+  EmailAuthProvider,
   GoogleAuthProvider,
   browserLocalPersistence,
   createUserWithEmailAndPassword,
   getAdditionalUserInfo,
   getIdToken,
   onIdTokenChanged,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup,
   setPersistence,
   signInWithCustomToken,
   signInWithEmailAndPassword,
@@ -15,7 +18,7 @@ import type { User } from 'firebase/auth';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { PropsWithChildren } from 'react';
 import { auth } from '../firebase/client';
-import { doc, setDoc } from 'firebase/firestore';
+import { collectionGroup, doc, documentId, getDocs, query, setDoc, where, writeBatch } from 'firebase/firestore';
 import { firestore } from '../firebase/client';
 import { sendLogoutToFlutter, sendTokenRefreshToFlutter } from '../bridge/flutterBridge';
 
@@ -50,6 +53,7 @@ type AuthContextValue = {
   registerWithEmail: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<{ isNewUser: boolean }>;
   logout: () => Promise<void>;
+  deleteAccount: (currentPassword?: string) => Promise<void>;
   refreshIdToken: () => Promise<string | null>;
 };
 
@@ -185,6 +189,78 @@ export function AuthProvider({ children }: PropsWithChildren) {
     sendLogoutToFlutter();
   }, []);
 
+  const deleteUserDocuments = useCallback(async (uid: string) => {
+    const batch = writeBatch(firestore);
+    batch.delete(doc(firestore, 'users', uid));
+    batch.delete(doc(firestore, 'roles', uid));
+
+    const refs = new Set<string>();
+    try {
+      const snap = await getDocs(
+        query(collectionGroup(firestore, 'members'), where('uid', '==', uid)),
+      );
+      for (const d of snap.docs) refs.add(d.ref.path);
+    } catch {
+      // ignore
+    }
+
+    if (refs.size === 0) {
+      try {
+        const byDocId = await getDocs(
+          query(collectionGroup(firestore, 'members'), where(documentId(), '==', uid)),
+        );
+        for (const d of byDocId.docs) refs.add(d.ref.path);
+      } catch {
+        // ignore
+      }
+    }
+
+    for (const path of refs) {
+      batch.delete(doc(firestore, path));
+    }
+
+    await batch.commit();
+  }, []);
+
+  const deleteAccount = useCallback(
+    async (currentPassword?: string) => {
+      if (IS_TEST_MODE) {
+        console.log('[TEST] 계정 삭제 시도');
+        return;
+      }
+
+      setError(null);
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error('로그인된 계정을 찾을 수 없습니다.');
+      }
+
+      const providerIds = new Set(
+        currentUser.providerData.map((p) => p.providerId).filter((id) => id && id !== 'firebase'),
+      );
+
+      if (providerIds.has('password')) {
+        const email = currentUser.email;
+        if (!email) throw new Error('이메일 정보를 찾을 수 없습니다.');
+        if (!currentPassword) throw new Error('계정 삭제를 위해 현재 비밀번호가 필요합니다.');
+        const credential = EmailAuthProvider.credential(email, currentPassword);
+        await reauthenticateWithCredential(currentUser, credential);
+      } else if (providerIds.has('google.com')) {
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+        await reauthenticateWithPopup(currentUser, provider);
+      } else {
+        await currentUser.reload();
+      }
+
+      await deleteUserDocuments(currentUser.uid);
+      await currentUser.delete();
+      await signOut(auth).catch(() => {});
+      sendLogoutToFlutter();
+    },
+    [deleteUserDocuments],
+  );
+
   const refreshIdToken = useCallback(async () => {
     if (IS_TEST_MODE) return 'mock-test-token';
     if (!auth.currentUser) return null;
@@ -207,6 +283,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
           registerWithEmail,
           loginWithGoogle,
           logout,
+          deleteAccount,
           refreshIdToken,
         };
       }
@@ -220,10 +297,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
         registerWithEmail,
         loginWithGoogle,
         logout,
+        deleteAccount,
         refreshIdToken,
       };
     },
-    [user, idToken, initializing, error, loginWithEmail, registerWithEmail, loginWithGoogle, logout, refreshIdToken],
+    [user, idToken, initializing, error, loginWithEmail, registerWithEmail, loginWithGoogle, logout, deleteAccount, refreshIdToken],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

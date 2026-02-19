@@ -18,7 +18,9 @@ dependencies:
   webview_flutter_android: ^3.16.9
   webview_flutter_wkwebview: ^3.14.0
   google_sign_in: ^6.2.2
+  sign_in_with_apple: ^6.1.4
   http: ^1.2.2
+  crypto: ^3.0.6
   intl: ^0.20.2
   cached_network_image: ^3.4.1
   url_launcher: ^6.3.2

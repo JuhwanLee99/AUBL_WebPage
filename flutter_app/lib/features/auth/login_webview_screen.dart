@@ -1,9 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
 
+import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../core/config/app_config.dart';
@@ -47,6 +52,7 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
   bool _pageLoading = true;
   bool _authenticating = false;
   bool _googleSigningIn = false;
+  bool _appleSigningIn = false;
   String? _error;
 
   void _applySystemUiChrome() {
@@ -228,7 +234,7 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
   }
 
   Future<void> _signInWithNativeGoogle() async {
-    if (_googleSigningIn || _authenticating) return;
+    if (_googleSigningIn || _authenticating || _appleSigningIn) return;
 
     setState(() {
       _googleSigningIn = true;
@@ -266,6 +272,75 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
     }
   }
 
+  String _generateNonce([int length = 32]) {
+    const charset =
+        '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
+    final random = Random.secure();
+    return List<String>.generate(
+      length,
+      (_) => charset[random.nextInt(charset.length)],
+    ).join();
+  }
+
+  String _sha256Of(String input) {
+    return sha256.convert(utf8.encode(input)).toString();
+  }
+
+  Future<void> _signInWithApple() async {
+    if (!Platform.isIOS) return;
+    if (_appleSigningIn || _authenticating || _googleSigningIn) return;
+
+    setState(() {
+      _appleSigningIn = true;
+      _error = null;
+    });
+
+    try {
+      final rawNonce = _generateNonce();
+      final credential = await SignInWithApple.getAppleIDCredential(
+        scopes: const <AppleIDAuthorizationScopes>[
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        nonce: _sha256Of(rawNonce),
+      );
+
+      final idToken = credential.identityToken;
+      if (idToken == null || idToken.isEmpty) {
+        throw Exception('Apple identity token이 없습니다.');
+      }
+
+      final oauth = OAuthProvider('apple.com').credential(
+        idToken: idToken,
+        rawNonce: rawNonce,
+      );
+      await FirebaseAuth.instance.signInWithCredential(oauth);
+      _finishLogin();
+    } on SignInWithAppleAuthorizationException catch (e) {
+      if (!mounted) return;
+      if (e.code == AuthorizationErrorCode.canceled) {
+        setState(() {
+          _error = null;
+        });
+        return;
+      }
+      setState(() {
+        _error = 'Apple 로그인 실패: ${e.message}';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Apple 로그인 실패: $e';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _appleSigningIn = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -276,9 +351,37 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
           child: Stack(
             children: [
               WebViewWidget(controller: _controller),
-              if (_pageLoading || _authenticating || _googleSigningIn)
+              if (_pageLoading ||
+                  _authenticating ||
+                  _googleSigningIn ||
+                  _appleSigningIn)
                 const Center(
                   child: CircularProgressIndicator(),
+                ),
+              if (Platform.isIOS)
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: 20,
+                  child: SafeArea(
+                    top: false,
+                    child: ElevatedButton.icon(
+                      onPressed: _pageLoading ||
+                              _authenticating ||
+                              _googleSigningIn ||
+                              _appleSigningIn
+                          ? null
+                          : _signInWithApple,
+                      icon: const Icon(Icons.apple),
+                      label: const Text('Apple로 로그인'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.black,
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: Colors.black54,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                    ),
+                  ),
                 ),
               if (_error != null)
                 Align(

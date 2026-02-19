@@ -47,10 +47,16 @@ android {
     buildTypes {
         release {
             val propsFile = rootProject.file("key.properties")
-            signingConfig = if (propsFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
+            val isReleaseTaskRequested = gradle.startParameter.taskNames.any {
+                it.contains("release", ignoreCase = true)
+            }
+            signingConfig = when {
+                propsFile.exists() -> signingConfigs.getByName("release")
+                !isReleaseTaskRequested -> signingConfigs.getByName("debug")
+                else -> throw org.gradle.api.GradleException(
+                    "Missing android/key.properties for release signing. " +
+                        "Create key.properties or run a non-release build.",
+                )
             }
             isMinifyEnabled = true
             isShrinkResources = true

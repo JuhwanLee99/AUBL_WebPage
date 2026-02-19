@@ -134,7 +134,7 @@ final _memberSections = <_ManualSection>[
       _ManualItem(
         heading: '로그인 방식',
         bullets: [
-          'WebView 로그인 또는 네이티브 Google 로그인',
+          'WebView 로그인, 네이티브 Google 로그인, 네이티브 Apple 로그인(iOS)',
         ],
       ),
       _ManualItem(
@@ -143,6 +143,8 @@ final _memberSections = <_ManualSection>[
           'UID, 이메일, 로그인 제공자, 역할 확인',
           '계정 생성일, 최근 로그인 시각 표시',
           '로그아웃: Firebase 세션 및 WebView 쿠키 정리',
+          '회원 탈퇴: 더보기 → 계정 → 회원 탈퇴 (재인증 후 처리)',
+          '외부 삭제 안내: https://aubl.club/account-deletion',
         ],
       ),
     ],
@@ -333,6 +335,7 @@ final _troubleshooting = <({String title, List<String> steps})>[
       '앱 완전 종료 후 재실행',
       '로그아웃 후 재로그인',
       'Google 로그인 문제 시 기기 Google 계정 상태 확인',
+      'iOS Apple 로그인 문제 시 Apple ID 로그인 상태 및 Face ID/Touch ID 설정 확인',
     ],
   ),
   (

@@ -6,10 +6,10 @@ const SECTIONS = [
   {
     title: '1. 개인정보의 수집 항목 및 수집 방법',
     items: [
-      '회원가입 시 수집 항목: 이메일 주소, 이름(Google 로그인 시), 계정 고유 식별자(UID)',
+      '회원가입 시 수집 항목: 이메일 주소, 이름(소셜 로그인 시 제공되는 경우), 계정 고유 식별자(UID)',
       '서비스 이용 과정에서 자동 수집: 기기 식별 정보, 앱 버전, OS 종류 및 버전, FCM 푸시 토큰',
       '커뮤니티(건의/문의) 이용 시 수집 항목: 게시글/댓글 내용, 작성 시각, 작성자 식별 정보(UID, 표시명)',
-      '수집 방법: 이메일·비밀번호 회원가입 또는 Google 로그인(OAuth 2.0)을 통한 수집, Firebase Authentication 및 Firestore 서비스 이용 과정에서의 자동 생성·수집',
+      '수집 방법: 이메일·비밀번호 회원가입 또는 Google/Apple(iOS 앱) 소셜 로그인을 통한 수집, Firebase Authentication 및 Firestore 서비스 이용 과정에서의 자동 생성·수집',
     ],
   },
   {
@@ -53,7 +53,7 @@ const SECTIONS = [
     title: '6. 이용자의 권리와 행사 방법',
     items: [
       '이용자는 언제든지 자신의 개인정보를 조회·수정·삭제할 수 있습니다.',
-      '회원 탈퇴를 원하는 경우 앱 내 "더보기 → 계정 관리"에서 직접 처리하거나, 아래 연락처로 요청할 수 있습니다.',
+      '회원 탈퇴를 원하는 경우 앱 내 "더보기 → 계정 → 회원 탈퇴"에서 직접 처리하거나, 웹 계정 삭제 안내 페이지(https://aubl.club/account-deletion)를 통해 요청할 수 있습니다.',
       '개인정보 열람·정정·삭제·처리정지 요구 시 지체 없이 조치합니다.',
     ],
   },
@@ -206,6 +206,21 @@ export default function PrivacyPage() {
         className="privacy-chunk"
         style={{ display: 'flex', gap: '12px', justifyContent: 'center', padding: '12px 0 24px' }}
       >
+        <Link
+          to="/account-deletion"
+          style={{
+            padding: '10px 20px',
+            borderRadius: '10px',
+            background: 'rgba(148,163,184,0.12)',
+            border: '1px solid rgba(148,163,184,0.25)',
+            color: '#94a3b8',
+            fontSize: '13px',
+            fontWeight: 700,
+            textDecoration: 'none',
+          }}
+        >
+          계정 삭제 안내
+        </Link>
         <Link
           to="/terms"
           style={{

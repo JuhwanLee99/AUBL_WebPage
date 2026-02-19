@@ -4,10 +4,10 @@ import '../../core/theme/app_theme.dart';
 
 const _kSections = [
   _Section('1. 개인정보의 수집 항목 및 수집 방법', [
-    '회원가입 시 수집 항목: 이메일 주소, 이름(Google 로그인 시), 계정 고유 식별자(UID)',
+    '회원가입 시 수집 항목: 이메일 주소, 이름(소셜 로그인 시 제공되는 경우), 계정 고유 식별자(UID)',
     '서비스 이용 과정에서 자동 수집: 기기 식별 정보, 앱 버전, OS 종류 및 버전, FCM 푸시 토큰',
     '커뮤니티(건의/문의) 이용 시 수집 항목: 게시글/댓글 내용, 작성 시각, 작성자 식별 정보(UID, 표시명)',
-    '수집 방법: 이메일·비밀번호 회원가입 또는 Google 로그인(OAuth 2.0)을 통한 수집, Firebase Authentication 및 Firestore 서비스 이용 과정에서의 자동 생성·수집',
+    '수집 방법: 이메일·비밀번호 회원가입 또는 Google/Apple(iOS 앱) 소셜 로그인을 통한 수집, Firebase Authentication 및 Firestore 서비스 이용 과정에서의 자동 생성·수집',
   ]),
   _Section('2. 개인정보의 수집 및 이용 목적', [
     '회원 식별 및 가입 의사 확인',
@@ -36,7 +36,7 @@ const _kSections = [
   ]),
   _Section('6. 이용자의 권리와 행사 방법', [
     '이용자는 언제든지 자신의 개인정보를 조회·수정·삭제할 수 있습니다.',
-    '회원 탈퇴를 원하는 경우 앱 내 "더보기 → 계정 관리"에서 직접 처리하거나, 아래 연락처로 요청할 수 있습니다.',
+    '회원 탈퇴를 원하는 경우 앱 내 "더보기 → 계정 → 회원 탈퇴"에서 직접 처리하거나, 웹 계정 삭제 안내 페이지(https://aubl.club/account-deletion)를 통해 요청할 수 있습니다.',
     '개인정보 열람·정정·삭제·처리정지 요구 시 지체 없이 조치합니다.',
   ]),
   _Section('7. 개인정보의 파기 절차 및 방법', [
@@ -81,17 +81,20 @@ class PrivacyScreen extends StatelessWidget {
                 colors: [Color(0xFF0a1a3f), Color(0xFF0f2f8f)],
               ),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppTheme.slate500.withValues(alpha: 0.25)),
+              border:
+                  Border.all(color: AppTheme.slate500.withValues(alpha: 0.25)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: AppTheme.blue400.withValues(alpha: 0.16),
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: AppTheme.blue400.withValues(alpha: 0.35)),
+                    border: Border.all(
+                        color: AppTheme.blue400.withValues(alpha: 0.35)),
                   ),
                   child: const Text(
                     'PRIVACY POLICY',
@@ -135,7 +138,8 @@ class PrivacyScreen extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppTheme.slate800.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppTheme.slate700.withValues(alpha: 0.5)),
+                border:
+                    Border.all(color: AppTheme.slate700.withValues(alpha: 0.5)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -156,7 +160,8 @@ class PrivacyScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text('  \u2022  ',
-                              style: TextStyle(color: AppTheme.slate500, fontSize: 13)),
+                              style: TextStyle(
+                                  color: AppTheme.slate500, fontSize: 13)),
                           Expanded(
                             child: Text(
                               item,
