@@ -577,6 +577,7 @@ export default function ScoreboardTextPage() {
               strikes={state.strikes}
               batterName={currentBatter}
               defenseAssignments={defenseAssignments}
+              isMobile={isMobile}
             />
           </div>
         </>
@@ -1258,6 +1259,7 @@ function FieldView({
   onSelectRunner,
   onSelectBatter,
   onSelectFielder,
+  isMobile,
 }: {
   bases: (string | null)[];
   inning: number;
@@ -1270,6 +1272,7 @@ function FieldView({
   onSelectRunner?: (payload: { base: 0 | 1 | 2; name: string }) => void;
   onSelectBatter?: () => void;
   onSelectFielder?: (payload: { name: string; pos: string }) => void;
+  isMobile?: boolean;
 }) {
   const label = `${half === 'top' ? '▲' : '▼'} ${inning}`;
   const baseSize = 'clamp(25px, 4vw, 36px)';
@@ -1331,6 +1334,7 @@ function FieldView({
         left={`${positions.second.x}%`}
         size={baseSize}
         onSelect={() => bases[1] && onSelectRunner?.({ base: 1, name: bases[1] })}
+        isMobile={isMobile}
       />
       <Base
         occupied={Boolean(bases[0])}
@@ -1339,6 +1343,7 @@ function FieldView({
         left={`${positions.first.x}%`}
         size={baseSize}
         onSelect={() => bases[0] && onSelectRunner?.({ base: 0, name: bases[0] })}
+        isMobile={isMobile}
       />
       <Base
         occupied={Boolean(bases[2])}
@@ -1347,18 +1352,21 @@ function FieldView({
         left={`${positions.third.x}%`}
         size={baseSize}
         onSelect={() => bases[2] && onSelectRunner?.({ base: 2, name: bases[2] })}
+        isMobile={isMobile}
       />
       <HomePlate occupied={false} size={baseSize} top={`${positions.home.y}%`} left={`${positions.home.x}%`} />
-      <BatterBadge name={batterName} top={`${positions.batter.y}%`} left={`${positions.batter.x}%`} onClick={onSelectBatter} />
+      <BatterBadge name={batterName} top={`${positions.batter.y}%`} left={`${positions.batter.x}%`} onClick={onSelectBatter} isMobile={isMobile} />
       <PitcherBadge
         name={defenseAssignments.find((player) => player.pos.toUpperCase() === 'P')?.name ?? '투수'}
         top="54%"
         left="50%"
         onClick={onSelectFielder}
+        isMobile={isMobile}
       />
       <DefenseLayer
         assignments={defenseAssignments.filter((player) => player.pos.toUpperCase() !== 'P')}
         onSelectFielder={onSelectFielder}
+        isMobile={isMobile}
       />
     </div>
   );
@@ -1371,6 +1379,7 @@ function Base({
   left,
   size,
   onSelect,
+  isMobile,
 }: {
   occupied?: boolean;
   runnerName?: string;
@@ -1378,6 +1387,7 @@ function Base({
   left?: string;
   size?: string;
   onSelect?: () => void;
+  isMobile?: boolean;
 }) {
   const clickable = occupied && onSelect;
   const parsedRunner = (() => {
@@ -1451,7 +1461,7 @@ function Base({
             whiteSpace: 'nowrap',
             fontWeight: 900,
             color: occupied ? '#1f2937' : '#6b7280',
-            fontSize: '9px',
+            fontSize: isMobile ? '9px' : '11px',
             lineHeight: 1.1,
             maxWidth: '100%',
           }}
@@ -1467,7 +1477,7 @@ function Base({
               whiteSpace: 'nowrap',
               fontWeight: 800,
               color: occupied ? '#1f2937' : '#6b7280',
-              fontSize: '8px',
+              fontSize: isMobile ? '8px' : '10px',
               lineHeight: 1,
               maxWidth: '100%',
             }}
@@ -1482,8 +1492,8 @@ function Base({
 }
 
 function HomePlate({ occupied, size, top, left }: { occupied: boolean; size?: string; top?: string; left?: string }) {
-  const plateWidth = size ? `calc(${size} * 1.5)` : '44px';
-  const plateHeight = size ? `calc(${size} * 1.2)` : '36px';
+  const plateWidth = size ? `calc(${size} * 1.2)` : '34px';
+  const plateHeight = size ? `calc(${size} * 1.0)` : '28px';
   return (
     <div
       style={{
@@ -1565,9 +1575,11 @@ function CounterDots({ label, count, max, color }: { label: string; count: numbe
 function DefenseLayer({
   assignments,
   onSelectFielder,
+  isMobile,
 }: {
   assignments: { name: string; pos: string; x: number; y: number }[];
   onSelectFielder?: (payload: { name: string; pos: string }) => void;
+  isMobile?: boolean;
 }) {
   return (
     <>
@@ -1589,7 +1601,7 @@ function DefenseLayer({
             border: '1px solid rgba(148,163,184,0.3)',
             color: '#e2e8f0',
             fontWeight: 800,
-            fontSize: '10px',
+            fontSize: isMobile ? '10px' : '12px',
             cursor: onSelectFielder ? 'pointer' : 'default',
             boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
             pointerEvents: onSelectFielder ? 'auto' : 'none',
@@ -1604,7 +1616,7 @@ function DefenseLayer({
   );
 }
 
-function BatterBadge({ name, top, left, onClick }: { name: string; top: string; left: string; onClick?: () => void }) {
+function BatterBadge({ name, top, left, onClick, isMobile }: { name: string; top: string; left: string; onClick?: () => void; isMobile?: boolean }) {
   return (
     <button
       type="button"
@@ -1620,7 +1632,7 @@ function BatterBadge({ name, top, left, onClick }: { name: string; top: string; 
         background: 'rgba(99,102,241,0.18)',
         color: '#e2e8f0',
         fontWeight: 900,
-        fontSize: '10px',
+        fontSize: isMobile ? '10px' : '12px',
         cursor: onClick ? 'pointer' : 'default',
         boxShadow: '0 6px 16px rgba(0,0,0,0.3)',
         pointerEvents: onClick ? 'auto' : 'none',
@@ -1637,11 +1649,13 @@ function PitcherBadge({
   top,
   left,
   onClick,
+  isMobile,
 }: {
   name: string;
   top: string;
   left: string;
   onClick?: (payload: { name: string; pos: string }) => void;
+  isMobile?: boolean;
 }) {
   return (
     <button
@@ -1658,7 +1672,7 @@ function PitcherBadge({
         background: 'rgba(15,23,42,0.75)',
         color: '#e2e8f0',
         fontWeight: 900,
-        fontSize: '10px',
+        fontSize: isMobile ? '10px' : '12px',
         cursor: onClick ? 'pointer' : 'default',
         boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
         pointerEvents: onClick ? 'auto' : 'none',
