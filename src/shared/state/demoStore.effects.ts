@@ -85,6 +85,7 @@ export function subscribeMatchesSnapshot(params: {
 
       skipMatchesWriteRef.current = true;
       matchesReadyRef.current = true;
+      skipFirestoreWriteRef.current = true; // matches 갱신은 game state write를 트리거하지 않아야 함
       dispatch({ type: 'setMatches', matches: merged });
 
       if (!stateRef.current.activeMatchId) {
@@ -591,14 +592,18 @@ export function syncGameStateWrite(params: {
   if (state.scorerUid && state.scorerUid !== currentUid) return;
   if (skipFirestoreWriteRef.current) {
     skipFirestoreWriteRef.current = false;
-    lastStateKeyRef.current = '';
+    // lastStateKeyRef는 초기화하지 않음 — 재초기화하면 Firestore에서 받은 상태를
+    // 즉시 다시 덮어쓰게 되어 무한 루프가 발생할 수 있음
     lastFeedLengthRef.current = state.feed.length;
     lastEventsLengthRef.current = state.events.length;
     return;
   }
-  if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
+  // 타이머가 이미 돌고 있으면 중복 세팅하지 않는다 (throttle).
+  // 타이머는 fire 시점의 stateRef.current를 사용하므로 최신 상태를 항상 반영한다.
+  if (writeTimerRef.current) return;
 
   writeTimerRef.current = setTimeout(() => {
+    writeTimerRef.current = null; // 타이머 ref 해제 — 다음 user action이 새 타이머를 세팅할 수 있게
     const run = async () => {
       const snapshot = snapshotState(stateRef.current);
       const { matches: _matches, feed: _feed, events: _events, onlineViewerCount: _onlineViewerCount, ...core } = snapshot;
@@ -696,13 +701,6 @@ export function syncGameStateWrite(params: {
       // ignore sync errors; will retry on next state change
     });
   }, WRITE_DEBOUNCE_MS);
-
-  return () => {
-    if (writeTimerRef.current) {
-      clearTimeout(writeTimerRef.current);
-      writeTimerRef.current = null;
-    }
-  };
 }
 
 export function syncScheduleMatchesWrite(params: {
@@ -747,7 +745,7 @@ export function syncScheduleMatchesWrite(params: {
 
   const syncMatches = async () => {
     const batch = writeBatch(firestore);
-    const filterEmptySlots = (lineup: MatchSchedule['lineups']['home']) =>
+    const filterEmptySlots = (lineup: NonNullable<MatchSchedule['lineups']>['home']) =>
       lineup.filter((slot) => slot.name && slot.name.trim() !== '');
 
     matches.forEach((match) => {
@@ -788,7 +786,7 @@ export function syncLiveScorePatch(params: {
   const scoreKey = `${matchId}:${homeScore}:${awayScore}`;
   if (scoreKey === lastLiveScoreSyncKeyRef.current) return;
   lastLiveScoreSyncKeyRef.current = scoreKey;
-  void pushMatchUpdate(matchId, { homeScore, awayScore }).catch(() => {});
+  void Promise.resolve(pushMatchUpdate(matchId, { homeScore, awayScore })).catch(() => {});
 }
 
 export function autoPurgeExpiredMatches(params: {
