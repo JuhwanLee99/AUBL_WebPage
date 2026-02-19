@@ -6,6 +6,10 @@ import { GROUP_LETTERS, GROUP_COLORS, TEAM_GROUPS } from '@shared/lib/teamGroups
 import type { GroupLetter } from '@shared/lib/teamGroups';
 import { useContent } from '@shared/state/contentProvider';
 import { buildTeamDirectory, encodeTeamId } from '@shared/lib/teamDirectory';
+import {
+  normalizeExternalImageUrl,
+  shouldForceLogoContrastBoost,
+} from '@shared/lib/imageUrl';
 import { firestore } from '@shared/firebase/client';
 
 /* ─── 로컬 타입 ─── */
@@ -40,7 +44,7 @@ export default function TeamHubPage() {
         snap.forEach((docSnap) => {
           const data = docSnap.data() as { emblemUrl?: string };
           if (typeof data.emblemUrl === 'string' && data.emblemUrl.trim()) {
-            next[docSnap.id] = data.emblemUrl.trim();
+            next[docSnap.id] = normalizeExternalImageUrl(data.emblemUrl);
           }
         });
         setLogoById(next);
@@ -330,49 +334,67 @@ export default function TeamHubPage() {
 
         {visibleTeams.length ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-            {visibleTeams.map((team) => (
-              <Link
-                key={team.name}
-                to={`/teams/${encodeTeamId(team.name)}`}
-                className="team-card"
-                style={{
-                  padding: '16px',
-                  borderRadius: '18px',
-                  border: '1px solid rgba(148,163,184,0.25)',
-                  backgroundColor: 'rgba(15,23,42,0.65)',
-                  backgroundImage: logoForTeam(team.name)
-                    ? `linear-gradient(180deg, rgba(15,23,42,0.7), rgba(15,23,42,0.7)), url(${logoForTeam(team.name)})`
-                    : undefined,
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'center',
-                  backgroundSize: '120px auto',
-                  color: '#e2e8f0',
-                  textDecoration: 'none',
-                  display: 'grid',
-                  gap: '10px',
-                  boxShadow: '0 12px 30px rgba(0,0,0,0.25)',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                  <span
-                    style={{
-                      padding: '4px 8px',
-                      borderRadius: '999px',
-                      fontWeight: 800,
-                      fontSize: '11px',
-                      background: `${team.color}22`,
-                      color: team.color,
-                      border: `1px solid ${team.color}55`,
-                    }}
-                  >
-                    {team.group}조
-                  </span>
-                  <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>TEAM PAGE</span>
-                </div>
-                <div style={{ fontWeight: 800, fontSize: '16px' }}>{team.name}</div>
-                <div style={{ color: '#94a3b8', fontSize: '12px' }}>일정 · 로스터 · 공지 확인</div>
-              </Link>
-            ))}
+            {visibleTeams.map((team) => {
+              const logoUrl = logoForTeam(team.name);
+              const needsBoost = logoUrl ? shouldForceLogoContrastBoost(logoUrl) : false;
+              return (
+                <Link
+                  key={team.name}
+                  to={`/teams/${encodeTeamId(team.name)}`}
+                  className="team-card"
+                  style={{
+                    padding: '16px',
+                    borderRadius: '18px',
+                    border: '1px solid rgba(148,163,184,0.25)',
+                    backgroundColor: 'rgba(15,23,42,0.65)',
+                    backgroundImage: logoUrl
+                      ? needsBoost
+                        ? `linear-gradient(180deg, rgba(15,23,42,0.7), rgba(15,23,42,0.7)), url("${logoUrl}"), radial-gradient(circle at center, rgba(255,255,255,1) 0%, rgba(255,255,255,0.93) 22%, rgba(255,255,255,0.54) 40%, rgba(255,255,255,0.12) 56%, rgba(255,255,255,0) 74%)`
+                        : `linear-gradient(180deg, rgba(15,23,42,0.7), rgba(15,23,42,0.7)), url("${logoUrl}")`
+                      : undefined,
+                    backgroundRepeat: logoUrl
+                      ? needsBoost
+                        ? 'no-repeat, no-repeat, no-repeat'
+                        : 'no-repeat, no-repeat'
+                      : undefined,
+                    backgroundPosition: logoUrl
+                      ? needsBoost
+                        ? 'center, center, center'
+                        : 'center, center'
+                      : undefined,
+                    backgroundSize: logoUrl
+                      ? needsBoost
+                        ? '100% 100%, 120px auto, 180px 180px'
+                        : '100% 100%, 120px auto'
+                      : undefined,
+                    color: '#e2e8f0',
+                    textDecoration: 'none',
+                    display: 'grid',
+                    gap: '10px',
+                    boxShadow: '0 12px 30px rgba(0,0,0,0.25)',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                    <span
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '999px',
+                        fontWeight: 800,
+                        fontSize: '11px',
+                        background: `${team.color}22`,
+                        color: team.color,
+                        border: `1px solid ${team.color}55`,
+                      }}
+                    >
+                      {team.group}조
+                    </span>
+                    <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>TEAM PAGE</span>
+                  </div>
+                  <div style={{ fontWeight: 800, fontSize: '16px' }}>{team.name}</div>
+                  <div style={{ color: '#94a3b8', fontSize: '12px' }}>일정 · 로스터 · 공지 확인</div>
+                </Link>
+              );
+            })}
           </div>
         ) : (
           <div style={{ color: '#94a3b8', fontWeight: 700 }}>조건에 맞는 팀이 없습니다. 검색어나 필터를 확인해주세요.</div>

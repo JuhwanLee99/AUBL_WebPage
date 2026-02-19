@@ -4,6 +4,10 @@ import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, orderB
 import { useContent } from '@shared/state/contentProvider';
 import { buildTeamDirectory, decodeTeamId, encodeTeamId } from '@shared/lib/teamDirectory';
 import { TEAM_GROUPS } from '@shared/lib/teamGroups';
+import {
+  normalizeExternalImageUrl,
+  shouldForceLogoContrastBoost,
+} from '@shared/lib/imageUrl';
 import { useDemoStore } from '@shared/state/demoStore';
 import type { MatchSchedule } from '@shared/state/demoStore';
 import { firestore } from '@shared/firebase/client';
@@ -335,7 +339,9 @@ export default function TeamDetailPage() {
       if (Object.prototype.hasOwnProperty.call(edits, 'position')) payload.position = edits.position ?? '';
       if (Object.prototype.hasOwnProperty.call(edits, 'bats')) payload.bats = edits.bats ?? 'R';
       if (Object.prototype.hasOwnProperty.call(edits, 'throws')) payload.throws = edits.throws ?? 'R';
-      if (Object.prototype.hasOwnProperty.call(edits, 'profileImageUrl')) payload.profileImageUrl = edits.profileImageUrl ?? '';
+      if (Object.prototype.hasOwnProperty.call(edits, 'profileImageUrl')) {
+        payload.profileImageUrl = normalizeExternalImageUrl(edits.profileImageUrl ?? '');
+      }
       if (Object.prototype.hasOwnProperty.call(edits, 'profileBio')) payload.profileBio = edits.profileBio ?? '';
 
       await setDoc(
@@ -366,21 +372,26 @@ export default function TeamDetailPage() {
     }
     setTeamInfoBusy(true);
     try {
+      const normalizedEmblemUrl = normalizeExternalImageUrl(teamInfoDraft.emblemUrl);
+      const nextTeamInfo = {
+        shortIntro: teamInfoDraft.shortIntro.trim(),
+        longIntro: teamInfoDraft.longIntro.trim(),
+        emblemUrl: normalizedEmblemUrl,
+        history: teamInfoDraft.history.trim(),
+      };
       await setDoc(
         doc(firestore, 'teams', teamDocId),
         {
           name: team.name,
           group: team.group,
-          shortIntro: teamInfoDraft.shortIntro.trim(),
-          longIntro: teamInfoDraft.longIntro.trim(),
-          emblemUrl: teamInfoDraft.emblemUrl.trim(),
-          history: teamInfoDraft.history.trim(),
+          ...nextTeamInfo,
           updatedAt: Date.now(),
         },
         { merge: true },
       );
       setTeamInfoStatus('팀 정보를 저장했습니다.');
-      setTeamInfo(teamInfoDraft);
+      setTeamInfo(nextTeamInfo);
+      setTeamInfoDraft(nextTeamInfo);
     } catch {
       setTeamInfoError('팀 정보 저장 중 문제가 발생했습니다.');
     } finally {
@@ -507,7 +518,8 @@ export default function TeamDetailPage() {
 
   const resolvedTeamDocId = teamDocId ?? '';
   const totalGames = record.wins + record.losses + record.draws;
-  const emblemUrl = teamInfo?.emblemUrl ?? '';
+  const emblemUrl = normalizeExternalImageUrl(teamInfo?.emblemUrl ?? '');
+  const emblemForceBoost = shouldForceLogoContrastBoost(emblemUrl);
   const shortIntro = teamInfo?.shortIntro ?? '팀 소개 문구가 준비 중입니다.';
   const longIntro = teamInfo?.longIntro ?? '팀 소개 상세 내용이 준비 중입니다.';
   const historyText = teamInfo?.history ?? '연혁 정보가 아직 등록되지 않았습니다.';
@@ -628,13 +640,16 @@ export default function TeamDetailPage() {
             <img
               src={emblemUrl}
               alt={`${team.name} emblem`}
+              referrerPolicy="no-referrer"
               style={{
                 width: '84px',
                 height: '84px',
                 borderRadius: '18px',
                 objectFit: 'cover',
                 border: '1px solid rgba(148,163,184,0.35)',
-                background: 'rgba(15,23,42,0.6)',
+                background: emblemForceBoost
+                  ? 'radial-gradient(circle at center, rgba(255,255,255,1) 0%, rgba(255,255,255,0.92) 24%, rgba(255,255,255,0.5) 42%, rgba(255,255,255,0.1) 58%, rgba(255,255,255,0) 76%), rgba(15,23,42,0.6)'
+                  : 'rgba(15,23,42,0.6)',
               }}
             />
           ) : (
@@ -1361,7 +1376,7 @@ export default function TeamDetailPage() {
               const positionValue = edits.position ?? member.position ?? '';
               const batsValue = edits.bats ?? member.bats ?? 'R';
               const throwsValue = edits.throws ?? member.throws ?? 'R';
-              const profileImageValue = edits.profileImageUrl ?? member.profileImageUrl ?? '';
+              const profileImageValue = normalizeExternalImageUrl(edits.profileImageUrl ?? member.profileImageUrl ?? '');
               const profileBioValue = edits.profileBio ?? member.profileBio ?? '';
               return (
                 <div
@@ -1381,6 +1396,7 @@ export default function TeamDetailPage() {
                         <img
                           src={profileImageValue}
                           alt={`${member.name} profile`}
+                          referrerPolicy="no-referrer"
                           style={{
                             width: '44px',
                             height: '44px',
