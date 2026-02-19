@@ -47,6 +47,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // 서비스 점검 설정
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // 경기 일정
     match /matches/{matchId} {
       allow read: if true;

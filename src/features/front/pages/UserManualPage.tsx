@@ -199,6 +199,7 @@ const WEB_ADMIN_SECTIONS: ManualSection[] = [
       { heading: '회칙 관리 (/admin/rules)', bullets: ['회칙 헤더/챕터 JSON 구조를 편집합니다.'] },
       { heading: '팀 소개 관리 (/admin/teams)', bullets: ['참가팀/조편성 및 관련 문구를 편집합니다.'] },
       { heading: '권한 관리 (/admin/roles)', bullets: ['감독 권한 부여/해제를 관리합니다.'] },
+      { heading: '서비스 점검 (/admin/maintenance)', bullets: ['점검 모드 ON/OFF 토글 — 관리자 외 모든 접근 차단', '서비스 재개 예정일 및 점검 메시지 설정', '저장 즉시 실시간 반영 (재배포 불필요)'] },
     ],
   },
   {
@@ -523,7 +524,7 @@ const APP_ADMIN_SECTIONS: ManualSection[] = [
     items: [
       {
         heading: '더보기 > 관리자 패널',
-        bullets: ['WebView로 /admin 진입', '랜딩 문구/티커, 리그 소개, 회칙, 팀/조 편성, 감독 권한 관리'],
+        bullets: ['WebView로 /admin 진입', '랜딩 문구/티커, 리그 소개, 회칙, 팀/조 편성, 감독 권한 관리', '서비스 점검 모드 ON/OFF — /admin/maintenance에서 점검 메시지·재개일 설정'],
       },
     ],
   },

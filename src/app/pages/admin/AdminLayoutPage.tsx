@@ -6,6 +6,7 @@ const tabs = [
   { path: '/admin/rules', label: '회칙 관리' },
   { path: '/admin/teams', label: '참가팀 · 조편성 관리' },
   { path: '/admin/roles', label: '계정 권한' },
+  { path: '/admin/maintenance', label: '🔴 서비스 점검' },
 ] as const;
 
 export default function AdminLayoutPage() {

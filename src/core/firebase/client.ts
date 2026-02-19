@@ -1,7 +1,12 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import type { FirebaseOptions } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
+import {
+  connectFirestoreEmulator,
+  getFirestore,
+  initializeFirestore,
+  memoryLocalCache,
+} from 'firebase/firestore';
 
 const firebaseConfig: FirebaseOptions = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -16,14 +21,28 @@ const firebaseConfig: FirebaseOptions = {
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
-export const firestore = getFirestore(app);
 
 const useFsEmulator = import.meta.env.VITE_USE_FIRESTORE_EMULATOR === 'true';
+
+// 에뮬레이터 모드: 메모리 캐시 사용 (IndexedDB 프로덕션 캐시와의 충돌 방지)
+// initializeFirestore는 앱당 한 번만 호출 가능하므로 HMR 재실행 시 getFirestore로 폴백
+export const firestore = useFsEmulator
+  ? (() => {
+      try {
+        return initializeFirestore(app, { localCache: memoryLocalCache() });
+      } catch {
+        return getFirestore(app);
+      }
+    })()
+  : getFirestore(app);
+
 if (useFsEmulator) {
   const host = import.meta.env.VITE_FIRESTORE_EMULATOR_HOST ?? '127.0.0.1';
   const port = Number(import.meta.env.VITE_FIRESTORE_EMULATOR_PORT ?? 8080);
-  // connectFirestoreEmulator must be called before any Firestore use.
-  connectFirestoreEmulator(firestore, host, port);
-  // Optional: log once for debugging; safe in browser console.
-  console.info(`[firestore] using emulator at ${host}:${port}`);
+  try {
+    connectFirestoreEmulator(firestore, host, port);
+    console.info(`[firestore] using emulator at ${host}:${port}`);
+  } catch {
+    // 이미 연결된 경우 (HMR 재실행) 무시
+  }
 }

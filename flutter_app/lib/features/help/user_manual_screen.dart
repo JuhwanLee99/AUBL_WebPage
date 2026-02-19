@@ -288,6 +288,7 @@ final _adminSections = <_ManualSection>[
         bullets: [
           'WebView로 ${WebRouteContracts.admin} 진입',
           '랜딩 문구/티커, 리그 소개, 회칙, 팀/조 편성, 감독 권한 관리',
+          '서비스 점검 모드 ON/OFF — 점검 메시지·재개일 설정, 저장 즉시 반영',
         ],
       ),
     ],
