@@ -8,6 +8,7 @@ export 'intro/rules_screen.dart';
 export 'legal/privacy_screen.dart';
 export 'legal/terms_screen.dart';
 export 'onboarding/onboarding_screen.dart';
+export 'prediction/prediction_screen.dart';
 export 'records/records_screen.dart';
 export 'schedule/schedule_screen.dart';
 export 'teams/team_hub_screen.dart';
