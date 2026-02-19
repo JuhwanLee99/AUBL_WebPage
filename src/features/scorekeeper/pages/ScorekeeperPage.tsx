@@ -4082,7 +4082,7 @@ function FieldView({
   onSelectFielder: (payload: { name: string; pos: string }) => void;
 }) {
   const label = `${half === 'top' ? '▲' : '▼'} ${inning}`;
-  const baseSize = 'clamp(19px, 3.2vw, 29px)';
+  const baseSize = 'clamp(24px, 4vw, 36px)';
   const groundShift = '-4%';
   const positions = {
     second: { x: 50, y: 35 },
