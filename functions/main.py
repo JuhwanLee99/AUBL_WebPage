@@ -81,12 +81,15 @@ def notify_team_notice(event: firestore_fn.Event[firestore_fn.DocumentSnapshot])
     notice_id = event.params.get("noticeId")
     if not team_id:
         return
-    title = (data.get("title") or "새 팀 공지").strip()
-    content = (data.get("content") or "공지 내용이 등록되었습니다.").strip()
-    body = content if len(content) <= 120 else f"{content[:117]}..."
+    notice_title = (data.get("title") or "새 공지").strip()
+    content = (data.get("content") or "").strip()
+    body = notice_title if not content else (
+        f"{notice_title}: {content}" if len(notice_title) + len(content) + 2 <= 120
+        else f"{notice_title}: {content[:120 - len(notice_title) - 5]}..."
+    )
     _send_topic_notification(
         f"team_{team_id}_notices",
-        title,
+        "팀 공지",
         body,
         {"teamId": str(team_id), "noticeId": str(notice_id or ""), "nav_type": "team_notice"},
     )
@@ -130,23 +133,32 @@ def notify_match_live(event: firestore_fn.Event[firestore_fn.Change[firestore_fn
 @firestore_fn.on_document_created(document="notices/{noticeId}", region="asia-northeast3")
 def notify_community_urgent(event: firestore_fn.Event[firestore_fn.DocumentSnapshot]) -> None:
     data = event.data.to_dict() if event.data else {}
-    title = (data.get("title") or "긴급 공지").strip()
-    content = (data.get("content") or "긴급 공지가 등록되었습니다.").strip()
-    body = content if len(content) <= 120 else f"{content[:117]}..."
+    notice_title = (data.get("title") or "새 공지").strip()
+    content = (data.get("content") or "").strip()
     notice_id = event.params.get("noticeId")
-    if data.get("category") == "긴급":
+    category = (data.get("category") or "일반").strip()
+
+    def _make_body(t: str, c: str) -> str:
+        if not c:
+            return t
+        combined = f"{t}: {c}"
+        return combined if len(combined) <= 120 else f"{t}: {c[:120 - len(t) - 5]}..."
+
+    body = _make_body(notice_title, content)
+    if category == "긴급":
         _send_topic_notification(
             "community_urgent",
-            title,
+            "긴급 공지",
             body,
             {"noticeId": str(notice_id or ""), "category": "긴급", "nav_type": "community_urgent"},
         )
         return
+    notif_title = f"{category} 공지" if category not in ("일반", "") else "커뮤니티 공지"
     _send_topic_notification(
         "community_notices",
-        title,
+        notif_title,
         body,
-        {"noticeId": str(notice_id or ""), "category": str(data.get("category") or ""), "nav_type": "community_notice"},
+        {"noticeId": str(notice_id or ""), "category": category, "nav_type": "community_notice"},
     )
 
 

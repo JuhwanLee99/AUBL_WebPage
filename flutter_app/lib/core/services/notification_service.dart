@@ -347,8 +347,6 @@ class NotificationService {
     if (notification == null) return;
 
     final navType = message.data['nav_type'] as String? ?? '';
-    final category = message.data['category'] as String? ?? '';
-    final subText = _navTypeToSubText(navType, category);
     final payload =
         navType.isNotEmpty ? jsonEncode({'nav_type': navType}) : null;
 
@@ -363,13 +361,12 @@ class NotificationService {
         priority: Priority.high,
         icon: android?.smallIcon ?? _androidSmallIcon,
         largeIcon: const DrawableResourceAndroidBitmap('ic_launcher'),
-        subText: subText,
       ),
       iOS: DarwinNotificationDetails(
         presentAlert: true,
         presentBadge: true,
         presentSound: true,
-        subtitle: subText.isNotEmpty ? subText : apple?.subtitle,
+        subtitle: apple?.subtitle,
       ),
     );
 
@@ -382,17 +379,5 @@ class NotificationService {
         payload: payload,
       );
     }
-  }
-
-  String _navTypeToSubText(String navType, String category) {
-    return switch (navType) {
-      'team_notice' => '팀 공지',
-      'match' => '경기 알림',
-      'community_urgent' => '긴급 공지',
-      'community_notice' =>
-        category.isNotEmpty ? '$category 공지' : '커뮤니티 공지',
-      'inquiry' => '문의 게시판',
-      _ => '',
-    };
   }
 }
