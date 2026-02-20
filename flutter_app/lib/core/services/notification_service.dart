@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -22,6 +23,7 @@ class NotificationService {
   static const String _topicCommunityNotices = 'community_notices';
   static const String _topicMatchesAll = 'matches_all';
   static const String _channelId = 'aubl_default';
+  static const String _androidSmallIcon = 'ic_stat_aubl';
 
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _local =
@@ -36,10 +38,19 @@ class NotificationService {
       return;
     }
 
-    await _messaging.requestPermission(alert: true, badge: true, sound: true);
+    await _messaging.setAutoInitEnabled(true);
+    final permission = await _messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    await _local
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
 
     const initSettings = InitializationSettings(
-      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      android: AndroidInitializationSettings('@drawable/ic_stat_aubl'),
       iOS: DarwinInitializationSettings(),
     );
     await _local.initialize(initSettings);
@@ -54,6 +65,14 @@ class NotificationService {
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(channel);
+
+    final token = await _messaging.getToken();
+    debugPrint(
+        '[NotificationService] Android permission: ${permission.authorizationStatus}');
+    debugPrint('[NotificationService] FCM token: $token');
+    _messaging.onTokenRefresh.listen((nextToken) {
+      debugPrint('[NotificationService] FCM token refreshed: $nextToken');
+    });
 
     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
 
@@ -285,7 +304,8 @@ class NotificationService {
         channelDescription: '경기 및 공지 알림',
         importance: Importance.high,
         priority: Priority.high,
-        icon: android?.smallIcon ?? '@mipmap/ic_launcher',
+        icon: android?.smallIcon ?? _androidSmallIcon,
+        largeIcon: const DrawableResourceAndroidBitmap('ic_launcher'),
       ),
       iOS: DarwinNotificationDetails(
         presentAlert: true,
