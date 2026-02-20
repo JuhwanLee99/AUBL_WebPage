@@ -39,6 +39,14 @@ type PitcherLine = {
   balls: number;
 };
 
+function emptyBatterLine(): BatterLine {
+  return { pa: 0, ab: 0, hits: 0, hr: 0, doubles: 0, triples: 0, bb: 0, hbp: 0, so: 0, sac: 0 };
+}
+
+function emptyPitcherLine(): PitcherLine {
+  return { bf: 0, outs: 0, hits: 0, hr: 0, bb: 0, hbp: 0, so: 0, pitches: 0, strikes: 0, balls: 0 };
+}
+
 type CsvPreviewSection = {
   title: string;
   rows: string[][];
@@ -112,6 +120,7 @@ function resolveJersey(jerseyMap: JerseyMap, side: 'home' | 'away', name: string
 
 export default function ScoreboardTextPage() {
   const { state, actions } = useDemoStore();
+  const { selectMatch, loadMoreFeed } = actions;
   const { isAdmin } = useAdmin();
   const { matchId } = useParams<{ matchId?: string }>();
   const [showReplay, setShowReplay] = useState(false);
@@ -126,10 +135,10 @@ export default function ScoreboardTextPage() {
       // matchId가 유효한지 확인
       const matchExists = state.matches.some((m) => m.id === matchId);
       if (matchExists) {
-        actions.selectMatch(matchId);
+        selectMatch(matchId);
       }
     }
-  }, [matchId, state.activeMatchId, state.matches, actions]);
+  }, [matchId, state.activeMatchId, state.matches, selectMatch]);
 
   useEffect(() => {
     if (!matchId && state.activeMatchId) {
@@ -154,9 +163,9 @@ export default function ScoreboardTextPage() {
     if (replayLoadRef.current) return;
     replayLoadRef.current = true;
     const timer = setTimeout(() => setShowReplay(true), 0);
-    actions.loadMoreFeed();
+    loadMoreFeed();
     return () => clearTimeout(timer);
-  }, [actions, state.gameOver]);
+  }, [loadMoreFeed, state.gameOver]);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -213,10 +222,6 @@ export default function ScoreboardTextPage() {
     : '라인업 공개 전';
 
   const currentInning = state.inning;
-
-  // [수정] Today 기록 계산 시 고유 이름 기반 매칭 사용
-  const batterToday = useMemo(() => computeBatterLine(feed, hittingSide, currentBatter), [feed, hittingSide, currentBatter]);
-  const pitcherToday = useMemo(() => computePitcherLine(feed, currentPitcher), [feed, currentPitcher]);
   
   const jerseyMap = useMemo(() => buildJerseyMap(state.lineups, state.benches, state.removed), [state.lineups, state.benches, state.removed]);
 
@@ -224,6 +229,41 @@ export default function ScoreboardTextPage() {
 
   // [중요] buildPlayerStats가 이제 고유 키 로직을 따름
   const playerStats = useMemo(() => buildPlayerStats(recordPayload, { practiceMode: isPracticeMode }), [recordPayload, isPracticeMode]);
+
+  // 현재 타자/투수 기록은 feed 텍스트 파싱이 아니라, 기록원과 동일한 집계(playerStats)에서 조회한다.
+  const batterToday = useMemo(() => {
+    const stat = playerStats.hitters[hittingSide].find((line) => isSamePlayerName(line.name, currentBatter));
+    if (!stat) return emptyBatterLine();
+    return {
+      pa: stat.pa,
+      ab: stat.ab,
+      hits: stat.h,
+      hr: stat.hr,
+      doubles: stat.doubles,
+      triples: stat.triples,
+      bb: stat.bb,
+      hbp: stat.hbp,
+      so: stat.so,
+      sac: stat.sac,
+    };
+  }, [playerStats.hitters, hittingSide, currentBatter]);
+
+  const pitcherToday = useMemo(() => {
+    const stat = playerStats.pitchers[defenseSide].find((line) => isSamePlayerName(line.name, currentPitcher));
+    if (!stat) return emptyPitcherLine();
+    return {
+      bf: stat.bf,
+      outs: stat.outs,
+      hits: stat.h,
+      hr: stat.hr,
+      bb: stat.bb,
+      hbp: stat.hbp,
+      so: stat.so,
+      pitches: stat.pitches,
+      strikes: stat.strikes,
+      balls: stat.balls,
+    };
+  }, [playerStats.pitchers, defenseSide, currentPitcher]);
   
   const postSummary = useMemo(
     () => buildPostGameSummary(playerStats.hitters, playerStats.pitchers, state.score),
@@ -927,9 +967,25 @@ function LiveFeed({
   const overscanPx = 200;
 
   useEffect(() => {
+    let cancelled = false;
     queueMicrotask(() => {
-      setCollapsed((prev) => ({ ...collapsedMap, ...prev }));
+      if (cancelled) return;
+      setCollapsed((prev) => {
+        let changed = false;
+        const next = { ...prev };
+
+        Object.entries(collapsedMap).forEach(([inningKey, value]) => {
+          if (Object.prototype.hasOwnProperty.call(prev, inningKey)) return;
+          next[Number(inningKey)] = value;
+          changed = true;
+        });
+
+        return changed ? next : prev;
+      });
     });
+    return () => {
+      cancelled = true;
+    };
   }, [collapsedMap]);
 
   useEffect(() => {
@@ -1781,151 +1837,6 @@ function classifyPitch(result: string) {
     normalized.includes('홈런') ||
     normalized.includes('아웃');
   return { pitch: hasPitch, ball: isBall, strike: isStrike };
-}
-
-// [수정] computeBatterLine: 고유 이름 매칭 로직 적용
-function computeBatterLine(feed: ReturnType<typeof useDemoStore>['state']['feed'], side: 'home' | 'away', batter: string): BatterLine {
-  const base: BatterLine = { pa: 0, ab: 0, hits: 0, hr: 0, doubles: 0, triples: 0, bb: 0, hbp: 0, so: 0, sac: 0 };
-  if (!batter) return base;
-  feed.forEach((entry) => {
-    const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
-    if (offenseSide !== side) return;
-    
-    // entry.batter에는 이미 고유 이름이 저장되어 있을 수 있음
-    // batter(현재 타석)도 고유 이름임.
-    // isSamePlayerName을 사용하여 비교 (혹은 문자열 단순 비교)
-    if (!isSamePlayerName(entry.batter, batter)) return;
-    
-    const kind = classifyResult(entry.result);
-    if (!kind) return;
-    if (['single', 'double', 'triple', 'hr', 'bb', 'hbp', 'so', 'so_reach', 'out', 'sac'].includes(kind)) {
-      base.pa += 1;
-    }
-    switch (kind) {
-      case 'single':
-        base.ab += 1;
-        base.hits += 1;
-        break;
-      case 'double':
-        base.ab += 1;
-        base.hits += 1;
-        base.doubles += 1;
-        break;
-      case 'triple':
-        base.ab += 1;
-        base.hits += 1;
-        base.triples += 1;
-        break;
-      case 'hr':
-        base.ab += 1;
-        base.hits += 1;
-        base.hr += 1;
-        break;
-      case 'bb':
-        base.bb += 1;
-        break;
-      case 'hbp':
-        base.hbp += 1;
-        break;
-      case 'so':
-        base.ab += 1;
-        base.so += 1;
-        break;
-      case 'so_reach':
-        base.ab += 1;
-        base.so += 1;
-        break;
-      case 'out':
-        base.ab += 1;
-        break;
-      case 'sac':
-        base.sac += 1;
-        break;
-      default:
-        break;
-    }
-  });
-  return base;
-}
-
-// [수정] computePitcherLine: ScorekeeperPage와 유사하게 투수 이름 파싱 로직 강화
-function computePitcherLine(feed: ReturnType<typeof useDemoStore>['state']['feed'], pitcher: string): PitcherLine {
-  const base: PitcherLine = { bf: 0, outs: 0, hits: 0, hr: 0, bb: 0, hbp: 0, so: 0, pitches: 0, strikes: 0, balls: 0 };
-  if (!pitcher) return base;
-  
-  // Feed is already in chronological order (oldest → newest) per pushFeed implementation
-  const chronological = feed;
-  const current: Record<'home' | 'away', string | null> = { home: null, away: null };
-  // [중요] ScorekeeperPage와 동일하게 괄호 제거하지 않음
-  const cleanName = (raw: string) => raw.replace(/투수/g, '').replace(/·/g, '').trim();
-  const isPitcherLog = (result: string) => result.includes('투수 (') || /투수\s*$/.test(result);
-
-  chronological.forEach((entry) => {
-    const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
-    const defenseSide: 'home' | 'away' = offenseSide === 'home' ? 'away' : 'home';
-    const result = entry.result.trim();
-
-    // 피드에서 투수 추적
-    if (result.includes('투수 교체') || (result.includes('대수비') && result.includes('→'))) {
-      const incoming = result.split('→')[1];
-      if (incoming) current[defenseSide] = cleanName(incoming);
-    } else if (isPitcherLog(result)) {
-      const namePart = result.includes('투수 (') ? result.split('투수')[0] : result.replace(/투수\s*$/, '');
-      current[defenseSide] = cleanName(namePart);
-    }
-
-    // 투수 교체가 명시되지 않은 경우, 현재 투수(pitcher)를 기본값으로 사용
-    const activePitcher = current[defenseSide] || pitcher;
-    // pitcher(현재 투수)와 피드 상의 투수 비교
-    if (!isSamePlayerName(activePitcher, pitcher)) return;
-
-    const pitchInfo = classifyPitch(result);
-    if (pitchInfo.pitch) {
-      base.pitches += 1;
-      if (pitchInfo.strike) base.strikes += 1;
-      if (pitchInfo.ball) base.balls += 1;
-    }
-
-    const kind = classifyResult(result);
-    if (!kind) return;
-    if (['single', 'double', 'triple', 'hr', 'bb', 'hbp', 'so', 'out', 'sac'].includes(kind)) {
-      base.bf += 1;
-    }
-    switch (kind) {
-      case 'single':
-        base.hits += 1;
-        break;
-      case 'double':
-        base.hits += 1;
-        break;
-      case 'triple':
-        base.hits += 1;
-        break;
-      case 'hr':
-        base.hits += 1;
-        base.hr += 1;
-        break;
-      case 'bb':
-        base.bb += 1;
-        break;
-      case 'hbp':
-        base.hbp += 1;
-        break;
-      case 'so':
-        base.so += 1;
-        base.outs += 1;
-        break;
-      case 'out':
-        base.outs += 1;
-        break;
-      case 'sac':
-        base.outs += 1;
-        break;
-      default:
-        break;
-    }
-  });
-  return base;
 }
 
 function buildJerseyMap(

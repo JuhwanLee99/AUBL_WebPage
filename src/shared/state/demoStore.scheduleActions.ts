@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { auth, firestore } from '../firebase/client';
 import {
   collection,
@@ -81,7 +82,7 @@ export function useScheduleActions(params: {
     initialState,
   } = params;
 
-  return {
+  return useMemo(() => ({
     addMatch: (match: MatchSchedule) => {
       markMatchesReady();
 
@@ -357,5 +358,18 @@ export function useScheduleActions(params: {
         },
       });
     },
-  };
+  }), [
+    dispatch,
+    getState,
+    isAdmin,
+    markMatchesReady,
+    markSkipMatchesWrite,
+    markSkipFirestoreWrite,
+    setLastFeedLength,
+    setLastEventsLength,
+    pushMatchUpdate,
+    purgeMatchFromFirestore,
+    updateCurrentMatchPointer,
+    initialState,
+  ]);
 }

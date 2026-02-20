@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { doc, setDoc } from 'firebase/firestore';
 import { firestore } from '../firebase/client';
 import { SPECTATOR_EXPANDED_FEED_LIMIT } from './demoStore.constants';
@@ -76,7 +77,7 @@ export function useGameActions(params: {
 }) {
   const { dispatch, stateRef, spectatorFeedLimitRef, setSpectatorFeedLimit, pushMatchUpdate } = params;
 
-  return {
+  return useMemo(() => ({
     addBall: () => dispatch({ type: 'ball' }),
     addStrike: (strikeType?: 'swinging' | 'looking') => dispatch({ type: 'strike', strikeType }),
     addFoul: (isBunt?: boolean) => dispatch({ type: 'foul', isBunt }),
@@ -180,5 +181,5 @@ export function useGameActions(params: {
     setGameLimit: (minutes: number | null) => dispatch({ type: 'setGameLimit', minutes }),
     pauseGameTimer: () => dispatch({ type: 'pauseGameTimer' }),
     resumeGameTimer: () => dispatch({ type: 'resumeGameTimer' }),
-  };
+  }), [dispatch, stateRef, spectatorFeedLimitRef, setSpectatorFeedLimit, pushMatchUpdate]);
 }

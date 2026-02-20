@@ -3058,33 +3058,40 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     });
   }, [state.matches, purgeMatchFromFirestore]);
 
-  const updateCurrentMatchPointer = (matchId: string | null) => {
+  const updateCurrentMatchPointer = useCallback((matchId: string | null) => {
     void setDoc(
       doc(firestore, 'app', 'current'),
       { activeMatchId: matchId },
       { merge: true },
     ).catch(() => {});
-  };
+  }, []);
+
+  const getState = useCallback(() => stateRef.current, []);
+  const markMatchesReady = useCallback(() => {
+    matchesReadyRef.current = true;
+  }, []);
+  const markSkipMatchesWrite = useCallback(() => {
+    skipMatchesWriteRef.current = true;
+  }, []);
+  const markSkipFirestoreWrite = useCallback(() => {
+    skipFirestoreWriteRef.current = true;
+  }, []);
+  const setLastFeedLength = useCallback((length: number) => {
+    lastFeedLengthRef.current = length;
+  }, []);
+  const setLastEventsLength = useCallback((length: number) => {
+    lastEventsLengthRef.current = length;
+  }, []);
 
   const scheduleActions = useScheduleActions({
     dispatch,
-    getState: () => stateRef.current,
+    getState,
     isAdmin,
-    markMatchesReady: () => {
-      matchesReadyRef.current = true;
-    },
-    markSkipMatchesWrite: () => {
-      skipMatchesWriteRef.current = true;
-    },
-    markSkipFirestoreWrite: () => {
-      skipFirestoreWriteRef.current = true;
-    },
-    setLastFeedLength: (length: number) => {
-      lastFeedLengthRef.current = length;
-    },
-    setLastEventsLength: (length: number) => {
-      lastEventsLengthRef.current = length;
-    },
+    markMatchesReady,
+    markSkipMatchesWrite,
+    markSkipFirestoreWrite,
+    setLastFeedLength,
+    setLastEventsLength,
     pushMatchUpdate,
     purgeMatchFromFirestore,
     updateCurrentMatchPointer,

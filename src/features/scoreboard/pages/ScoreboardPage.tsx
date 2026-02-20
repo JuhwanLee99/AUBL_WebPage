@@ -5,6 +5,7 @@ import { useDemoStore } from '@shared/state/demoStore';
 
 export default function ScoreboardPage() {
   const { state, actions } = useDemoStore();
+  const { selectMatch } = actions;
   const { matchId } = useParams<{ matchId?: string }>();
   const navigate = useNavigate();
 
@@ -12,10 +13,10 @@ export default function ScoreboardPage() {
     if (matchId && matchId !== state.activeMatchId) {
       const matchExists = state.matches.some((m) => m.id === matchId);
       if (matchExists) {
-        actions.selectMatch(matchId);
+        selectMatch(matchId);
       }
     }
-  }, [matchId, state.activeMatchId, state.matches, actions]);
+  }, [matchId, state.activeMatchId, state.matches, selectMatch]);
 
   useEffect(() => {
     if (!matchId && state.activeMatchId) {

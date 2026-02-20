@@ -45,6 +45,7 @@ function classifyResult(result: string) {
 
 export default function ScoreboardLiveOverlayPage() {
   const { state, actions } = useDemoStore();
+  const { selectMatch } = actions;
   const { isAdmin } = useAdmin();
   const navigate = useNavigate();
   const { matchId } = useParams<{ matchId?: string }>();
@@ -59,10 +60,10 @@ export default function ScoreboardLiveOverlayPage() {
     if (matchId && matchId !== state.activeMatchId) {
       const matchExists = state.matches.some((m) => m.id === matchId);
       if (matchExists) {
-        actions.selectMatch(matchId);
+        selectMatch(matchId);
       }
     }
-  }, [matchId, state.activeMatchId, state.matches, actions]);
+  }, [matchId, state.activeMatchId, state.matches, selectMatch]);
 
   useEffect(() => {
     if (!matchId && state.activeMatchId) {
