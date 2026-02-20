@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import html2canvas from 'html2canvas';
 import { GROUP_LETTERS, GROUP_COLORS } from '@shared/lib/teamGroups';
 import type { GroupLetter } from '@shared/lib/teamGroups';
 
@@ -119,6 +120,8 @@ export default function GroupDrawPage() {
   const [notif, setNotif] = useState<{ name: string; seed: number; group: GroupLetter } | null>(null);
   const [notifVisible, setNotifVisible] = useState(false);
   const notifTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const summaryRef = useRef<HTMLElement>(null);
+  const cardsRef = useRef<HTMLElement>(null);
 
   // localStorage 동기화
   useEffect(() => {
@@ -213,6 +216,23 @@ export default function GroupDrawPage() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const downloadImage = async (el: HTMLElement | null, filename: string) => {
+    if (!el) return;
+    const canvas = await html2canvas(el, {
+      backgroundColor: '#0d1117',
+      scale: 2,
+      useCORS: true,
+      logging: false,
+    });
+    const url = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const goNextSeed = () => {
@@ -510,19 +530,35 @@ export default function GroupDrawPage() {
           </section>
 
           {/* 오른쪽: 조 편성 패널 */}
-          <section>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: '#e2e8f0' }}>조 편성</h2>
-              {selected && (
-                <span
+          <section ref={cardsRef} style={{ padding: '0 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '14px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: '#e2e8f0' }}>조 편성</h2>
+                {selected && (
+                  <span
+                    style={{
+                      padding: '5px 12px', borderRadius: '8px', fontWeight: 800, fontSize: '13px',
+                      background: `${seedColor}15`, color: seedColor,
+                      border: `1px solid ${seedColor}35`,
+                    }}
+                  >
+                    배정할 조를 클릭하세요
+                  </span>
+                )}
+              </div>
+              {assignedCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => downloadImage(cardsRef.current, '2026_AUBL_조편성카드.png')}
                   style={{
-                    padding: '5px 12px', borderRadius: '8px', fontWeight: 800, fontSize: '13px',
-                    background: `${seedColor}15`, color: seedColor,
-                    border: `1px solid ${seedColor}35`,
+                    padding: '7px 14px', borderRadius: '10px',
+                    fontWeight: 800, fontSize: '12px',
+                    background: 'rgba(52,211,153,0.1)', color: '#34d399',
+                    border: '1.5px solid rgba(52,211,153,0.3)', cursor: 'pointer',
                   }}
                 >
-                  배정할 조를 클릭하세요
-                </span>
+                  카드 이미지 저장
+                </button>
               )}
             </div>
 
@@ -691,6 +727,7 @@ export default function GroupDrawPage() {
       {/* ── 편성 결과 요약 표 ── */}
       {assignedCount > 0 && (
         <section
+          ref={summaryRef}
           style={{
             padding: '22px', borderRadius: '16px',
             background: 'rgba(255,255,255,0.02)',
@@ -698,20 +735,34 @@ export default function GroupDrawPage() {
             overflowX: 'auto',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
             <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 900, color: '#e2e8f0' }}>편성 결과 요약</h3>
-            <button
-              type="button"
-              onClick={handleDownload}
-              style={{
-                padding: '8px 16px', borderRadius: '10px',
-                fontWeight: 800, fontSize: '13px',
-                background: 'rgba(96,165,250,0.12)', color: '#93c5fd',
-                border: '1.5px solid rgba(96,165,250,0.32)', cursor: 'pointer',
-              }}
-            >
-              텍스트 다운로드
-            </button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={handleDownload}
+                style={{
+                  padding: '8px 14px', borderRadius: '10px',
+                  fontWeight: 800, fontSize: '12px',
+                  background: 'rgba(96,165,250,0.1)', color: '#93c5fd',
+                  border: '1.5px solid rgba(96,165,250,0.28)', cursor: 'pointer',
+                }}
+              >
+                텍스트 저장
+              </button>
+              <button
+                type="button"
+                onClick={() => downloadImage(summaryRef.current, '2026_AUBL_편성요약.png')}
+                style={{
+                  padding: '8px 14px', borderRadius: '10px',
+                  fontWeight: 800, fontSize: '12px',
+                  background: 'rgba(168,85,247,0.1)', color: '#d8b4fe',
+                  border: '1.5px solid rgba(168,85,247,0.28)', cursor: 'pointer',
+                }}
+              >
+                표 이미지 저장
+              </button>
+            </div>
           </div>
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 4px' }}>
             <thead>
