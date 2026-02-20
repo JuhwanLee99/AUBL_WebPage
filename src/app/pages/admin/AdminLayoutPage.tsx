@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, Link } from 'react-router-dom';
 
 const tabs = [
   { path: '/admin/landing', label: '랜딩 관리' },
@@ -13,9 +13,32 @@ const tabs = [
 export default function AdminLayoutPage() {
   return (
     <div style={{ display: 'grid', gap: '18px', padding: 'var(--section-padding) 0' }}>
-      <header style={{ display: 'grid', gap: '10px' }}>
-        <h1 style={{ margin: 0, fontSize: '30px', fontWeight: 900, color: '#e2e8f0' }}>콘텐츠 CMS</h1>
-        <p style={{ margin: 0, color: '#94a3b8', fontWeight: 700 }}>랜딩 · 리그소개 · 회칙 · 참가팀/조편성을 관리합니다.</p>
+      <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'grid', gap: '6px' }}>
+          <h1 style={{ margin: 0, fontSize: '30px', fontWeight: 900, color: '#e2e8f0' }}>콘텐츠 CMS</h1>
+          <p style={{ margin: 0, color: '#94a3b8', fontWeight: 700 }}>랜딩 · 리그소개 · 회칙 · 참가팀/조편성을 관리합니다.</p>
+        </div>
+        <Link
+          to="/draw"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '12px 20px',
+            borderRadius: '14px',
+            fontWeight: 900,
+            fontSize: '14px',
+            textDecoration: 'none',
+            background: 'linear-gradient(120deg, rgba(249,115,22,0.22), rgba(168,85,247,0.22))',
+            color: '#fdba74',
+            border: '1.5px solid rgba(249,115,22,0.45)',
+            boxShadow: '0 6px 20px rgba(249,115,22,0.18)',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+          }}
+        >
+          조추첨식 페이지 →
+        </Link>
       </header>
 
       <nav style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>

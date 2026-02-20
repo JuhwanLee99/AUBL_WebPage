@@ -25,6 +25,7 @@ export default function Layout() {
   if (isEmbeddedParam) embeddedRef.current = true;
   const isEmbedded = embeddedRef.current;
   const hideChrome = isLiveOverlay || isEmbedded;
+  const isDrawPage = location.pathname === '/draw';
   const isLanding = location.pathname === '/';
   const scoreboardTextPath = state.activeMatchId ? `/scoreboard-text/${state.activeMatchId}` : '/scoreboard-text';
   const liveOverlayPath = state.activeMatchId ? `/live-overlay/${state.activeMatchId}` : '/live-overlay';
@@ -347,7 +348,7 @@ export default function Layout() {
   return (
     <ContentProvider>
       <div className="app-shell">
-      {!hideChrome && (
+      {!hideChrome && !isDrawPage && (
         <header className="app-header">
           <div
             className="app-header__inner"

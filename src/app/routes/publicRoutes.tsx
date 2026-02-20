@@ -31,6 +31,7 @@ import SchedulePracticePage from '../pages/SchedulePracticePage';
 import LoginPage from '../pages/LoginPage';
 import AccessDeniedPage from '../pages/AccessDeniedPage';
 import AccountPage from '../pages/AccountPage';
+import GroupDrawPage from '@features/front/pages/GroupDrawPage';
 import { RequireAdmin } from '@shared/auth/RequireAdmin';
 
 export const publicRoutes: RouteObject[] = [
@@ -177,5 +178,9 @@ export const publicRoutes: RouteObject[] = [
   {
     path: 'access-denied',
     element: <AccessDeniedPage />,
+  },
+  {
+    path: 'draw',
+    element: <GroupDrawPage />,
   },
 ];
