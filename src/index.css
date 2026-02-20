@@ -474,6 +474,39 @@ button:focus-visible {
   border-color: rgba(148, 163, 184, 0.5);
 }
 
+.auth-apple {
+  width: 100%;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  color: #e2e8f0;
+  font-weight: 800;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.auth-apple span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: #e2e8f0;
+  color: #0f172a;
+  font-weight: 900;
+}
+
+.auth-apple:hover {
+  background: rgba(15, 23, 42, 0.95);
+  border-color: rgba(148, 163, 184, 0.5);
+}
+
 .auth-divider {
   display: flex;
   align-items: center;

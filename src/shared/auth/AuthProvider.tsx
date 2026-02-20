@@ -1,6 +1,7 @@
 import {
   EmailAuthProvider,
   GoogleAuthProvider,
+  OAuthProvider,
   browserLocalPersistence,
   createUserWithEmailAndPassword,
   getAdditionalUserInfo,
@@ -52,6 +53,7 @@ type AuthContextValue = {
   loginWithEmail: (email: string, password: string) => Promise<void>;
   registerWithEmail: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<{ isNewUser: boolean }>;
+  loginWithApple: () => Promise<{ isNewUser: boolean }>;
   logout: () => Promise<void>;
   deleteAccount: (currentPassword?: string) => Promise<void>;
   refreshIdToken: () => Promise<string | null>;
@@ -179,6 +181,19 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return { isNewUser: getAdditionalUserInfo(result)?.isNewUser ?? false };
   }, []);
 
+  const loginWithApple = useCallback(async () => {
+    if (IS_TEST_MODE) {
+      console.log('[TEST] 애플 로그인 시도');
+      return { isNewUser: false };
+    }
+    setError(null);
+    const provider = new OAuthProvider('apple.com');
+    provider.addScope('email');
+    provider.addScope('name');
+    const result = await signInWithPopup(auth, provider);
+    return { isNewUser: getAdditionalUserInfo(result)?.isNewUser ?? false };
+  }, []);
+
   const logout = useCallback(async () => {
     if (IS_TEST_MODE) {
       console.log('[TEST] 로그아웃 시도');
@@ -282,6 +297,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
           loginWithEmail,
           registerWithEmail,
           loginWithGoogle,
+          loginWithApple,
           logout,
           deleteAccount,
           refreshIdToken,
@@ -296,12 +312,25 @@ export function AuthProvider({ children }: PropsWithChildren) {
         loginWithEmail,
         registerWithEmail,
         loginWithGoogle,
+        loginWithApple,
         logout,
         deleteAccount,
         refreshIdToken,
       };
     },
-    [user, idToken, initializing, error, loginWithEmail, registerWithEmail, loginWithGoogle, logout, deleteAccount, refreshIdToken],
+    [
+      user,
+      idToken,
+      initializing,
+      error,
+      loginWithEmail,
+      registerWithEmail,
+      loginWithGoogle,
+      loginWithApple,
+      logout,
+      deleteAccount,
+      refreshIdToken,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

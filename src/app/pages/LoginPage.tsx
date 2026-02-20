@@ -14,7 +14,7 @@ type LocationState = {
 };
 
 export default function LoginPage() {
-  const { loginWithEmail, registerWithEmail, loginWithGoogle, logout, error, user } = useAuth();
+  const { loginWithEmail, registerWithEmail, loginWithGoogle, loginWithApple, logout, error, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
@@ -130,6 +130,31 @@ export default function LoginPage() {
     }
   };
 
+  const handleAppleClick = async () => {
+    if (embedded) {
+      setMessage('앱 내 WebView에서는 Apple 로그인을 지원하지 않습니다. 앱의 Apple 로그인 버튼을 사용해 주세요.');
+      return;
+    }
+    setSubmitting(true);
+    setMessage(null);
+    try {
+      await loginWithApple();
+      if (auth.currentUser) void sendLoginSuccessToFlutter(auth.currentUser);
+      navigate(redirectTo, { replace: true });
+    } catch (err) {
+      const code = typeof err === 'object' && err && 'code' in err ? String((err as { code?: unknown }).code) : '';
+      if (code === 'auth/operation-not-allowed') {
+        setMessage('Apple 로그인 설정이 아직 완료되지 않았습니다. 설정 완료 후 다시 시도해 주세요.');
+      } else if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+        setMessage('Apple 로그인이 취소되었습니다.');
+      } else {
+        setMessage(err instanceof Error ? err.message : 'Apple 로그인에 실패했습니다.');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleGoogleConsentDecline = async () => {
     setShowGoogleConsent(false);
     // 이미 로그인된 신규 유저가 동의 거부 → 계정 삭제
@@ -182,7 +207,7 @@ export default function LoginPage() {
             ? nativeGoogleEnabled
               ? '이메일·비밀번호 또는 Google 계정으로 로그인하세요.'
               : '앱 내 WebView에서는 이메일·비밀번호 로그인만 지원합니다.'
-            : '이메일·비밀번호(재확인) 또는 Google 계정으로 간편 로그인하세요.'}
+            : '이메일·비밀번호(재확인) 또는 Google/Apple 계정으로 간편 로그인하세요.'}
         </p>
       </div>
 
@@ -299,6 +324,12 @@ export default function LoginPage() {
               <span>G</span>
               Google 계정으로 계속하기
             </button>
+            {!embedded && (
+              <button type="button" className="auth-apple" onClick={handleAppleClick} disabled={submitting} style={{ marginTop: '8px' }}>
+                <span></span>
+                Apple 계정으로 계속하기
+              </button>
+            )}
           </>
         )}
 
@@ -360,9 +391,9 @@ export default function LoginPage() {
                     <>
                       {[
                         { title: '제1조 (목적)', items: ['본 약관은 전국대학아마추어야구연합회(이하 "AUBL")가 제공하는 모바일 앱 및 웹 서비스의 이용 조건과 절차, 회원과 AUBL의 권리·의무를 규정함을 목적으로 합니다.'] },
-                        { title: '제2조 (정의)', items: ['"서비스"란 경기 일정·결과 조회, 실시간 문자중계, 기록 열람, 커뮤니티, 푸시 알림 등 일체의 서비스를 말합니다.', '"회원"이란 본 약관에 동의하고 이메일·비밀번호 또는 Google/Apple(iOS 앱) 계정을 통해 가입한 이용자를 말합니다.'] },
+                        { title: '제2조 (정의)', items: ['"서비스"란 경기 일정·결과 조회, 실시간 문자중계, 기록 열람, 커뮤니티, 푸시 알림 등 일체의 서비스를 말합니다.', '"회원"이란 본 약관에 동의하고 이메일·비밀번호 또는 Google/Apple 계정을 통해 가입한 이용자를 말합니다.'] },
                         { title: '제3조 (약관의 효력 및 변경)', items: ['변경된 약관에 동의하지 않는 경우 회원 탈퇴를 할 수 있으며, 고지 후 7일 이내 탈퇴하지 않은 경우 동의한 것으로 간주합니다.'] },
-                        { title: '제4조 (회원 가입 및 탈퇴)', items: ['회원 가입은 이메일·비밀번호 등록 또는 Google/Apple(iOS 앱) 계정을 통한 소셜 로그인으로 이루어지며, 가입 시 본 약관 및 개인정보 처리방침에 동의한 것으로 간주합니다.', '회원은 언제든지 앱 내 "더보기 → 계정 → 회원 탈퇴"에서 탈퇴를 요청할 수 있으며, 웹 계정 삭제 안내 페이지(https://aubl.club/account-deletion)에서도 삭제 절차를 확인할 수 있습니다. 탈퇴 시 개인정보는 즉시 파기됩니다.'] },
+                        { title: '제4조 (회원 가입 및 탈퇴)', items: ['회원 가입은 이메일·비밀번호 등록 또는 Google/Apple 계정을 통한 소셜 로그인으로 이루어지며, 가입 시 본 약관 및 개인정보 처리방침에 동의한 것으로 간주합니다.', '회원은 언제든지 앱 내 "더보기 → 계정 → 회원 탈퇴"에서 탈퇴를 요청할 수 있으며, 웹 계정 삭제 안내 페이지(https://aubl.club/account-deletion)에서도 삭제 절차를 확인할 수 있습니다. 탈퇴 시 개인정보는 즉시 파기됩니다.'] },
                         { title: '제5조 (서비스의 제공 및 변경)', items: ['AUBL은 경기 일정·결과 조회, 실시간 문자중계, 선수 기록 열람, 커뮤니티, 팀 관리, 푸시 알림 서비스를 제공합니다.', '종료 경기 및 과거 시즌 기록 데이터는 AUBL 백엔드 API(api.aubl.club)와 운영 MariaDB를 통해 제공될 수 있으며, API 전송 구간에 Cloudflare 인프라가 사용될 수 있습니다.', '서비스는 무료로 제공되며, 향후 유료 서비스 도입 시 별도 고지 후 동의를 받습니다.'] },
                         { title: '제7조 (회원의 의무)', items: ['타인의 개인정보 도용, 허위 정보 등록, 서비스 운영 방해, 욕설·비방·음란물 게시, 상업적 광고 게시, 무단 크롤링·스크래핑을 금지합니다.', '위반 시 AUBL은 사전 통지 없이 서비스 이용을 제한하거나 회원 자격을 박탈할 수 있습니다.'] },
                         { title: '제8조 (게시물의 관리)', items: ['회원이 작성한 게시물의 저작권은 해당 회원에게 귀속됩니다.', '경기 기록·통계 데이터는 AUBL에 귀속되며, 서비스 운영 목적으로 활용됩니다.'] },
@@ -383,7 +414,7 @@ export default function LoginPage() {
                   ) : (
                     <>
                       {[
-                        { title: '1. 개인정보의 수집 항목 및 수집 방법', items: ['수집 항목: 이메일 주소, 이름(소셜 로그인 시 제공되는 경우), 계정 고유 식별자(UID)', '자동 수집: 기기 식별 정보, 앱 버전, OS 종류 및 버전, FCM 푸시 토큰', '커뮤니티(건의/문의) 이용 시 수집 항목: 게시글/댓글 내용, 작성 시각, 작성자 식별 정보(UID, 표시명)', '수집 방법: 이메일·비밀번호 회원가입 또는 Google/Apple(iOS 앱) 소셜 로그인'] },
+                        { title: '1. 개인정보의 수집 항목 및 수집 방법', items: ['수집 항목: 이메일 주소, 이름(소셜 로그인 시 제공되는 경우), 계정 고유 식별자(UID)', '자동 수집: 기기 식별 정보, 앱 버전, OS 종류 및 버전, FCM 푸시 토큰', '커뮤니티(건의/문의) 이용 시 수집 항목: 게시글/댓글 내용, 작성 시각, 작성자 식별 정보(UID, 표시명)', '수집 방법: 이메일·비밀번호 회원가입 또는 Google/Apple 소셜 로그인'] },
                         { title: '2. 개인정보의 수집 및 이용 목적', items: ['회원 식별 및 가입 의사 확인', '리그 경기 일정·결과·기록 조회 서비스 제공', '커뮤니티 게시글 작성·관리', '건의/문의 접수, 답변, 처리 상태 안내', '팀 공지사항 및 경기 알림(푸시 알림) 발송'] },
                         { title: '3. 개인정보의 보유 및 이용 기간', items: ['회원 탈퇴 시까지 보유하며, 탈퇴 요청 즉시 파기합니다.', '통신비밀보호법에 의한 로그 기록: 3개월'] },
                         { title: '4. 개인정보의 제3자 제공', items: ['원칙적으로 이용자의 개인정보를 제3자에게 제공하지 않습니다.', '이용자의 동의가 있는 경우 또는 법령에 의해 요구되는 경우에 한해 제공합니다.'] },

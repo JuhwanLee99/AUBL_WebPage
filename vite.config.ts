@@ -5,11 +5,23 @@ import path from 'node:path'
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const apiUrl = (env.VITE_BACKEND_API_URL || '').trim()
+  const isDefaultApiOrigin = /^https?:\/\/api\.aubl\.club\/?$/.test(apiUrl)
   const proxyTarget =
     env.VITE_BACKEND_PROXY_TARGET ||
     env.VITE_BACKEND_TEST_URL ||
+    (apiUrl && !isDefaultApiOrigin ? apiUrl : '') ||
     'http://localhost:8080'
   const isHttps = proxyTarget.startsWith('https://')
+  const secureProxy = isHttps && env.VITE_BACKEND_PROXY_SECURE !== 'false'
+  const shouldSpoofOrigin = env.VITE_BACKEND_PROXY_SPOOF_ORIGIN === 'true'
+  const proxyOrigin = (() => {
+    try {
+      return new URL(proxyTarget).origin
+    } catch {
+      return proxyTarget
+    }
+  })()
 
   return {
     resolve: {
@@ -32,7 +44,23 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: proxyTarget,
           changeOrigin: true,
-          secure: isHttps,
+          secure: secureProxy,
+          ...(shouldSpoofOrigin
+            ? {
+                headers: {
+                  origin: proxyOrigin,
+                  referer: proxyOrigin + '/',
+                },
+              }
+            : {}),
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq) => {
+              if (shouldSpoofOrigin) return
+              // Remove browser CORS headers in dev-proxy mode.
+              proxyReq.removeHeader('origin')
+              proxyReq.removeHeader('referer')
+            })
+          },
         },
       },
     },

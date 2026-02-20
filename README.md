@@ -88,6 +88,10 @@ npm install
 VITE_FIREBASE_API_KEY=your_api_key
 VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
 ...
+VITE_BACKEND_API_URL=https://api.aubl.club
+VITE_BACKEND_PROXY_TARGET=https://api.aubl.club
+# 기본 false: dev 프록시가 Origin/Referer를 제거하여 CORS 403 방지
+VITE_BACKEND_PROXY_SPOOF_ORIGIN=false
 ```
 
 ### 3. 실행 (Development)

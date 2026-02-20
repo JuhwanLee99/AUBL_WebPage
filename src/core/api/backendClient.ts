@@ -28,7 +28,9 @@ async function fetchApi<T>(path: string, init?: RequestInit): Promise<T> {
 
   const res = await fetch(`${BASE_URL}${path}`, { ...init, headers });
   if (!res.ok) {
-    throw new Error(`API error ${res.status}: ${res.statusText}`);
+    let detail = '';
+    try { detail = await res.text(); } catch { /* ignore */ }
+    throw new Error(`API error ${res.status}: ${res.statusText}${detail ? ` — ${detail}` : ''}`);
   }
   return res.json();
 }
@@ -1109,7 +1111,7 @@ export async function getPlayoffSummaries(
           toStringValue(row.scope ?? row.recordType ?? row.record_type ?? row.gameType ?? row.game_type) || 'PLAYOFF',
       } satisfies PlayoffSummaryRow;
     })
-    .filter((item): item is PlayoffSummaryRow => item !== null);
+    .filter((item): item is NonNullable<typeof item> => item !== null);
 }
 
 export async function getPowerRankings(params: {

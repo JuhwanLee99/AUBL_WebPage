@@ -7,6 +7,8 @@ import AdminRulesPage from '../pages/admin/AdminRulesPage';
 import AdminTeamsPage from '../pages/admin/AdminTeamsPage';
 import AdminRolesPage from '../pages/admin/AdminRolesPage';
 import AdminMaintenancePage from '../pages/admin/AdminMaintenancePage';
+import AdminGamesPage from '../pages/admin/AdminGamesPage';
+import AdminGameEditPage from '../pages/admin/AdminGameEditPage';
 import { RequireAdmin } from '@shared/auth/RequireAdmin';
 
 export const adminRoutes: RouteObject[] = [
@@ -24,6 +26,8 @@ export const adminRoutes: RouteObject[] = [
       { path: 'rules', element: <AdminRulesPage /> },
       { path: 'teams', element: <AdminTeamsPage /> },
       { path: 'roles', element: <AdminRolesPage /> },
+      { path: 'games', element: <AdminGamesPage /> },
+      { path: 'games/:matchId', element: <AdminGameEditPage /> },
       { path: 'maintenance', element: <AdminMaintenancePage /> },
     ],
   },
