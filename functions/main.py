@@ -88,7 +88,7 @@ def notify_team_notice(event: firestore_fn.Event[firestore_fn.DocumentSnapshot])
         f"team_{team_id}_notices",
         title,
         body,
-        {"teamId": str(team_id), "noticeId": str(notice_id or "")},
+        {"teamId": str(team_id), "noticeId": str(notice_id or ""), "nav_type": "team_notice"},
     )
 
 
@@ -114,7 +114,7 @@ def notify_match_live(event: firestore_fn.Event[firestore_fn.Change[firestore_fn
         "matches_all",
         "경기 시작",
         matchup,
-        {"matchId": str(match_id or ""), "teamId": "all"},
+        {"matchId": str(match_id or ""), "teamId": "all", "nav_type": "match"},
     )
     for team_id in [home_id, away_id]:
         if not team_id:
@@ -123,7 +123,7 @@ def notify_match_live(event: firestore_fn.Event[firestore_fn.Change[firestore_fn
             f"team_{team_id}_matches",
             "경기 시작",
             matchup,
-            {"matchId": str(match_id or ""), "teamId": str(team_id)},
+            {"matchId": str(match_id or ""), "teamId": str(team_id), "nav_type": "match"},
         )
 
 
@@ -139,14 +139,14 @@ def notify_community_urgent(event: firestore_fn.Event[firestore_fn.DocumentSnaps
             "community_urgent",
             title,
             body,
-            {"noticeId": str(notice_id or ""), "category": "긴급"},
+            {"noticeId": str(notice_id or ""), "category": "긴급", "nav_type": "community_urgent"},
         )
         return
     _send_topic_notification(
         "community_notices",
         title,
         body,
-        {"noticeId": str(notice_id or ""), "category": str(data.get("category") or "")},
+        {"noticeId": str(notice_id or ""), "category": str(data.get("category") or ""), "nav_type": "community_notice"},
     )
 
 
@@ -195,7 +195,7 @@ def notify_inquiry_status(event: firestore_fn.Event[firestore_fn.Change[firestor
         f"inquiry_{uid}",
         "처리 상태 변경",
         f'"{title}" 글이 {new_status} 상태로 변경되었습니다.',
-        {"inquiryId": str(inquiry_id or ""), "type": "status"},
+        {"inquiryId": str(inquiry_id or ""), "type": "status", "nav_type": "inquiry"},
     )
 
 
@@ -223,5 +223,5 @@ def notify_inquiry_comment(event: firestore_fn.Event[firestore_fn.DocumentSnapsh
         f"inquiry_{uid}",
         "새 댓글",
         f'"{inquiry_title}"에 {author}님이 댓글을 남겼습니다.',
-        {"inquiryId": str(inquiry_id), "type": "comment"},
+        {"inquiryId": str(inquiry_id), "type": "comment", "nav_type": "inquiry"},
     )

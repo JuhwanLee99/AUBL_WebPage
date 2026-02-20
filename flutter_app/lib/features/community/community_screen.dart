@@ -15,10 +15,10 @@ class CommunityScreen extends StatefulWidget {
   const CommunityScreen({super.key});
 
   @override
-  State<CommunityScreen> createState() => _CommunityScreenState();
+  State<CommunityScreen> createState() => CommunityScreenState();
 }
 
-class _CommunityScreenState extends State<CommunityScreen> {
+class CommunityScreenState extends State<CommunityScreen> {
   final _fs = FirestoreService();
   final TextEditingController _searchController = TextEditingController();
   List<Notice> _notices = [];
@@ -51,6 +51,12 @@ class _CommunityScreenState extends State<CommunityScreen> {
     _refreshNotifier?.removeListener(_loadNotices);
     _searchController.dispose();
     super.dispose();
+  }
+
+  /// 알림 탭 등 외부에서 카테고리 필터를 지정할 때 호출.
+  void switchToCategory(String category) {
+    if (!mounted) return;
+    setState(() => _selectedCategory = category);
   }
 
   Future<void> _loadNotices() async {

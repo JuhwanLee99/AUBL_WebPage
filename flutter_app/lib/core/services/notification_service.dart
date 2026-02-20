@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -30,6 +32,30 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
   bool _initialized = false;
 
+  // ── 알림 탭 네비게이션 ──
+  final _navController = StreamController<String>.broadcast();
+  String? _pendingNav;
+
+  /// 알림 탭 시 발행되는 nav_type 스트림.
+  /// MainShell에서 구독해 탭 전환에 활용.
+  Stream<String> get navigationStream => _navController.stream;
+
+  /// 앱 종료 후 알림 탭으로 시작된 경우 저장된 nav_type을 반환하고 초기화.
+  String? consumePendingNav() {
+    final nav = _pendingNav;
+    _pendingNav = null;
+    return nav;
+  }
+
+  void _dispatchNav(String navType) {
+    if (navType.isEmpty) return;
+    if (_navController.hasListener) {
+      _navController.add(navType);
+    } else {
+      _pendingNav = navType;
+    }
+  }
+
   Future<void> init() async {
     if (_initialized) return;
 
@@ -53,7 +79,19 @@ class NotificationService {
       android: AndroidInitializationSettings('@drawable/ic_stat_aubl'),
       iOS: DarwinInitializationSettings(),
     );
-    await _local.initialize(initSettings);
+    await _local.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: (details) {
+        // 포그라운드 로컬 알림 탭 처리
+        final payload = details.payload;
+        if (payload == null) return;
+        try {
+          final map = jsonDecode(payload) as Map<String, dynamic>;
+          final navType = map['nav_type'] as String? ?? '';
+          _dispatchNav(navType);
+        } catch (_) {}
+      },
+    );
 
     const channel = AndroidNotificationChannel(
       _channelId,
@@ -75,6 +113,19 @@ class NotificationService {
     });
 
     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+
+    // 백그라운드 → 포그라운드 (알림 탭)
+    FirebaseMessaging.onMessageOpenedApp.listen((message) {
+      final navType = message.data['nav_type'] as String? ?? '';
+      _dispatchNav(navType);
+    });
+
+    // 앱 종료 상태에서 알림 탭으로 시작
+    final initialMessage = await _messaging.getInitialMessage();
+    if (initialMessage != null) {
+      final navType = initialMessage.data['nav_type'] as String? ?? '';
+      if (navType.isNotEmpty) _pendingNav = navType;
+    }
 
     final prefs = await SharedPreferences.getInstance();
     final storedTeam = prefs.getString(_teamKey);
@@ -295,6 +346,12 @@ class NotificationService {
     final notification = message.notification;
     if (notification == null) return;
 
+    final navType = message.data['nav_type'] as String? ?? '';
+    final category = message.data['category'] as String? ?? '';
+    final subText = _navTypeToSubText(navType, category);
+    final payload =
+        navType.isNotEmpty ? jsonEncode({'nav_type': navType}) : null;
+
     final android = notification.android;
     final apple = notification.apple;
     final details = NotificationDetails(
@@ -306,12 +363,13 @@ class NotificationService {
         priority: Priority.high,
         icon: android?.smallIcon ?? _androidSmallIcon,
         largeIcon: const DrawableResourceAndroidBitmap('ic_launcher'),
+        subText: subText,
       ),
       iOS: DarwinNotificationDetails(
         presentAlert: true,
         presentBadge: true,
         presentSound: true,
-        subtitle: apple?.subtitle,
+        subtitle: subText.isNotEmpty ? subText : apple?.subtitle,
       ),
     );
 
@@ -321,7 +379,20 @@ class NotificationService {
         notification.title,
         notification.body,
         details,
+        payload: payload,
       );
     }
+  }
+
+  String _navTypeToSubText(String navType, String category) {
+    return switch (navType) {
+      'team_notice' => '팀 공지',
+      'match' => '경기 알림',
+      'community_urgent' => '긴급 공지',
+      'community_notice' =>
+        category.isNotEmpty ? '$category 공지' : '커뮤니티 공지',
+      'inquiry' => '문의 게시판',
+      _ => '',
+    };
   }
 }

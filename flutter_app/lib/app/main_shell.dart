@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../core/services/notification_service.dart';
+import '../features/community/inquiry_board_screen.dart';
 import '../features/feature_entries.dart';
 import 'embedded_webview_panel.dart';
 import 'more_screen.dart';
@@ -19,9 +21,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   int _currentIndex = 0;
   bool _loggedIn = false;
   late final StreamSubscription<User?> _authSub;
+  StreamSubscription<String>? _notifNavSub;
   final _refreshNotifier = ValueNotifier<int>(0);
   final GlobalKey<RecordsScreenState> _recordsKey =
       GlobalKey<RecordsScreenState>();
+  final GlobalKey<CommunityScreenState> _communityKey =
+      GlobalKey<CommunityScreenState>();
 
   // 임베디드 웹뷰 오버레이 상태
   String? _overlayPath;
@@ -36,6 +41,16 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (mounted) setState(() => _loggedIn = user != null);
     });
+
+    // 알림 탭 네비게이션 스트림 구독
+    _notifNavSub =
+        NotificationService.instance.navigationStream.listen(_handleNotifNav);
+
+    // 앱 종료 후 알림으로 시작된 경우 처리
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final pending = NotificationService.instance.consumePendingNav();
+      if (pending != null) _handleNotifNav(pending);
+    });
   }
 
   @override
@@ -43,6 +58,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _refreshNotifier.dispose();
     _authSub.cancel();
+    _notifNavSub?.cancel();
     super.dispose();
   }
 
@@ -68,6 +84,35 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       _overlayTitle = null;
       _overlayFullscreen = false;
     });
+  }
+
+  /// 알림 탭 시 nav_type에 따라 적절한 탭/화면으로 이동.
+  void _handleNotifNav(String navType) {
+    if (!mounted) return;
+    // 오버레이가 열려 있으면 닫기
+    if (_overlayPath != null) _closeEmbeddedWebView();
+
+    switch (navType) {
+      case 'community_urgent':
+        setState(() => _currentIndex = 4);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _communityKey.currentState?.switchToCategory('긴급');
+        });
+      case 'community_notice':
+        setState(() => _currentIndex = 4);
+      case 'team_notice':
+        setState(() => _currentIndex = 1);
+      case 'match':
+        setState(() => _currentIndex = 2);
+      case 'inquiry':
+        setState(() => _currentIndex = 4);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          Navigator.of(context).push<void>(
+            MaterialPageRoute(builder: (_) => const InquiryBoardScreen()),
+          );
+        });
+    }
   }
 
   @override
@@ -108,7 +153,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                     const TeamHubScreen(),
                     const ScheduleScreen(),
                     RecordsScreen(key: _recordsKey),
-                    const CommunityScreen(),
+                    CommunityScreen(key: _communityKey),
                     const MoreScreen(),
                   ],
                 ),
