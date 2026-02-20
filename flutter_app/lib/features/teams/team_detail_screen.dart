@@ -8,6 +8,7 @@ import '../../core/models/match.dart' as m;
 import '../../core/models/team.dart';
 import '../../core/models/team_member.dart';
 import '../../core/models/team_notice.dart';
+import '../../core/services/team_image_cache_manager.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/webview/app_webview_screen.dart';
 import '../../core/widgets/match_status_badge.dart';
@@ -266,6 +267,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
               padding: const EdgeInsets.only(bottom: 12),
               child: CachedNetworkImage(
                 imageUrl: _team!.emblemUrl!,
+                cacheManager: TeamImageCacheManager.instance,
                 width: 80,
                 height: 80,
                 fit: BoxFit.contain,
