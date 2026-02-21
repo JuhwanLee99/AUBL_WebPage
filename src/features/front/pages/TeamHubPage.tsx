@@ -367,14 +367,11 @@ export default function TeamHubPage() {
               {groupedVisibleTeams.map((row) => (
                 <div
                   key={row.group}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '72px minmax(0, 1fr)',
-                    gap: '10px',
-                    alignItems: 'start',
-                  }}
+                  className="team-hub-group-row"
+                  style={{ display: 'grid', gap: '10px', alignItems: 'start' }}
                 >
                   <div
+                    className="team-hub-group-label"
                     style={{
                       paddingTop: '8px',
                       color: GROUP_COLORS[row.group],
@@ -385,8 +382,8 @@ export default function TeamHubPage() {
                   >
                     {row.group}조
                   </div>
-                  <div style={{ position: 'relative' }}>
-                    <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' }}>
+                  <div className="team-hub-group-track" style={{ position: 'relative' }}>
+                    <div className="team-hub-group-grid" style={{ display: 'grid', gap: '10px' }}>
                       {row.teams.map((team) => {
                         const logoUrl = logoForTeam(team.name);
                         const needsBoost = logoUrl ? shouldForceLogoContrastBoost(logoUrl) : false;
@@ -394,7 +391,7 @@ export default function TeamHubPage() {
                           <Link
                             key={team.name}
                             to={`/teams/${encodeTeamId(team.name)}`}
-                            className="team-card"
+                            className="team-card team-hub-group-card"
                             style={{
                               padding: '16px',
                               borderRadius: '18px',

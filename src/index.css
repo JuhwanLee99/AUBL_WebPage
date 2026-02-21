@@ -279,6 +279,18 @@ button:focus-visible {
   transform: translate(-50%, 8px);
 }
 
+.team-hub-group-row {
+  grid-template-columns: 72px minmax(0, 1fr);
+}
+
+.team-hub-group-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.team-hub-group-card {
+  min-width: 0;
+}
+
 @media (max-width: 1024px) {
   :root {
     --page-padding: 32px 18px 64px;
@@ -306,6 +318,32 @@ button:focus-visible {
 
   .nav-scroll__rail {
     width: max-content;
+  }
+
+  .team-hub-group-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .team-hub-group-label {
+    padding-top: 0 !important;
+  }
+
+  .team-hub-group-track {
+    overflow-x: auto;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .team-hub-group-grid {
+    display: flex !important;
+    flex-wrap: nowrap;
+    width: max-content;
+  }
+
+  .team-hub-group-card {
+    flex: 0 0 clamp(220px, 68vw, 280px);
+    min-width: clamp(220px, 68vw, 280px);
   }
 }
 
@@ -335,6 +373,23 @@ button:focus-visible {
 
   .app-header__inner {
     align-items: flex-start;
+  }
+
+  .team-hub-group-track {
+    overflow-x: visible;
+    padding-bottom: 0;
+  }
+
+  .team-hub-group-grid {
+    display: grid !important;
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .team-hub-group-card {
+    flex: initial;
+    min-width: 0;
+    width: 100%;
   }
 }
 
