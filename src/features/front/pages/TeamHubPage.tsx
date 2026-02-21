@@ -4,6 +4,7 @@ import gsap from 'gsap';
 import { collection, getDocs } from 'firebase/firestore';
 import { GROUP_LETTERS, GROUP_COLORS, TEAM_GROUPS } from '@shared/lib/teamGroups';
 import type { GroupLetter } from '@shared/lib/teamGroups';
+import { TEAM_SEED_INFO } from '@shared/lib/teamSeeds';
 import { useContent } from '@shared/state/contentProvider';
 import { buildTeamDirectory, encodeTeamId } from '@shared/lib/teamDirectory';
 import {
@@ -30,7 +31,7 @@ export default function TeamHubPage() {
   const pageRef = useRef<HTMLDivElement>(null);
   const [activeGroup, setActiveGroup] = useState<GroupKey>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortKey, setSortKey] = useState<SortKey>('NAME');
+  const [sortKey, setSortKey] = useState<SortKey>('GROUP');
   const [logoById, setLogoById] = useState<Record<string, string>>({});
   const teamEntries = teamsContent.entries.length ? teamsContent.entries : TEAM_GROUPS;
   const teams = buildTeamDirectory(teamEntries);
@@ -70,24 +71,52 @@ export default function TeamHubPage() {
   }, []);
 
   const normalizedSearch = searchTerm.trim().toLowerCase();
-  const visibleTeams = useMemo(() => {
-    const filtered = teams.filter((team) => {
+  const filteredTeams = useMemo(() => {
+    return teams.filter((team) => {
       if (activeGroup !== 'ALL' && team.group !== activeGroup) return false;
       if (!normalizedSearch) return true;
       return team.name.toLowerCase().includes(normalizedSearch);
     });
+  }, [teams, activeGroup, normalizedSearch]);
 
-    const sorted = [...filtered].sort((a, b) => {
+  const visibleTeams = useMemo(() => {
+    return [...filteredTeams].sort((a, b) => {
       if (sortKey === 'GROUP') {
         const groupDiff = a.group.localeCompare(b.group, 'en');
         if (groupDiff !== 0) return groupDiff;
+        const aSeed = TEAM_SEED_INFO.get(a.name);
+        const bSeed = TEAM_SEED_INFO.get(b.name);
+        const seedDiff = (aSeed?.seed ?? 99) - (bSeed?.seed ?? 99);
+        if (seedDiff !== 0) return seedDiff;
+        const rankDiff = (aSeed?.rank ?? 999) - (bSeed?.rank ?? 999);
+        if (rankDiff !== 0) return rankDiff;
         return a.name.localeCompare(b.name, 'ko', { sensitivity: 'base' });
       }
       return a.name.localeCompare(b.name, 'ko', { sensitivity: 'base' });
     });
+  }, [filteredTeams, sortKey]);
 
-    return sorted;
-  }, [teams, activeGroup, normalizedSearch, sortKey]);
+  const groupedVisibleTeams = useMemo(() => {
+    if (sortKey !== 'GROUP') return [];
+    const grouped: Record<GroupLetter, typeof visibleTeams> = {
+      A: [],
+      B: [],
+      C: [],
+      D: [],
+      E: [],
+      F: [],
+      G: [],
+      H: [],
+    };
+    visibleTeams.forEach((team) => {
+      grouped[team.group].push(team);
+    });
+
+    const targetGroups: GroupLetter[] = activeGroup === 'ALL' ? GROUP_LETTERS : [activeGroup];
+    return targetGroups
+      .map((group) => ({ group, teams: grouped[group] }))
+      .filter((row) => row.teams.length > 0);
+  }, [visibleTeams, activeGroup, sortKey]);
 
   const groupCounts = useMemo(() => {
     const map: Record<GroupLetter, number> = { A: 0, B: 0, C: 0, D: 0, E: 0, F: 0, G: 0, H: 0 };
@@ -333,69 +362,162 @@ export default function TeamHubPage() {
         </header>
 
         {visibleTeams.length ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-            {visibleTeams.map((team) => {
-              const logoUrl = logoForTeam(team.name);
-              const needsBoost = logoUrl ? shouldForceLogoContrastBoost(logoUrl) : false;
-              return (
-                <Link
-                  key={team.name}
-                  to={`/teams/${encodeTeamId(team.name)}`}
-                  className="team-card"
+          sortKey === 'GROUP' ? (
+            <div style={{ display: 'grid', gap: '12px' }}>
+              {groupedVisibleTeams.map((row) => (
+                <div
+                  key={row.group}
                   style={{
-                    padding: '16px',
-                    borderRadius: '18px',
-                    border: '1px solid rgba(148,163,184,0.25)',
-                    backgroundColor: 'rgba(15,23,42,0.65)',
-                    backgroundImage: logoUrl
-                      ? needsBoost
-                        ? `linear-gradient(180deg, rgba(15,23,42,0.7), rgba(15,23,42,0.7)), url("${logoUrl}"), radial-gradient(circle at center, rgba(255,255,255,1) 0%, rgba(255,255,255,0.93) 22%, rgba(255,255,255,0.54) 40%, rgba(255,255,255,0.12) 56%, rgba(255,255,255,0) 74%)`
-                        : `linear-gradient(180deg, rgba(15,23,42,0.7), rgba(15,23,42,0.7)), url("${logoUrl}")`
-                      : undefined,
-                    backgroundRepeat: logoUrl
-                      ? needsBoost
-                        ? 'no-repeat, no-repeat, no-repeat'
-                        : 'no-repeat, no-repeat'
-                      : undefined,
-                    backgroundPosition: logoUrl
-                      ? needsBoost
-                        ? 'center, center, center'
-                        : 'center, center'
-                      : undefined,
-                    backgroundSize: logoUrl
-                      ? needsBoost
-                        ? '100% 100%, 120px auto, 180px 180px'
-                        : '100% 100%, 120px auto'
-                      : undefined,
-                    color: '#e2e8f0',
-                    textDecoration: 'none',
                     display: 'grid',
+                    gridTemplateColumns: '72px minmax(0, 1fr)',
                     gap: '10px',
-                    boxShadow: '0 12px 30px rgba(0,0,0,0.25)',
+                    alignItems: 'start',
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                    <span
-                      style={{
-                        padding: '4px 8px',
-                        borderRadius: '999px',
-                        fontWeight: 800,
-                        fontSize: '11px',
-                        background: `${team.color}22`,
-                        color: team.color,
-                        border: `1px solid ${team.color}55`,
-                      }}
-                    >
-                      {team.group}조
-                    </span>
-                    <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>TEAM PAGE</span>
+                  <div
+                    style={{
+                      paddingTop: '8px',
+                      color: GROUP_COLORS[row.group],
+                      fontSize: '14px',
+                      fontWeight: 900,
+                      letterSpacing: '0.03em',
+                    }}
+                  >
+                    {row.group}조
                   </div>
-                  <div style={{ fontWeight: 800, fontSize: '16px' }}>{team.name}</div>
-                  <div style={{ color: '#94a3b8', fontSize: '12px' }}>일정 · 로스터 · 공지 확인</div>
-                </Link>
-              );
-            })}
-          </div>
+                  <div style={{ position: 'relative' }}>
+                    <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' }}>
+                      {row.teams.map((team) => {
+                        const logoUrl = logoForTeam(team.name);
+                        const needsBoost = logoUrl ? shouldForceLogoContrastBoost(logoUrl) : false;
+                        return (
+                          <Link
+                            key={team.name}
+                            to={`/teams/${encodeTeamId(team.name)}`}
+                            className="team-card"
+                            style={{
+                              padding: '16px',
+                              borderRadius: '18px',
+                              border: '1px solid rgba(148,163,184,0.25)',
+                              backgroundColor: 'rgba(15,23,42,0.65)',
+                              backgroundImage: logoUrl
+                                ? needsBoost
+                                  ? `linear-gradient(180deg, rgba(15,23,42,0.7), rgba(15,23,42,0.7)), url("${logoUrl}"), radial-gradient(circle at center, rgba(255,255,255,1) 0%, rgba(255,255,255,0.93) 22%, rgba(255,255,255,0.54) 40%, rgba(255,255,255,0.12) 56%, rgba(255,255,255,0) 74%)`
+                                  : `linear-gradient(180deg, rgba(15,23,42,0.7), rgba(15,23,42,0.7)), url("${logoUrl}")`
+                                : undefined,
+                              backgroundRepeat: logoUrl
+                                ? needsBoost
+                                  ? 'no-repeat, no-repeat, no-repeat'
+                                  : 'no-repeat, no-repeat'
+                                : undefined,
+                              backgroundPosition: logoUrl
+                                ? needsBoost
+                                  ? 'center, center, center'
+                                  : 'center, center'
+                                : undefined,
+                              backgroundSize: logoUrl
+                                ? needsBoost
+                                  ? '100% 100%, 120px auto, 180px 180px'
+                                  : '100% 100%, 120px auto'
+                                : undefined,
+                              color: '#e2e8f0',
+                              textDecoration: 'none',
+                              display: 'grid',
+                              gap: '10px',
+                              boxShadow: '0 12px 30px rgba(0,0,0,0.25)',
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                              <span
+                                style={{
+                                  padding: '4px 8px',
+                                  borderRadius: '999px',
+                                  fontWeight: 800,
+                                  fontSize: '11px',
+                                  background: `${team.color}22`,
+                                  color: team.color,
+                                  border: `1px solid ${team.color}55`,
+                                }}
+                              >
+                                {team.group}조
+                              </span>
+                              <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>TEAM PAGE</span>
+                            </div>
+                            <div style={{ fontWeight: 800, fontSize: '16px' }}>{team.name}</div>
+                            <div style={{ color: '#94a3b8', fontSize: '12px' }}>일정 · 로스터 · 공지 확인</div>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+              {visibleTeams.map((team) => {
+                const logoUrl = logoForTeam(team.name);
+                const needsBoost = logoUrl ? shouldForceLogoContrastBoost(logoUrl) : false;
+                return (
+                  <Link
+                    key={team.name}
+                    to={`/teams/${encodeTeamId(team.name)}`}
+                    className="team-card"
+                    style={{
+                      padding: '16px',
+                      borderRadius: '18px',
+                      border: '1px solid rgba(148,163,184,0.25)',
+                      backgroundColor: 'rgba(15,23,42,0.65)',
+                      backgroundImage: logoUrl
+                        ? needsBoost
+                          ? `linear-gradient(180deg, rgba(15,23,42,0.7), rgba(15,23,42,0.7)), url("${logoUrl}"), radial-gradient(circle at center, rgba(255,255,255,1) 0%, rgba(255,255,255,0.93) 22%, rgba(255,255,255,0.54) 40%, rgba(255,255,255,0.12) 56%, rgba(255,255,255,0) 74%)`
+                          : `linear-gradient(180deg, rgba(15,23,42,0.7), rgba(15,23,42,0.7)), url("${logoUrl}")`
+                        : undefined,
+                      backgroundRepeat: logoUrl
+                        ? needsBoost
+                          ? 'no-repeat, no-repeat, no-repeat'
+                          : 'no-repeat, no-repeat'
+                        : undefined,
+                      backgroundPosition: logoUrl
+                        ? needsBoost
+                          ? 'center, center, center'
+                          : 'center, center'
+                        : undefined,
+                      backgroundSize: logoUrl
+                        ? needsBoost
+                          ? '100% 100%, 120px auto, 180px 180px'
+                          : '100% 100%, 120px auto'
+                        : undefined,
+                      color: '#e2e8f0',
+                      textDecoration: 'none',
+                      display: 'grid',
+                      gap: '10px',
+                      boxShadow: '0 12px 30px rgba(0,0,0,0.25)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                      <span
+                        style={{
+                          padding: '4px 8px',
+                          borderRadius: '999px',
+                          fontWeight: 800,
+                          fontSize: '11px',
+                          background: `${team.color}22`,
+                          color: team.color,
+                          border: `1px solid ${team.color}55`,
+                        }}
+                      >
+                        {team.group}조
+                      </span>
+                      <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>TEAM PAGE</span>
+                    </div>
+                    <div style={{ fontWeight: 800, fontSize: '16px' }}>{team.name}</div>
+                    <div style={{ color: '#94a3b8', fontSize: '12px' }}>일정 · 로스터 · 공지 확인</div>
+                  </Link>
+                );
+              })}
+            </div>
+          )
         ) : (
           <div style={{ color: '#94a3b8', fontWeight: 700 }}>조건에 맞는 팀이 없습니다. 검색어나 필터를 확인해주세요.</div>
         )}

@@ -263,6 +263,9 @@ const META_DOC = 'settings/contentMeta';
 const STATIC_KEYS: (keyof Omit<ContentState, 'tickerItems'>)[] = ['landing', 'intro', 'rules', 'teams'];
 
 const VALID_GROUPS: GroupLetter[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+const DEFAULT_GROUP_BY_TEAM = new Map<string, GroupLetter>(
+  TEAM_GROUPS.map((entry) => [entry.name, entry.group]),
+);
 
 const ContentContext = createContext<ContentContextValue>({
   content: defaultContent,
@@ -314,7 +317,14 @@ function normalizeTicker(value: unknown, fallback: string[]): string[] {
 }
 
 function normalizeTeamsEntries(value: unknown, fallback: TeamContentEntry[]): TeamContentEntry[] {
-  if (!Array.isArray(value)) return fallback;
+  const applyGroupOverrides = (entries: TeamContentEntry[]): TeamContentEntry[] =>
+    entries.map((entry) => {
+      const forcedGroup = DEFAULT_GROUP_BY_TEAM.get(entry.name);
+      if (!forcedGroup || entry.group === forcedGroup) return entry;
+      return { ...entry, group: forcedGroup };
+    });
+
+  if (!Array.isArray(value)) return applyGroupOverrides(fallback);
   const next: TeamContentEntry[] = [];
   for (const item of value) {
     if (!item || typeof item !== 'object') continue;
@@ -323,7 +333,7 @@ function normalizeTeamsEntries(value: unknown, fallback: TeamContentEntry[]): Te
     if (!name || typeof group !== 'string' || !VALID_GROUPS.includes(group as GroupLetter)) continue;
     next.push({ name, group: group as GroupLetter });
   }
-  return next.length ? next : fallback;
+  return applyGroupOverrides(next.length ? next : fallback);
 }
 
 function normalizeRuleChapters(value: unknown, fallback: RuleChapter[]): RuleChapter[] {
