@@ -95,7 +95,7 @@
 - 로그인 방식
   - WebView 로그인
   - 네이티브 Google 로그인
-  - 네이티브 Apple 로그인(iOS)
+  - WebView Apple 로그인(iOS/Android)
 - 로그인 후 계정 화면에서 확인 가능 항목
   - UID
   - 이메일
@@ -276,7 +276,7 @@
 1. 앱 완전 종료 후 재실행
 2. 로그아웃 후 재로그인
 3. Google 로그인 문제 시 기기 Google 계정 상태 확인
-4. iOS Apple 로그인 문제 시 Apple ID 로그인 상태 및 Face ID/Touch ID 설정 확인
+4. Apple 로그인 문제 시 WebView에서 버튼 재시도 및 기본 브라우저 로그인 상태 확인
 
 ### 데이터가 오래된 것 같을 때
 

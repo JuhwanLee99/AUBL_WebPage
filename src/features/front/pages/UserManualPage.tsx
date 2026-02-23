@@ -444,7 +444,7 @@ const APP_MEMBER_SECTIONS: ManualSection[] = [
       },
       {
         heading: '로그인 방식',
-        bullets: ['WebView 로그인, 네이티브 Google 로그인, 네이티브 Apple 로그인(iOS)'],
+        bullets: ['WebView 로그인, 네이티브 Google 로그인, WebView Apple 로그인(iOS/Android)'],
       },
       {
         heading: '계정 화면',
@@ -647,7 +647,7 @@ const APP_TROUBLESHOOTING = [
       '앱 완전 종료 후 재실행',
       '로그아웃 후 재로그인',
       'Google 로그인 문제 시 기기 Google 계정 상태 확인',
-      'iOS Apple 로그인 문제 시 Apple ID 로그인 상태 및 Face ID/Touch ID 설정 확인',
+      'Apple 로그인 문제 시 WebView에서 버튼 재시도 및 기본 브라우저 로그인 상태 확인',
     ],
   },
   {

@@ -45,7 +45,7 @@ flutter build appbundle --release --dart-define-from-file=env/prod.json
 
 - [ ] 이메일 로그인
 - [ ] Google 로그인
-- [ ] Apple 로그인(iOS)
+- [ ] Apple 로그인(WebView: iOS/Android)
 - [ ] 로그아웃
 - [ ] 회원 탈퇴
 - [ ] WebView 관리자 페이지 진입/권한 제어
