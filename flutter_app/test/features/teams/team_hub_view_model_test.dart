@@ -1,3 +1,4 @@
+import 'package:aubl_flutter_app/core/data/team_groups.dart';
 import 'package:aubl_flutter_app/features/teams/data/team_hub_repository.dart';
 import 'package:aubl_flutter_app/features/teams/team_hub_view_model.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,17 +28,20 @@ void main() {
     });
 
     test('filters teams by group and query', () {
+      final targetTeam =
+          teamGroups.firstWhere((team) => team.name.contains('한양'));
+      final query = targetTeam.name.substring(0, 2);
       final viewModel = TeamHubViewModel(
         dataSource: _FakeTeamHubDataSource({}),
       );
 
-      viewModel.setSelectedGroup('H');
-      viewModel.setSearchQuery('한양');
+      viewModel.setSelectedGroup(targetTeam.group);
+      viewModel.setSearchQuery(query);
       final filtered = viewModel.filteredTeams();
 
       expect(filtered, isNotEmpty);
-      expect(filtered.every((team) => team.group == 'H'), isTrue);
-      expect(filtered.every((team) => team.name.contains('한양')), isTrue);
+      expect(filtered.every((team) => team.group == targetTeam.group), isTrue);
+      expect(filtered.every((team) => team.name.contains(query)), isTrue);
     });
 
     test('toggles sort mode', () {

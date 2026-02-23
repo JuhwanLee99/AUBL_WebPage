@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../core/services/notification_service.dart';
-import '../features/community/inquiry_board_screen.dart';
 import '../features/feature_entries.dart';
 import 'embedded_webview_panel.dart';
 import 'more_screen.dart';

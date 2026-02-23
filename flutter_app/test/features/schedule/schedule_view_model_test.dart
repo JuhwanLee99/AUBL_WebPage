@@ -1,4 +1,5 @@
 import 'package:aubl_flutter_app/core/models/match.dart' as m;
+import 'package:aubl_flutter_app/core/data/team_groups.dart';
 import 'package:aubl_flutter_app/features/schedule/data/schedule_repository.dart';
 import 'package:aubl_flutter_app/features/schedule/schedule_view_model.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -44,19 +45,24 @@ void main() {
     });
 
     test('filters matches by group and sorts completed matches desc', () async {
+      const firstMatchHome = '한양대학교 불새';
+      const firstMatchAway = '연세대학교 EAGLES';
+      final firstMatchGroup = teamNameToGroup[firstMatchHome];
+      expect(firstMatchGroup, isNotNull);
+
       final source = _FakeScheduleDataSource(
         remote: [
           _match(
             id: 'h-group',
-            homeTeamName: '한양대학교 불새',
-            awayTeamName: '연세대학교 EAGLES',
+            homeTeamName: firstMatchHome,
+            awayTeamName: firstMatchAway,
             status: 'completed',
             startTime: '2025-04-01T10:00:00.000',
           ),
           _match(
             id: 'f-group',
-            homeTeamName: '연세대학교 EAGLES',
-            awayTeamName: '중앙대학교 랑데뷰',
+            homeTeamName: '테스트상대A',
+            awayTeamName: '테스트상대B',
             status: 'completed',
             startTime: '2025-06-01T10:00:00.000',
           ),
@@ -74,7 +80,7 @@ void main() {
       await viewModel.loadMatches();
 
       expect(
-        viewModel.groupMatches('H').map((match) => match.id),
+        viewModel.groupMatches(firstMatchGroup).map((match) => match.id),
         ['h-group'],
       );
       expect(
