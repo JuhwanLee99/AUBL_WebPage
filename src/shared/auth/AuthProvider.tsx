@@ -4,6 +4,7 @@ import {
   OAuthProvider,
   browserLocalPersistence,
   createUserWithEmailAndPassword,
+  getRedirectResult,
   getAdditionalUserInfo,
   getIdToken,
   onIdTokenChanged,
@@ -13,6 +14,7 @@ import {
   signInWithCustomToken,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
 } from 'firebase/auth';
 import type { User } from 'firebase/auth';
@@ -53,7 +55,7 @@ type AuthContextValue = {
   loginWithEmail: (email: string, password: string) => Promise<void>;
   registerWithEmail: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<{ isNewUser: boolean }>;
-  loginWithApple: () => Promise<{ isNewUser: boolean }>;
+  loginWithApple: (options?: { useRedirect?: boolean }) => Promise<{ isNewUser: boolean }>;
   logout: () => Promise<void>;
   deleteAccount: (currentPassword?: string) => Promise<void>;
   refreshIdToken: () => Promise<string | null>;
@@ -72,6 +74,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (IS_TEST_MODE) return;
     if (typeof window === 'undefined') return;
     setPersistence(auth, browserLocalPersistence).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (IS_TEST_MODE) return;
+    void getRedirectResult(auth).catch((err) => {
+      setError(err instanceof Error ? err.message : '소셜 로그인 처리 중 오류가 발생했습니다.');
+    });
   }, []);
 
   // Flutter 앱에서 로그인 상태를 주입받기 위한 글로벌 핸들러
@@ -181,7 +190,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return { isNewUser: getAdditionalUserInfo(result)?.isNewUser ?? false };
   }, []);
 
-  const loginWithApple = useCallback(async () => {
+  const loginWithApple = useCallback(async (options?: { useRedirect?: boolean }) => {
     if (IS_TEST_MODE) {
       console.log('[TEST] 애플 로그인 시도');
       return { isNewUser: false };
@@ -190,6 +199,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
     const provider = new OAuthProvider('apple.com');
     provider.addScope('email');
     provider.addScope('name');
+    if (options?.useRedirect) {
+      await signInWithRedirect(auth, provider);
+      return { isNewUser: false };
+    }
     const result = await signInWithPopup(auth, provider);
     return { isNewUser: getAdditionalUserInfo(result)?.isNewUser ?? false };
   }, []);

@@ -31,6 +31,7 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _local =
       FlutterLocalNotificationsPlugin();
   bool _initialized = false;
+  bool get _isPushSupportedPlatform => Platform.isAndroid || Platform.isIOS;
 
   // ── 알림 탭 네비게이션 ──
   final _navController = StreamController<String>.broadcast();
@@ -59,7 +60,7 @@ class NotificationService {
   Future<void> init() async {
     if (_initialized) return;
 
-    if (!Platform.isAndroid) {
+    if (!_isPushSupportedPlatform) {
       _initialized = true;
       return;
     }
@@ -70,14 +71,27 @@ class NotificationService {
       badge: true,
       sound: true,
     );
-    await _local
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
+    if (Platform.isAndroid) {
+      await _local
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestNotificationsPermission();
+    }
+    if (Platform.isIOS) {
+      await _messaging.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+    }
 
     const initSettings = InitializationSettings(
       android: AndroidInitializationSettings('@drawable/ic_stat_aubl'),
-      iOS: DarwinInitializationSettings(),
+      iOS: DarwinInitializationSettings(
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
+      ),
     );
     await _local.initialize(
       initSettings,
@@ -93,20 +107,26 @@ class NotificationService {
       },
     );
 
-    const channel = AndroidNotificationChannel(
-      _channelId,
-      'AUBL 알림',
-      description: '경기 및 공지 알림',
-      importance: Importance.high,
-    );
-    await _local
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
+    if (Platform.isAndroid) {
+      const channel = AndroidNotificationChannel(
+        _channelId,
+        'AUBL 알림',
+        description: '경기 및 공지 알림',
+        importance: Importance.high,
+      );
+      await _local
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(channel);
+    }
 
     final token = await _messaging.getToken();
+    if (Platform.isIOS) {
+      final apnsToken = await _messaging.getAPNSToken();
+      debugPrint('[NotificationService] APNs token: $apnsToken');
+    }
     debugPrint(
-        '[NotificationService] Android permission: ${permission.authorizationStatus}');
+        '[NotificationService] ${Platform.isIOS ? 'iOS' : 'Android'} permission: ${permission.authorizationStatus}');
     debugPrint('[NotificationService] FCM token: $token');
     _messaging.onTokenRefresh.listen((nextToken) {
       debugPrint('[NotificationService] FCM token refreshed: $nextToken');
@@ -207,7 +227,7 @@ class NotificationService {
     final prev = prefs.getString(_teamKey);
     final uid = prefs.getString(_userUidKey);
 
-    if (!Platform.isAndroid) {
+    if (!_isPushSupportedPlatform) {
       if (teamId != null && teamId.isNotEmpty) {
         await prefs.setString(_teamKey, teamId);
       } else {
@@ -235,7 +255,7 @@ class NotificationService {
     final prefs = await SharedPreferences.getInstance();
     final prev = prefs.getString(_userUidKey);
 
-    if (!Platform.isAndroid) {
+    if (!_isPushSupportedPlatform) {
       if (uid != null && uid.isNotEmpty) {
         await prefs.setString(_userUidKey, uid);
       } else {
@@ -276,7 +296,7 @@ class NotificationService {
     String? teamId,
     String? uid,
   }) async {
-    if (!Platform.isAndroid) return;
+    if (!_isPushSupportedPlatform) return;
 
     final currentTeamId = teamId ?? prefs.getString(_teamKey);
     final currentUid = uid ?? prefs.getString(_userUidKey);

@@ -131,13 +131,13 @@ export default function LoginPage() {
   };
 
   const handleAppleClick = async () => {
-    if (embedded) {
-      setMessage('앱 내 WebView에서는 Apple 로그인을 지원하지 않습니다. 앱의 Apple 로그인 버튼을 사용해 주세요.');
-      return;
-    }
     setSubmitting(true);
     setMessage(null);
     try {
+      if (embedded) {
+        await loginWithApple({ useRedirect: true });
+        return;
+      }
       await loginWithApple();
       if (auth.currentUser) void sendLoginSuccessToFlutter(auth.currentUser);
       navigate(redirectTo, { replace: true });
@@ -205,7 +205,7 @@ export default function LoginPage() {
         <p className="lede">
           {embedded
             ? nativeGoogleEnabled
-              ? '이메일·비밀번호 또는 Google 계정으로 로그인하세요.'
+              ? '이메일·비밀번호 또는 Google/Apple 계정으로 로그인하세요.'
               : '앱 내 WebView에서는 이메일·비밀번호 로그인만 지원합니다.'
             : '이메일·비밀번호(재확인) 또는 Google/Apple 계정으로 간편 로그인하세요.'}
         </p>
@@ -324,12 +324,10 @@ export default function LoginPage() {
               <span>G</span>
               Google 계정으로 계속하기
             </button>
-            {!embedded && (
-              <button type="button" className="auth-apple" onClick={handleAppleClick} disabled={submitting} style={{ marginTop: '8px' }}>
-                <span></span>
-                Apple 계정으로 계속하기
-              </button>
-            )}
+            <button type="button" className="auth-apple" onClick={handleAppleClick} disabled={submitting} style={{ marginTop: '8px' }}>
+              <span></span>
+              Apple 계정으로 계속하기
+            </button>
           </>
         )}
 

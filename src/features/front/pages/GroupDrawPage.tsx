@@ -73,9 +73,6 @@ export default function GroupDrawPage() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ groups, newcomer1, newcomer2 }));
   }, [groups, newcomer1, newcomer2]);
 
-  // 시드 전환 시 선택 초기화
-  useEffect(() => { setSelected(null); }, [activeSeed]);
-
   // 언마운트 시 타이머 정리
   useEffect(() => () => { if (notifTimer.current) clearTimeout(notifTimer.current); }, []);
 
@@ -132,6 +129,11 @@ export default function GroupDrawPage() {
     }));
   };
 
+  const changeActiveSeed = (nextSeed: number | null) => {
+    setActiveSeed(nextSeed);
+    setSelected(null);
+  };
+
   const handleReset = () => {
     setGroups(emptyGroups());
     setNewcomer1('');
@@ -184,7 +186,7 @@ export default function GroupDrawPage() {
     if (activeSeed === null) return;
     const idx = availableSeeds.indexOf(activeSeed);
     const next = availableSeeds[idx + 1] ?? null;
-    setActiveSeed(next);
+    changeActiveSeed(next);
   };
 
   const activeSeedDone =
@@ -302,7 +304,7 @@ export default function GroupDrawPage() {
               <button
                 key={seed}
                 type="button"
-                onClick={() => setActiveSeed(isActive ? null : seed)}
+                onClick={() => changeActiveSeed(isActive ? null : seed)}
                 style={{
                   padding: '12px 18px', borderRadius: '14px', fontWeight: 900, fontSize: '14px',
                   background: isActive ? `${c}22` : isDone ? 'rgba(52,211,153,0.08)' : 'rgba(255,255,255,0.04)',
@@ -636,7 +638,7 @@ export default function GroupDrawPage() {
                 <button
                   key={seed}
                   type="button"
-                  onClick={() => setActiveSeed(seed)}
+                  onClick={() => changeActiveSeed(seed)}
                   style={{
                     padding: '18px', borderRadius: '14px', textAlign: 'left',
                     background: isDone ? 'rgba(52,211,153,0.07)' : `${c}08`,
