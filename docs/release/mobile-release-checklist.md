@@ -2,6 +2,7 @@
 
 문서 버전: 2026-02-19
 대상: `flutter_app` (Android / iOS)
+제출 서류 패키지: `docs/release/store-submission-dossier.md`
 
 ## 1) 사전 게이트
 
