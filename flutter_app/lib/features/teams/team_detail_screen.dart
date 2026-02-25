@@ -769,13 +769,24 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
+        builder: (ctx, setDialogState) => Dialog(
           backgroundColor: AppTheme.slate800,
-          title: const Text('공지 작성'),
-          content: SingleChildScrollView(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const Text(
+                  '공지 작성',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: category,
                   items: _noticeCategories
@@ -798,7 +809,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   decoration: const InputDecoration(labelText: '내용'),
                   maxLines: 4,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
                 CheckboxListTile(
                   value: pinned,
                   onChanged: (v) => setDialogState(() => pinned = v ?? false),
@@ -806,53 +817,57 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   title: const Text('상단 고정 공지'),
                   controlAffinity: ListTileControlAffinity.leading,
                 ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: saving ? null : () => Navigator.pop(ctx),
+                      child: const Text('취소'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        disabledBackgroundColor: AppTheme.slate700,
+                      ),
+                      onPressed: () async {
+                        if (saving) return;
+                        final title = titleCtrl.text.trim();
+                        final content = contentCtrl.text.trim();
+                        if (title.isEmpty || content.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('제목과 내용을 입력해주세요.')),
+                          );
+                          return;
+                        }
+                        setDialogState(() => saving = true);
+                        try {
+                          final result = await _viewModel.addNotice(
+                            teamId: widget.teamId,
+                            title: title,
+                            content: content,
+                            category: category,
+                            pinned: pinned,
+                          );
+                          if (mounted) {
+                            _applyNoticeActionResult(result);
+                          }
+                          if (result.errorMessage == null && ctx.mounted) {
+                            Navigator.pop(ctx);
+                          }
+                        } finally {
+                          if (ctx.mounted) {
+                            setDialogState(() => saving = false);
+                          }
+                        }
+                      },
+                      child: Text(saving ? '게시 중...' : '게시'),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: saving ? null : () => Navigator.pop(ctx),
-              child: const Text('취소'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                disabledBackgroundColor: AppTheme.slate700,
-              ),
-              onPressed: () async {
-                if (saving) return;
-                final title = titleCtrl.text.trim();
-                final content = contentCtrl.text.trim();
-                if (title.isEmpty || content.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('제목과 내용을 입력해주세요.')),
-                  );
-                  return;
-                }
-
-                setDialogState(() => saving = true);
-                try {
-                  final result = await _viewModel.addNotice(
-                    teamId: widget.teamId,
-                    title: title,
-                    content: content,
-                    category: category,
-                    pinned: pinned,
-                  );
-                  if (mounted) {
-                    _applyNoticeActionResult(result);
-                  }
-                  if (result.errorMessage == null && ctx.mounted) {
-                    Navigator.pop(ctx);
-                  }
-                } finally {
-                  if (ctx.mounted) {
-                    setDialogState(() => saving = false);
-                  }
-                }
-              },
-              child: Text(saving ? '게시 중...' : '게시'),
-            ),
-          ],
         ),
       ),
     );

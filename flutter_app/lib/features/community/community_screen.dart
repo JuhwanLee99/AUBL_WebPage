@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:url_launcher/url_launcher.dart';
@@ -26,13 +27,16 @@ class CommunityScreenState extends State<CommunityScreen> {
   String _selectedCategory = '전체';
   String _searchQuery = '';
   ValueNotifier<int>? _refreshNotifier;
+  bool _isAdmin = false;
 
   static const _categories = ['전체', '긴급', '경기공지', '징계', '일반'];
+  static const _writeCategories = ['일반', '징계', '경기공지', '긴급'];
 
   @override
   void initState() {
     super.initState();
     _loadNotices();
+    _checkAdmin();
   }
 
   @override
@@ -57,6 +61,13 @@ class CommunityScreenState extends State<CommunityScreen> {
   void switchToCategory(String category) {
     if (!mounted) return;
     setState(() => _selectedCategory = category);
+  }
+
+  Future<void> _checkAdmin() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final token = await user.getIdTokenResult();
+    if (mounted) setState(() => _isAdmin = token.claims?['admin'] == true);
   }
 
   Future<void> _loadNotices() async {
@@ -115,6 +126,12 @@ class CommunityScreenState extends State<CommunityScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('커뮤니티')),
+      floatingActionButton: _isAdmin
+          ? FloatingActionButton(
+              onPressed: _showWriteNoticeDialog,
+              child: const Icon(Icons.edit),
+            )
+          : null,
       body: Stack(
         children: [
           const BackgroundLogo(saturation: 0.85),
@@ -294,6 +311,131 @@ class CommunityScreenState extends State<CommunityScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  void _showWriteNoticeDialog() {
+    final titleCtrl = TextEditingController();
+    final contentCtrl = TextEditingController();
+    String category = '일반';
+    bool isImportant = false;
+    bool saving = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => Dialog(
+          backgroundColor: AppTheme.slate800,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '공지 작성',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  initialValue: category,
+                  items: _writeCategories
+                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setDialogState(() => category = v);
+                  },
+                  decoration: const InputDecoration(labelText: '카테고리'),
+                  dropdownColor: AppTheme.slate700,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: titleCtrl,
+                  decoration: const InputDecoration(labelText: '제목'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: contentCtrl,
+                  decoration: const InputDecoration(labelText: '내용'),
+                  maxLines: 4,
+                ),
+                const SizedBox(height: 4),
+                CheckboxListTile(
+                  value: isImportant,
+                  onChanged: (v) =>
+                      setDialogState(() => isImportant = v ?? false),
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('중요 공지로 표시'),
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: saving ? null : () => Navigator.pop(ctx),
+                      child: const Text('취소'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        disabledBackgroundColor: AppTheme.slate700,
+                      ),
+                      onPressed: saving
+                          ? null
+                          : () async {
+                              final title = titleCtrl.text.trim();
+                              final content = contentCtrl.text.trim();
+                              if (title.isEmpty || content.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text('제목과 내용을 입력해주세요.')),
+                                );
+                                return;
+                              }
+                              setDialogState(() => saving = true);
+                              try {
+                                final author =
+                                    FirebaseAuth.instance.currentUser?.displayName ??
+                                        '관리자';
+                                await _fs.addNotice(
+                                  title: title,
+                                  category: category,
+                                  content: content,
+                                  author: author,
+                                  isImportant: isImportant,
+                                );
+                                if (ctx.mounted) Navigator.pop(ctx);
+                                if (mounted) {
+                                  _loadNotices();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('공지가 등록되었습니다.')),
+                                  );
+                                }
+                              } catch (e) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('오류가 발생했습니다: $e')),
+                                  );
+                                }
+                              } finally {
+                                if (ctx.mounted) setDialogState(() => saving = false);
+                              }
+                            },
+                      child: Text(saving ? '게시 중...' : '게시'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

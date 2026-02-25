@@ -279,6 +279,25 @@ class FirestoreService {
     return Notice.fromFirestore(doc);
   }
 
+  Future<void> addNotice({
+    required String title,
+    required String category,
+    required String content,
+    required String author,
+    bool isImportant = false,
+    bool allowComments = true,
+  }) {
+    return _db.collection('notices').add({
+      'title': title,
+      'category': category,
+      'content': content,
+      'author': author,
+      'createdAt': DateTime.now().millisecondsSinceEpoch,
+      'isImportant': isImportant,
+      'allowComments': allowComments,
+    });
+  }
+
   Stream<List<NoticeComment>> watchNoticeComments(String noticeId) {
     return _db
         .collection('notices')
