@@ -82,53 +82,8 @@ class BackendApiService {
         final raw = await _get('/api/rankings/batters', query: fallbackQuery);
         return _normalizeBatterRankings(raw, seasonId);
       }
-      if (!_isNotFoundError(err)) rethrow;
+      rethrow;
     }
-
-    final legacySortMap = <BatterRankingSort, String>{
-      BatterRankingSort.battingAverage: 'avg',
-      BatterRankingSort.hits: 'hits',
-      BatterRankingSort.homeRuns: 'hr',
-      BatterRankingSort.rbi: 'rbi',
-      BatterRankingSort.ops: 'ops',
-    };
-
-    final attempts = _buildSortAttempts(
-        sort?.wire, sort == null ? null : legacySortMap[sort]);
-    Object? lastError;
-
-    for (final attemptSort in attempts) {
-      final fallbackQuery = _buildRankingQuery(
-        seasonId: seasonId,
-        limit: limit,
-        sort: attemptSort,
-        filters: filters,
-        regulation: regulation,
-      );
-      try {
-        final raw = await _get('/api/records/batters', query: fallbackQuery);
-        return _normalizeBatterRankings(raw, seasonId);
-      } catch (err) {
-        if (_isBadRequestError(err) && _hasActiveRecordFilters(filters)) {
-          final noFilterQuery = _buildRankingQuery(
-            seasonId: seasonId,
-            limit: limit,
-            sort: attemptSort,
-            filters: null,
-            regulation: regulation,
-          );
-          final raw = await _get('/api/records/batters', query: noFilterQuery);
-          return _normalizeBatterRankings(raw, seasonId);
-        }
-        lastError = err;
-        if (_isBadRequestError(err) && attemptSort != null) {
-          continue;
-        }
-        rethrow;
-      }
-    }
-
-    throw lastError ?? Exception('타자 랭킹을 불러오지 못했습니다.');
   }
 
   Future<List<PitcherRanking>> getPitcherRankings({
@@ -163,53 +118,8 @@ class BackendApiService {
         final raw = await _get('/api/rankings/pitchers', query: fallbackQuery);
         return _normalizePitcherRankings(raw, seasonId);
       }
-      if (!_isNotFoundError(err)) rethrow;
+      rethrow;
     }
-
-    final legacySortMap = <PitcherRankingSort, String>{
-      PitcherRankingSort.era: 'era',
-      PitcherRankingSort.whip: 'whip',
-      PitcherRankingSort.strikeouts: 'so',
-      PitcherRankingSort.wins: 'wins',
-      PitcherRankingSort.saves: 'saves',
-    };
-
-    final attempts = _buildSortAttempts(
-        sort?.wire, sort == null ? null : legacySortMap[sort]);
-    Object? lastError;
-
-    for (final attemptSort in attempts) {
-      final fallbackQuery = _buildRankingQuery(
-        seasonId: seasonId,
-        limit: limit,
-        sort: attemptSort,
-        filters: filters,
-        regulation: regulation,
-      );
-      try {
-        final raw = await _get('/api/records/pitchers', query: fallbackQuery);
-        return _normalizePitcherRankings(raw, seasonId);
-      } catch (err) {
-        if (_isBadRequestError(err) && _hasActiveRecordFilters(filters)) {
-          final noFilterQuery = _buildRankingQuery(
-            seasonId: seasonId,
-            limit: limit,
-            sort: attemptSort,
-            filters: null,
-            regulation: regulation,
-          );
-          final raw = await _get('/api/records/pitchers', query: noFilterQuery);
-          return _normalizePitcherRankings(raw, seasonId);
-        }
-        lastError = err;
-        if (_isBadRequestError(err) && attemptSort != null) {
-          continue;
-        }
-        rethrow;
-      }
-    }
-
-    throw lastError ?? Exception('투수 랭킹을 불러오지 못했습니다.');
   }
 
   Future<List<SeasonSummary>> getSeasons() async {
@@ -743,21 +653,6 @@ class BackendApiService {
     return limit > 100 ? 100 : limit;
   }
 
-  List<String?> _buildSortAttempts(String? primary, String? legacy) {
-    final out = <String?>[];
-    final seen = <String>{};
-    void add(String? value) {
-      final key = value ?? '__none__';
-      if (seen.contains(key)) return;
-      seen.add(key);
-      out.add(value);
-    }
-
-    add(primary);
-    add(legacy);
-    add(null);
-    return out;
-  }
 
   void _applyRecordFilters(
       Map<String, String> query, RecordFilterParams? filters) {
@@ -1185,7 +1080,10 @@ enum BatterRankingSort {
   rbi('rbi'),
   ops('ops'),
   sluggingPct('sluggingPct'),
-  onBasePct('onBasePct');
+  onBasePct('onBasePct'),
+  gamesPlayed('gamesPlayed'),
+  plateAppearance('plateAppearance'),
+  stolenBases('stolenBases');
 
   const BatterRankingSort(this.wire);
   final String wire;
@@ -1196,7 +1094,10 @@ enum PitcherRankingSort {
   whip('whip'),
   strikeouts('strikeouts'),
   wins('wins'),
-  saves('saves');
+  saves('saves'),
+  inningsPitched('inningsPitched'),
+  walksAllowed('walksAllowed'),
+  gamesPlayed('gamesPlayed');
 
   const PitcherRankingSort(this.wire);
   final String wire;

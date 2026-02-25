@@ -21,7 +21,7 @@ import {
   thStyle,
   theadRowStyle,
 } from '../components/recordStyles';
-import { getDivisionLabel, getScopeLabel, toWinPct } from '../utils/recordView';
+import { getDivisionLabel, getScopeLabel, tierToKorean, toWinPct } from '../utils/recordView';
 
 type StandingsSortKey =
   | 'rank'
@@ -247,7 +247,7 @@ export default function StandingsTab({
                       onToggle={() => onToggleScope(resolvedScope as Exclude<RecordScope, 'ALL'>)}
                     />
                     <InteractiveFilterCell
-                      label={resolvedDivision}
+                      label={tierToKorean(resolvedDivision)}
                       active={playoffDivision !== 'ALL' && playoffDivision === resolvedDivision}
                       onToggle={
                         resolvedDivision === '-'
@@ -291,7 +291,7 @@ export default function StandingsTab({
               {playoffStageSummary.map((row, index) => (
                 <tr key={`${row.tier}-${row.round}`} style={tbodyRowStyle(index)}>
                   <InteractiveFilterCell
-                    label={row.tier}
+                    label={tierToKorean(row.tier)}
                     active={playoffDivision !== 'ALL' && playoffDivision === row.tier}
                     onToggle={
                       row.tier === 'EUTTEUM' || row.tier === 'BEOGEUM'

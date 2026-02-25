@@ -42,6 +42,12 @@ def _send_topic_notification(topic: str, title: str, body: str, data: dict[str, 
         topic=topic,
         notification=messaging.Notification(title=title, body=body),
         data=data or {},
+        apns=messaging.APNSConfig(
+            payload=messaging.APNSPayload(
+                aps=messaging.Aps(sound="default"),
+            ),
+        ),
+        android=messaging.AndroidConfig(priority="high"),
     )
     messaging.send(message)
 

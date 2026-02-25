@@ -26,7 +26,7 @@ import {
   thStyle,
   theadRowStyle,
 } from '../components/recordStyles';
-import { getDivisionLabel, getScopeLabel } from '../utils/recordView';
+import { getDivisionLabel, getScopeLabel, tierToKorean } from '../utils/recordView';
 
 type BatterSortKey =
   | 'rank'
@@ -343,7 +343,7 @@ export default function BattersTab({
                       onToggle={() => onToggleScope(resolvedScope as Exclude<RecordScope, 'ALL'>)}
                     />
                     <InteractiveFilterCell
-                      label={resolvedDivision}
+                      label={tierToKorean(resolvedDivision)}
                       active={playoffDivision !== 'ALL' && playoffDivision === resolvedDivision}
                       onToggle={
                         resolvedDivision === '-'

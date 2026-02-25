@@ -1,5 +1,34 @@
 part of 'records_screen.dart';
 
+// 정렬 활성 컬럼 강조색 (web: #34d399 emerald-400)
+const _sortActiveColor = Color(0xFF34D399);
+const _sortHint = '↕ 컬럼 탭하여 정렬';
+
+// 정렬 활성 여부에 따른 셀 스타일 반환
+TextStyle _cs(int cellIdx, int? sortColIdx) => sortColIdx == cellIdx
+    ? _cellStyle.copyWith(color: _sortActiveColor, fontWeight: FontWeight.w700)
+    : _cellStyle;
+
+TextStyle _ns(int cellIdx, int? sortColIdx) => sortColIdx == cellIdx
+    ? _numStyle.copyWith(color: _sortActiveColor, fontWeight: FontWeight.w700)
+    : _numStyle;
+
+String _tierLabel(String? value) {
+  final raw = (value ?? '').trim().toUpperCase();
+  if (raw.contains('EUTTEUM') || raw.contains('으뜸')) return '으뜸';
+  if (raw.contains('BEOGEUM') || raw.contains('버금')) return '버금';
+  return '-';
+}
+
+String _roundLabel(String? value) {
+  final raw = (value ?? '').trim().toUpperCase();
+  if (raw == 'FINAL') return '결승';
+  if (raw == 'SEMI_FINAL') return '4강';
+  if (raw == 'QUARTER_FINAL') return '8강';
+  if (raw == 'ROUND_OF_16') return '16강';
+  return value ?? '-';
+}
+
 extension _RecordsScreenSections on RecordsScreenState {
   Widget _buildFilterBar() {
     final selectedSeason = _seasons.where((e) => e.id == _seasonId).firstOrNull;
@@ -364,6 +393,12 @@ extension _RecordsScreenSections on RecordsScreenState {
         return 'SLG ${row.sluggingPct.toStringAsFixed(3)}';
       case BatterRankingSort.ops:
         return 'OPS ${row.ops.toStringAsFixed(3)}';
+      case BatterRankingSort.gamesPlayed:
+        return 'G ${row.gamesPlayed}';
+      case BatterRankingSort.plateAppearance:
+        return 'PA ${row.plateAppearance}';
+      case BatterRankingSort.stolenBases:
+        return 'SB ${row.stolenBases}';
     }
   }
 
@@ -379,6 +414,12 @@ extension _RecordsScreenSections on RecordsScreenState {
         return 'SV ${row.saves}';
       case PitcherRankingSort.era:
         return 'ERA ${row.era.toStringAsFixed(2)}';
+      case PitcherRankingSort.inningsPitched:
+        return 'IP ${row.inningsPitched.toStringAsFixed(1)}';
+      case PitcherRankingSort.walksAllowed:
+        return 'BB ${row.walksAllowed}';
+      case PitcherRankingSort.gamesPlayed:
+        return 'G ${row.gamesPlayed}';
     }
   }
 
@@ -396,10 +437,11 @@ extension _RecordsScreenSections on RecordsScreenState {
 
   String _divisionLabel(String? value) {
     final raw = (value ?? '').trim().toUpperCase();
-    if (raw.contains('EUTTEUM') || raw.contains('으뜸')) return 'EUTTEUM';
-    if (raw.contains('BEOGEUM') || raw.contains('버금')) return 'BEOGEUM';
+    if (raw.contains('EUTTEUM') || raw.contains('으뜸')) return '으뜸';
+    if (raw.contains('BEOGEUM') || raw.contains('버금')) return '버금';
     return '-';
   }
+
 
   String _groupLabel(String? partCode) {
     final group = RecordsViewModel.resolveGroupFromPartCode(partCode);
@@ -493,6 +535,9 @@ class _RecordsOverviewSection extends StatelessWidget {
                       _SortItem(value: BatterRankingSort.hits, label: 'H'),
                       _SortItem(value: BatterRankingSort.homeRuns, label: 'HR'),
                       _SortItem(value: BatterRankingSort.rbi, label: 'RBI'),
+                      _SortItem(value: BatterRankingSort.gamesPlayed, label: 'G'),
+                      _SortItem(value: BatterRankingSort.plateAppearance, label: 'PA'),
+                      _SortItem(value: BatterRankingSort.stolenBases, label: 'SB'),
                     ],
                     onChanged: onBatterSortChanged,
                   ),
@@ -521,6 +566,9 @@ class _RecordsOverviewSection extends StatelessWidget {
                           value: PitcherRankingSort.strikeouts, label: 'K'),
                       _SortItem(value: PitcherRankingSort.wins, label: 'W'),
                       _SortItem(value: PitcherRankingSort.saves, label: 'SV'),
+                      _SortItem(value: PitcherRankingSort.inningsPitched, label: 'IP'),
+                      _SortItem(value: PitcherRankingSort.walksAllowed, label: 'BB'),
+                      _SortItem(value: PitcherRankingSort.gamesPlayed, label: 'G'),
                     ],
                     onChanged: onPitcherSortChanged,
                   ),
@@ -541,7 +589,7 @@ class _RecordsOverviewSection extends StatelessWidget {
   }
 }
 
-class _RecordsBattersSection extends StatelessWidget {
+class _RecordsBattersSection extends StatefulWidget {
   const _RecordsBattersSection({
     required this.filters,
     required this.topInBatters,
@@ -567,65 +615,108 @@ class _RecordsBattersSection extends StatelessWidget {
   final String Function(String? partCode) groupLabel;
 
   @override
+  State<_RecordsBattersSection> createState() => _RecordsBattersSectionState();
+}
+
+class _RecordsBattersSectionState extends State<_RecordsBattersSection> {
+  int? _sortColIdx;
+  bool _sortAsc = true;
+
+  void _onSort(int colIdx, bool ascending) {
+    setState(() {
+      _sortColIdx = colIdx;
+      _sortAsc = ascending;
+    });
+  }
+
+  List<BatterRanking> get _sortedBatters {
+    final idx = _sortColIdx;
+    if (idx == null) return widget.batters;
+    final sorted = [...widget.batters];
+    int cmp(BatterRanking a, BatterRanking b) {
+      switch (idx) {
+        case 0:  return a.rank.compareTo(b.rank);
+        case 1:  return a.playerName.compareTo(b.playerName);
+        case 2:  return a.teamName.compareTo(b.teamName);
+        case 3:  return (a.scope ?? '').compareTo(b.scope ?? '');
+        case 4:  return (a.seasonType ?? '').compareTo(b.seasonType ?? '');
+        case 5:  return (a.partCode ?? '').compareTo(b.partCode ?? '');
+        case 6:  return (a.regulation ?? '').compareTo(b.regulation ?? '');
+        case 7:  return (int.tryParse(a.jerseyNumber) ?? 0).compareTo(int.tryParse(b.jerseyNumber) ?? 0);
+        case 8:  return (a.seasonYear ?? 0).compareTo(b.seasonYear ?? 0);
+        case 9:  return a.battingAverage.compareTo(b.battingAverage);
+        case 10: return a.onBasePct.compareTo(b.onBasePct);
+        case 11: return a.sluggingPct.compareTo(b.sluggingPct);
+        case 12: return a.ops.compareTo(b.ops);
+        case 13: return a.homeRuns.compareTo(b.homeRuns);
+        case 14: return a.runsBattedIn.compareTo(b.runsBattedIn);
+        case 15: return a.stolenBases.compareTo(b.stolenBases);
+        case 16: return a.hits.compareTo(b.hits);
+        case 17: return a.gamesPlayed.compareTo(b.gamesPlayed);
+        default: return 0;
+      }
+    }
+    sorted.sort((a, b) => _sortAsc ? cmp(a, b) : cmp(b, a));
+    return sorted;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final batters = _sortedBatters;
     return RefreshIndicator(
-      onRefresh: onRefresh,
+      onRefresh: widget.onRefresh,
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
           _TopFivePanel<BatterRanking>(
             title: '타자 TOP 5 (규정 IN)',
             accent: AppTheme.purple500,
-            rows: topInBatters,
+            rows: widget.topInBatters,
             emptyText: '타자 데이터가 없습니다.',
             sortWidget: _SortDropdown<BatterRankingSort>(
-              value: filters.topBatterSort,
+              value: widget.filters.topBatterSort,
               items: const [
-                _SortItem(
-                    value: BatterRankingSort.battingAverage, label: 'AVG'),
+                _SortItem(value: BatterRankingSort.battingAverage, label: 'AVG'),
                 _SortItem(value: BatterRankingSort.ops, label: 'OPS'),
                 _SortItem(value: BatterRankingSort.onBasePct, label: 'OBP'),
                 _SortItem(value: BatterRankingSort.sluggingPct, label: 'SLG'),
                 _SortItem(value: BatterRankingSort.hits, label: 'H'),
                 _SortItem(value: BatterRankingSort.homeRuns, label: 'HR'),
                 _SortItem(value: BatterRankingSort.rbi, label: 'RBI'),
+                _SortItem(value: BatterRankingSort.gamesPlayed, label: 'G'),
+                _SortItem(value: BatterRankingSort.plateAppearance, label: 'PA'),
               ],
-              onChanged: onBatterSortChanged,
+              onChanged: widget.onBatterSortChanged,
             ),
             itemBuilder: (row) => _TopPlayerTile(
               rank: row.rank,
               name: row.playerName,
               team: row.teamName,
-              value: formatTopBatterValue(row),
-              onTap: () => onOpenPlayerDetail(row.playerId),
+              value: widget.formatTopBatterValue(row),
+              onTap: () => widget.onOpenPlayerDetail(row.playerId),
             ),
           ),
           const SizedBox(height: 10),
           _Card(
             title: '타자 기록',
+            hint: _sortHint,
             child: batters.isEmpty
                 ? const _EmptyState(text: '표시할 타자 기록이 없습니다.')
                 : _buildPlayerStatsTable(
                     statColumns: const [
-                      DataColumn(
-                          label: Text('AVG', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('OBP', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('SLG', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('OPS', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('HR', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('RBI', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('SB', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('H', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('G', style: _thStyle), numeric: true),
+                      DataColumn(label: Text('AVG', style: _thStyle), numeric: true),
+                      DataColumn(label: Text('OBP', style: _thStyle), numeric: true),
+                      DataColumn(label: Text('SLG', style: _thStyle), numeric: true),
+                      DataColumn(label: Text('OPS', style: _thStyle), numeric: true),
+                      DataColumn(label: Text('HR', style: _thStyle), numeric: true),
+                      DataColumn(label: Text('RBI', style: _thStyle), numeric: true),
+                      DataColumn(label: Text('SB', style: _thStyle), numeric: true),
+                      DataColumn(label: Text('H', style: _thStyle), numeric: true),
+                      DataColumn(label: Text('G', style: _thStyle), numeric: true),
                     ],
+                    sortColumnIndex: _sortColIdx,
+                    sortAscending: _sortAsc,
+                    onSort: _onSort,
                     rows: batters
                         .map(
                           (row) => DataRow(
@@ -641,34 +732,21 @@ class _RecordsBattersSection extends StatelessWidget {
                                 regulation: row.regulation,
                                 jerseyNumber: row.jerseyNumber,
                                 seasonYear: row.seasonYear,
-                                onOpenPlayerDetail: onOpenPlayerDetail,
-                                scopeLabel: scopeLabel,
-                                divisionLabel: divisionLabel,
-                                groupLabel: groupLabel,
+                                onOpenPlayerDetail: widget.onOpenPlayerDetail,
+                                scopeLabel: widget.scopeLabel,
+                                divisionLabel: widget.divisionLabel,
+                                groupLabel: widget.groupLabel,
+                                sortColIdx: _sortColIdx,
                               ),
-                              DataCell(Text(
-                                  row.battingAverage.toStringAsFixed(3),
-                                  style: _numStyle)),
-                              DataCell(Text(row.onBasePct.toStringAsFixed(3),
-                                  style: _numStyle)),
-                              DataCell(Text(row.sluggingPct.toStringAsFixed(3),
-                                  style: _numStyle)),
-                              DataCell(
-                                Text(
-                                  row.ops.toStringAsFixed(3),
-                                  style: _numStyle.copyWith(
-                                      color: AppTheme.purple500),
-                                ),
-                              ),
-                              DataCell(
-                                  Text('${row.homeRuns}', style: _numStyle)),
-                              DataCell(Text('${row.runsBattedIn}',
-                                  style: _numStyle)),
-                              DataCell(
-                                  Text('${row.stolenBases}', style: _numStyle)),
-                              DataCell(Text('${row.hits}', style: _numStyle)),
-                              DataCell(
-                                  Text('${row.gamesPlayed}', style: _numStyle)),
+                              DataCell(Text(row.battingAverage.toStringAsFixed(3), style: _ns(9, _sortColIdx))),
+                              DataCell(Text(row.onBasePct.toStringAsFixed(3), style: _ns(10, _sortColIdx))),
+                              DataCell(Text(row.sluggingPct.toStringAsFixed(3), style: _ns(11, _sortColIdx))),
+                              DataCell(Text(row.ops.toStringAsFixed(3), style: _numStyle.copyWith(color: _sortColIdx == 12 ? _sortActiveColor : AppTheme.purple500, fontWeight: _sortColIdx == 12 ? FontWeight.w700 : null))),
+                              DataCell(Text('${row.homeRuns}', style: _ns(13, _sortColIdx))),
+                              DataCell(Text('${row.runsBattedIn}', style: _ns(14, _sortColIdx))),
+                              DataCell(Text('${row.stolenBases}', style: _ns(15, _sortColIdx))),
+                              DataCell(Text('${row.hits}', style: _ns(16, _sortColIdx))),
+                              DataCell(Text('${row.gamesPlayed}', style: _ns(17, _sortColIdx))),
                             ],
                           ),
                         )
@@ -681,7 +759,7 @@ class _RecordsBattersSection extends StatelessWidget {
   }
 }
 
-class _RecordsPitchersSection extends StatelessWidget {
+class _RecordsPitchersSection extends StatefulWidget {
   const _RecordsPitchersSection({
     required this.filters,
     required this.topInPitchers,
@@ -707,60 +785,105 @@ class _RecordsPitchersSection extends StatelessWidget {
   final String Function(String? partCode) groupLabel;
 
   @override
+  State<_RecordsPitchersSection> createState() => _RecordsPitchersSectionState();
+}
+
+class _RecordsPitchersSectionState extends State<_RecordsPitchersSection> {
+  int? _sortColIdx;
+  bool _sortAsc = true;
+
+  void _onSort(int colIdx, bool ascending) {
+    setState(() {
+      _sortColIdx = colIdx;
+      _sortAsc = ascending;
+    });
+  }
+
+  List<PitcherRanking> get _sortedPitchers {
+    final idx = _sortColIdx;
+    if (idx == null) return widget.pitchers;
+    final sorted = [...widget.pitchers];
+    int cmp(PitcherRanking a, PitcherRanking b) {
+      switch (idx) {
+        case 0:  return a.rank.compareTo(b.rank);
+        case 1:  return a.playerName.compareTo(b.playerName);
+        case 2:  return a.teamName.compareTo(b.teamName);
+        case 3:  return (a.scope ?? '').compareTo(b.scope ?? '');
+        case 4:  return (a.seasonType ?? '').compareTo(b.seasonType ?? '');
+        case 5:  return (a.partCode ?? '').compareTo(b.partCode ?? '');
+        case 6:  return (a.regulation ?? '').compareTo(b.regulation ?? '');
+        case 7:  return (int.tryParse(a.jerseyNumber) ?? 0).compareTo(int.tryParse(b.jerseyNumber) ?? 0);
+        case 8:  return (a.seasonYear ?? 0).compareTo(b.seasonYear ?? 0);
+        case 9:  return a.era.compareTo(b.era);
+        case 10: return a.inningsPitched.compareTo(b.inningsPitched);
+        case 11: return a.whip.compareTo(b.whip);
+        case 12: return a.strikeouts.compareTo(b.strikeouts);
+        case 13: return a.walksAllowed.compareTo(b.walksAllowed);
+        case 14: return a.wins != b.wins ? a.wins.compareTo(b.wins) : b.losses.compareTo(a.losses);
+        case 15: return a.saves.compareTo(b.saves);
+        case 16: return a.gamesPlayed.compareTo(b.gamesPlayed);
+        default: return 0;
+      }
+    }
+    sorted.sort((a, b) => _sortAsc ? cmp(a, b) : cmp(b, a));
+    return sorted;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final pitchers = _sortedPitchers;
     return RefreshIndicator(
-      onRefresh: onRefresh,
+      onRefresh: widget.onRefresh,
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
           _TopFivePanel<PitcherRanking>(
             title: '투수 TOP 5 (규정 IN)',
             accent: AppTheme.blue400,
-            rows: topInPitchers,
+            rows: widget.topInPitchers,
             emptyText: '투수 데이터가 없습니다.',
             sortWidget: _SortDropdown<PitcherRankingSort>(
-              value: filters.topPitcherSort,
+              value: widget.filters.topPitcherSort,
               items: const [
                 _SortItem(value: PitcherRankingSort.era, label: 'ERA'),
                 _SortItem(value: PitcherRankingSort.whip, label: 'WHIP'),
                 _SortItem(value: PitcherRankingSort.strikeouts, label: 'K'),
                 _SortItem(value: PitcherRankingSort.wins, label: 'W'),
                 _SortItem(value: PitcherRankingSort.saves, label: 'SV'),
+                _SortItem(value: PitcherRankingSort.inningsPitched, label: 'IP'),
+                _SortItem(value: PitcherRankingSort.walksAllowed, label: 'BB'),
+                _SortItem(value: PitcherRankingSort.gamesPlayed, label: 'G'),
               ],
-              onChanged: onPitcherSortChanged,
+              onChanged: widget.onPitcherSortChanged,
             ),
             itemBuilder: (row) => _TopPlayerTile(
               rank: row.rank,
               name: row.playerName,
               team: row.teamName,
-              value: formatTopPitcherValue(row),
-              onTap: () => onOpenPlayerDetail(row.playerId),
+              value: widget.formatTopPitcherValue(row),
+              onTap: () => widget.onOpenPlayerDetail(row.playerId),
             ),
           ),
           const SizedBox(height: 10),
           _Card(
             title: '투수 기록',
+            hint: _sortHint,
             child: pitchers.isEmpty
                 ? const _EmptyState(text: '표시할 투수 기록이 없습니다.')
                 : _buildPlayerStatsTable(
                     statColumns: const [
-                      DataColumn(
-                          label: Text('ERA', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('IP', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('WHIP', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('K', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('BB', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('W-L', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('SV', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('G', style: _thStyle), numeric: true),
+                      DataColumn(label: Text('ERA', style: _thStyle), numeric: true),
+                      DataColumn(label: Text('IP', style: _thStyle), numeric: true),
+                      DataColumn(label: Text('WHIP', style: _thStyle), numeric: true),
+                      DataColumn(label: Text('K', style: _thStyle), numeric: true),
+                      DataColumn(label: Text('BB', style: _thStyle), numeric: true),
+                      DataColumn(label: Text('W-L', style: _thStyle), numeric: true),
+                      DataColumn(label: Text('SV', style: _thStyle), numeric: true),
+                      DataColumn(label: Text('G', style: _thStyle), numeric: true),
                     ],
+                    sortColumnIndex: _sortColIdx,
+                    sortAscending: _sortAsc,
+                    onSort: _onSort,
                     rows: pitchers
                         .map(
                           (row) => DataRow(
@@ -776,27 +899,20 @@ class _RecordsPitchersSection extends StatelessWidget {
                                 regulation: row.regulation,
                                 jerseyNumber: row.jerseyNumber,
                                 seasonYear: row.seasonYear,
-                                onOpenPlayerDetail: onOpenPlayerDetail,
-                                scopeLabel: scopeLabel,
-                                divisionLabel: divisionLabel,
-                                groupLabel: groupLabel,
+                                onOpenPlayerDetail: widget.onOpenPlayerDetail,
+                                scopeLabel: widget.scopeLabel,
+                                divisionLabel: widget.divisionLabel,
+                                groupLabel: widget.groupLabel,
+                                sortColIdx: _sortColIdx,
                               ),
-                              DataCell(Text(row.era.toStringAsFixed(2),
-                                  style: _numStyle)),
-                              DataCell(Text(
-                                  row.inningsPitched.toStringAsFixed(1),
-                                  style: _numStyle)),
-                              DataCell(Text(row.whip.toStringAsFixed(2),
-                                  style: _numStyle)),
-                              DataCell(
-                                  Text('${row.strikeouts}', style: _numStyle)),
-                              DataCell(Text('${row.walksAllowed}',
-                                  style: _numStyle)),
-                              DataCell(Text('${row.wins}-${row.losses}',
-                                  style: _numStyle)),
-                              DataCell(Text('${row.saves}', style: _numStyle)),
-                              DataCell(
-                                  Text('${row.gamesPlayed}', style: _numStyle)),
+                              DataCell(Text(row.era.toStringAsFixed(2), style: _ns(9, _sortColIdx))),
+                              DataCell(Text(row.inningsPitched.toStringAsFixed(1), style: _ns(10, _sortColIdx))),
+                              DataCell(Text(row.whip.toStringAsFixed(2), style: _ns(11, _sortColIdx))),
+                              DataCell(Text('${row.strikeouts}', style: _ns(12, _sortColIdx))),
+                              DataCell(Text('${row.walksAllowed}', style: _ns(13, _sortColIdx))),
+                              DataCell(Text('${row.wins}-${row.losses}', style: _cs(14, _sortColIdx))),
+                              DataCell(Text('${row.saves}', style: _ns(15, _sortColIdx))),
+                              DataCell(Text('${row.gamesPlayed}', style: _ns(16, _sortColIdx))),
                             ],
                           ),
                         )
@@ -812,22 +928,34 @@ class _RecordsPitchersSection extends StatelessWidget {
 Widget _buildPlayerStatsTable({
   required List<DataColumn> statColumns,
   required List<DataRow> rows,
+  int? sortColumnIndex,
+  bool sortAscending = true,
+  void Function(int, bool)? onSort,
 }) {
+  final allStatCols = statColumns
+      .map((c) => DataColumn(label: c.label, numeric: c.numeric, onSort: onSort))
+      .toList();
   return _buildHorizontalDataTable(
-    columns: [..._playerBaseColumns, ...statColumns],
+    columns: [..._buildBaseColumns(onSort), ...allStatCols],
     rows: rows,
+    sortColumnIndex: sortColumnIndex,
+    sortAscending: sortAscending,
   );
 }
 
 Widget _buildHorizontalDataTable({
   required List<DataColumn> columns,
   required List<DataRow> rows,
+  int? sortColumnIndex,
+  bool sortAscending = true,
 }) {
   return SingleChildScrollView(
     scrollDirection: Axis.horizontal,
     child: DataTable(
       headingRowColor: WidgetStateProperty.all(AppTheme.slate800),
       columnSpacing: 14,
+      sortColumnIndex: sortColumnIndex,
+      sortAscending: sortAscending,
       columns: columns,
       rows: rows,
     ),
@@ -849,38 +977,44 @@ List<DataCell> _buildPlayerBaseCells({
   required String Function(String? value) scopeLabel,
   required String Function(String? value) divisionLabel,
   required String Function(String? partCode) groupLabel,
+  int? sortColIdx,
 }) {
   return [
-    DataCell(Text('$rank', style: _cellStyle)),
+    DataCell(Text('$rank', style: _ns(0, sortColIdx))),
     DataCell(
       InkWell(
         onTap: () => onOpenPlayerDetail(playerId),
-        child: Text(playerName, style: _linkCellStyle),
+        child: Text(
+          playerName,
+          style: sortColIdx == 1
+              ? _linkCellStyle.copyWith(color: _sortActiveColor)
+              : _linkCellStyle,
+        ),
       ),
     ),
-    DataCell(Text(teamName, style: _cellStyle)),
-    DataCell(Text(scopeLabel(scope), style: _cellStyle)),
-    DataCell(Text(divisionLabel(seasonType), style: _cellStyle)),
-    DataCell(Text(groupLabel(partCode), style: _cellStyle)),
-    DataCell(Text((regulation ?? 'IN').toUpperCase(), style: _cellStyle)),
-    DataCell(Text(jerseyNumber.isEmpty ? '-' : jerseyNumber, style: _numStyle)),
-    DataCell(Text('${seasonYear ?? '-'}', style: _numStyle)),
+    DataCell(Text(teamName, style: _cs(2, sortColIdx))),
+    DataCell(Text(scopeLabel(scope), style: _cs(3, sortColIdx))),
+    DataCell(Text(divisionLabel(seasonType), style: _cs(4, sortColIdx))),
+    DataCell(Text(groupLabel(partCode), style: _cs(5, sortColIdx))),
+    DataCell(Text((regulation ?? 'IN').toUpperCase(), style: _cs(6, sortColIdx))),
+    DataCell(Text(jerseyNumber.isEmpty ? '-' : jerseyNumber, style: _ns(7, sortColIdx))),
+    DataCell(Text('${seasonYear ?? '-'}', style: _ns(8, sortColIdx))),
   ];
 }
 
-const _playerBaseColumns = <DataColumn>[
-  DataColumn(label: Text('#', style: _thStyle)),
-  DataColumn(label: Text('이름', style: _thStyle)),
-  DataColumn(label: Text('팀', style: _thStyle)),
-  DataColumn(label: Text('구분', style: _thStyle)),
-  DataColumn(label: Text('플레이오프', style: _thStyle)),
-  DataColumn(label: Text('조', style: _thStyle)),
-  DataColumn(label: Text('규정', style: _thStyle)),
-  DataColumn(label: Text('등번호', style: _thStyle), numeric: true),
-  DataColumn(label: Text('년도', style: _thStyle), numeric: true),
+List<DataColumn> _buildBaseColumns(void Function(int, bool)? onSort) => [
+  DataColumn(label: const Text('#', style: _thStyle), onSort: onSort),
+  DataColumn(label: const Text('이름', style: _thStyle), onSort: onSort),
+  DataColumn(label: const Text('팀', style: _thStyle), onSort: onSort),
+  DataColumn(label: const Text('구분', style: _thStyle), onSort: onSort),
+  DataColumn(label: const Text('플레이오프', style: _thStyle), onSort: onSort),
+  DataColumn(label: const Text('조', style: _thStyle), onSort: onSort),
+  DataColumn(label: const Text('규정', style: _thStyle), onSort: onSort),
+  DataColumn(label: const Text('등번호', style: _thStyle), numeric: true, onSort: onSort),
+  DataColumn(label: const Text('년도', style: _thStyle), numeric: true, onSort: onSort),
 ];
 
-class _RecordsStandingsSection extends StatelessWidget {
+class _RecordsStandingsSection extends StatefulWidget {
   const _RecordsStandingsSection({
     required this.teamStandings,
     required this.playoffRows,
@@ -898,79 +1032,120 @@ class _RecordsStandingsSection extends StatelessWidget {
   final String Function(String? partCode) groupLabel;
 
   @override
+  State<_RecordsStandingsSection> createState() => _RecordsStandingsSectionState();
+}
+
+class _RecordsStandingsSectionState extends State<_RecordsStandingsSection> {
+  int? _sortColIdx;
+  bool _sortAsc = true;
+
+  void _onSort(int colIdx, bool ascending) {
+    setState(() {
+      _sortColIdx = colIdx;
+      _sortAsc = ascending;
+    });
+  }
+
+  // Returns original indices sorted by the active column.
+  // The '#' column always displays the original API rank (originalIndex + 1).
+  List<int> get _sortedIndices {
+    final indices = List.generate(widget.teamStandings.length, (i) => i);
+    final idx = _sortColIdx;
+    if (idx == null) return indices;
+
+    int cmp(int ia, int ib) {
+      final a = widget.teamStandings[ia];
+      final b = widget.teamStandings[ib];
+      switch (idx) {
+        case 0: return ia.compareTo(ib);
+        case 1: return a.teamName.compareTo(b.teamName);
+        case 2: return (a.scope ?? '').compareTo(b.scope ?? '');
+        case 3: return (a.seasonType ?? '').compareTo(b.seasonType ?? '');
+        case 4: return (a.partCode ?? '').compareTo(b.partCode ?? '');
+        case 5:
+          final ga = a.wins + a.losses + a.ties;
+          final gb = b.wins + b.losses + b.ties;
+          return ga.compareTo(gb);
+        case 6:
+          final va = a.wins * 1000 + a.ties * 100 - a.losses;
+          final vb = b.wins * 1000 + b.ties * 100 - b.losses;
+          return va.compareTo(vb);
+        case 7: return a.winPct.compareTo(b.winPct);
+        default: return 0;
+      }
+    }
+    indices.sort((ia, ib) => _sortAsc ? cmp(ia, ib) : cmp(ib, ia));
+    return indices;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (teamStandings.isEmpty) {
+    if (widget.teamStandings.isEmpty) {
       return const _EmptyState(text: '표시할 팀 순위가 없습니다.');
     }
 
+    final sortedIndices = _sortedIndices;
+
     return RefreshIndicator(
-      onRefresh: onRefresh,
+      onRefresh: widget.onRefresh,
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
           _Card(
             title: '팀 순위',
+            hint: _sortHint,
             child: _buildHorizontalDataTable(
-              columns: const [
-                DataColumn(label: Text('#', style: _thStyle)),
-                DataColumn(label: Text('팀', style: _thStyle)),
-                DataColumn(label: Text('구분', style: _thStyle)),
-                DataColumn(label: Text('플레이오프', style: _thStyle)),
-                DataColumn(label: Text('조', style: _thStyle)),
-                DataColumn(label: Text('경기', style: _thStyle), numeric: true),
-                DataColumn(
-                    label: Text('승-무-패', style: _thStyle), numeric: true),
-                DataColumn(label: Text('승률', style: _thStyle), numeric: true),
+              sortColumnIndex: _sortColIdx,
+              sortAscending: _sortAsc,
+              columns: [
+                DataColumn(label: const Text('#', style: _thStyle), onSort: _onSort),
+                DataColumn(label: const Text('팀', style: _thStyle), onSort: _onSort),
+                DataColumn(label: const Text('구분', style: _thStyle), onSort: _onSort),
+                DataColumn(label: const Text('플레이오프', style: _thStyle), onSort: _onSort),
+                DataColumn(label: const Text('조', style: _thStyle), onSort: _onSort),
+                DataColumn(label: const Text('경기', style: _thStyle), numeric: true, onSort: _onSort),
+                DataColumn(label: const Text('승-무-패', style: _thStyle), numeric: true, onSort: _onSort),
+                DataColumn(label: const Text('승률', style: _thStyle), numeric: true, onSort: _onSort),
               ],
-              rows: List.generate(teamStandings.length, (index) {
-                final row = teamStandings[index];
+              rows: sortedIndices.map((index) {
+                final row = widget.teamStandings[index];
                 final games = row.wins + row.losses + row.ties;
                 return DataRow(
                   cells: [
-                    DataCell(Text('${index + 1}', style: _cellStyle)),
-                    DataCell(
-                      Text(
-                        row.teamName,
-                        style: _cellStyle.copyWith(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    DataCell(Text(scopeLabel(row.scope), style: _cellStyle)),
-                    DataCell(
-                        Text(divisionLabel(row.seasonType), style: _cellStyle)),
-                    DataCell(Text(groupLabel(row.partCode), style: _cellStyle)),
-                    DataCell(Text('$games', style: _numStyle)),
-                    DataCell(Text('${row.wins}-${row.ties}-${row.losses}',
-                        style: _numStyle)),
-                    DataCell(Text('${(row.winPct * 100).toStringAsFixed(1)}%',
-                        style: _numStyle)),
+                    DataCell(Text('${index + 1}', style: _ns(0, _sortColIdx))),
+                    DataCell(Text(row.teamName, style: _sortColIdx == 1
+                        ? _cellStyle.copyWith(color: _sortActiveColor, fontWeight: FontWeight.w700)
+                        : _cellStyle.copyWith(fontWeight: FontWeight.w600))),
+                    DataCell(Text(widget.scopeLabel(row.scope), style: _cs(2, _sortColIdx))),
+                    DataCell(Text(widget.divisionLabel(row.seasonType), style: _cs(3, _sortColIdx))),
+                    DataCell(Text(widget.groupLabel(row.partCode), style: _cs(4, _sortColIdx))),
+                    DataCell(Text('$games', style: _ns(5, _sortColIdx))),
+                    DataCell(Text('${row.wins}-${row.ties}-${row.losses}', style: _ns(6, _sortColIdx))),
+                    DataCell(Text('${(row.winPct * 100).toStringAsFixed(1)}%', style: _ns(7, _sortColIdx))),
                   ],
                 );
-              }),
+              }).toList(),
             ),
           ),
           const SizedBox(height: 10),
           _Card(
             title: '플레이오프 스테이지 요약',
-            child: playoffRows.isEmpty
+            child: widget.playoffRows.isEmpty
                 ? const _EmptyState(text: '요약할 플레이오프 데이터가 없습니다.')
                 : _buildHorizontalDataTable(
                     columns: const [
                       DataColumn(label: Text('구분', style: _thStyle)),
                       DataColumn(label: Text('라운드', style: _thStyle)),
-                      DataColumn(
-                          label: Text('점수', style: _thStyle), numeric: true),
+                      DataColumn(label: Text('점수', style: _thStyle), numeric: true),
                       DataColumn(label: Text('팀', style: _thStyle)),
                     ],
-                    rows: playoffRows
+                    rows: widget.playoffRows
                         .map(
                           (row) => DataRow(
                             cells: [
-                              DataCell(
-                                  Text(row.playoffTier, style: _cellStyle)),
-                              DataCell(
-                                  Text(row.playoffRound, style: _cellStyle)),
-                              DataCell(Text(row.finalsPoints.toStringAsFixed(1),
-                                  style: _numStyle)),
+                              DataCell(Text(_tierLabel(row.playoffTier), style: _cellStyle)),
+                              DataCell(Text(_roundLabel(row.playoffRound), style: _cellStyle)),
+                              DataCell(Text(row.finalsPoints.toStringAsFixed(1), style: _numStyle)),
                               DataCell(Text(row.teamName, style: _cellStyle)),
                             ],
                           ),

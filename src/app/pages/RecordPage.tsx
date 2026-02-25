@@ -69,6 +69,9 @@ const BATTER_SORT_OPTIONS: Array<{ value: BatterRankingSort; label: string }> = 
   { value: 'hits', label: 'H' },
   { value: 'homeRuns', label: 'HR' },
   { value: 'rbi', label: 'RBI' },
+  { value: 'gamesPlayed', label: 'G' },
+  { value: 'plateAppearance', label: 'PA' },
+  { value: 'stolenBases', label: 'SB' },
 ];
 
 const PITCHER_SORT_OPTIONS: Array<{ value: PitcherRankingSort; label: string }> = [
@@ -77,6 +80,9 @@ const PITCHER_SORT_OPTIONS: Array<{ value: PitcherRankingSort; label: string }> 
   { value: 'strikeouts', label: 'K' },
   { value: 'wins', label: 'W' },
   { value: 'saves', label: 'SV' },
+  { value: 'inningsPitched', label: 'IP' },
+  { value: 'walksAllowed', label: 'BB' },
+  { value: 'gamesPlayed', label: 'G' },
 ];
 
 function hasJerseyValue(value: string | null | undefined): boolean {

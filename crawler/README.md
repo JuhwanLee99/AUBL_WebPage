@@ -182,10 +182,20 @@ PY
 
 SQL 생성:
 
+> **⚠️ 유의사항: `--playoff-xlsx` 옵션 필수**
+>
+> `--playoff-xlsx`를 생략하면 `GAME.playoff_tier`가 NULL로 저장되고,
+> `BATTER_STATS`/`PITCHER_STATS`의 `season_type`이 모두 `'PLAYOFF'`로만 저장됩니다.
+> 그 결과 으뜸/버금 구분이 불가능해지며, 팀 순위·타자·투수 기록 화면에서
+> 플레이오프 티어 필터가 동작하지 않습니다.
+> **반드시 아래와 같이 `--playoff-xlsx` 옵션을 포함해 실행하세요.**
+
 ```bash
 mkdir -p output/2015_2025
 for y in $(seq 2015 2025); do
-  PYTHONPATH=src python scripts/generate_sql_dump.py /tmp/aubl_2015_2025_out --year $y > output/2015_2025/import_${y}.sql
+  python3 scripts/generate_sql_dump.py out --year $y \
+    --playoff-xlsx "../2015~2025 플레이오프 정리.xlsx" \
+    > output/2015_2025/import_${y}.sql
 done
 
 : > output/2015_2025/import_2015_2025.sql
@@ -246,6 +256,10 @@ python scripts/apply_team_code_normalization.py \
 - 엄격 검증이 필요하면 `--strict-playoff-map` 옵션을 사용하세요(미매핑 존재 시 종료코드 2).
 
 연도별 정규화 SQL 생성:
+
+> **참고:** 플레이오프 으뜸/버금 정보(`GAME.playoff_tier`, `season_type`)는
+> `generate_sql_dump.py` 단계에서 `--playoff-xlsx` 옵션으로 이미 삽입됩니다.
+> 정규화 스크립트에는 `--playoff-xlsx`를 별도로 전달하지 않아도 됩니다.
 
 ```bash
 for y in $(seq 2015 2025); do

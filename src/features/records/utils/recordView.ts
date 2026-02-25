@@ -14,6 +14,12 @@ export function getDivisionLabel(value: string | null | undefined): string {
   return '-';
 }
 
+export function tierToKorean(tier: string | null | undefined): string {
+  if (tier === 'EUTTEUM') return '으뜸';
+  if (tier === 'BEOGEUM') return '버금';
+  return tier || '-';
+}
+
 export function normalizeTier(value: string | null | undefined): string {
   const raw = (value || '').trim().toUpperCase();
   if (raw.includes('EUTTEUM') || raw.includes('으뜸')) return 'EUTTEUM';

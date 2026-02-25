@@ -471,10 +471,11 @@ class _MetricCard extends StatelessWidget {
 }
 
 class _Card extends StatelessWidget {
-  const _Card({required this.title, required this.child});
+  const _Card({required this.title, required this.child, this.hint});
 
   final String title;
   final Widget child;
+  final String? hint;
 
   @override
   Widget build(BuildContext context) {
@@ -488,10 +489,24 @@ class _Card extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-                color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
+          Row(
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700),
+              ),
+              if (hint != null) ...[
+                const Spacer(),
+                Text(
+                  hint!,
+                  style: const TextStyle(
+                      color: AppTheme.slate500, fontSize: 10),
+                ),
+              ],
+            ],
           ),
           const SizedBox(height: 10),
           child,

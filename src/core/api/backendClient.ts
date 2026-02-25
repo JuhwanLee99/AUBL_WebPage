@@ -419,9 +419,12 @@ export type BatterRankingSort =
   | 'rbi'
   | 'ops'
   | 'sluggingPct'
-  | 'onBasePct';
+  | 'onBasePct'
+  | 'gamesPlayed'
+  | 'plateAppearance'
+  | 'stolenBases';
 
-export type PitcherRankingSort = 'era' | 'whip' | 'strikeouts' | 'wins' | 'saves';
+export type PitcherRankingSort = 'era' | 'whip' | 'strikeouts' | 'wins' | 'saves' | 'inningsPitched' | 'walksAllowed' | 'gamesPlayed';
 
 function toStringValue(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
@@ -448,6 +451,7 @@ function toRegulationValue(value: unknown): string | null {
   }
   return null;
 }
+
 
 function toNumberArray(value: unknown): number[] {
   if (Array.isArray(value)) {
@@ -479,20 +483,6 @@ function isBadRequestError(err: unknown): boolean {
   return err instanceof Error && err.message.includes('400');
 }
 
-function buildSortAttempts(primary?: string, legacy?: string): Array<string | undefined> {
-  const attempts: Array<string | undefined> = [];
-  const seen = new Set<string>();
-  const push = (value: string | undefined) => {
-    const key = value ?? '__none__';
-    if (seen.has(key)) return;
-    seen.add(key);
-    attempts.push(value);
-  };
-  push(primary);
-  push(legacy);
-  push(undefined);
-  return attempts;
-}
 
 function buildQuery(opts: {
   seasonId: number;
@@ -673,40 +663,8 @@ export async function getBatterRankings(opts: {
       const raw = await fetchApi<unknown>(`/api/rankings/batters${fallbackQs ? `?${fallbackQs}` : ''}`);
       return normalizeBatterRankings(raw, opts.seasonId);
     }
-    if (!isNotFoundError(err)) throw err;
+    throw err;
   }
-
-  const legacySortMap: Partial<Record<BatterRankingSort, string>> = {
-    battingAverage: 'avg',
-    hits: 'hits',
-    homeRuns: 'hr',
-    rbi: 'rbi',
-    ops: 'ops',
-  };
-  const legacySort = opts.sort ? legacySortMap[opts.sort] : undefined;
-  const sortAttempts = buildSortAttempts(opts.sort, legacySort);
-  let lastError: unknown = null;
-
-  for (const sort of sortAttempts) {
-    const fallbackParams = buildQuery({ ...opts, sort });
-    const fallbackQs = fallbackParams.toString();
-    try {
-      const raw = await fetchApi<unknown>(`/api/records/batters${fallbackQs ? `?${fallbackQs}` : ''}`);
-      return normalizeBatterRankings(raw, opts.seasonId);
-    } catch (err) {
-      if (isBadRequestError(err) && hasActiveRecordFilters(opts.filters)) {
-        const noFilterParams = buildQuery({ ...opts, sort, filters: undefined });
-        const noFilterQs = noFilterParams.toString();
-        const raw = await fetchApi<unknown>(`/api/records/batters${noFilterQs ? `?${noFilterQs}` : ''}`);
-        return normalizeBatterRankings(raw, opts.seasonId);
-      }
-      lastError = err;
-      if (isBadRequestError(err) && sort !== undefined) continue;
-      throw err;
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error('타자 랭킹을 불러오지 못했습니다.');
 }
 
 export async function getPitcherRankings(opts: {
@@ -731,40 +689,8 @@ export async function getPitcherRankings(opts: {
       const raw = await fetchApi<unknown>(`/api/rankings/pitchers${fallbackQs ? `?${fallbackQs}` : ''}`);
       return normalizePitcherRankings(raw, opts.seasonId);
     }
-    if (!isNotFoundError(err)) throw err;
+    throw err;
   }
-
-  const legacySortMap: Partial<Record<PitcherRankingSort, string>> = {
-    era: 'era',
-    whip: 'whip',
-    strikeouts: 'so',
-    wins: 'wins',
-    saves: 'saves',
-  };
-  const legacySort = opts.sort ? legacySortMap[opts.sort] : undefined;
-  const sortAttempts = buildSortAttempts(opts.sort, legacySort);
-  let lastError: unknown = null;
-
-  for (const sort of sortAttempts) {
-    const fallbackParams = buildQuery({ ...opts, sort });
-    const fallbackQs = fallbackParams.toString();
-    try {
-      const raw = await fetchApi<unknown>(`/api/records/pitchers${fallbackQs ? `?${fallbackQs}` : ''}`);
-      return normalizePitcherRankings(raw, opts.seasonId);
-    } catch (err) {
-      if (isBadRequestError(err) && hasActiveRecordFilters(opts.filters)) {
-        const noFilterParams = buildQuery({ ...opts, sort, filters: undefined });
-        const noFilterQs = noFilterParams.toString();
-        const raw = await fetchApi<unknown>(`/api/records/pitchers${noFilterQs ? `?${noFilterQs}` : ''}`);
-        return normalizePitcherRankings(raw, opts.seasonId);
-      }
-      lastError = err;
-      if (isBadRequestError(err) && sort !== undefined) continue;
-      throw err;
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error('투수 랭킹을 불러오지 못했습니다.');
 }
 
 export async function getPlayerSearchIndex(seasonId: number): Promise<PlayerLookup[]> {
@@ -1067,19 +993,14 @@ export async function getPlayoffSummaries(
   if (!Number.isInteger(seasonId) || seasonId <= 0) {
     throw new Error('seasonId is required and must be a positive integer.');
   }
-  const params = new URLSearchParams({ seasonId: String(seasonId) });
+  const params = new URLSearchParams({ seasonId: String(seasonId), view: 'teams' });
   applyRecordFilters(params, filters);
   let raw: unknown;
   try {
     raw = await fetchApi<unknown>(`/api/records/playoffs?${params.toString()}`);
   } catch (err) {
-    if (isBadRequestError(err) && hasActiveRecordFilters(filters)) {
-      raw = await fetchApi<unknown>(`/api/records/playoffs?seasonId=${seasonId}`);
-    } else if (isNotFoundError(err)) {
-      return [];
-    } else {
-      throw err;
-    }
+    if (isNotFoundError(err)) return [];
+    throw err;
   }
   if (!Array.isArray(raw)) return [];
   return raw
@@ -1097,18 +1018,15 @@ export async function getPlayoffSummaries(
         teamName,
         playoffTier: tier,
         playoffRound: toStringValue(
-          row.playoffRound ?? row.playoff_round ?? row.round ?? row.stage,
+          row.bestRound ?? row.best_round ?? row.playoffRound ?? row.playoff_round ?? row.round ?? row.stage,
         ),
-        finalsPoints: toFiniteNumber(row.finalsPoints ?? row.finals_points ?? row.points) ?? 0,
+        finalsPoints: toFiniteNumber(row.wins ?? row.finalsPoints ?? row.finals_points ?? row.points) ?? 0,
         seasonId: toFiniteNumber(row.seasonId ?? row.season_id) ?? seasonId,
         seasonYear: toFiniteNumber(row.seasonYear ?? row.season_year ?? row.year),
         partCode: toStringValue(row.partCode ?? row.part_code ?? row.groupCode ?? row.group_code) || null,
         group: toStringValue(row.group) || null,
-        seasonType:
-          toStringValue(row.seasonType ?? row.season_type ?? row.division ?? row.playoffTier ?? row.playoff_tier) ||
-          null,
-        scope:
-          toStringValue(row.scope ?? row.recordType ?? row.record_type ?? row.gameType ?? row.game_type) || 'PLAYOFF',
+        seasonType: toStringValue(row.seasonType ?? row.season_type) || null,
+        scope: toStringValue(row.scope ?? row.recordType ?? row.record_type) || 'PLAYOFF',
       } satisfies PlayoffSummaryRow;
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
