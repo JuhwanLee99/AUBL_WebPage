@@ -1,13 +1,19 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
 
+import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../core/config/app_config.dart';
 import '../core/contracts/flutter_bridge_contract.dart';
 import '../core/contracts/web_contracts.dart';
+import '../core/services/auth_session_service.dart';
 import '../core/services/auth_bridge_service.dart';
 import '../core/theme/app_theme.dart';
 import '../core/webview/app_webview_screen.dart';
@@ -38,7 +44,6 @@ class EmbeddedWebViewPanel extends StatefulWidget {
 
 class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
   final AuthBridgeService _authBridgeService = AuthBridgeService();
-  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: const ['email']);
   late final WebViewController _controller;
   StreamSubscription<User?>? _authSub;
   final WebViewAuthSyncState _authSyncState = WebViewAuthSyncState();
@@ -46,10 +51,16 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
   bool _loading = true;
   bool _authenticating = false;
   bool _googleSigningIn = false;
+  bool _appleSigningIn = false;
+  bool _injecting = false;
+  bool _loggedOut = false;
   String? _error;
   bool _loginBypassInFlight = false;
   String? _pendingLoginRedirect;
   bool _retriedErrFailed = false;
+
+  bool get _isIosAppleNativeEnabled =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
   // fullscreen 모드: 상단바 자동 숨김
   bool _barsVisible = true;
@@ -92,7 +103,10 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
           onNavigationRequest: _onNavigationRequest,
           onPageStarted: (_) {
             if (!mounted) return;
-            setState(() => _loading = true);
+            setState(() {
+              _loading = true;
+              _injecting = false;
+            });
           },
           onPageFinished: (_) {
             if (!mounted) return;
@@ -122,6 +136,7 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
             if (!mounted) return;
             setState(() {
               _loading = false;
+              _injecting = false;
               _error = '웹 로딩 실패: ${error.description}';
             });
           },
@@ -134,11 +149,18 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
       WebViewAuthSyncController.seedFromCurrentUser(current, _authSyncState);
       unawaited(_injectAuthIfNeeded());
     }
-    _authSub = WebViewAuthSyncController.bindAuthState(
-      auth: FirebaseAuth.instance,
-      syncState: _authSyncState,
-      onRequireInject: _injectAuthIfNeeded,
-    );
+
+    // auth state 직접 구독: 재로그인 시 _loggedOut 초기화 포함
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user == null) {
+        _authSyncState.clearObservedUid();
+        return;
+      }
+      if (_loggedOut && mounted) setState(() => _loggedOut = false);
+      if (_authSyncState.shouldSkipObservedUid(user.uid)) return;
+      _authSyncState.markObservedUid(user.uid);
+      unawaited(_injectAuthIfNeeded());
+    });
 
     // fullscreen 모드: 3초 후 상단바 자동 숨김
     if (widget.fullscreen) {
@@ -181,6 +203,13 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
       }
       return NavigationDecision.prevent;
     }
+    if (WebViewNavigationGuard.isAppleOAuthRequest(uri)) {
+      if (!_isIosAppleNativeEnabled) return NavigationDecision.navigate;
+      if (!_appleSigningIn) {
+        unawaited(_signInWithNativeApple());
+      }
+      return NavigationDecision.prevent;
+    }
 
     final loginResolution = WebViewNavigationGuard.resolveLoginNavigation(
       uri: uri,
@@ -204,11 +233,9 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
       rawMessage: raw,
       onWebToken: _signInWithCustomToken,
       onLogout: () async {
+        if (mounted) setState(() => _loggedOut = true);
         _authSyncState.reset();
-        try {
-          await GoogleSignIn().signOut();
-        } catch (_) {}
-        await FirebaseAuth.instance.signOut();
+        await AuthSessionService.signOutFast(clearWebViewCookies: false);
       },
       onRequestNativeGoogle: _signInWithNativeGoogle,
     );
@@ -216,6 +243,11 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
 
   /// Flutter 로그인 상태를 WebView에 주입
   Future<void> _injectAuthIfNeeded({String? redirectUrl}) async {
+    if (_loggedOut) return;
+    final shouldShowInjecting = redirectUrl != null;
+    if (shouldShowInjecting && mounted) {
+      setState(() => _injecting = true);
+    }
     try {
       await WebViewAuthSyncController.injectAuthIfNeeded(
         auth: FirebaseAuth.instance,
@@ -227,8 +259,13 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
+        _injecting = false;
         _error = '인증 주입 실패: $e';
       });
+    } finally {
+      if (shouldShowInjecting && mounted) {
+        setState(() => _injecting = false);
+      }
     }
   }
 
@@ -247,6 +284,7 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
     if (_authenticating) return;
     if (!mounted) return;
     setState(() {
+      _loggedOut = false;
       _authenticating = true;
       _error = null;
     });
@@ -272,28 +310,130 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
       return;
     }
     setState(() {
+      _loggedOut = false;
       _googleSigningIn = true;
       _error = null;
     });
     try {
-      final account = await _googleSignIn.signIn();
-      if (account == null) return;
-      final authData = await account.authentication;
+      final account = await GoogleSignIn.instance.authenticate();
+      final authData = account.authentication;
       final idToken = authData.idToken;
       if (idToken == null || idToken.isEmpty) {
-        throw Exception('Google idToken이 없습니다.');
+        throw Exception('Google idToken을 가져오지 못했습니다.');
       }
       final credential = GoogleAuthProvider.credential(
         idToken: idToken,
-        accessToken: authData.accessToken,
       );
       await FirebaseAuth.instance.signInWithCredential(credential);
-      unawaited(_injectAuthIfNeeded(redirectUrl: _pageUrl));
+      await _injectAuthIfNeeded(redirectUrl: _pageUrl);
+    } on GoogleSignInException catch (e) {
+      debugPrint(
+          'Google native auth failed: code=${e.code}, msg=${e.description}');
+      if (e.code == GoogleSignInExceptionCode.canceled) return;
+      if (!mounted) return;
+      setState(() => _error = 'Google 로그인 실패: $e');
     } catch (e) {
+      debugPrint('Google native auth failed: $e');
       if (!mounted) return;
       setState(() => _error = 'Google 로그인 실패: $e');
     } finally {
       if (mounted) setState(() => _googleSigningIn = false);
+    }
+  }
+
+  String _generateNonce([int length = 32]) {
+    const charset =
+        '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
+    final random = Random.secure();
+    return List.generate(
+      length,
+      (_) => charset[random.nextInt(charset.length)],
+    ).join();
+  }
+
+  String _sha256ofString(String input) {
+    final bytes = utf8.encode(input);
+    return sha256.convert(bytes).toString();
+  }
+
+  Map<String, dynamic> _decodeJwtClaims(String jwt) {
+    final parts = jwt.split('.');
+    if (parts.length < 2) return const <String, dynamic>{};
+    try {
+      final payload =
+          utf8.decode(base64Url.decode(base64Url.normalize(parts[1])));
+      final decoded = jsonDecode(payload);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) {
+        return decoded.map(
+          (key, value) => MapEntry(key.toString(), value),
+        );
+      }
+    } catch (_) {}
+    return const <String, dynamic>{};
+  }
+
+  Future<void> _signInWithNativeApple() async {
+    if (_appleSigningIn || _authenticating) return;
+    if (!_isIosAppleNativeEnabled) return;
+    if (FirebaseAuth.instance.currentUser != null) {
+      unawaited(_injectAuthIfNeeded(redirectUrl: _pageUrl));
+      return;
+    }
+    setState(() {
+      _loggedOut = false;
+      _appleSigningIn = true;
+      _error = null;
+    });
+    Map<String, dynamic> claims = const <String, dynamic>{};
+    String? expectedNonce;
+
+    try {
+      final rawNonce = _generateNonce();
+      final nonce = _sha256ofString(rawNonce);
+      expectedNonce = nonce;
+      final credential = await SignInWithApple.getAppleIDCredential(
+        scopes: const [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        nonce: nonce,
+      );
+      final identityToken = credential.identityToken;
+      if (identityToken == null || identityToken.isEmpty) {
+        throw Exception('Apple identity token이 없습니다.');
+      }
+      claims = _decodeJwtClaims(identityToken);
+      final tokenNonce = claims['nonce']?.toString();
+      if (tokenNonce != null && tokenNonce.isNotEmpty && tokenNonce != nonce) {
+        throw Exception('Apple nonce 검증 실패');
+      }
+      final oauthCredential = AppleAuthProvider.credentialWithIDToken(
+        identityToken,
+        rawNonce,
+        AppleFullPersonName(
+          givenName: credential.givenName,
+          familyName: credential.familyName,
+        ),
+      );
+      await FirebaseAuth.instance.signInWithCredential(oauthCredential);
+      unawaited(_injectAuthIfNeeded(redirectUrl: _pageUrl));
+    } on SignInWithAppleAuthorizationException catch (e) {
+      if (e.code == AuthorizationErrorCode.canceled) return;
+      if (!mounted) return;
+      setState(() => _error = 'Apple 로그인 실패: $e');
+    } on FirebaseAuthException catch (e) {
+      debugPrint(
+        'Apple native auth failed: code=${e.code}, msg=${e.message}, '
+        'aud=${claims['aud']}, iss=${claims['iss']}, tokenNonce=${claims['nonce']}, expectedNonce=$expectedNonce',
+      );
+      if (!mounted) return;
+      setState(() => _error = 'Apple 로그인 실패: $e');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'Apple 로그인 실패: $e');
+    } finally {
+      if (mounted) setState(() => _appleSigningIn = false);
     }
   }
 
@@ -338,8 +478,17 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
             child: Stack(
               children: [
                 WebViewWidget(controller: _controller),
-                if (_loading || _authenticating || _googleSigningIn)
+                if (_loading ||
+                    _authenticating ||
+                    _googleSigningIn ||
+                    _appleSigningIn)
                   const Center(child: CircularProgressIndicator()),
+                // 주입 중 WebView 랜딩페이지 가리기 (불투명 오버레이)
+                if (_injecting)
+                  Container(
+                    color: AppTheme.slate900,
+                    child: const Center(child: CircularProgressIndicator()),
+                  ),
                 if (_error != null)
                   Align(
                     alignment: Alignment.bottomCenter,

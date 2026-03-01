@@ -8,6 +8,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../../core/config/app_config.dart';
 import '../../core/contracts/flutter_bridge_contract.dart';
 import '../../core/contracts/web_contracts.dart';
+import '../../core/services/auth_session_service.dart';
 import '../../core/services/auth_bridge_service.dart';
 import '../../core/webview/auth_sync/webview_auth_sync_controller.dart';
 import '../../core/webview/auth_sync/webview_auth_sync_state.dart';
@@ -132,7 +133,7 @@ class _ScorekeeperWebViewScreenState extends State<ScorekeeperWebViewScreen> {
       onWebToken: _signInWithCustomToken,
       onLogout: () async {
         _authSyncState.clearConsumedWebIdToken();
-        await FirebaseAuth.instance.signOut();
+        await AuthSessionService.signOutFast(clearWebViewCookies: false);
       },
       onRequestNativeGoogle: () async {},
     );

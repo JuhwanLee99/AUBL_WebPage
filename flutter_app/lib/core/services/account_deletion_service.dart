@@ -38,15 +38,11 @@ class AccountDeletionService {
   AccountDeletionService({
     FirebaseAuth? auth,
     FirebaseFirestore? firestore,
-    GoogleSignIn? googleSignIn,
   })  : _auth = auth ?? FirebaseAuth.instance,
-        _firestore = firestore ?? FirebaseFirestore.instance,
-        _googleSignIn =
-            googleSignIn ?? GoogleSignIn(scopes: const <String>['email']);
+        _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
-  final GoogleSignIn _googleSignIn;
 
   Future<AccountDeletionResult> deleteCurrentUser({
     String? currentPassword,
@@ -96,19 +92,21 @@ class AccountDeletionService {
         await user.reauthenticateWithCredential(credential);
         return;
       case AccountDeletionProvider.google:
-        final account = await _googleSignIn.signIn();
-        if (account == null) {
-          throw AccountDeletionException('Google 재인증이 취소되었습니다.');
+        late final GoogleSignInAccount account;
+        try {
+          account = await GoogleSignIn.instance.authenticate();
+        } on GoogleSignInException catch (e) {
+          if (e.code == GoogleSignInExceptionCode.canceled) {
+            throw AccountDeletionException('Google 재인증이 취소되었습니다.');
+          }
+          rethrow;
         }
-        final authData = await account.authentication;
+        final authData = account.authentication;
         final idToken = authData.idToken;
         if (idToken == null || idToken.isEmpty) {
           throw AccountDeletionException('Google idToken을 가져오지 못했습니다.');
         }
-        final credential = GoogleAuthProvider.credential(
-          idToken: idToken,
-          accessToken: authData.accessToken,
-        );
+        final credential = GoogleAuthProvider.credential(idToken: idToken);
         await user.reauthenticateWithCredential(credential);
         return;
       case AccountDeletionProvider.apple:
@@ -127,9 +125,13 @@ class AccountDeletionService {
         if (idToken == null || idToken.isEmpty) {
           throw AccountDeletionException('Apple identity token을 가져오지 못했습니다.');
         }
-        final oauth = OAuthProvider('apple.com').credential(
-          idToken: idToken,
-          rawNonce: rawNonce,
+        final oauth = AppleAuthProvider.credentialWithIDToken(
+          idToken,
+          rawNonce,
+          AppleFullPersonName(
+            givenName: credential.givenName,
+            familyName: credential.familyName,
+          ),
         );
         await user.reauthenticateWithCredential(oauth);
         return;
@@ -182,11 +184,15 @@ class AccountDeletionService {
     if (refs.isNotEmpty) return refs;
 
     try {
-      final byDocId = await _firestore
-          .collectionGroup('members')
-          .where(FieldPath.documentId, isEqualTo: uid)
-          .get();
-      refs.addAll(byDocId.docs.map((d) => d.reference));
+      // iOS에서 collectionGroup + documentId 동등 비교는 런타임 예외가 날 수 있어
+      // teams/*/members/{uid} 직접 조회로 fallback 한다.
+      final teams = await _firestore.collection('teams').get();
+      for (final team in teams.docs) {
+        final ref = team.reference.collection('members').doc(uid);
+        final memberDoc = await ref.get();
+        if (!memberDoc.exists) continue;
+        refs.add(ref);
+      }
     } catch (_) {}
     return refs;
   }

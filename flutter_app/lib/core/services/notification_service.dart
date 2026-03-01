@@ -94,7 +94,7 @@ class NotificationService {
       ),
     );
     await _local.initialize(
-      initSettings,
+      settings: initSettings,
       onDidReceiveNotificationResponse: (details) {
         // 포그라운드 로컬 알림 탭 처리
         final payload = details.payload;
@@ -120,10 +120,20 @@ class NotificationService {
           ?.createNotificationChannel(channel);
     }
 
-    final token = await _messaging.getToken();
+    String? token;
     if (Platform.isIOS) {
-      final apnsToken = await _messaging.getAPNSToken();
+      final apnsToken = await _waitForApnsToken();
       debugPrint('[NotificationService] APNs token: $apnsToken');
+      if (apnsToken == null || apnsToken.isEmpty) {
+        debugPrint(
+          '[NotificationService] APNs token is not ready yet; '
+          'skip initial FCM token fetch.',
+        );
+      } else {
+        token = await _safeGetFcmToken();
+      }
+    } else {
+      token = await _safeGetFcmToken();
     }
     debugPrint(
         '[NotificationService] ${Platform.isIOS ? 'iOS' : 'Android'} permission: ${permission.authorizationStatus}');
@@ -152,6 +162,29 @@ class NotificationService {
     final storedUid = prefs.getString(_userUidKey);
     await _syncSubscriptions(prefs, teamId: storedTeam, uid: storedUid);
     _initialized = true;
+  }
+
+  Future<String?> _waitForApnsToken({
+    int maxAttempts = 20,
+    Duration delay = const Duration(milliseconds: 500),
+  }) async {
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      final token = await _messaging.getAPNSToken();
+      if (token != null && token.isNotEmpty) {
+        return token;
+      }
+      await Future<void>.delayed(delay);
+    }
+    return null;
+  }
+
+  Future<String?> _safeGetFcmToken() async {
+    try {
+      return await _messaging.getToken();
+    } catch (e) {
+      debugPrint('[NotificationService] Failed to fetch FCM token: $e');
+      return null;
+    }
   }
 
   Future<MatchNotifyPreference> getMatchPreference() async {
@@ -364,14 +397,22 @@ class NotificationService {
 
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
     final notification = message.notification;
-    if (notification == null) return;
+    final rawTitle = notification?.title ?? message.data['title'] as String?;
+    final rawBody = notification?.body ?? message.data['body'] as String?;
+    if ((rawTitle == null || rawTitle.trim().isEmpty) &&
+        (rawBody == null || rawBody.trim().isEmpty)) {
+      return;
+    }
 
     final navType = message.data['nav_type'] as String? ?? '';
     final payload =
         navType.isNotEmpty ? jsonEncode({'nav_type': navType}) : null;
+    final normalizedTitle =
+        _normalizeNotificationText(rawTitle, fallback: 'AUBL 알림');
+    final normalizedBody = _normalizeNotificationText(rawBody);
 
-    final android = notification.android;
-    final apple = notification.apple;
+    final android = notification?.android;
+    final apple = notification?.apple;
     final details = NotificationDetails(
       android: AndroidNotificationDetails(
         _channelId,
@@ -392,12 +433,139 @@ class NotificationService {
 
     if (Platform.isAndroid || Platform.isIOS) {
       await _local.show(
-        notification.hashCode,
-        notification.title,
-        notification.body,
-        details,
+        id: message.hashCode,
+        title: normalizedTitle,
+        body: normalizedBody,
+        notificationDetails: details,
         payload: payload,
       );
     }
+  }
+
+  String? _normalizeNotificationText(String? raw, {String? fallback}) {
+    if (raw == null || raw.trim().isEmpty) return fallback;
+    final trimmed = raw.trim();
+    final hasDeltaPattern =
+        RegExp(r'(\\?"ops\\?"\s*:|\\?"insert\\?"\s*:)').hasMatch(trimmed);
+    if (!hasDeltaPattern) {
+      return trimmed;
+    }
+
+    final deltaStartMatch = RegExp(r'\{\\?"ops\\?"\s*:').firstMatch(trimmed);
+    final deltaStart = deltaStartMatch?.start ?? 0;
+    final prefix = deltaStart > 0 ? trimmed.substring(0, deltaStart).trim() : '';
+    final deltaRaw = trimmed.substring(deltaStart).trim();
+    final deltaText = _extractDeltaPreviewText(deltaRaw) ??
+        _extractDeltaPreviewText(trimmed.replaceAll(r'\"', '"'));
+    if (deltaText == null || deltaText.isEmpty) {
+      return prefix.isEmpty ? fallback ?? trimmed : prefix;
+    }
+    if (prefix.isEmpty) return deltaText;
+    return '${prefix.replaceFirst(RegExp(r'[:\s]+$'), '')}\n$deltaText';
+  }
+
+  String? _extractDeltaPreviewText(String raw) {
+    final normalizedRaw = raw.replaceAll(r'\"', '"');
+    List<dynamic>? ops;
+    try {
+      final decoded = jsonDecode(normalizedRaw);
+      if (decoded is Map && decoded['ops'] is List) {
+        ops = decoded['ops'] as List<dynamic>;
+      } else if (decoded is List) {
+        ops = decoded;
+      } else if (decoded is String) {
+        final nested = jsonDecode(decoded);
+        if (nested is Map && nested['ops'] is List) {
+          ops = nested['ops'] as List<dynamic>;
+        } else if (nested is List) {
+          ops = nested;
+        }
+      }
+    } catch (_) {}
+
+    if (ops == null) {
+      final fragments = <String>[];
+
+      final quotedInsertMatches =
+          RegExp(r'"insert"\s*:\s*"((?:\\.|[^"\\])*)"').allMatches(normalizedRaw);
+      for (final m in quotedInsertMatches) {
+        final value = m.group(1);
+        if (value == null || value.isEmpty) continue;
+        try {
+          final unescaped = jsonDecode('"$value"');
+          if (unescaped is String && unescaped.trim().isNotEmpty) {
+            fragments.add(unescaped.trim());
+          }
+        } catch (_) {
+          final fallback = value
+              .replaceAll(r'\n', '\n')
+              .replaceAll(r'\"', '"')
+              .trim();
+          if (fallback.isNotEmpty) fragments.add(fallback);
+        }
+      }
+
+      final plainInsertMatches = RegExp(r'"insert"\s*:\s*([^,\}\]]+)')
+          .allMatches(normalizedRaw)
+          .map((m) => m.group(1)?.trim() ?? '');
+      for (final rawValue in plainInsertMatches) {
+        if (rawValue.isEmpty) continue;
+        if (rawValue.startsWith('"') || rawValue.startsWith('{')) continue;
+        var cleaned = rawValue.replaceAll(r'\n', '\n').trim();
+        if ((cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+            (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+          cleaned = cleaned.substring(1, cleaned.length - 1).trim();
+        }
+        if (cleaned.isNotEmpty) fragments.add(cleaned);
+      }
+
+      if (RegExp(r'"image"\s*:').hasMatch(normalizedRaw)) {
+        fragments.add('[이미지]');
+      }
+      if (RegExp(r'"video"\s*:').hasMatch(normalizedRaw)) {
+        fragments.add('[동영상]');
+      }
+
+      // 비정형 payload 대응:
+      // 예) {"ops":[f"insert":2026... 처럼 JSON이 깨져도 insert 값 회수 시도
+      final permissiveInsertMatches = RegExp(
+        r'''(?:^|[^A-Za-z0-9_])(?:[fFrRbBuU])?["']?insert["']?\s*:\s*(?:(["'])([\s\S]*?)\1|([^,\}\]]+))''',
+        multiLine: true,
+        dotAll: true,
+      ).allMatches(normalizedRaw);
+      for (final m in permissiveInsertMatches) {
+        final rawValue = (m.group(2) ?? m.group(3) ?? '').trim();
+        if (rawValue.isEmpty) continue;
+        final cleaned = rawValue
+            .replaceAll(r'\n', '\n')
+            .replaceAll(r'\"', '"')
+            .replaceAll(RegExp(r'^\[|\]$'), '')
+            .trim();
+        if (cleaned.isNotEmpty) {
+          fragments.add(cleaned);
+        }
+      }
+
+      if (fragments.isEmpty) return null;
+      return fragments.join(' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+    }
+
+    final buffer = StringBuffer();
+    for (final op in ops) {
+      if (op is! Map) continue;
+      final insert = op['insert'];
+      if (insert is String) {
+        buffer.write(insert);
+      } else if (insert is Map) {
+        if (insert.containsKey('image')) buffer.write('[이미지] ');
+        if (insert.containsKey('video')) buffer.write('[동영상] ');
+      }
+    }
+    final text = buffer
+        .toString()
+        .replaceAll(RegExp(r'\n+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return text.isEmpty ? null : text;
   }
 }

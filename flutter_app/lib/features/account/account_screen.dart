@@ -1,12 +1,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/services/account_deletion_service.dart';
+import '../../core/services/auth_session_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/services/notification_service.dart';
@@ -108,11 +107,7 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> _logout() async {
-    try {
-      await GoogleSignIn().signOut();
-    } catch (_) {}
-    await FirebaseAuth.instance.signOut();
-    await WebViewCookieManager().clearCookies();
+    await AuthSessionService.signOutFast();
     if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
   }
 
@@ -245,10 +240,7 @@ class _AccountScreenState extends State<AccountScreen> {
       await _accountDeletionService.deleteCurrentUser(
         currentPassword: password,
       );
-      try {
-        await GoogleSignIn().signOut();
-      } catch (_) {}
-      await WebViewCookieManager().clearCookies();
+      await AuthSessionService.signOutFast();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('회원 탈퇴가 완료되었습니다.')),

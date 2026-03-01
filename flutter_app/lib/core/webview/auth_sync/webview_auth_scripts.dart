@@ -32,30 +32,38 @@ class WebViewAuthScripts {
         escapedRedirect == null ? 'null' : "'$escapedRedirect'";
 
     return '''
-(function() {
+(() => new Promise((resolve) => {
   const token = '$escapedToken';
   const redirect = $redirectExpr;
   const inject = () => {
-    if (window.${FlutterBridgeContracts.authInjectFunction}) {
-      const result = window.${FlutterBridgeContracts.authInjectFunction}(token);
-      if (redirect) {
-        Promise.resolve(result)
-          .then(() => window.location.replace(redirect))
-          .catch(() => {});
-      }
-      return true;
-    }
-    return false;
+    const fn = window.${FlutterBridgeContracts.authInjectFunction};
+    if (!fn) return false;
+    Promise.resolve(fn(token))
+      .then(() => {
+        if (redirect) {
+          window.location.replace(redirect);
+        }
+        resolve(true);
+      })
+      .catch(() => resolve(false));
+    return true;
   };
+
   if (inject()) return;
+
   let tries = 0;
   const timer = setInterval(() => {
     tries += 1;
-    if (inject() || tries >= 20) {
+    if (inject()) {
       clearInterval(timer);
+      return;
+    }
+    if (tries >= 20) {
+      clearInterval(timer);
+      resolve(false);
     }
   }, 300);
-})();
+}))()
 ''';
   }
 }

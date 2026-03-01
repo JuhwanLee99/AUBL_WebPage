@@ -1,9 +1,10 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 
 import '../core/contracts/web_contracts.dart';
+import '../core/services/auth_session_service.dart';
 import '../core/services/notification_service.dart';
 import '../core/theme/app_theme.dart';
 import '../core/webview/app_webview_screen.dart';
@@ -18,6 +19,8 @@ class MoreScreen extends StatefulWidget {
 }
 
 class _MoreScreenState extends State<MoreScreen> {
+  StreamSubscription<User?>? _authSub;
+  int _adminClaimRequestId = 0;
   bool _isAdmin = false;
   bool _checking = true;
   bool _loggedIn = false;
@@ -31,33 +34,45 @@ class _MoreScreenState extends State<MoreScreen> {
   @override
   void initState() {
     super.initState();
-    _checkAuth();
+    _bindAuthState();
     _loadNotificationPrefs();
   }
 
-  Future<void> _checkAuth() async {
-    final user = FirebaseAuth.instance.currentUser;
+  void _bindAuthState() {
+    _applyAuthState(FirebaseAuth.instance.currentUser);
+    _authSub = FirebaseAuth.instance.authStateChanges().listen(_applyAuthState);
+  }
+
+  void _applyAuthState(User? user) {
+    if (!mounted) return;
+    setState(() {
+      _loggedIn = user != null;
+      _checking = false;
+      if (user == null) _isAdmin = false;
+    });
+
     if (user == null) {
-      if (mounted) {
-        setState(() {
-          _loggedIn = false;
-          _checking = false;
-        });
-      }
+      unawaited(NotificationService.instance.updateUserInquiryTopic(null));
       return;
     }
-    _loggedIn = true;
-    await NotificationService.instance.updateUserInquiryTopic(user.uid);
+
+    unawaited(NotificationService.instance.updateUserInquiryTopic(user.uid));
+    unawaited(_refreshAdminClaim(user));
+  }
+
+  Future<void> _refreshAdminClaim(User user) async {
+    final requestId = ++_adminClaimRequestId;
     try {
-      final token = await user.getIdTokenResult(true);
-      if (!mounted) return;
-      setState(() {
-        _isAdmin = token.claims?['admin'] == true;
-        _checking = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _checking = false);
-    }
+      final token = await user.getIdTokenResult();
+      if (!mounted || requestId != _adminClaimRequestId) return;
+      setState(() => _isAdmin = token.claims?['admin'] == true);
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadNotificationPrefs() async {
@@ -68,8 +83,7 @@ class _MoreScreenState extends State<MoreScreen> {
         await NotificationService.instance.getCommunityNoticeEnabled();
     final teamNotice =
         await NotificationService.instance.getTeamNoticeEnabled();
-    final inquiry =
-        await NotificationService.instance.getInquiryNotifEnabled();
+    final inquiry = await NotificationService.instance.getInquiryNotifEnabled();
     if (!mounted) return;
     setState(() {
       _matchPref = pref;
@@ -275,22 +289,20 @@ class _MoreScreenState extends State<MoreScreen> {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const LoginWebViewScreen()),
     );
-    // 로그인 후 돌아오면 상태 갱신
-    if (mounted) _checkAuth();
   }
 
   Future<void> _logout() async {
-    await NotificationService.instance.updateUserInquiryTopic(null);
-    try {
-      await GoogleSignIn().signOut();
-    } catch (_) {}
-    await FirebaseAuth.instance.signOut();
-    await WebViewCookieManager().clearCookies();
     if (mounted) {
       setState(() {
         _loggedIn = false;
         _isAdmin = false;
+        _checking = false;
       });
+    }
+    try {
+      await AuthSessionService.signOutFast();
+    } catch (_) {
+      _applyAuthState(FirebaseAuth.instance.currentUser);
     }
   }
 

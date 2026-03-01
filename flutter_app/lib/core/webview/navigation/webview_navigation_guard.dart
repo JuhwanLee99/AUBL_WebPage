@@ -30,6 +30,16 @@ class WebViewNavigationGuard {
     return desc.contains('err_failed');
   }
 
+  static bool isAppleOAuthRequest(Uri uri) {
+    final host = uri.host.toLowerCase();
+    if (host.contains('appleid.apple.com')) return true;
+    final providerId = uri.queryParameters['providerId'];
+    if (providerId == 'apple.com' && uri.path.contains('/__/auth/handler')) {
+      return true;
+    }
+    return false;
+  }
+
   static bool isGoogleOAuthRequest(Uri uri) {
     final host = uri.host.toLowerCase();
     if (host.contains('accounts.google.com') ||

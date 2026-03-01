@@ -1,9 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
 
+import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../core/config/app_config.dart';
@@ -13,6 +18,7 @@ import '../../core/services/auth_bridge_service.dart';
 import '../../core/webview/auth_sync/webview_auth_scripts.dart';
 import '../../core/webview/auth_sync/webview_auth_sync_controller.dart';
 import '../../core/webview/auth_sync/webview_auth_sync_state.dart';
+import '../../core/webview/navigation/webview_navigation_guard.dart';
 
 class LoginWebViewScreen extends StatefulWidget {
   const LoginWebViewScreen({
@@ -38,7 +44,6 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
     systemNavigationBarDividerColor: _chromeColor,
   );
   final AuthBridgeService _authBridgeService = AuthBridgeService();
-  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: const ['email']);
   late final WebViewController _controller;
   StreamSubscription<User?>? _authSub;
   bool _loginCompleted = false;
@@ -47,7 +52,12 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
   bool _pageLoading = true;
   bool _authenticating = false;
   bool _googleSigningIn = false;
+  bool _appleSigningIn = false;
+  bool _retriedErrFailed = false;
   String? _error;
+
+  bool get _isIosAppleNativeEnabled =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
   void _applySystemUiChrome() {
     unawaited(SystemChrome.setEnabledSystemUIMode(
@@ -113,6 +123,16 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
               }
               return NavigationDecision.prevent;
             }
+            if (uri != null &&
+                WebViewNavigationGuard.isAppleOAuthRequest(uri)) {
+              if (!_isIosAppleNativeEnabled) {
+                return NavigationDecision.navigate;
+              }
+              if (!_appleSigningIn) {
+                unawaited(_signInWithNativeApple());
+              }
+              return NavigationDecision.prevent;
+            }
             return NavigationDecision.navigate;
           },
           onPageStarted: (_) {
@@ -131,6 +151,15 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
             unawaited(_requestWebIdTokenIfNeeded());
           },
           onWebResourceError: (error) {
+            if (WebViewNavigationGuard.shouldRetryFailedNavigation(
+              error,
+              hasRetried: _retriedErrFailed,
+            )) {
+              _retriedErrFailed = true;
+              unawaited(_controller.reload());
+              return;
+            }
+            if (WebViewNavigationGuard.shouldIgnoreWebError(error)) return;
             if (!mounted) return;
             setState(() {
               _pageLoading = false;
@@ -236,23 +265,27 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
     });
 
     try {
-      final account = await _googleSignIn.signIn();
-      if (account == null) return;
-
-      final authData = await account.authentication;
+      final account = await GoogleSignIn.instance.authenticate();
+      final authData = account.authentication;
       final idToken = authData.idToken;
-
       if (idToken == null || idToken.isEmpty) {
-        throw Exception('Google idToken이 없습니다. iOS URL Scheme 설정을 확인하세요.');
+        throw Exception('Google idToken을 가져오지 못했습니다.');
       }
-
       final credential = GoogleAuthProvider.credential(
         idToken: idToken,
-        accessToken: authData.accessToken,
       );
       await FirebaseAuth.instance.signInWithCredential(credential);
       _finishLogin();
+    } on GoogleSignInException catch (e) {
+      debugPrint(
+          'Google native auth failed: code=${e.code}, msg=${e.description}');
+      if (e.code == GoogleSignInExceptionCode.canceled) return;
+      if (!mounted) return;
+      setState(() {
+        _error = 'Google 로그인 실패: $e';
+      });
     } catch (e) {
+      debugPrint('Google native auth failed: $e');
       if (!mounted) return;
       setState(() {
         _error = 'Google 로그인 실패: $e';
@@ -261,6 +294,109 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
       if (mounted) {
         setState(() {
           _googleSigningIn = false;
+        });
+      }
+    }
+  }
+
+  String _generateNonce([int length = 32]) {
+    const charset =
+        '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
+    final random = Random.secure();
+    return List.generate(
+      length,
+      (_) => charset[random.nextInt(charset.length)],
+    ).join();
+  }
+
+  String _sha256ofString(String input) {
+    final bytes = utf8.encode(input);
+    return sha256.convert(bytes).toString();
+  }
+
+  Map<String, dynamic> _decodeJwtClaims(String jwt) {
+    final parts = jwt.split('.');
+    if (parts.length < 2) return const <String, dynamic>{};
+    try {
+      final payload =
+          utf8.decode(base64Url.decode(base64Url.normalize(parts[1])));
+      final decoded = jsonDecode(payload);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) {
+        return decoded.map(
+          (key, value) => MapEntry(key.toString(), value),
+        );
+      }
+    } catch (_) {}
+    return const <String, dynamic>{};
+  }
+
+  Future<void> _signInWithNativeApple() async {
+    if (_appleSigningIn || _authenticating) return;
+    if (!_isIosAppleNativeEnabled) return;
+
+    setState(() {
+      _appleSigningIn = true;
+      _error = null;
+    });
+
+    Map<String, dynamic> claims = const <String, dynamic>{};
+    String? expectedNonce;
+
+    try {
+      final rawNonce = _generateNonce();
+      final nonce = _sha256ofString(rawNonce);
+      expectedNonce = nonce;
+      final credential = await SignInWithApple.getAppleIDCredential(
+        scopes: const [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        nonce: nonce,
+      );
+      final identityToken = credential.identityToken;
+      if (identityToken == null || identityToken.isEmpty) {
+        throw Exception('Apple identity token이 없습니다.');
+      }
+      claims = _decodeJwtClaims(identityToken);
+      final tokenNonce = claims['nonce']?.toString();
+      if (tokenNonce != null && tokenNonce.isNotEmpty && tokenNonce != nonce) {
+        throw Exception('Apple nonce 검증 실패');
+      }
+      final oauthCredential = AppleAuthProvider.credentialWithIDToken(
+        identityToken,
+        rawNonce,
+        AppleFullPersonName(
+          givenName: credential.givenName,
+          familyName: credential.familyName,
+        ),
+      );
+      await FirebaseAuth.instance.signInWithCredential(oauthCredential);
+      _finishLogin();
+    } on SignInWithAppleAuthorizationException catch (e) {
+      if (e.code == AuthorizationErrorCode.canceled) return;
+      if (!mounted) return;
+      setState(() {
+        _error = 'Apple 로그인 실패: $e';
+      });
+    } on FirebaseAuthException catch (e) {
+      debugPrint(
+        'Apple native auth failed: code=${e.code}, msg=${e.message}, '
+        'aud=${claims['aud']}, iss=${claims['iss']}, tokenNonce=${claims['nonce']}, expectedNonce=$expectedNonce',
+      );
+      if (!mounted) return;
+      setState(() {
+        _error = 'Apple 로그인 실패: $e';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Apple 로그인 실패: $e';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _appleSigningIn = false;
         });
       }
     }
@@ -276,9 +412,13 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
           child: Stack(
             children: [
               WebViewWidget(controller: _controller),
-              if (_pageLoading || _authenticating || _googleSigningIn)
-                const Center(
-                  child: CircularProgressIndicator(),
+              if (_pageLoading ||
+                  _authenticating ||
+                  _googleSigningIn ||
+                  _appleSigningIn)
+                Container(
+                  color: _chromeColor,
+                  child: const Center(child: CircularProgressIndicator()),
                 ),
               if (_error != null)
                 Align(
