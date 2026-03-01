@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import RichTextEditor from '../../shared/components/editor/RichTextEditor';
+import RichTextViewer from '../../shared/components/editor/RichTextViewer';
+import { isDeltaEmpty } from '../../shared/components/editor/quillUtils';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   doc,
@@ -117,7 +120,7 @@ export default function InquiryDetailPage() {
   };
 
   const handleWriteComment = async () => {
-    if (!commentText.trim()) return;
+    if (isDeltaEmpty(commentText)) return;
     if (!currentUser) {
       alert('로그인이 필요합니다.');
       return;
@@ -234,11 +237,7 @@ export default function InquiryDetailPage() {
               onChange={(e) => setEditTitle(e.target.value)}
             />
             {/* 본문 */}
-            <textarea
-              style={{ ...inputStyle, minHeight: '250px', lineHeight: 1.6, resize: 'vertical' }}
-              value={editContent}
-              onChange={(e) => setEditContent(e.target.value)}
-            />
+            <RichTextEditor value={editContent} onChange={setEditContent} minHeight={250} />
             {/* 비밀글 */}
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
               <input
@@ -334,8 +333,8 @@ export default function InquiryDetailPage() {
               </span>
             </div>
             <h1 style={{ fontSize: '26px', fontWeight: 900, margin: '0 0 24px 0', lineHeight: 1.3 }}>{post.title}</h1>
-            <div style={{ color: '#e2e8f0', lineHeight: 1.8, fontSize: '15px', whiteSpace: 'pre-wrap', borderTop: '1px solid rgba(148,163,184,0.1)', paddingTop: '24px' }}>
-              {post.content}
+            <div style={{ borderTop: '1px solid rgba(148,163,184,0.1)', paddingTop: '24px' }}>
+              <RichTextViewer content={post.content} style={{ fontSize: '15px', lineHeight: 1.8 }} />
             </div>
           </>
         )}
@@ -349,24 +348,16 @@ export default function InquiryDetailPage() {
           </h3>
 
           {/* 댓글 입력 */}
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '28px' }}>
-            <textarea
-              placeholder={currentUser ? '댓글을 남겨주세요.' : '로그인이 필요합니다.'}
-              disabled={!currentUser}
-              value={commentText}
-              onChange={(e) => setCommentText(e.target.value)}
-              style={{
-                flex: 1,
-                padding: '12px',
-                borderRadius: '8px',
-                background: '#1e293b',
-                border: '1px solid #334155',
-                color: '#fff',
-                fontSize: '14px',
-                minHeight: '44px',
-                resize: 'vertical',
-              }}
-            />
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '28px', alignItems: 'flex-end' }}>
+            <div style={{ flex: 1 }}>
+              <RichTextEditor
+                value={commentText}
+                onChange={setCommentText}
+                mini
+                placeholder={currentUser ? '댓글을 남겨주세요.' : '로그인이 필요합니다.'}
+                minHeight={60}
+              />
+            </div>
             <button
               onClick={handleWriteComment}
               disabled={!currentUser || !commentText.trim()}
@@ -407,9 +398,7 @@ export default function InquiryDetailPage() {
                       </button>
                     )}
                   </div>
-                  <div style={{ color: '#cbd5e1', fontSize: '14px', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                    {comment.content}
-                  </div>
+                  <RichTextViewer content={comment.content} style={{ fontSize: '14px', lineHeight: 1.5, color: '#cbd5e1' }} />
                 </div>
               ))
             )}

@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { collection, addDoc } from 'firebase/firestore';
 import { firestore, auth } from '../../shared/firebase/client';
 import type { NoticeCategory } from '../../shared/types';
+import RichTextEditor from '../../shared/components/editor/RichTextEditor';
+import { isDeltaEmpty } from '../../shared/components/editor/quillUtils';
 // sendFCMNotification 등 필요한 import 유지
 
 const CATEGORIES: NoticeCategory[] = ['일반', '경기공지', '징계', '긴급'];
@@ -17,7 +19,7 @@ export default function NoticeWritePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !content.trim()) return;
+    if (!title.trim() || isDeltaEmpty(content)) return;
     
     setSubmitting(true);
     try {
@@ -85,22 +87,15 @@ export default function NoticeWritePage() {
         />
 
         {/* 본문 입력 */}
-        <textarea
-          placeholder="내용을 입력하세요"
+        <RichTextEditor
           value={content}
-          onChange={(e) => setContent(e.target.value)}
-          style={{
-            minHeight: '300px',
-            padding: '14px',
-            borderRadius: '8px',
-            background: '#1e293b',
-            border: '1px solid #334155',
-            color: '#fff',
-            fontSize: '15px',
-            lineHeight: 1.6,
-            resize: 'vertical'
-          }}
+          onChange={setContent}
+          placeholder="내용을 입력하세요"
+          minHeight={300}
         />
+        <p style={{ margin: 0, color: '#64748b', fontSize: '12px' }}>
+          이미지/동영상은 툴바의 📷 / 🎬 버튼으로 URL을 입력하여 삽입할 수 있습니다.
+        </p>
 
         {/* [추가] 댓글 허용 옵션 */}
         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>

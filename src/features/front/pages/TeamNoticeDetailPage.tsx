@@ -7,6 +7,9 @@ import { useAdmin } from '@shared/auth/useAdmin';
 import { useTeamRole } from '@shared/auth/useTeamRole';
 import { decodeTeamId } from '@shared/lib/teamDirectory';
 import type { TeamNotice, TeamNoticeComment } from '@shared/types';
+import RichTextEditor from '@shared/components/editor/RichTextEditor';
+import RichTextViewer from '@shared/components/editor/RichTextViewer';
+import { isDeltaEmpty } from '@shared/components/editor/quillUtils';
 
 const cardBase: React.CSSProperties = {
   borderRadius: '16px',
@@ -118,8 +121,7 @@ export default function TeamNoticeDetailPage() {
 
   const handleAddComment = async () => {
     if (!user || !teamDocId || !noticeId) return;
-    const content = commentInput.trim();
-    if (!content) {
+    if (isDeltaEmpty(commentInput)) {
       setCommentError('댓글 내용을 입력해주세요.');
       return;
     }
@@ -131,7 +133,7 @@ export default function TeamNoticeDetailPage() {
         noticeId,
         uid: user.uid,
         author: user.displayName ?? user.email ?? '익명',
-        content,
+        content: commentInput,
         createdAt: Date.now(),
         parentId: null,
         likedBy: [],
@@ -148,8 +150,7 @@ export default function TeamNoticeDetailPage() {
 
   const handleAddReply = async (parentId: string) => {
     if (!user || !teamDocId || !noticeId) return;
-    const content = replyInput.trim();
-    if (!content) {
+    if (isDeltaEmpty(replyInput)) {
       setCommentError('답글 내용을 입력해주세요.');
       return;
     }
@@ -161,7 +162,7 @@ export default function TeamNoticeDetailPage() {
         noticeId,
         uid: user.uid,
         author: user.displayName ?? user.email ?? '익명',
-        content,
+        content: replyInput,
         createdAt: Date.now(),
         parentId,
         likedBy: [],
@@ -290,7 +291,7 @@ export default function TeamNoticeDetailPage() {
             <div style={{ color: '#94a3b8', fontSize: '12px' }}>
               {notice.createdAt ? new Date(notice.createdAt).toLocaleString('ko-KR') : '날짜 미정'} · {notice.createdByName ?? '운영진'}
             </div>
-            <div style={{ color: '#cbd5e1', lineHeight: 1.7 }}>{notice.content}</div>
+            <RichTextViewer content={notice.content} style={{ lineHeight: 1.7 }} />
           </div>
         ) : (
           <div style={{ color: '#94a3b8', fontWeight: 700 }}>해당 공지를 찾을 수 없습니다.</div>
@@ -322,19 +323,12 @@ export default function TeamNoticeDetailPage() {
 
         {user ? (
           <div style={{ display: 'grid', gap: '8px' }}>
-            <textarea
+            <RichTextEditor
+              mini
               value={commentInput}
-              onChange={(e) => setCommentInput(e.target.value)}
-              rows={3}
+              onChange={setCommentInput}
               placeholder="댓글을 입력하세요."
-              style={{
-                padding: '10px 12px',
-                borderRadius: '10px',
-                border: '1px solid rgba(148,163,184,0.35)',
-                background: 'rgba(15,23,42,0.6)',
-                color: '#e2e8f0',
-                resize: 'vertical',
-              }}
+              minHeight={60}
             />
             <button
               type="button"
@@ -385,7 +379,7 @@ export default function TeamNoticeDetailPage() {
                     <div style={{ fontWeight: 800, color: '#e2e8f0' }}>{comment.author}</div>
                     <div style={{ color: '#94a3b8', fontSize: '12px' }}>{new Date(comment.createdAt).toLocaleString('ko-KR')}</div>
                   </div>
-                  <div style={{ color: '#cbd5e1', fontSize: '13px' }}>{comment.content}</div>
+                  <RichTextViewer content={comment.content} style={{ fontSize: '13px', color: '#cbd5e1' }} />
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     <button
                       type="button"
@@ -465,19 +459,12 @@ export default function TeamNoticeDetailPage() {
 
                   {replyTo === comment.id && user && (
                     <div style={{ display: 'grid', gap: '8px', marginTop: '6px' }}>
-                      <textarea
+                      <RichTextEditor
+                        mini
                         value={replyInput}
-                        onChange={(e) => setReplyInput(e.target.value)}
-                        rows={2}
+                        onChange={setReplyInput}
                         placeholder="답글을 입력하세요."
-                        style={{
-                          padding: '10px 12px',
-                          borderRadius: '10px',
-                          border: '1px solid rgba(148,163,184,0.35)',
-                          background: 'rgba(15,23,42,0.6)',
-                          color: '#e2e8f0',
-                          resize: 'vertical',
-                        }}
+                        minHeight={60}
                       />
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <button
@@ -538,7 +525,7 @@ export default function TeamNoticeDetailPage() {
                               <div style={{ fontWeight: 800, color: '#e2e8f0' }}>{reply.author}</div>
                               <div style={{ color: '#94a3b8', fontSize: '12px' }}>{new Date(reply.createdAt).toLocaleString('ko-KR')}</div>
                             </div>
-                            <div style={{ color: '#cbd5e1', fontSize: '13px' }}>{reply.content}</div>
+                            <RichTextViewer content={reply.content} style={{ fontSize: '13px', color: '#cbd5e1' }} />
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                               <button
                                 type="button"

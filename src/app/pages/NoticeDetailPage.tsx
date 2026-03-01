@@ -1,19 +1,22 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  doc, 
-  getDoc, 
-  updateDoc, 
-  deleteDoc, 
-  collection, 
-  addDoc, 
-  query, 
-  orderBy, 
-  onSnapshot 
-} from 'firebase/firestore'; 
+import {
+  doc,
+  getDoc,
+  updateDoc,
+  deleteDoc,
+  collection,
+  addDoc,
+  query,
+  orderBy,
+  onSnapshot
+} from 'firebase/firestore';
 import { firestore, auth } from '../../shared/firebase/client';
 import { useAdmin } from '../../shared/auth/useAdmin';
 import type { Notice } from '../../shared/types';
+import RichTextEditor from '../../shared/components/editor/RichTextEditor';
+import RichTextViewer from '../../shared/components/editor/RichTextViewer';
+import { isDeltaEmpty, plainTextToDelta } from '../../shared/components/editor/quillUtils';
 
 interface Comment {
   id: string;
@@ -58,6 +61,7 @@ export default function NoticeDetailPage() {
           const data = snap.data() as Notice;
           setNotice({ ...data, id: snap.id });
           setEditTitle(data.title);
+          // 기존 plain text 게시글은 Delta로 변환하여 에디터에 로드
           setEditContent(data.content);
           setEditAllowComments(data.allowComments ?? true); // [추가] 기존 값이 없으면 true
         }
@@ -117,7 +121,7 @@ export default function NoticeDetailPage() {
 
   // 댓글 작성
   const handleWriteComment = async () => {
-    if (!commentText.trim()) return;
+    if (isDeltaEmpty(commentText)) return;
     if (!currentUser) {
       alert('로그인이 필요합니다.');
       return;
@@ -179,10 +183,10 @@ export default function NoticeDetailPage() {
               value={editTitle}
               onChange={(e) => setEditTitle(e.target.value)}
             />
-            <textarea 
-              style={{ width: '100%', minHeight: '300px', padding: '10px', background: '#1e293b', border: '1px solid #334155', color: '#fff', borderRadius: '8px', lineHeight: 1.6 }}
+            <RichTextEditor
               value={editContent}
-              onChange={(e) => setEditContent(e.target.value)}
+              onChange={setEditContent}
+              minHeight={300}
             />
             
             {/* [추가] 수정 모드에서 댓글 허용 설정 */}
@@ -213,8 +217,8 @@ export default function NoticeDetailPage() {
               </span>
             </div>
             <h1 style={{ fontSize: '28px', fontWeight: 900, margin: '0 0 24px 0', lineHeight: 1.3 }}>{notice.title}</h1>
-            <div style={{ color: '#e2e8f0', lineHeight: 1.8, fontSize: '16px', whiteSpace: 'pre-wrap', borderTop: '1px solid rgba(148,163,184,0.1)', paddingTop: '24px' }}>
-              {notice.content}
+            <div style={{ borderTop: '1px solid rgba(148,163,184,0.1)', paddingTop: '24px' }}>
+              <RichTextViewer content={notice.content} style={{ fontSize: '16px', lineHeight: 1.8 }} />
             </div>
           </>
         )}
@@ -227,24 +231,16 @@ export default function NoticeDetailPage() {
             댓글 <span style={{ color: '#94a3b8', fontSize: '14px', fontWeight: 400 }}>{comments.length}</span>
           </h3>
 
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '32px' }}>
-            <textarea
-              placeholder={currentUser ? "댓글을 남겨주세요." : "로그인이 필요합니다."}
-              disabled={!currentUser}
-              value={commentText}
-              onChange={(e) => setCommentText(e.target.value)}
-              style={{
-                flex: 1,
-                padding: '12px',
-                borderRadius: '8px',
-                background: '#1e293b',
-                border: '1px solid #334155',
-                color: '#fff',
-                fontSize: '15px',
-                minHeight: '45px',
-                resize: 'vertical',
-              }}
-            />
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '32px', alignItems: 'flex-end' }}>
+            <div style={{ flex: 1 }}>
+              <RichTextEditor
+                value={commentText}
+                onChange={setCommentText}
+                mini
+                placeholder={currentUser ? "댓글을 남겨주세요." : "로그인이 필요합니다."}
+                minHeight={60}
+              />
+            </div>
             <button
               onClick={handleWriteComment}
               disabled={!currentUser}
@@ -281,9 +277,7 @@ export default function NoticeDetailPage() {
                     </button>
                   )}
                 </div>
-                <div style={{ color: '#cbd5e1', fontSize: '15px', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                  {comment.content}
-                </div>
+                <RichTextViewer content={comment.content} style={{ fontSize: '15px', lineHeight: 1.5, color: '#cbd5e1' }} />
               </div>
             ))}
             {comments.length === 0 && (

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { firestore } from '../../shared/firebase/client';
 import { useAdmin } from '../../shared/auth/useAdmin';
+import { deltaToPreviewText } from '../../shared/components/editor/quillUtils';
 import type { Notice, NoticeCategory } from '../../shared/types';
 
 // 필터 타입 정의
@@ -49,7 +50,7 @@ export default function CommunityNoticesPage() {
     if (!q) return categoryFiltered;
 
     return categoryFiltered.filter((notice) =>
-      `${notice.title} ${notice.content} ${notice.author}`.toLowerCase().includes(q),
+      `${notice.title} ${deltaToPreviewText(notice.content)} ${notice.author}`.toLowerCase().includes(q),
     );
   }, [notices, activeFilter, searchQuery]);
 
@@ -193,9 +194,9 @@ export default function CommunityNoticesPage() {
                   {notice.title}
                 </h3>
                 
-                <p style={{ 
-                  margin: 0, 
-                  color: '#cbd5e1', 
+                <p style={{
+                  margin: 0,
+                  color: '#cbd5e1',
                   lineHeight: 1.6,
                   display: '-webkit-box',
                   WebkitLineClamp: 2,
@@ -203,7 +204,7 @@ export default function CommunityNoticesPage() {
                   overflow: 'hidden',
                   textOverflow: 'ellipsis'
                 }}>
-                  {notice.content}
+                  {deltaToPreviewText(notice.content)}
                 </p>
               </div>
             </Link>

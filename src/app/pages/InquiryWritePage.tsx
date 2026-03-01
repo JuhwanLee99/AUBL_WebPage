@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { collection, addDoc } from 'firebase/firestore';
 import { firestore, auth } from '../../shared/firebase/client';
 import type { InquiryPlatform, InquiryCategory } from '../../shared/types';
+import RichTextEditor from '../../shared/components/editor/RichTextEditor';
+import { isDeltaEmpty } from '../../shared/components/editor/quillUtils';
 
 const CATEGORIES: InquiryCategory[] = ['기능 개선', '버그 신고', '사용 문의', '경기/기록 오류', '기타'];
 
@@ -26,7 +28,7 @@ export default function InquiryWritePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !content.trim()) return;
+    if (!title.trim() || isDeltaEmpty(content)) return;
     if (!currentUser) {
       alert('로그인이 필요합니다.');
       navigate('/login');
@@ -84,7 +86,8 @@ export default function InquiryWritePage() {
           fontWeight: 600,
         }}
       >
-        스크린샷 등 첨부파일이 필요한 경우, 게시글 등록 후 `aublcau@gmail.com`으로 전송해 주세요.
+        이미지/동영상은 툴바의 📷 / 🎬 버튼으로 URL을 입력하여 삽입할 수 있습니다.<br />
+        스크린샷 등 파일 첨부가 필요한 경우, 게시글 등록 후 <strong>aublcau@gmail.com</strong>으로 전송해 주세요.
       </div>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -165,16 +168,11 @@ export default function InquiryWritePage() {
           <label style={{ display: 'block', color: '#94a3b8', fontSize: '13px', fontWeight: 700, marginBottom: '8px' }}>
             내용
           </label>
-          <textarea
-            placeholder="내용을 입력하세요"
+          <RichTextEditor
             value={content}
-            onChange={(e) => setContent(e.target.value)}
-            style={{
-              ...inputStyle,
-              minHeight: '280px',
-              lineHeight: 1.6,
-              resize: 'vertical',
-            }}
+            onChange={setContent}
+            placeholder="내용을 입력하세요"
+            minHeight={280}
           />
         </div>
 
