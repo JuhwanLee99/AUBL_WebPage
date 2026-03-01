@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/theme/app_theme.dart';
@@ -18,6 +19,7 @@ class AublApp extends StatelessWidget {
       title: 'AUBL',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
+      localizationsDelegates: const [FlutterQuillLocalizations.delegate],
       builder: (context, child) {
         return AnnotatedRegion<SystemUiOverlayStyle>(
           value: AppTheme.systemUiStyle,

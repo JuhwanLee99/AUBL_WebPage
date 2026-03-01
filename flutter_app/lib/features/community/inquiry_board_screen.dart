@@ -131,7 +131,7 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
                             ),
                           ),
                           child: const Text(
-                            '첨부파일 업로드는 현재 지원하지 않습니다. 스크린샷 등 첨부가 필요하면 게시글 작성 후 aublcau@gmail.com으로 전송해 주세요.',
+                            '첨부파일 업로드는 현재 지원하지 않습니다. 스크린샷 등 파일이 필요한 경우 구글 드라이브 등 외부 링크를 본문에 첨부하거나, 게시글 작성 후 aublcau@gmail.com으로 전송해 주세요.',
                             style: TextStyle(
                               color: AppTheme.blue400,
                               fontSize: 12,

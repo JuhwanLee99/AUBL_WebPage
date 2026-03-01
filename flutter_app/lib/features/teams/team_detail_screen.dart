@@ -11,6 +11,8 @@ import '../../core/models/team_notice.dart';
 import '../../core/services/team_image_cache_manager.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/webview/app_webview_screen.dart';
+import '../../core/widgets/editor/delta_utils.dart';
+import '../../core/widgets/editor/rich_text_editor.dart';
 import '../../core/widgets/match_status_badge.dart';
 import '../../core/widgets/section_header.dart';
 import 'team_notice_detail_screen.dart';
@@ -408,7 +410,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
             ? categoryFiltered
             : categoryFiltered.where((notice) {
                 final title = notice.title.toLowerCase();
-                final content = notice.content.toLowerCase();
+                final content = deltaToPreviewText(notice.content).toLowerCase();
                 final author = (notice.createdByName ?? '').toLowerCase();
                 return title.contains(query) ||
                     content.contains(query) ||
@@ -761,7 +763,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
 
   void _showAddNoticeDialog() {
     final titleCtrl = TextEditingController();
-    final contentCtrl = TextEditingController();
+    String contentDelta = '';
     String category = '일반';
     bool pinned = false;
     bool saving = false;
@@ -772,7 +774,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
         builder: (ctx, setDialogState) => Dialog(
           backgroundColor: AppTheme.slate800,
           insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -804,10 +806,15 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   decoration: const InputDecoration(labelText: '제목'),
                 ),
                 const SizedBox(height: 12),
-                TextField(
-                  controller: contentCtrl,
-                  decoration: const InputDecoration(labelText: '내용'),
-                  maxLines: 4,
+                RichTextEditor(
+                  onChanged: (v) => contentDelta = v,
+                  placeholder: '내용을 입력하세요',
+                  minHeight: 160,
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  '이미지/동영상은 툴바 버튼으로 URL을 입력하여 삽입할 수 있습니다.',
+                  style: TextStyle(color: AppTheme.slate500, fontSize: 11),
                 ),
                 const SizedBox(height: 4),
                 CheckboxListTile(
@@ -833,8 +840,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                       onPressed: () async {
                         if (saving) return;
                         final title = titleCtrl.text.trim();
-                        final content = contentCtrl.text.trim();
-                        if (title.isEmpty || content.isEmpty) {
+                        if (title.isEmpty || isDeltaEmpty(contentDelta)) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('제목과 내용을 입력해주세요.')),
                           );
@@ -845,7 +851,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                           final result = await _viewModel.addNotice(
                             teamId: widget.teamId,
                             title: title,
-                            content: content,
+                            content: contentDelta,
                             category: category,
                             pinned: pinned,
                           );

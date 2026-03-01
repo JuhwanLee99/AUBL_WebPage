@@ -5,6 +5,9 @@ import 'package:timeago/timeago.dart' as timeago;
 import '../../core/models/inquiry_post.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/editor/delta_utils.dart';
+import '../../core/widgets/editor/rich_text_editor.dart';
+import '../../core/widgets/editor/rich_text_viewer.dart';
 import 'inquiry_write_screen.dart';
 
 class InquiryDetailScreen extends StatefulWidget {
@@ -18,7 +21,8 @@ class InquiryDetailScreen extends StatefulWidget {
 
 class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
   final _fs = FirestoreService();
-  final _commentCtrl = TextEditingController();
+  String _commentDelta = '';
+  int _editorKey = 0;
   late InquiryPost _post;
   bool _isAdmin = false;
 
@@ -34,12 +38,6 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
     if (user == null) return;
     final token = await user.getIdTokenResult();
     if (mounted) setState(() => _isAdmin = token.claims?['admin'] == true);
-  }
-
-  @override
-  void dispose() {
-    _commentCtrl.dispose();
-    super.dispose();
   }
 
   User? get _user => FirebaseAuth.instance.currentUser;
@@ -61,19 +59,22 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
       };
 
   Future<void> _postComment() async {
-    final text = _commentCtrl.text.trim();
-    if (text.isEmpty || _user == null) return;
+    if (isDeltaEmpty(_commentDelta) || _user == null) return;
+    final content = _commentDelta;
+    setState(() {
+      _commentDelta = '';
+      _editorKey++;
+    });
     await _fs.addInquiryComment(
       _post.id,
       InquiryComment(
         id: '',
-        content: text,
+        content: content,
         author: _user!.displayName ?? _user!.email?.split('@').first ?? '익명',
         uid: _user!.uid,
         createdAt: DateTime.now().millisecondsSinceEpoch,
       ),
     );
-    _commentCtrl.clear();
   }
 
   Future<void> _deletePost() async {
@@ -82,9 +83,12 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.slate800,
         title: const Text('삭제 확인', style: TextStyle(color: Colors.white)),
-        content: const Text('게시글을 삭제하시겠습니까?', style: TextStyle(color: AppTheme.slate300)),
+        content: const Text('게시글을 삭제하시겠습니까?',
+            style: TextStyle(color: AppTheme.slate300)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('취소')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('삭제', style: TextStyle(color: Color(0xFFF87171))),
@@ -108,7 +112,8 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
               icon: const Icon(Icons.edit_outlined),
               onPressed: () async {
                 final updated = await Navigator.of(context).push<bool>(
-                  MaterialPageRoute(builder: (_) => InquiryWriteScreen(editPost: _post)),
+                  MaterialPageRoute(
+                      builder: (_) => InquiryWriteScreen(editPost: _post)),
                 );
                 if (updated == true && mounted) {
                   // 수정 후 최신 데이터 다시 로드
@@ -137,13 +142,18 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
                       padding: EdgeInsets.symmetric(vertical: 48),
                       child: Column(
                         children: [
-                          Icon(Icons.lock_outline, size: 56, color: AppTheme.slate500),
+                          Icon(Icons.lock_outline,
+                              size: 56, color: AppTheme.slate500),
                           SizedBox(height: 16),
                           Text('비밀글입니다.',
-                              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700)),
                           SizedBox(height: 8),
                           Text('작성자와 관리자만 열람할 수 있습니다.',
-                              style: TextStyle(color: AppTheme.slate500, fontSize: 13)),
+                              style: TextStyle(
+                                  color: AppTheme.slate500, fontSize: 13)),
                         ],
                       ),
                     ),
@@ -155,7 +165,8 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
                     runSpacing: 4,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      _badge(_post.platform == 'app' ? '앱' : '웹', _platformColor(_post.platform)),
+                      _badge(_post.platform == 'app' ? '앱' : '웹',
+                          _platformColor(_post.platform)),
                       _badge(_post.category, _categoryColor(_post.category)),
                       // 처리 상태
                       if (_isAdmin)
@@ -163,29 +174,40 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
                       else
                         _badge(_post.status, _statusColor(_post.status)),
                       if (_post.isPrivate)
-                        const Icon(Icons.lock_outline, size: 14, color: AppTheme.slate500),
+                        const Icon(Icons.lock_outline,
+                            size: 14, color: AppTheme.slate500),
                     ],
                   ),
 
                   const SizedBox(height: 12),
                   // ── 제목 ──
                   Text(_post.title,
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                      style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white)),
                   const SizedBox(height: 6),
                   // ── 작성자·날짜 ──
                   Text(
                     '${_post.author} · ${timeago.format(DateTime.fromMillisecondsSinceEpoch(_post.createdAt), locale: 'ko')}',
-                    style: const TextStyle(color: AppTheme.slate500, fontSize: 12),
+                    style:
+                        const TextStyle(color: AppTheme.slate500, fontSize: 12),
                   ),
                   const Divider(height: 28),
                   // ── 본문 ──
-                  Text(_post.content,
-                      style: const TextStyle(color: AppTheme.slate300, fontSize: 14, height: 1.7)),
+                  RichTextViewer(
+                      content: _post.content,
+                      fontSize: 14,
+                      color: AppTheme.slate300,
+                      lineHeight: 1.7),
                   const SizedBox(height: 32),
 
                   // ── 댓글 ──
                   const Text('댓글',
-                      style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600)),
                   const SizedBox(height: 10),
                   StreamBuilder<List<InquiryComment>>(
                     stream: _fs.watchInquiryComments(_post.id),
@@ -193,7 +215,8 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
                       final comments = snap.data ?? [];
                       if (comments.isEmpty) {
                         return const Text('아직 댓글이 없습니다.',
-                            style: TextStyle(color: AppTheme.slate500, fontSize: 13));
+                            style: TextStyle(
+                                color: AppTheme.slate500, fontSize: 13));
                       }
                       return Column(
                         children: comments.map((c) {
@@ -207,27 +230,37 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
                                   children: [
                                     Text(c.author,
                                         style: const TextStyle(
-                                            color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+                                            color: Colors.white,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500)),
                                     const SizedBox(width: 8),
                                     Text(
                                       timeago.format(
-                                          DateTime.fromMillisecondsSinceEpoch(c.createdAt),
+                                          DateTime.fromMillisecondsSinceEpoch(
+                                              c.createdAt),
                                           locale: 'ko'),
-                                      style: const TextStyle(color: AppTheme.slate500, fontSize: 11),
+                                      style: const TextStyle(
+                                          color: AppTheme.slate500,
+                                          fontSize: 11),
                                     ),
                                     if (isMine || _isAdmin) ...[
                                       const Spacer(),
                                       GestureDetector(
-                                        onTap: () => _fs.deleteInquiryComment(_post.id, c.id),
+                                        onTap: () => _fs.deleteInquiryComment(
+                                            _post.id, c.id),
                                         child: const Text('삭제',
-                                            style: TextStyle(color: Color(0xFFF87171), fontSize: 11)),
+                                            style: TextStyle(
+                                                color: Color(0xFFF87171),
+                                                fontSize: 11)),
                                       ),
                                     ],
                                   ],
                                 ),
                                 const SizedBox(height: 4),
-                                Text(c.content,
-                                    style: const TextStyle(color: AppTheme.slate300, fontSize: 13)),
+                                RichTextViewer(
+                                    content: c.content,
+                                    fontSize: 13,
+                                    color: AppTheme.slate300),
                               ],
                             ),
                           );
@@ -240,36 +273,69 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
             ),
           ),
 
-          // ── 댓글 입력창 (접근 가능 & 로그인 상태) ──
-          if (_isAccessible && _user != null)
+          // ── 댓글 입력창 (접근 가능) ──
+          if (_isAccessible)
             Container(
-              padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
               decoration: const BoxDecoration(
                 color: AppTheme.slate800,
                 border: Border(top: BorderSide(color: AppTheme.slate700)),
               ),
               child: SafeArea(
                 top: false,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _commentCtrl,
-                        decoration: const InputDecoration(
-                          hintText: '댓글을 입력하세요...',
-                          border: InputBorder.none,
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(vertical: 8),
-                        ),
-                        style: const TextStyle(fontSize: 14),
+                child: _user == null
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            constraints: const BoxConstraints(minHeight: 60),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 18),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1e293b),
+                              borderRadius: BorderRadius.circular(10),
+                              border:
+                                  Border.all(color: const Color(0xFF334155)),
+                            ),
+                            child: const Text(
+                              '로그인이 필요합니다.',
+                              style: TextStyle(
+                                color: AppTheme.slate400,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          const Align(
+                            alignment: Alignment.centerRight,
+                            child: Icon(Icons.send, color: AppTheme.slate600),
+                          ),
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          RichTextEditor(
+                            key: ValueKey(_editorKey),
+                            onChanged: (v) => _commentDelta = v,
+                            mini: true,
+                            placeholder: '댓글을 입력하세요...',
+                            minHeight: 60,
+                          ),
+                          const SizedBox(height: 6),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: IconButton(
+                              icon: const Icon(Icons.send,
+                                  color: AppTheme.blue400),
+                              onPressed: _postComment,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.send, color: AppTheme.blue400),
-                      onPressed: _postComment,
-                    ),
-                  ],
-                ),
               ),
             ),
         ],
@@ -298,11 +364,16 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
               const Padding(
                 padding: EdgeInsets.all(16),
                 child: Text('처리 상태 변경',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15)),
               ),
               ...InquiryPost.statuses.map((s) => ListTile(
                     title: Text(s, style: TextStyle(color: _statusColor(s))),
-                    trailing: s == current ? const Icon(Icons.check, color: Colors.white) : null,
+                    trailing: s == current
+                        ? const Icon(Icons.check, color: Colors.white)
+                        : null,
                     onTap: () => Navigator.pop(ctx, s),
                   )),
               const SizedBox(height: 8),
@@ -345,7 +416,9 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(current, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
+            Text(current,
+                style: TextStyle(
+                    color: color, fontSize: 12, fontWeight: FontWeight.w700)),
             const SizedBox(width: 3),
             Icon(Icons.arrow_drop_down, color: color, size: 16),
           ],
@@ -360,6 +433,8 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
           color: color.withValues(alpha: 0.18),
           borderRadius: BorderRadius.circular(5),
         ),
-        child: Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
+        child: Text(label,
+            style: TextStyle(
+                color: color, fontSize: 12, fontWeight: FontWeight.w700)),
       );
 }

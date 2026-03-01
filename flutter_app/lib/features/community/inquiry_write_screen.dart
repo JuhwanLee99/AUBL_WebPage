@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../../core/models/inquiry_post.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/editor/rich_text_editor.dart';
+import '../../core/widgets/editor/delta_utils.dart';
 
 class InquiryWriteScreen extends StatefulWidget {
   const InquiryWriteScreen({super.key, this.editPost});
@@ -18,7 +20,7 @@ class InquiryWriteScreen extends StatefulWidget {
 class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
   final _fs = FirestoreService();
   final _titleCtrl = TextEditingController();
-  final _contentCtrl = TextEditingController();
+  String _contentDelta = '';
 
   String _platform = 'app';
   String _category = '기능 개선';
@@ -35,7 +37,7 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
     final p = widget.editPost;
     if (p != null) {
       _titleCtrl.text = p.title;
-      _contentCtrl.text = p.content;
+      _contentDelta = p.content;
       _platform = p.platform;
       _category = p.category;
       _isPrivate = p.isPrivate;
@@ -45,14 +47,13 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
   @override
   void dispose() {
     _titleCtrl.dispose();
-    _contentCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     final title = _titleCtrl.text.trim();
-    final content = _contentCtrl.text.trim();
-    if (title.isEmpty || content.isEmpty) return;
+    if (title.isEmpty || isDeltaEmpty(_contentDelta)) return;
+    final content = _contentDelta;
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -99,7 +100,7 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
   Widget build(BuildContext context) {
     final canSubmit = !_submitting &&
         _titleCtrl.text.trim().isNotEmpty &&
-        _contentCtrl.text.trim().isNotEmpty;
+        !isDeltaEmpty(_contentDelta);
 
     return Scaffold(
       appBar: AppBar(
@@ -137,7 +138,7 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
                     Border.all(color: AppTheme.blue500.withValues(alpha: 0.35)),
               ),
               child: const Text(
-                '스크린샷 등 첨부파일이 필요한 경우, 게시글 등록 후 aublcau@gmail.com으로 전송해 주세요.',
+                '첨부파일 업로드는 현재 지원하지 않습니다.\n스크린샷 등 파일이 필요한 경우 구글 드라이브 등 외부 링크를 본문에 첨부하거나, 게시글 작성 후 aublcau@gmail.com으로 전송해 주세요.',
                 style: TextStyle(
                   color: AppTheme.blue400,
                   fontSize: 12,
@@ -193,12 +194,11 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
             // ── 본문 ──
             _sectionLabel('내용'),
             const SizedBox(height: 8),
-            TextField(
-              controller: _contentCtrl,
-              maxLines: 10,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-              decoration: _inputDecoration('내용을 입력하세요'),
-              onChanged: (_) => setState(() {}),
+            RichTextEditor(
+              initialValue: _contentDelta,
+              onChanged: (v) => setState(() => _contentDelta = v),
+              placeholder: '내용을 입력하세요',
+              minHeight: 200,
             ),
             const SizedBox(height: 16),
 

@@ -41,18 +41,12 @@ class FirestoreService {
         .where('startTime', isLessThan: '${dateStr}Z') // same-day range
         .get();
 
-    return snap.docs
-        .map(Match.fromFirestore)
-        .where((m) => !m.deleted)
-        .toList();
+    return snap.docs.map(Match.fromFirestore).where((m) => !m.deleted).toList();
   }
 
   Future<List<Match>> getAllMatches() async {
     final snap = await _db.collection('matches').orderBy('startTime').get();
-    return snap.docs
-        .map(Match.fromFirestore)
-        .where((m) => !m.deleted)
-        .toList();
+    return snap.docs.map(Match.fromFirestore).where((m) => !m.deleted).toList();
   }
 
   Future<List<Match>> getCompletedMatches() async {
@@ -61,10 +55,7 @@ class FirestoreService {
         .where('status', isEqualTo: 'completed')
         .orderBy('startTime', descending: true)
         .get();
-    return snap.docs
-        .map(Match.fromFirestore)
-        .where((m) => !m.deleted)
-        .toList();
+    return snap.docs.map(Match.fromFirestore).where((m) => !m.deleted).toList();
   }
 
   Future<List<Match>> getScheduledMatches() async {
@@ -73,10 +64,7 @@ class FirestoreService {
         .where('status', isEqualTo: 'scheduled')
         .orderBy('startTime')
         .get();
-    return snap.docs
-        .map(Match.fromFirestore)
-        .where((m) => !m.deleted)
-        .toList();
+    return snap.docs.map(Match.fromFirestore).where((m) => !m.deleted).toList();
   }
 
   Future<List<Match>> getMatchesByTeam(String teamName) async {
@@ -193,7 +181,10 @@ class FirestoreService {
   }
 
   Future<void> updateTeamInfo(String teamId, Map<String, dynamic> data) {
-    return _db.collection('teams').doc(teamId).set(data, SetOptions(merge: true));
+    return _db
+        .collection('teams')
+        .doc(teamId)
+        .set(data, SetOptions(merge: true));
   }
 
   // ────────────────────────────────────────────
@@ -410,15 +401,25 @@ class FirestoreService {
     } catch (_) {}
 
     if (docs.isEmpty) {
+      // iOS에서 collectionGroup + documentId 동등 비교는 런타임 예외가 날 수 있어
+      // teams/*/members/{uid} 직접 조회로 fallback 한다.
       try {
-        final snap = await group
-            .where(FieldPath.documentId, isEqualTo: uid)
-            .limit(1)
-            .get();
-        docs = snap.docs;
+        final teams = await _db.collection('teams').get();
+        for (final team in teams.docs) {
+          final memberDoc =
+              await team.reference.collection('members').doc(uid).get();
+          if (!memberDoc.exists) continue;
+          final data = memberDoc.data();
+          if (data == null) continue;
+          return {
+            'teamId': team.id,
+            'role': data['role'] ?? 'player',
+          };
+        }
       } catch (_) {
-        return null;
+        // ignore
       }
+      return null;
     }
 
     if (docs.isEmpty) return null;

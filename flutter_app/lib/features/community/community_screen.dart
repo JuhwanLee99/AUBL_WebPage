@@ -9,6 +9,8 @@ import '../../core/services/cache_service.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/background_logo.dart';
+import '../../core/widgets/editor/delta_utils.dart';
+import '../../core/widgets/editor/rich_text_editor.dart';
 import 'inquiry_board_screen.dart';
 import 'notice_detail_screen.dart';
 
@@ -107,7 +109,7 @@ class CommunityScreenState extends State<CommunityScreen> {
 
     return categoryFiltered.where((n) {
       final title = n.title.toLowerCase();
-      final content = n.content.toLowerCase();
+      final content = deltaToPreviewText(n.content).toLowerCase();
       final author = n.author.toLowerCase();
       return title.contains(q) || content.contains(q) || author.contains(q);
     }).toList();
@@ -119,6 +121,34 @@ class CommunityScreenState extends State<CommunityScreen> {
         '경기공지' => AppTheme.blue500,
         _ => AppTheme.slate500,
       };
+
+  Widget _buildAttachmentBadge({
+    required IconData icon,
+    required String label,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppTheme.slate700.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: AppTheme.slate400),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppTheme.slate400,
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -256,6 +286,7 @@ class CommunityScreenState extends State<CommunityScreen> {
                         DateTime.fromMillisecondsSinceEpoch(n.createdAt),
                         locale: 'ko',
                       );
+                      final attachment = summarizeDeltaAttachments(n.content);
                       return Padding(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 3),
@@ -296,10 +327,40 @@ class CommunityScreenState extends State<CommunityScreen> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          subtitle: Text(
-                            '${n.author} · $ago',
-                            style: const TextStyle(
-                                color: AppTheme.slate500, fontSize: 12),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '${n.author} · $ago',
+                                style: const TextStyle(
+                                    color: AppTheme.slate500, fontSize: 12),
+                              ),
+                              if (attachment.hasAny) ...[
+                                const SizedBox(height: 4),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  children: [
+                                    if (attachment.hasImage)
+                                      _buildAttachmentBadge(
+                                        icon: Icons.image_outlined,
+                                        label: '이미지',
+                                      ),
+                                    if (attachment.hasVideo)
+                                      _buildAttachmentBadge(
+                                        icon: Icons.videocam_outlined,
+                                        label: '동영상',
+                                      ),
+                                    if (attachment.hasLink)
+                                      _buildAttachmentBadge(
+                                        icon: Icons.link,
+                                        label: '링크',
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ],
                           ),
                           trailing: const Icon(Icons.chevron_right,
                               size: 18, color: AppTheme.slate500),
@@ -317,7 +378,7 @@ class CommunityScreenState extends State<CommunityScreen> {
 
   void _showWriteNoticeDialog() {
     final titleCtrl = TextEditingController();
-    final contentCtrl = TextEditingController();
+    String contentDelta = '';
     String category = '일반';
     bool isImportant = false;
     bool saving = false;
@@ -328,7 +389,7 @@ class CommunityScreenState extends State<CommunityScreen> {
         builder: (ctx, setDialogState) => Dialog(
           backgroundColor: AppTheme.slate800,
           insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -360,10 +421,15 @@ class CommunityScreenState extends State<CommunityScreen> {
                   decoration: const InputDecoration(labelText: '제목'),
                 ),
                 const SizedBox(height: 12),
-                TextField(
-                  controller: contentCtrl,
-                  decoration: const InputDecoration(labelText: '내용'),
-                  maxLines: 4,
+                RichTextEditor(
+                  onChanged: (v) => contentDelta = v,
+                  placeholder: '내용을 입력하세요',
+                  minHeight: 160,
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  '이미지/동영상은 툴바 버튼으로 URL을 입력하여 삽입할 수 있습니다.',
+                  style: TextStyle(color: AppTheme.slate500, fontSize: 11),
                 ),
                 const SizedBox(height: 4),
                 CheckboxListTile(
@@ -391,8 +457,7 @@ class CommunityScreenState extends State<CommunityScreen> {
                           ? null
                           : () async {
                               final title = titleCtrl.text.trim();
-                              final content = contentCtrl.text.trim();
-                              if (title.isEmpty || content.isEmpty) {
+                              if (title.isEmpty || isDeltaEmpty(contentDelta)) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                       content: Text('제목과 내용을 입력해주세요.')),
@@ -407,7 +472,7 @@ class CommunityScreenState extends State<CommunityScreen> {
                                 await _fs.addNotice(
                                   title: title,
                                   category: category,
-                                  content: content,
+                                  content: contentDelta,
                                   author: author,
                                   isImportant: isImportant,
                                 );

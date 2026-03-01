@@ -6,6 +6,9 @@ import '../../core/models/notice_comment.dart';
 import '../../core/models/team_notice.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/editor/delta_utils.dart';
+import '../../core/widgets/editor/rich_text_editor.dart';
+import '../../core/widgets/editor/rich_text_viewer.dart';
 
 class TeamNoticeDetailScreen extends StatefulWidget {
   const TeamNoticeDetailScreen({
@@ -27,21 +30,21 @@ class TeamNoticeDetailScreen extends StatefulWidget {
 
 class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
   final _fs = FirestoreService();
-  final _commentCtrl = TextEditingController();
+  String _commentDelta = '';
+  int _editorKey = 0;
   String? _replyToId;
 
-  @override
-  void dispose() {
-    _commentCtrl.dispose();
-    super.dispose();
-  }
-
   Future<void> _postComment() async {
-    final text = _commentCtrl.text.trim();
-    if (text.isEmpty) return;
+    if (isDeltaEmpty(_commentDelta)) return;
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
+    final content = _commentDelta;
+    setState(() {
+      _commentDelta = '';
+      _editorKey++;
+      _replyToId = null;
+    });
     await _fs.addTeamNoticeComment(
       widget.teamId,
       widget.notice.id,
@@ -49,17 +52,17 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
         id: '',
         uid: user.uid,
         author: user.email?.split('@').first ?? '익명',
-        content: text,
+        content: content,
         createdAt: DateTime.now().millisecondsSinceEpoch,
         parentId: _replyToId,
       ),
     );
-    _commentCtrl.clear();
-    if (mounted) setState(() => _replyToId = null);
   }
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+
     return Scaffold(
       appBar: AppBar(title: const Text('공지 상세')),
       body: Column(
@@ -98,11 +101,10 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
                   ],
                 ),
                 const Divider(height: 24),
-                Text(
-                  widget.notice.content,
-                  style:
-                      const TextStyle(color: AppTheme.slate300, fontSize: 14),
-                ),
+                RichTextViewer(
+                    content: widget.notice.content,
+                    fontSize: 14,
+                    color: AppTheme.slate300),
                 const SizedBox(height: 24),
                 const Text(
                   '댓글',
@@ -163,12 +165,17 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
                               FirebaseAuth.instance.currentUser?.uid ?? '',
                           onReply: () =>
                               setState(() => _replyToId = comment.id),
-                          onLike: () => _fs.toggleCommentLike(
-                            widget.teamId,
-                            widget.notice.id,
-                            comment.id,
-                            FirebaseAuth.instance.currentUser!.uid,
-                          ),
+                          onLike: () {
+                            final currentUser =
+                                FirebaseAuth.instance.currentUser;
+                            if (currentUser == null) return;
+                            _fs.toggleCommentLike(
+                              widget.teamId,
+                              widget.notice.id,
+                              comment.id,
+                              currentUser.uid,
+                            );
+                          },
                           canManage: widget.canManage,
                           onDelete: (commentId) => _fs.deleteTeamNoticeComment(
                               widget.teamId, widget.notice.id, commentId),
@@ -183,57 +190,85 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
 
           // ── 댓글 입력 ──
           Container(
-            padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
             decoration: const BoxDecoration(
               color: AppTheme.slate800,
               border: Border(top: BorderSide(color: AppTheme.slate700)),
             ),
             child: SafeArea(
               top: false,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_replyToId != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Row(
-                        children: [
-                          const Text('답글 작성 중',
-                              style: TextStyle(
-                                  color: AppTheme.blue400, fontSize: 12)),
-                          const Spacer(),
-                          GestureDetector(
-                            onTap: () => setState(() => _replyToId = null),
-                            child: const Text('취소',
-                                style: TextStyle(
-                                    color: AppTheme.slate400, fontSize: 12)),
+              child: user == null
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          constraints: const BoxConstraints(minHeight: 60),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 18),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1e293b),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFF334155)),
                           ),
-                        ],
-                      ),
-                    ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _commentCtrl,
-                          decoration: const InputDecoration(
-                            hintText: '댓글을 입력하세요...',
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(vertical: 8),
+                          child: const Text(
+                            '로그인이 필요합니다.',
+                            style: TextStyle(
+                              color: AppTheme.slate400,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                          style: const TextStyle(fontSize: 14),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.send, color: AppTheme.blue400),
-                        onPressed: _postComment,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                        const SizedBox(height: 6),
+                        const Align(
+                          alignment: Alignment.centerRight,
+                          child: Icon(Icons.send, color: AppTheme.slate600),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_replyToId != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Row(
+                              children: [
+                                const Text('답글 작성 중',
+                                    style: TextStyle(
+                                        color: AppTheme.blue400, fontSize: 12)),
+                                const Spacer(),
+                                GestureDetector(
+                                  onTap: () =>
+                                      setState(() => _replyToId = null),
+                                  child: const Text('취소',
+                                      style: TextStyle(
+                                          color: AppTheme.slate400,
+                                          fontSize: 12)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        RichTextEditor(
+                          key: ValueKey(_editorKey),
+                          onChanged: (v) => _commentDelta = v,
+                          mini: true,
+                          placeholder: '댓글을 입력하세요...',
+                          minHeight: 60,
+                        ),
+                        const SizedBox(height: 6),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: IconButton(
+                            icon:
+                                const Icon(Icons.send, color: AppTheme.blue400),
+                            onPressed: _postComment,
+                          ),
+                        ),
+                      ],
+                    ),
             ),
           ),
         ],
@@ -289,8 +324,8 @@ class _CommentTile extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          Text(comment.content,
-              style: const TextStyle(color: AppTheme.slate300, fontSize: 13)),
+          RichTextViewer(
+              content: comment.content, fontSize: 13, color: AppTheme.slate300),
           const SizedBox(height: 4),
           Row(
             children: [
@@ -358,9 +393,10 @@ class _CommentTile extends StatelessWidget {
                                 ],
                               ),
                               const SizedBox(height: 2),
-                              Text(r.content,
-                                  style: const TextStyle(
-                                      color: AppTheme.slate400, fontSize: 12)),
+                              RichTextViewer(
+                                  content: r.content,
+                                  fontSize: 12,
+                                  color: AppTheme.slate400),
                               if (r.uid == currentUid || canManage) ...[
                                 const SizedBox(height: 3),
                                 GestureDetector(
