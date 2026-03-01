@@ -7,6 +7,7 @@ const tabs = [
   { path: '/admin/teams', label: '참가팀 · 조편성 관리' },
   { path: '/admin/roles', label: '계정 권한' },
   { path: '/admin/games', label: '경기 기록 수정' },
+  { path: '/admin/power-ranking', label: '파워랭킹 재계산' },
   { path: '/admin/maintenance', label: '🔴 서비스 점검' },
 ] as const;
 

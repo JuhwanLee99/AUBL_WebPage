@@ -1111,6 +1111,19 @@ export async function getPowerRankingSeasonScores(params: {
     .filter((item): item is PowerRankingSeasonScoreRow => item !== null);
 }
 
+export async function rebuildPowerRanking(params: {
+  fromYear: number;
+  toYear: number;
+}): Promise<void> {
+  const query = new URLSearchParams({
+    fromYear: String(params.fromYear),
+    toYear: String(params.toYear),
+  });
+  await fetchApi<unknown>(`/api/admin/records/power-ranking/rebuild?${query.toString()}`, {
+    method: 'POST',
+  });
+}
+
 // ── Game Logs ──
 
 export interface BatterGameLog {
