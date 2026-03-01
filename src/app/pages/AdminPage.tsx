@@ -22,10 +22,6 @@ const inputStyle = {
 
 const labelStyle = { color: '#cbd5e1', fontWeight: 800, fontSize: '13px', marginBottom: '6px', display: 'block' };
 
-function lines(list: string[]) {
-  return list.join('\n');
-}
-
 function serializeHistory(items: ContentState['intro']['historyHighlights']) {
   return items.map((h) => `${h.title} | ${h.desc} | ${h.accent}`).join('\n');
 }
@@ -51,8 +47,6 @@ export default function AdminPage() {
   const intro = content.intro;
   const previewRef = useRef<HTMLDivElement>(null);
 
-  const [tickerDraft, setTickerDraft] = useState(lines(content.tickerItems));
-
   const [tagline, setTagline] = useState(intro.tagline);
   const [heroSubtitle, setHeroSubtitle] = useState(intro.heroSubtitle);
   const [heroTitle, setHeroTitle] = useState(intro.heroTitle);
@@ -65,12 +59,10 @@ export default function AdminPage() {
   const [metricsDraft, setMetricsDraft] = useState(serializeMetrics(intro.heroMetrics));
 
   const [status, setStatus] = useState<string | null>(null);
-  const [previewTicker, setPreviewTicker] = useState<string[] | null>(null);
   const [previewIntro, setPreviewIntro] = useState<ContentState['intro'] | null>(null);
 
   useEffect(() => {
     queueMicrotask(() => {
-      setTickerDraft(lines(content.tickerItems));
       setTagline(intro.tagline);
       setHeroSubtitle(intro.heroSubtitle);
       setHeroTitle(intro.heroTitle);
@@ -82,7 +74,6 @@ export default function AdminPage() {
       setMetricsDraft(serializeMetrics(intro.heroMetrics));
     });
   }, [
-    content.tickerItems,
     intro.tagline,
     intro.heroSubtitle,
     intro.heroTitle,
@@ -93,12 +84,6 @@ export default function AdminPage() {
     intro.postseasonMatches,
     intro.heroMetrics,
   ]);
-
-  const parseTicker = () =>
-    tickerDraft
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean);
 
   const parseHistory = () =>
     historyDraft
@@ -163,11 +148,6 @@ export default function AdminPage() {
       })
       .filter((item) => item.label && item.value);
 
-  const saveTicker = () => {
-    updateContent({ tickerItems: parseTicker() });
-    setStatus('LIVE INFO 문구를 저장했습니다.');
-  };
-
   const saveIntro = () => {
     updateContent({
       intro: {
@@ -186,7 +166,6 @@ export default function AdminPage() {
   };
 
   const previewIntroContent = () => {
-    setPreviewTicker(parseTicker());
     setPreviewIntro({
       tagline,
       heroSubtitle,
@@ -198,7 +177,7 @@ export default function AdminPage() {
       postseasonMatches: parsePostseason(),
       heroMetrics: parseMetrics(),
     });
-    setStatus('미리보기를 갱신했습니다. 아래에서 확인하세요.');
+    setStatus('리그 소개 미리보기를 갱신했습니다. 아래에서 확인하세요.');
     queueMicrotask(() => {
       previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
@@ -212,7 +191,6 @@ export default function AdminPage() {
   const infoText = useMemo(
     () =>
       [
-        '라이브 INFO 문구: 한 줄당 한 항목, 줄바꿈으로 구분',
         '리그 소개 카드: "제목 | 설명 | 포인트" 형태, 포인트는 세미콜론(;)으로 구분',
         '색상(선택): #60a5fa 같은 HEX 값, 비우면 기본 색상 적용',
       ].join(' • '),
@@ -256,58 +234,6 @@ export default function AdminPage() {
           {status}
         </div>
       )}
-
-      <div style={cardStyle}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-          <h3 style={{ margin: 0, color: '#e2e8f0' }}>랜딩 · LIVE INFO 문구</h3>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button
-              type='button'
-              onClick={() => {
-                setPreviewTicker(parseTicker());
-                setStatus('LIVE INFO 미리보기를 갱신했습니다. 아래에서 확인하세요.');
-                queueMicrotask(() => {
-                  previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                });
-              }}
-              style={{
-                padding: '8px 12px',
-                borderRadius: '10px',
-                border: '1px solid rgba(234,179,8,0.5)',
-                background: 'rgba(234,179,8,0.18)',
-                color: '#fef08a',
-                fontWeight: 800,
-              }}
-            >
-              미리보기
-            </button>
-            <button
-              type='button'
-              onClick={saveTicker}
-              style={{
-                padding: '8px 12px',
-                borderRadius: '10px',
-                border: '1px solid rgba(96,165,250,0.4)',
-                background: 'rgba(96,165,250,0.16)',
-                color: '#bfdbfe',
-                fontWeight: 800,
-              }}
-            >
-              저장
-            </button>
-          </div>
-        </div>
-        <label style={labelStyle} htmlFor="ticker-input">
-          한 줄당 하나의 문구 (줄바꿈으로 구분)
-        </label>
-        <textarea
-          id="ticker-input"
-          style={{ ...inputStyle, minHeight: '120px', fontFamily: 'inherit' }}
-          value={tickerDraft}
-          onChange={(e) => setTickerDraft(e.target.value)}
-          placeholder="예) 📢 [공지] ..."
-        />
-      </div>
 
       <div style={cardStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
@@ -458,43 +384,11 @@ export default function AdminPage() {
         </p>
       </div>
 
-      {(previewTicker || previewIntro) && (
+      {previewIntro && (
         <div ref={previewRef} style={{ ...cardStyle, border: '1px solid rgba(34,197,94,0.28)', background: 'rgba(15,23,42,0.72)' }}>
           <h3 style={{ margin: '0 0 10px', color: '#e2e8f0' }}>미리보기</h3>
-          {previewTicker && (
-            <div style={{ marginBottom: '12px', display: 'grid', gap: '6px' }}>
-              <p style={{ margin: 0, color: '#bfdbfe', fontWeight: 800, fontSize: '13px' }}>LIVE INFO 문구</p>
-              <div
-                style={{
-                  display: 'flex',
-                  gap: '8px',
-                  flexWrap: 'wrap',
-                }}
-              >
-                {previewTicker.map((line, idx) => (
-                  <span
-                    key={`preview-ticker-${idx}`}
-                    style={{
-                      padding: '8px 10px',
-                      borderRadius: '10px',
-                      background: 'rgba(255,255,255,0.06)',
-                      border: '1px solid rgba(148,163,184,0.3)',
-                      color: '#e2e8f0',
-                      fontWeight: 700,
-                      fontSize: '12px',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {line}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {previewIntro && (
-            <div style={{ display: 'grid', gap: '14px' }}>
-              <p style={{ margin: 0, color: '#bbf7d0', fontWeight: 800, fontSize: '13px' }}>리그 소개 미리보기</p>
+          <div style={{ display: 'grid', gap: '14px' }}>
+            <p style={{ margin: 0, color: '#bbf7d0', fontWeight: 800, fontSize: '13px' }}>리그 소개 미리보기</p>
               <div style={{ border: '1px solid rgba(148,163,184,0.25)', borderRadius: '12px', padding: '14px', background: 'rgba(255,255,255,0.02)' }}>
                 <p style={{ margin: 0, color: '#cbd5e1', fontWeight: 700, letterSpacing: '0.04em', fontSize: '12px' }}>{previewIntro.tagline}</p>
                 <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '13px' }}>{previewIntro.heroSubtitle}</span>
@@ -579,8 +473,7 @@ export default function AdminPage() {
                   ))}
                 </div>
               </div>
-            </div>
-          )}
+          </div>
         </div>
       )}
     </div>

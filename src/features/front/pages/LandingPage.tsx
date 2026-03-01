@@ -11,7 +11,7 @@ import { useAdmin } from '@shared/auth/useAdmin';
 import { useAuth } from '@shared/auth/AuthProvider';
 import { useTeamRole } from '@shared/auth/useTeamRole';
 import { decodeTeamId } from '@shared/lib/teamDirectory';
-import type { TeamNotice } from '@shared/types';
+import type { Notice, TeamNotice } from '@shared/types';
 
 const formatLiveTime = (value: string) => {
   const date = new Date(value);
@@ -118,6 +118,37 @@ const formatTimeShort = (value: string) => {
   }).format(date);
 };
 
+const normalizeCreatedAt = (value: unknown): number => {
+  if (typeof value === 'number') return value;
+  if (value && typeof value === 'object' && 'toMillis' in value && typeof (value as { toMillis?: unknown }).toMillis === 'function') {
+    const millis = (value as { toMillis: () => number }).toMillis();
+    return Number.isFinite(millis) ? millis : 0;
+  }
+  return 0;
+};
+
+const formatNoticeDate = (value: number) => {
+  if (!value) return '-';
+  return new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(value));
+};
+
+const noticeCategoryStyle = (category: Notice['category']) => {
+  switch (category) {
+    case '긴급':
+      return { background: 'rgba(239,68,68,0.16)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.32)' };
+    case '경기공지':
+      return { background: 'rgba(59,130,246,0.16)', color: '#93c5fd', border: '1px solid rgba(59,130,246,0.32)' };
+    case '징계':
+      return { background: 'rgba(248,113,113,0.16)', color: '#fda4af', border: '1px solid rgba(248,113,113,0.32)' };
+    default:
+      return { background: 'rgba(148,163,184,0.18)', color: '#e2e8f0', border: '1px solid rgba(148,163,184,0.3)' };
+  }
+};
+
 function Badge({ label, dots }: { label: string; dots: { active: boolean; color: string }[] }) {
   return (
     <div
@@ -206,6 +237,7 @@ export default function LandingPage() {
   const [nowTs, setNowTs] = useState<number>(() => Date.now());
   const [memberTeamId, setMemberTeamId] = useState<string | null>(null);
   const [teamNotices, setTeamNotices] = useState<TeamNotice[]>([]);
+  const [latestCommunityNotices, setLatestCommunityNotices] = useState<Notice[]>([]);
   const activeMatch = useMemo(
     () => state.matches.find((match) => match.id === state.activeMatchId) ?? null,
     [state.matches, state.activeMatchId],
@@ -273,6 +305,33 @@ export default function LandingPage() {
     return () => unsub();
   }, [myTeamId]);
 
+  useEffect(() => {
+    const noticesQuery = query(collection(firestore, 'notices'), orderBy('createdAt', 'desc'), limit(6));
+    const unsub = onSnapshot(
+      noticesQuery,
+      (snap) => {
+        const next = snap.docs.map((docSnap) => {
+          const data = docSnap.data() as Partial<Notice>;
+          return {
+            id: docSnap.id,
+            title: data.title ?? '제목 없음',
+            category: data.category ?? '일반',
+            content: data.content ?? '',
+            author: data.author ?? '운영진',
+            createdAt: normalizeCreatedAt(data.createdAt),
+            isImportant: data.isImportant,
+            allowComments: data.allowComments,
+          } as Notice;
+        });
+        setLatestCommunityNotices(next);
+      },
+      () => {
+        setLatestCommunityNotices([]);
+      },
+    );
+    return () => unsub();
+  }, []);
+
   // 1. 오늘 경기 계산
   const todaysScheduled = useMemo(() => {
     // 현재 KST 기준 '오늘'의 YYYY-MM-DD 키 생성
@@ -311,9 +370,6 @@ export default function LandingPage() {
       .filter((match) => match.status === 'inProgress')
       .sort((a, b) => safeMatchTime(a.startTime) - safeMatchTime(b.startTime));
   }, [liveMatchesRealtime, state.matches]);
-
-  // 4. 티커 아이템
-  const tickerItems = content.tickerItems ?? [];
 
   // Ensure live widget always has full schedule data
   useEffect(() => {
@@ -670,58 +726,129 @@ export default function LandingPage() {
         )}
       </section>
 
-      {/* Live Info Ticker */}
+      {/* Community Notice Preview */}
       <section
         style={{
           borderRadius: 'var(--surface-radius-md)',
-          padding: '12px 14px',
+          padding: '14px',
           border: '1px solid rgba(148, 163, 184, 0.28)',
           background: 'rgba(15, 23, 42, 0.7)',
           boxShadow: '0 12px 28px rgba(0, 0, 0, 0.28)',
-          display: 'flex',
-          gap: '14px',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          overflow: 'hidden',
+          display: 'grid',
+          gap: '12px',
         }}
       >
-        <div
-          style={{
-            padding: '10px 12px',
-            borderRadius: '12px',
-            background: 'rgba(96, 165, 250, 0.14)',
-            color: '#bfdbfe',
-            fontWeight: 800,
-            letterSpacing: '0.04em',
-            fontSize: 'clamp(11px, 2.8vw, 12px)',
-            flexShrink: 0,
-            border: '1px solid rgba(96, 165, 250, 0.24)',
-          }}
-        >
-          LIVE INFO
-        </div>
-        <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '4px', width: '100%' }}>
-          {tickerItems.map((item) => (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span
-              key={item}
               style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                whiteSpace: 'nowrap',
-                padding: '10px 12px',
-                borderRadius: '12px',
-                background: 'rgba(255, 255, 255, 0.04)',
-                color: '#e2e8f0',
-                fontWeight: 600,
-                border: '1px solid rgba(148, 163, 184, 0.22)',
-                fontSize: 'clamp(13px, 3.4vw, 14px)',
+                padding: '6px 10px',
+                borderRadius: '999px',
+                background: 'rgba(59,130,246,0.15)',
+                color: '#93c5fd',
+                fontWeight: 900,
+                fontSize: '11px',
+                letterSpacing: '0.06em',
+                border: '1px solid rgba(59,130,246,0.3)',
               }}
             >
-              {item}
+              COMMUNITY NOTICE
             </span>
-          ))}
+            <span style={{ color: '#cbd5e1', fontWeight: 700, fontSize: '13px' }}>공지사항 최신글</span>
+          </div>
+          <Link
+            to="/community/notices"
+            style={{
+              padding: '8px 12px',
+              borderRadius: '10px',
+              border: '1px solid rgba(148,163,184,0.35)',
+              background: 'rgba(255,255,255,0.04)',
+              color: '#e2e8f0',
+              fontWeight: 800,
+              fontSize: '12px',
+              textDecoration: 'none',
+            }}
+          >
+            전체 공지 보기 →
+          </Link>
         </div>
+
+        {latestCommunityNotices.length ? (
+          <div style={{ overflowX: 'auto', paddingBottom: '4px' }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(6, minmax(150px, 1fr))',
+                gap: '8px',
+                minWidth: '960px',
+              }}
+            >
+              {latestCommunityNotices.map((notice) => (
+                <Link
+                  key={notice.id}
+                  to={`/community/notices/${notice.id}`}
+                  style={{
+                    textDecoration: 'none',
+                    display: 'grid',
+                    gap: '8px',
+                    alignContent: 'space-between',
+                    minHeight: '86px',
+                    padding: '10px',
+                    borderRadius: '12px',
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(148, 163, 184, 0.22)',
+                  }}
+                >
+                  <span
+                    style={{
+                      color: '#e2e8f0',
+                      fontWeight: 700,
+                      fontSize: '13px',
+                      lineHeight: 1.35,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                    }}
+                  >
+                    {notice.title}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                    <span
+                      style={{
+                        ...noticeCategoryStyle(notice.category),
+                        padding: '2px 7px',
+                        borderRadius: '999px',
+                        fontWeight: 800,
+                        fontSize: '10px',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {notice.category}
+                    </span>
+                    <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '11px', whiteSpace: 'nowrap' }}>
+                      {formatNoticeDate(notice.createdAt)}
+                    </span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div
+            style={{
+              padding: '12px',
+              borderRadius: '12px',
+              border: '1px solid rgba(148,163,184,0.2)',
+              background: 'rgba(255,255,255,0.02)',
+              color: '#94a3b8',
+              fontWeight: 700,
+            }}
+          >
+            등록된 공지사항이 없습니다.
+          </div>
+        )}
       </section>
 
       {/* Live Games Snapshot */}
