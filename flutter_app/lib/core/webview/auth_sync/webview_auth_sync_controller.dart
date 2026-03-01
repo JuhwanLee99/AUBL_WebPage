@@ -11,6 +11,11 @@ import 'webview_auth_sync_state.dart';
 class WebViewAuthSyncController {
   const WebViewAuthSyncController._();
 
+  static bool _isTruthyJsResult(Object result) {
+    final normalized = result.toString().trim().toLowerCase();
+    return normalized == 'true' || normalized == '"true"' || normalized == '1';
+  }
+
   static void seedFromCurrentUser(User? user, WebViewAuthSyncState syncState) {
     if (user == null) return;
     syncState.setInitialObservedUid(user.uid);
@@ -76,12 +81,15 @@ class WebViewAuthSyncController {
     );
     if (skipRedundantInjection) return;
     final customToken = await authBridgeService.exchangeWebIdToken(idToken);
-    await controller.runJavaScript(
+    final injected = await controller.runJavaScriptReturningResult(
       WebViewAuthScripts.buildInjectCustomToken(
         customToken: customToken,
         redirectUrl: redirectUrl,
       ),
     );
+    if (!_isTruthyJsResult(injected)) {
+      throw AuthBridgeException('웹 인증 주입 실패: inject 함수 실행 결과가 false 입니다.');
+    }
     syncState.markInjected(uid: user.uid, idToken: idToken);
   }
 
