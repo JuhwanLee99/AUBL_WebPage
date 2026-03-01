@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import urllib.request
 
 from firebase_admin import auth as admin_auth
@@ -17,6 +18,114 @@ _COMPLETED_STATUSES = {"completed", "final", "ended", "종료"}
 
 set_global_options(max_instances=10)
 initialize_app()
+
+
+def _normalize_whitespace(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _delta_ops_to_text(ops: list[object]) -> str:
+    chunks: list[str] = []
+    for op in ops:
+        if not isinstance(op, dict):
+            continue
+        insert = op.get("insert")
+        if isinstance(insert, str):
+            value = insert.strip()
+            if value:
+                chunks.append(value)
+            continue
+        if isinstance(insert, dict):
+            if "image" in insert:
+                chunks.append("[이미지]")
+            if "video" in insert:
+                chunks.append("[동영상]")
+    return _normalize_whitespace(" ".join(chunks))
+
+
+def _extract_insert_fragments(raw: str) -> str:
+    fragments: list[str] = []
+    normalized = raw.replace(r"\"", '"')
+
+    quoted = re.finditer(r'"insert"\s*:\s*"((?:\\.|[^"\\])*)"', normalized, flags=re.DOTALL)
+    for match in quoted:
+        value = match.group(1)
+        if not value:
+            continue
+        try:
+            unescaped = json.loads(f'"{value}"')
+            if isinstance(unescaped, str):
+                cleaned = _normalize_whitespace(unescaped)
+                if cleaned:
+                    fragments.append(cleaned)
+        except Exception:  # noqa: BLE001
+            cleaned = _normalize_whitespace(value)
+            if cleaned:
+                fragments.append(cleaned)
+
+    # 비정형 payload 대응 (예: {"ops":[f"insert":... 처럼 깨진 형태)
+    permissive = re.finditer(
+        r"""(?:^|[^A-Za-z0-9_])(?:[fFrRbBuU])?["']?insert["']?\s*:\s*(?:(["'])([\s\S]*?)\1|([^,\}\]]+))""",
+        normalized,
+        flags=re.DOTALL,
+    )
+    for match in permissive:
+        raw_value = (match.group(2) or match.group(3) or "").strip()
+        if not raw_value:
+            continue
+        cleaned = _normalize_whitespace(raw_value.strip("[]"))
+        if cleaned:
+            fragments.append(cleaned)
+
+    if re.search(r'"image"\s*:', normalized):
+        fragments.append("[이미지]")
+    if re.search(r'"video"\s*:', normalized):
+        fragments.append("[동영상]")
+
+    return _normalize_whitespace(" ".join(fragments))
+
+
+def _extract_notice_preview(content: str) -> str:
+    raw = (content or "").strip()
+    if not raw:
+        return ""
+
+    try:
+        decoded = json.loads(raw)
+        if isinstance(decoded, dict) and isinstance(decoded.get("ops"), list):
+            return _delta_ops_to_text(decoded["ops"])
+        if isinstance(decoded, list):
+            return _delta_ops_to_text(decoded)
+        if isinstance(decoded, str):
+            nested = json.loads(decoded)
+            if isinstance(nested, dict) and isinstance(nested.get("ops"), list):
+                return _delta_ops_to_text(nested["ops"])
+            if isinstance(nested, list):
+                return _delta_ops_to_text(nested)
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Delta 형식 문자열이 아니면 plain text 처리
+    if '"ops"' not in raw and '"insert"' not in raw and r"\"ops\"" not in raw and r"\"insert\"" not in raw:
+        return _normalize_whitespace(raw)
+
+    return _extract_insert_fragments(raw)
+
+
+def _build_notice_body(title: str, content: str, max_len: int = 120) -> str:
+    title_text = (title or "새 공지").strip() or "새 공지"
+    preview = _extract_notice_preview(content)
+    if not preview:
+        return title_text
+
+    combined = f"{title_text}: {preview}"
+    if len(combined) <= max_len:
+        return combined
+
+    available = max_len - len(title_text) - 5  # ': ' + '...'
+    if available <= 0:
+        return f"{title_text[:max_len - 3]}..."
+    return f"{title_text}: {preview[:available]}..."
 
 
 def _cors_headers() -> dict[str, str]:
@@ -89,10 +198,7 @@ def notify_team_notice(event: firestore_fn.Event[firestore_fn.DocumentSnapshot])
         return
     notice_title = (data.get("title") or "새 공지").strip()
     content = (data.get("content") or "").strip()
-    body = notice_title if not content else (
-        f"{notice_title}: {content}" if len(notice_title) + len(content) + 2 <= 120
-        else f"{notice_title}: {content[:120 - len(notice_title) - 5]}..."
-    )
+    body = _build_notice_body(notice_title, content)
     _send_topic_notification(
         f"team_{team_id}_notices",
         "팀 공지",
@@ -144,13 +250,7 @@ def notify_community_urgent(event: firestore_fn.Event[firestore_fn.DocumentSnaps
     notice_id = event.params.get("noticeId")
     category = (data.get("category") or "일반").strip()
 
-    def _make_body(t: str, c: str) -> str:
-        if not c:
-            return t
-        combined = f"{t}: {c}"
-        return combined if len(combined) <= 120 else f"{t}: {c[:120 - len(t) - 5]}..."
-
-    body = _make_body(notice_title, content)
+    body = _build_notice_body(notice_title, content)
     if category == "긴급":
         _send_topic_notification(
             "community_urgent",
