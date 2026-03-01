@@ -1,3 +1,6 @@
+/* Quill rich text editor */
+@import 'quill/dist/quill.snow.css';
+
 /* Global base styles for the landing layout */
 * {
   box-sizing: border-box;
@@ -124,7 +127,7 @@ button:focus-visible {
 .landing-stack {
   display: flex;
   flex-direction: column;
-  gap: var(--section-gap);
+  gap: 32px;
 }
 
 .landing-hero {
@@ -553,8 +556,12 @@ button:focus-visible {
   height: 22px;
   border-radius: 6px;
   background: #e2e8f0;
-  color: #0f172a;
-  font-weight: 900;
+}
+
+.auth-apple__icon svg {
+  width: 14px;
+  height: 14px;
+  fill: #0f172a;
 }
 
 .auth-apple:hover {

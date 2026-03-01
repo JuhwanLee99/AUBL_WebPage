@@ -13,6 +13,16 @@ type LocationState = {
   from?: string;
 };
 
+type SocialProvider = 'google' | 'apple';
+
+function AppleLogoIcon() {
+  return (
+    <svg viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false">
+      <path d="M16.365 1.43c0 1.14-.43 2.273-1.15 3.115-.864 1.01-2.274 1.79-3.664 1.675-.177-1.094.33-2.273 1.046-3.09.79-.93 2.268-1.79 3.768-1.7zM21.54 17.057c-.584 1.286-.864 1.86-1.62 3.01-1.055 1.62-2.549 3.64-4.409 3.653-1.655.017-2.082-1.077-4.329-1.065-2.247.013-2.715 1.086-4.37 1.069-1.86-.013-3.274-1.831-4.33-3.449C-.866 15.563-.462 10.03 2.375 7.693c2.016-1.662 5.209-1.332 6.443.37.957 1.307.884 3.123.439 4.685-.402 1.414-1.365 2.69-1.254 4.102.1 1.27 1.124 2.523 2.396 2.643 1.34.127 2.04-.947 3.3-.944 1.206.003 1.87 1.071 3.09.942 1.06-.111 1.92-.99 2.43-1.87.606-1.045.855-2.044.886-2.097-.023-.007-3.402-1.307-3.436-5.192-.028-3.25 2.652-4.803 2.773-4.878-1.53-2.236-3.896-2.54-4.73-2.602-2.046-.16-3.79 1.104-4.77 1.104-1.008 0-2.53-1.075-4.156-1.048-2.093.032-4.053 1.22-5.127 3.084-2.219 3.845-.564 9.52 1.608 12.656 1.05 1.525 2.297 3.227 3.938 3.167 1.608-.067 2.225-1.02 4.178-1.02 1.95 0 2.53 1.02 4.191.98 1.723-.028 2.807-1.54 3.857-3.072" />
+    </svg>
+  );
+}
+
 export default function LoginPage() {
   const { loginWithEmail, registerWithEmail, loginWithGoogle, loginWithApple, logout, error, user } = useAuth();
   const navigate = useNavigate();
@@ -34,12 +44,13 @@ export default function LoginPage() {
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [agreedPrivacy, setAgreedPrivacy] = useState(false);
   const [logoutReady, setLogoutReady] = useState(!forceLogout);
-  const [showGoogleConsent, setShowGoogleConsent] = useState(false);
-  const [googleAgreedTerms, setGoogleAgreedTerms] = useState(false);
-  const [googleAgreedPrivacy, setGoogleAgreedPrivacy] = useState(false);
+  const [showSocialConsent, setShowSocialConsent] = useState(false);
+  const [socialConsentProvider, setSocialConsentProvider] = useState<SocialProvider>('google');
+  const [socialAgreedTerms, setSocialAgreedTerms] = useState(false);
+  const [socialAgreedPrivacy, setSocialAgreedPrivacy] = useState(false);
   // true: 이미 Firebase 로그인 완료 후 동의 대기 (신규 유저), false: 로그인 전 동의 (Flutter 네이티브)
-  const [googleConsentPostSignIn, setGoogleConsentPostSignIn] = useState(false);
-  const [googleConsentTab, setGoogleConsentTab] = useState<'terms' | 'privacy'>('terms');
+  const [socialConsentPostSignIn, setSocialConsentPostSignIn] = useState(false);
+  const [socialConsentTab, setSocialConsentTab] = useState<'terms' | 'privacy'>('terms');
 
   useEffect(() => {
     if (!embedded || !user) return;
@@ -97,18 +108,21 @@ export default function LoginPage() {
     }
   };
 
-  const openGoogleConsent = (postSignIn: boolean) => {
-    setGoogleAgreedTerms(false);
-    setGoogleAgreedPrivacy(false);
-    setGoogleConsentPostSignIn(postSignIn);
+  const socialProviderLabel = socialConsentProvider === 'google' ? 'Google' : 'Apple';
+
+  const openSocialConsent = (provider: SocialProvider, postSignIn: boolean) => {
+    setSocialConsentProvider(provider);
+    setSocialAgreedTerms(false);
+    setSocialAgreedPrivacy(false);
+    setSocialConsentPostSignIn(postSignIn);
     setMessage(null);
-    setShowGoogleConsent(true);
+    setShowSocialConsent(true);
   };
 
   const handleGoogleClick = async () => {
     // Flutter 네이티브: isNewUser를 알 수 없으므로 로그인 전에 동의 먼저
     if (embedded && (nativeGoogleEnabled || hasFlutterBridge())) {
-      openGoogleConsent(false);
+      openSocialConsent('google', false);
       return;
     }
     // 웹: 로그인 먼저, 신규 유저인 경우에만 동의 모달
@@ -117,7 +131,7 @@ export default function LoginPage() {
     try {
       const { isNewUser } = await loginWithGoogle();
       if (isNewUser) {
-        openGoogleConsent(true);
+        openSocialConsent('google', true);
         setSubmitting(false);
         return;
       }
@@ -131,14 +145,19 @@ export default function LoginPage() {
   };
 
   const handleAppleClick = async () => {
+    if (embedded) {
+      openSocialConsent('apple', false);
+      return;
+    }
     setSubmitting(true);
     setMessage(null);
     try {
-      if (embedded) {
-        await loginWithApple({ useRedirect: true });
+      const { isNewUser } = await loginWithApple();
+      if (isNewUser) {
+        openSocialConsent('apple', true);
+        setSubmitting(false);
         return;
       }
-      await loginWithApple();
       if (auth.currentUser) void sendLoginSuccessToFlutter(auth.currentUser);
       navigate(redirectTo, { replace: true });
     } catch (err) {
@@ -155,10 +174,10 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogleConsentDecline = async () => {
-    setShowGoogleConsent(false);
+  const handleSocialConsentDecline = async () => {
+    setShowSocialConsent(false);
     // 이미 로그인된 신규 유저가 동의 거부 → 계정 삭제
-    if (googleConsentPostSignIn && auth.currentUser) {
+    if (socialConsentPostSignIn && auth.currentUser) {
       try {
         await auth.currentUser.delete();
       } catch {
@@ -167,14 +186,14 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogleConsent = async () => {
-    if (!googleAgreedTerms || !googleAgreedPrivacy) {
+  const handleSocialConsent = async () => {
+    if (!socialAgreedTerms || !socialAgreedPrivacy) {
       setMessage('이용약관 및 개인정보 처리방침에 동의해 주세요.');
       return;
     }
-    setShowGoogleConsent(false);
+    setShowSocialConsent(false);
     // 웹 신규 유저: 이미 로그인됨 → 그냥 이동
-    if (googleConsentPostSignIn) {
+    if (socialConsentPostSignIn) {
       if (auth.currentUser) void sendLoginSuccessToFlutter(auth.currentUser);
       navigate(redirectTo, { replace: true });
       return;
@@ -183,13 +202,34 @@ export default function LoginPage() {
     setSubmitting(true);
     setMessage(null);
     try {
-      const sent = requestNativeGoogleSignInFromFlutter();
-      if (!sent) {
-        setMessage('앱 브리지 연결을 찾지 못했습니다. 앱을 다시 실행해 주세요.');
+      if (socialConsentProvider === 'google') {
+        const sent = requestNativeGoogleSignInFromFlutter();
+        if (!sent) {
+          setMessage('앱 브리지 연결을 찾지 못했습니다. 앱을 다시 실행해 주세요.');
+          return;
+        }
+        setMessage('앱에서 Google 로그인을 진행 중입니다.');
         return;
       }
-      setMessage('앱에서 Google 로그인을 진행 중입니다.');
+      await loginWithApple({ useRedirect: true });
+      setMessage('앱에서 Apple 로그인을 진행 중입니다.');
     } catch (err) {
+      if (socialConsentProvider === 'apple') {
+        const code =
+          typeof err === 'object' && err && 'code' in err
+            ? String((err as { code?: unknown }).code)
+            : '';
+        if (code === 'auth/operation-not-allowed') {
+          setMessage('Apple 로그인 설정이 아직 완료되지 않았습니다. 설정 완료 후 다시 시도해 주세요.');
+          return;
+        }
+        if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+          setMessage('Apple 로그인이 취소되었습니다.');
+          return;
+        }
+        setMessage(err instanceof Error ? err.message : 'Apple 로그인에 실패했습니다.');
+        return;
+      }
       setMessage(err instanceof Error ? err.message : '구글 로그인에 실패했습니다.');
     } finally {
       setSubmitting(false);
@@ -325,13 +365,15 @@ export default function LoginPage() {
               Google 계정으로 계속하기
             </button>
             <button type="button" className="auth-apple" onClick={handleAppleClick} disabled={submitting} style={{ marginTop: '8px' }}>
-              <span></span>
+              <span className="auth-apple__icon">
+                <AppleLogoIcon />
+              </span>
               Apple 계정으로 계속하기
             </button>
           </>
         )}
 
-        {showGoogleConsent && (
+        {showSocialConsent && (
           <div
             style={{
               position: 'fixed', inset: 0, zIndex: 9999,
@@ -339,7 +381,7 @@ export default function LoginPage() {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               padding: '16px',
             }}
-            onClick={handleGoogleConsentDecline}
+            onClick={handleSocialConsentDecline}
           >
             <div
               style={{
@@ -353,7 +395,7 @@ export default function LoginPage() {
               {/* 헤더 */}
               <div>
                 <h2 style={{ margin: '0 0 6px', fontSize: '18px', fontWeight: 700, color: '#f1f5f9' }}>
-                  Google 계정으로 계속하기
+                  {socialProviderLabel} 계정으로 계속하기
                 </h2>
                 <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
                   AUBL 서비스 이용을 위해 아래 약관을 확인하고 동의해 주세요.
@@ -368,13 +410,13 @@ export default function LoginPage() {
                     <button
                       key={tab}
                       type="button"
-                      onClick={() => setGoogleConsentTab(tab)}
+                      onClick={() => setSocialConsentTab(tab)}
                       style={{
                         flex: 1, padding: '10px 0', border: 'none', cursor: 'pointer',
                         fontSize: '13px', fontWeight: 600,
-                        background: googleConsentTab === tab ? '#0f172a' : '#1e293b',
-                        color: googleConsentTab === tab ? '#f97316' : '#64748b',
-                        borderBottom: googleConsentTab === tab ? '2px solid #f97316' : '2px solid transparent',
+                        background: socialConsentTab === tab ? '#0f172a' : '#1e293b',
+                        color: socialConsentTab === tab ? '#f97316' : '#64748b',
+                        borderBottom: socialConsentTab === tab ? '2px solid #f97316' : '2px solid transparent',
                         transition: 'color 0.15s',
                       }}
                     >
@@ -385,7 +427,7 @@ export default function LoginPage() {
 
                 {/* 미리보기 스크롤 영역 */}
                 <div style={{ height: '260px', overflowY: 'auto', padding: '16px', background: '#0f172a', display: 'grid', gap: '14px' }}>
-                  {googleConsentTab === 'terms' ? (
+                  {socialConsentTab === 'terms' ? (
                     <>
                       {[
                         { title: '제1조 (목적)', items: ['본 약관은 전국대학아마추어야구연합회(이하 "AUBL")가 제공하는 모바일 앱 및 웹 서비스의 이용 조건과 절차, 회원과 AUBL의 권리·의무를 규정함을 목적으로 합니다.'] },
@@ -442,8 +484,8 @@ export default function LoginPage() {
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: '#cbd5e1' }}>
                   <input
                     type="checkbox"
-                    checked={googleAgreedTerms}
-                    onChange={(e) => setGoogleAgreedTerms(e.target.checked)}
+                    checked={socialAgreedTerms}
+                    onChange={(e) => setSocialAgreedTerms(e.target.checked)}
                     style={{ accentColor: '#f97316', width: '16px', height: '16px', cursor: 'pointer', flexShrink: 0 }}
                   />
                   <span>
@@ -453,8 +495,8 @@ export default function LoginPage() {
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: '#cbd5e1' }}>
                   <input
                     type="checkbox"
-                    checked={googleAgreedPrivacy}
-                    onChange={(e) => setGoogleAgreedPrivacy(e.target.checked)}
+                    checked={socialAgreedPrivacy}
+                    onChange={(e) => setSocialAgreedPrivacy(e.target.checked)}
                     style={{ accentColor: '#f97316', width: '16px', height: '16px', cursor: 'pointer', flexShrink: 0 }}
                   />
                   <span>
@@ -470,7 +512,7 @@ export default function LoginPage() {
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
                   type="button"
-                  onClick={handleGoogleConsentDecline}
+                  onClick={handleSocialConsentDecline}
                   style={{
                     flex: 1, padding: '11px', borderRadius: '8px', border: '1px solid #334155',
                     background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: '14px',
@@ -480,13 +522,13 @@ export default function LoginPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={handleGoogleConsent}
-                  disabled={!googleAgreedTerms || !googleAgreedPrivacy}
+                  onClick={handleSocialConsent}
+                  disabled={!socialAgreedTerms || !socialAgreedPrivacy}
                   style={{
                     flex: 2, padding: '11px', borderRadius: '8px', border: 'none',
-                    background: (!googleAgreedTerms || !googleAgreedPrivacy) ? '#334155' : '#f97316',
-                    color: (!googleAgreedTerms || !googleAgreedPrivacy) ? '#64748b' : '#fff',
-                    cursor: (!googleAgreedTerms || !googleAgreedPrivacy) ? 'not-allowed' : 'pointer',
+                    background: (!socialAgreedTerms || !socialAgreedPrivacy) ? '#334155' : '#f97316',
+                    color: (!socialAgreedTerms || !socialAgreedPrivacy) ? '#64748b' : '#fff',
+                    cursor: (!socialAgreedTerms || !socialAgreedPrivacy) ? 'not-allowed' : 'pointer',
                     fontSize: '14px', fontWeight: 600,
                   }}
                 >
