@@ -3,6 +3,7 @@ import { getIdTokenResult, onIdTokenChanged } from 'firebase/auth';
 import {
   collection,
   doc,
+  getDoc,
   setDoc,
   writeBatch,
   getDocs,
@@ -2746,6 +2747,8 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   const notifiedMatchStartRef = useRef<Set<string>>(new Set());
   const matchesReadyRef = useRef(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isScorer, setIsScorer] = useState(false);
+  const canRecordGame = isAdmin || isScorer;
   const [scorerMode, setScorerMode] = useState(false);
   const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const presenceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -2879,16 +2882,35 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       if (cancelled) return;
       if (!user) {
         setIsAdmin(false);
+        setIsScorer(false);
         return;
       }
+      let adminByClaim = false;
       try {
         const token = await getIdTokenResult(user, true);
         if (cancelled) return;
-        const admin = Boolean((token.claims as Record<string, unknown>).admin) || ADMIN_EMAILS.includes(user.email?.toLowerCase() ?? '');
-        setIsAdmin(admin);
+        adminByClaim = Boolean((token.claims as Record<string, unknown>).admin);
+      } catch {
+        // ignore token fetch errors; fallback below
+      }
+      const adminByEmail = ADMIN_EMAILS.includes(user.email?.toLowerCase() ?? '');
+      const admin = adminByClaim || adminByEmail;
+      if (admin) {
+        setIsAdmin(true);
+        setIsScorer(false);
+        return;
+      }
+
+      try {
+        const roleDoc = await getDoc(doc(firestore, 'roles', user.uid));
+        if (cancelled) return;
+        const role = roleDoc.exists() ? roleDoc.data()?.role : null;
+        setIsAdmin(false);
+        setIsScorer(role === 'scorer');
       } catch {
         if (cancelled) return;
-        setIsAdmin(ADMIN_EMAILS.includes(user.email?.toLowerCase() ?? ''));
+        setIsAdmin(false);
+        setIsScorer(false);
       }
     });
     return () => {
@@ -2908,7 +2930,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   // Subscribe to schedule for everyone; non-admin은 민감 필드만 제거한 projected 데이터를 사용.
   useEffect(() => {
     return subscribeMatchesSnapshot({
-      isAdmin,
+      canRecordGame,
       stateRef,
       skipMatchesWriteRef,
       matchesReadyRef,
@@ -2916,11 +2938,11 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       notifiedMatchStartRef,
       dispatch,
     });
-  }, [isAdmin]);
+  }, [canRecordGame]);
 
   // Admin: if active match lineups exist in schedule but local game state is empty, resync once.
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!canRecordGame) return;
     const matchId = state.activeMatchId;
     if (!matchId) return;
     if (state.gameStarted || state.gameOver) return;
@@ -2933,7 +2955,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     if (!matchHasPlayers || stateHasPlayers) return;
     skipFirestoreWriteRef.current = true;
     dispatch({ type: 'selectMatch', matchId, followCurrent: state.followCurrent });
-  }, [isAdmin, state.activeMatchId, state.gameStarted, state.gameOver, state.matches, state.lineups, state.followCurrent]);
+  }, [canRecordGame, state.activeMatchId, state.gameStarted, state.gameOver, state.matches, state.lineups, state.followCurrent]);
 
   // Listen to current active match pointer so spectators know which match to watch.
   useEffect(() => {
@@ -2948,14 +2970,14 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     return subscribeActiveMatchState({
       activeMatchId: state.activeMatchId,
-      isAdmin,
+      canRecordGame,
       scorerMode,
       stateRef,
       skipFirestoreWriteRef,
       dispatch,
       initialState,
     });
-  }, [state.activeMatchId, isAdmin, scorerMode]);
+  }, [state.activeMatchId, canRecordGame, scorerMode]);
 
   // Subscribe to feed/events subcollections (최근 N개만).
   useEffect(() => {
@@ -3016,7 +3038,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     return syncGameStateWrite({
       state,
       scorerMode,
-      isAdmin,
+      canRecordGame,
       stateRef,
       skipFirestoreWriteRef,
       lastStateKeyRef,
@@ -3024,7 +3046,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       lastEventsLengthRef,
       writeTimerRef,
     });
-  }, [state, isAdmin, scorerMode]);
+  }, [state, canRecordGame, scorerMode]);
 
   // Sync schedule changes to Firestore (admin routes only; spectators skip via flag/auth).
   useEffect(() => {
@@ -3040,7 +3062,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   // 진행 중인 경기 점수는 active match 1건만 patch 저장
   useEffect(() => {
     syncLiveScorePatch({
-      isAdmin,
+      canRecordGame,
       activeMatchId: state.activeMatchId,
       matches: state.matches,
       homeScore: state.score.home,
@@ -3048,7 +3070,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       lastLiveScoreSyncKeyRef,
       pushMatchUpdate,
     });
-  }, [isAdmin, state.activeMatchId, state.matches, state.score.home, state.score.away, pushMatchUpdate]);
+  }, [canRecordGame, state.activeMatchId, state.matches, state.score.home, state.score.away, pushMatchUpdate]);
 
   // Auto purge expired trashed matches (deleted flag) from matches collection.
   useEffect(() => {
@@ -3086,7 +3108,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   const scheduleActions = useScheduleActions({
     dispatch,
     getState,
-    isAdmin,
+    isAdmin: canRecordGame,
     markMatchesReady,
     markSkipMatchesWrite,
     markSkipFirestoreWrite,

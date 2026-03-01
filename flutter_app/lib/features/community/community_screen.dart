@@ -31,8 +31,8 @@ class CommunityScreenState extends State<CommunityScreen> {
   ValueNotifier<int>? _refreshNotifier;
   bool _isAdmin = false;
 
-  static const _categories = ['전체', '긴급', '경기공지', '징계', '일반'];
-  static const _writeCategories = ['일반', '징계', '경기공지', '긴급'];
+  static const _categories = ['전체', '긴급', '심판/기록원 모집', '경기공지', '징계', '일반'];
+  static const _writeCategories = ['일반', '심판/기록원 모집', '징계', '경기공지', '긴급'];
 
   @override
   void initState() {
@@ -117,6 +117,7 @@ class CommunityScreenState extends State<CommunityScreen> {
 
   Color _categoryColor(String cat) => switch (cat) {
         '긴급' => AppTheme.red500,
+        '심판/기록원 모집' => AppTheme.green500,
         '징계' => AppTheme.orange500,
         '경기공지' => AppTheme.blue500,
         _ => AppTheme.slate500,
@@ -166,211 +167,220 @@ class CommunityScreenState extends State<CommunityScreen> {
         children: [
           const BackgroundLogo(saturation: 0.85),
           _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadNotices,
-              child: ListView(
-                children: [
-                  // ── 갤러리 배너 ──
-                  _buildGalleryBanner(),
-                  const Divider(height: 1),
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
+                  onRefresh: _loadNotices,
+                  child: ListView(
+                    children: [
+                      // ── 갤러리 배너 ──
+                      _buildGalleryBanner(),
+                      const Divider(height: 1),
 
-                  // ── 건의/문의 배너 ──
-                  _buildInquiryBanner(),
-                  const Divider(height: 1),
+                      // ── 건의/문의 배너 ──
+                      _buildInquiryBanner(),
+                      const Divider(height: 1),
 
-                  // ── 카테고리 필터 ──
-                  SizedBox(
-                    height: 48,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      children: _categories.map((cat) {
-                        final selected = cat == _selectedCategory;
-                        final color =
-                            cat == '전체' ? AppTheme.blue400 : _categoryColor(cat);
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: ChoiceChip(
-                            label: Text(cat,
-                                style: TextStyle(
-                                    color: selected ? Colors.white : color,
-                                    fontSize: 13)),
-                            selected: selected,
-                            selectedColor: color,
-                            onSelected: (_) =>
-                                setState(() => _selectedCategory = cat),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-
-                  // ── 검색 ──
-                  Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    child: TextField(
-                      controller: _searchController,
-                      onChanged: (value) =>
-                          setState(() => _searchQuery = value),
-                      textInputAction: TextInputAction.search,
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
-                      decoration: InputDecoration(
-                        hintText: '제목, 내용, 작성자 검색',
-                        hintStyle: const TextStyle(
-                            color: AppTheme.slate500, fontSize: 13),
-                        prefixIcon: const Icon(Icons.search,
-                            color: AppTheme.slate500, size: 20),
-                        suffixIcon: _searchQuery.isEmpty
-                            ? null
-                            : IconButton(
-                                icon: const Icon(Icons.close,
-                                    color: AppTheme.slate500, size: 18),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() => _searchQuery = '');
-                                },
-                              ),
-                        filled: true,
-                        fillColor: AppTheme.slate800.withValues(alpha: 0.5),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide:
-                              BorderSide(color: AppTheme.slate700.withValues(alpha: 0.6)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide:
-                              BorderSide(color: AppTheme.slate700.withValues(alpha: 0.6)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide:
-                              BorderSide(color: AppTheme.blue500.withValues(alpha: 0.9)),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // ── 공지 수 ──
-                  Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                    child: Text(
-                      '${filtered.length}개 공지',
-                      style: const TextStyle(
-                          color: AppTheme.slate500, fontSize: 12),
-                    ),
-                  ),
-
-                  // ── 공지 목록 ──
-                  if (filtered.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Center(
-                        child: Text(
-                          _searchQuery.trim().isEmpty
-                              ? '공지가 없습니다.'
-                              : '검색 결과가 없습니다.',
-                          style: const TextStyle(color: AppTheme.slate500),
-                        ),
-                      ),
-                    )
-                  else
-                    ...filtered.map((n) {
-                      final ago = timeago.format(
-                        DateTime.fromMillisecondsSinceEpoch(n.createdAt),
-                        locale: 'ko',
-                      );
-                      final attachment = summarizeDeltaAttachments(n.content);
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 3),
-                        child: ListTile(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          tileColor: AppTheme.slate800.withValues(alpha: 0.5),
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) =>
-                                    NoticeDetailScreen(notice: n),
+                      // ── 카테고리 필터 ──
+                      SizedBox(
+                        height: 48,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          children: _categories.map((cat) {
+                            final selected = cat == _selectedCategory;
+                            final color = cat == '전체'
+                                ? AppTheme.blue400
+                                : _categoryColor(cat);
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ChoiceChip(
+                                label: Text(cat,
+                                    style: TextStyle(
+                                        color: selected ? Colors.white : color,
+                                        fontSize: 13)),
+                                selected: selected,
+                                selectedColor: color,
+                                onSelected: (_) =>
+                                    setState(() => _selectedCategory = cat),
                               ),
                             );
-                          },
-                          leading: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: _categoryColor(n.category)
-                                  .withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              n.category,
-                              style: TextStyle(
-                                color: _categoryColor(n.category),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          title: Text(
-                            n.title,
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 14),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                '${n.author} · $ago',
-                                style: const TextStyle(
-                                    color: AppTheme.slate500, fontSize: 12),
-                              ),
-                              if (attachment.hasAny) ...[
-                                const SizedBox(height: 4),
-                                Wrap(
-                                  spacing: 6,
-                                  runSpacing: 4,
-                                  children: [
-                                    if (attachment.hasImage)
-                                      _buildAttachmentBadge(
-                                        icon: Icons.image_outlined,
-                                        label: '이미지',
-                                      ),
-                                    if (attachment.hasVideo)
-                                      _buildAttachmentBadge(
-                                        icon: Icons.videocam_outlined,
-                                        label: '동영상',
-                                      ),
-                                    if (attachment.hasLink)
-                                      _buildAttachmentBadge(
-                                        icon: Icons.link,
-                                        label: '링크',
-                                      ),
-                                  ],
-                                ),
-                              ],
-                            ],
-                          ),
-                          trailing: const Icon(Icons.chevron_right,
-                              size: 18, color: AppTheme.slate500),
+                          }).toList(),
                         ),
-                      );
-                    }),
-                  const SizedBox(height: 32),
-                ],
-              ),
-            ),
+                      ),
+
+                      // ── 검색 ──
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 4),
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: (value) =>
+                              setState(() => _searchQuery = value),
+                          textInputAction: TextInputAction.search,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 14),
+                          decoration: InputDecoration(
+                            hintText: '제목, 내용, 작성자 검색',
+                            hintStyle: const TextStyle(
+                                color: AppTheme.slate500, fontSize: 13),
+                            prefixIcon: const Icon(Icons.search,
+                                color: AppTheme.slate500, size: 20),
+                            suffixIcon: _searchQuery.isEmpty
+                                ? null
+                                : IconButton(
+                                    icon: const Icon(Icons.close,
+                                        color: AppTheme.slate500, size: 18),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() => _searchQuery = '');
+                                    },
+                                  ),
+                            filled: true,
+                            fillColor: AppTheme.slate800.withValues(alpha: 0.5),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(
+                                  color:
+                                      AppTheme.slate700.withValues(alpha: 0.6)),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(
+                                  color:
+                                      AppTheme.slate700.withValues(alpha: 0.6)),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(
+                                  color:
+                                      AppTheme.blue500.withValues(alpha: 0.9)),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // ── 공지 수 ──
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 4),
+                        child: Text(
+                          '${filtered.length}개 공지',
+                          style: const TextStyle(
+                              color: AppTheme.slate500, fontSize: 12),
+                        ),
+                      ),
+
+                      // ── 공지 목록 ──
+                      if (filtered.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(32),
+                          child: Center(
+                            child: Text(
+                              _searchQuery.trim().isEmpty
+                                  ? '공지가 없습니다.'
+                                  : '검색 결과가 없습니다.',
+                              style: const TextStyle(color: AppTheme.slate500),
+                            ),
+                          ),
+                        )
+                      else
+                        ...filtered.map((n) {
+                          final ago = timeago.format(
+                            DateTime.fromMillisecondsSinceEpoch(n.createdAt),
+                            locale: 'ko',
+                          );
+                          final attachment =
+                              summarizeDeltaAttachments(n.content);
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 3),
+                            child: ListTile(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              tileColor:
+                                  AppTheme.slate800.withValues(alpha: 0.5),
+                              onTap: () {
+                                Navigator.of(context)
+                                    .push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) =>
+                                            NoticeDetailScreen(notice: n),
+                                      ),
+                                    )
+                                    .then((_) => _loadNotices());
+                              },
+                              leading: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: _categoryColor(n.category)
+                                      .withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  n.category,
+                                  style: TextStyle(
+                                    color: _categoryColor(n.category),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              title: Text(
+                                n.title,
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 14),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '${n.author} · $ago',
+                                    style: const TextStyle(
+                                        color: AppTheme.slate500, fontSize: 12),
+                                  ),
+                                  if (attachment.hasAny) ...[
+                                    const SizedBox(height: 4),
+                                    Wrap(
+                                      spacing: 6,
+                                      runSpacing: 4,
+                                      children: [
+                                        if (attachment.hasImage)
+                                          _buildAttachmentBadge(
+                                            icon: Icons.image_outlined,
+                                            label: '이미지',
+                                          ),
+                                        if (attachment.hasVideo)
+                                          _buildAttachmentBadge(
+                                            icon: Icons.videocam_outlined,
+                                            label: '동영상',
+                                          ),
+                                        if (attachment.hasLink)
+                                          _buildAttachmentBadge(
+                                            icon: Icons.link,
+                                            label: '링크',
+                                          ),
+                                      ],
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              trailing: const Icon(Icons.chevron_right,
+                                  size: 18, color: AppTheme.slate500),
+                            ),
+                          );
+                        }),
+                      const SizedBox(height: 32),
+                    ],
+                  ),
+                ),
         ],
       ),
     );
@@ -388,7 +398,8 @@ class CommunityScreenState extends State<CommunityScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => Dialog(
           backgroundColor: AppTheme.slate800,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -466,13 +477,24 @@ class CommunityScreenState extends State<CommunityScreen> {
                               }
                               setDialogState(() => saving = true);
                               try {
-                                final author =
-                                    FirebaseAuth.instance.currentUser?.displayName ??
-                                        '관리자';
+                                final currentUser =
+                                    FirebaseAuth.instance.currentUser;
+                                if (currentUser == null) {
+                                  if (!mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                        content: Text('로그인이 필요합니다.')),
+                                  );
+                                  return;
+                                }
+                                final author = currentUser.displayName ??
+                                    currentUser.email?.split('@').first ??
+                                    '관리자';
                                 await _fs.addNotice(
                                   title: title,
                                   category: category,
                                   content: contentDelta,
+                                  uid: currentUser.uid,
                                   author: author,
                                   isImportant: isImportant,
                                 );
@@ -480,7 +502,8 @@ class CommunityScreenState extends State<CommunityScreen> {
                                 if (mounted) {
                                   _loadNotices();
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('공지가 등록되었습니다.')),
+                                    const SnackBar(
+                                        content: Text('공지가 등록되었습니다.')),
                                   );
                                 }
                               } catch (e) {
@@ -490,7 +513,9 @@ class CommunityScreenState extends State<CommunityScreen> {
                                   );
                                 }
                               } finally {
-                                if (ctx.mounted) setDialogState(() => saving = false);
+                                if (ctx.mounted) {
+                                  setDialogState(() => saving = false);
+                                }
                               }
                             },
                       child: Text(saving ? '게시 중...' : '게시'),
@@ -588,8 +613,7 @@ class CommunityScreenState extends State<CommunityScreen> {
                           fontWeight: FontWeight.w600)),
                   SizedBox(height: 2),
                   Text('DC인사이드 갤러리로 이동',
-                      style:
-                          TextStyle(color: AppTheme.slate400, fontSize: 12)),
+                      style: TextStyle(color: AppTheme.slate400, fontSize: 12)),
                 ],
               ),
             ),

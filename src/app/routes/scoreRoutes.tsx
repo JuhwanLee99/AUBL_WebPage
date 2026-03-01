@@ -3,7 +3,7 @@ import ScoreboardPage from '@features/scoreboard/pages/ScoreboardPage';
 import ScoreboardTextPage from '@features/scoreboard/pages/ScoreboardTextPage';
 import ScoreboardLiveOverlayPage from '@features/scoreboard/pages/ScoreboardLiveOverlayPage';
 import ScorekeeperPage from '@features/scorekeeper/pages/ScorekeeperPage';
-import { RequireAdmin } from '@shared/auth/RequireAdmin';
+import { RequireScorerOrAdmin } from '@shared/auth/RequireScorerOrAdmin';
 
 export const scoreRoutes: RouteObject[] = [
   {
@@ -33,17 +33,17 @@ export const scoreRoutes: RouteObject[] = [
   {
     path: 'scorekeeper',
     element: (
-      <RequireAdmin>
+      <RequireScorerOrAdmin>
         <ScorekeeperPage />
-      </RequireAdmin>
+      </RequireScorerOrAdmin>
     ),
   },
   {
     path: 'scorekeeper/:matchId',
     element: (
-      <RequireAdmin>
+      <RequireScorerOrAdmin>
         <ScorekeeperPage />
-      </RequireAdmin>
+      </RequireScorerOrAdmin>
     ),
   },
 ];

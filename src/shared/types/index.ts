@@ -60,7 +60,7 @@ export interface TeamSeasonRecord {
   players: PlayerSeasonStat[];
 }
 
-export type NoticeCategory = '일반' | '징계' | '경기공지' | '긴급';
+export type NoticeCategory = '일반' | '징계' | '경기공지' | '긴급' | '심판/기록원 모집';
 
 export interface Notice {
   id: string;

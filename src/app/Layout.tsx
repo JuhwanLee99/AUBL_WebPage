@@ -16,7 +16,7 @@ const MOBILE_NOTICE_SNOOZE_MS = 1000 * 60 * 60 * 24; // 모바일 팝업 24시�
 export default function Layout() {
   const location = useLocation();
   const { user, logout, initializing } = useAuth();
-  const { isAdmin, roleLabel, roleDetail } = useAdmin();
+  const { isAdmin, canUseScorekeeper, canEditGameRecords, roleLabel, roleDetail } = useAdmin();
   const { state } = useDemoStore();
   const isLiveOverlay = location.pathname.startsWith('/live-overlay');
   const isScoreboardText = location.pathname.startsWith('/scoreboard-text');
@@ -269,8 +269,8 @@ export default function Layout() {
       },
       { path: '/community', label: '커뮤니티' },
       { path: '/prediction', label: '승부예측' },
-      // 기록원: 항상 보이지만 비관리자는 클릭 시 안내 버블만 노출
-      { path: scorekeeperPath, label: '기록원', requiresAdmin: true, showWhenBlocked: true },
+      // 기록원: 항상 보이지만 비권한 사용자는 클릭 시 안내 버블만 노출
+      { path: scorekeeperPath, label: '기록원', requiresScorekeeper: true, showWhenBlocked: true },
       // 사용설명서: 네이티브 페이지
       { path: '/manual', label: '사용설명서' },
     ],
@@ -285,9 +285,12 @@ export default function Layout() {
         if (item.requiresAdmin && !isAdmin) {
           return item.showWhenBlocked === true;
         }
+        if (item.requiresScorekeeper && !canUseScorekeeper) {
+          return item.showWhenBlocked === true;
+        }
         return true;
       }),
-    [navItems, isAdmin],
+    [navItems, isAdmin, canUseScorekeeper],
   );
 
   const activeParentPath = useMemo(() => {
@@ -425,14 +428,18 @@ export default function Layout() {
                   {filteredNavItems.map((item) => {
                     const isActive = location.pathname === item.path || activeParentPath === item.path;
                     const isHovering = hoveredMenu === item.path;
-                    const blocked = item.requiresAdmin && !isAdmin;
+                    const blockedByAdmin = item.requiresAdmin && !isAdmin;
+                    const blockedByScorekeeper = item.requiresScorekeeper && !canUseScorekeeper;
+                    const blocked = blockedByAdmin || blockedByScorekeeper;
                     const isExternal = (item as { isExternal?: boolean }).isExternal;
 
                     const handleBlockedHover = (el: HTMLAnchorElement | null) => {
                       if (!blocked || !el) return;
                       const rect = el.getBoundingClientRect();
                       setTooltip({
-                        text: '관리자 로그인이 필요합니다',
+                        text: blockedByScorekeeper
+                          ? '관리자 또는 기록원 권한이 필요합니다'
+                          : '관리자 로그인이 필요합니다',
                         x: rect.left + rect.width / 2,
                         y: rect.bottom,
                       });
@@ -644,6 +651,27 @@ export default function Layout() {
                             display: 'inline-block',
                           }}
                           title={`권한: ${roleLabel} (${roleDetail}) · 클릭하면 관리자 페이지로 이동`}
+                        >
+                          {roleLabel}
+                        </span>
+                      </Link>
+                    ) : canEditGameRecords ? (
+                      <Link to="/admin/games" style={{ textDecoration: 'none' }}>
+                        <span
+                          className="badge-hoverable"
+                          style={{
+                            padding: '6px 10px',
+                            borderRadius: '10px',
+                            background: 'rgba(249,115,22,0.18)',
+                            color: '#fdba74',
+                            fontWeight: 800,
+                            fontSize: '12px',
+                            border: '1px solid rgba(249,115,22,0.45)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.02em',
+                            display: 'inline-block',
+                          }}
+                          title={`권한: ${roleLabel} (${roleDetail}) · 클릭하면 경기 기록 수정으로 이동`}
                         >
                           {roleLabel}
                         </span>

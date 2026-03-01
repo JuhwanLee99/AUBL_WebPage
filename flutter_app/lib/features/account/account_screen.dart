@@ -24,12 +24,15 @@ class _AccountScreenState extends State<AccountScreen> {
   bool _loading = true;
   bool _deleting = false;
   bool _isAdmin = false;
+  bool _isScorer = false;
   String _roleLabel = '일반';
   String _roleDetail = '사용자';
 
   Color _roleAccent() {
     if (_isAdmin) return AppTheme.blue500;
     switch (_roleLabel) {
+      case '기록원':
+        return AppTheme.orange500;
       case '감독':
         return const Color(0xFFF97316);
       case '스태프':
@@ -56,6 +59,7 @@ class _AccountScreenState extends State<AccountScreen> {
     try {
       final token = await user.getIdTokenResult(true);
       final admin = token.claims?['admin'] == true;
+      var scorer = false;
       String roleLabel = '일반';
       String roleDetail = '사용자';
 
@@ -68,7 +72,11 @@ class _AccountScreenState extends State<AccountScreen> {
             .doc(user.uid)
             .get();
         final data = roleDoc.data();
-        if (roleDoc.exists && data?['role'] == 'coach') {
+        if (roleDoc.exists && data?['role'] == 'scorer') {
+          scorer = true;
+          roleLabel = '기록원';
+          roleDetail = '기록/중계';
+        } else if (roleDoc.exists && data?['role'] == 'coach') {
           roleLabel = '감독';
           roleDetail = data?['teamName'] as String? ??
               data?['teamId'] as String? ??
@@ -96,6 +104,7 @@ class _AccountScreenState extends State<AccountScreen> {
       if (mounted) {
         setState(() {
           _isAdmin = admin;
+          _isScorer = scorer;
           _roleLabel = roleLabel;
           _roleDetail = roleDetail;
           _loading = false;
@@ -330,8 +339,13 @@ class _AccountScreenState extends State<AccountScreen> {
                                       AppTheme.blue500,
                                       Color(0xFF8B5CF6),
                                     ])
+                                  : _isScorer
+                                      ? const LinearGradient(colors: [
+                                          AppTheme.orange500,
+                                          AppTheme.amber400,
+                                        ])
                                   : null,
-                              color: _isAdmin
+                              color: (_isAdmin || _isScorer)
                                   ? null
                                   : _roleAccent().withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(12),

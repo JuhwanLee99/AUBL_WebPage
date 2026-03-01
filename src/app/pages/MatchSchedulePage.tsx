@@ -236,7 +236,7 @@ const getSafeTime = (value: string) => {
 export default function MatchSchedulePage() {
   const { state, actions } = useDemoStore();
   const navigate = useNavigate();
-  const { isAdmin } = useAdmin();
+  const { isAdmin, canUseScorekeeper } = useAdmin();
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -329,6 +329,16 @@ export default function MatchSchedulePage() {
     const rect = el.getBoundingClientRect();
     setTooltip({
       text: '관리자 로그인이 필요합니다',
+      x: rect.left + rect.width / 2,
+      y: rect.bottom,
+    });
+  };
+
+  const showScorekeeperBlockedTooltip = (el: HTMLElement | null) => {
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setTooltip({
+      text: '관리자 또는 기록원 권한이 필요합니다',
       x: rect.left + rect.width / 2,
       y: rect.bottom,
     });
@@ -486,8 +496,8 @@ export default function MatchSchedulePage() {
       navigate(`${path}/${match.id}`);
     };
     const goToScorekeeper = (buttonEl: HTMLButtonElement | null) => {
-      if (!isAdmin) {
-        showBlockedTooltip(buttonEl);
+      if (!canUseScorekeeper) {
+        showScorekeeperBlockedTooltip(buttonEl);
         return;
       }
       setTooltip(null);
@@ -612,17 +622,17 @@ export default function MatchSchedulePage() {
                 type="button"
                 onClick={(e) => goToScorekeeper(e.currentTarget)}
                 onMouseEnter={(e) => {
-                  if (!isAdmin) showBlockedTooltip(e.currentTarget);
+                  if (!canUseScorekeeper) showScorekeeperBlockedTooltip(e.currentTarget);
                 }}
                 onMouseLeave={() => setTooltip(null)}
                 onFocus={(e) => {
-                  if (!isAdmin) showBlockedTooltip(e.currentTarget);
+                  if (!canUseScorekeeper) showScorekeeperBlockedTooltip(e.currentTarget);
                 }}
                 onBlur={() => setTooltip(null)}
                 style={{
                   ...quickActionStyle,
-                  cursor: isAdmin ? 'pointer' : 'not-allowed',
-                  color: isAdmin ? quickActionStyle.color : 'rgba(203,213,225,0.6)',
+                  cursor: canUseScorekeeper ? 'pointer' : 'not-allowed',
+                  color: canUseScorekeeper ? quickActionStyle.color : 'rgba(203,213,225,0.6)',
                 }}
                 title="기록원"
               >

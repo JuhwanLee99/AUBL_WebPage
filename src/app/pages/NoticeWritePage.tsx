@@ -7,7 +7,7 @@ import RichTextEditor from '../../shared/components/editor/RichTextEditor';
 import { isDeltaEmpty } from '../../shared/components/editor/quillUtils';
 // sendFCMNotification 등 필요한 import 유지
 
-const CATEGORIES: NoticeCategory[] = ['일반', '경기공지', '징계', '긴급'];
+const CATEGORIES: NoticeCategory[] = ['일반', '심판/기록원 모집', '경기공지', '징계', '긴급'];
 
 export default function NoticeWritePage() {
   const navigate = useNavigate();

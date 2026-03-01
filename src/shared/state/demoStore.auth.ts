@@ -1,5 +1,7 @@
 import { getIdTokenResult } from 'firebase/auth';
 import type { User } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { firestore } from '../firebase/client';
 
 export async function resolveUserRole(
   user: User | null,
@@ -14,5 +16,11 @@ export async function resolveUserRole(
   }
   const email = user.email?.toLowerCase();
   if (email && adminEmails.includes(email)) return '관리자';
+  try {
+    const roleDoc = await getDoc(doc(firestore, 'roles', user.uid));
+    if (roleDoc.exists() && roleDoc.data()?.role === 'scorer') return '기록원';
+  } catch {
+    // ignore role lookup errors
+  }
   return '일반';
 }

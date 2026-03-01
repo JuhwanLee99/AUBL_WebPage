@@ -140,6 +140,8 @@ const noticeCategoryStyle = (category: Notice['category']) => {
   switch (category) {
     case '긴급':
       return { background: 'rgba(239,68,68,0.16)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.32)' };
+    case '심판/기록원 모집':
+      return { background: 'rgba(34,197,94,0.16)', color: '#86efac', border: '1px solid rgba(34,197,94,0.32)' };
     case '경기공지':
       return { background: 'rgba(59,130,246,0.16)', color: '#93c5fd', border: '1px solid rgba(59,130,246,0.32)' };
     case '징계':

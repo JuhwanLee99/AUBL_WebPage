@@ -48,7 +48,7 @@ const isMatchCompleted = (match?: MatchSchedule | null) =>
   match?.status === 'completed' || match?.status === 'canceled';
 
 export function subscribeMatchesSnapshot(params: {
-  isAdmin: boolean;
+  canRecordGame: boolean;
   stateRef: RefLike<DemoState>;
   skipMatchesWriteRef: RefLike<boolean>;
   matchesReadyRef: RefLike<boolean>;
@@ -57,7 +57,7 @@ export function subscribeMatchesSnapshot(params: {
   dispatch: DemoDispatch;
 }) {
   const {
-    isAdmin,
+    canRecordGame,
     stateRef,
     skipMatchesWriteRef,
     matchesReadyRef,
@@ -75,8 +75,8 @@ export function subscribeMatchesSnapshot(params: {
         ...(docSnap.data() as Partial<MatchSchedule>),
       }));
       const normalized = normalizeMatches(incoming);
-      const projected = isAdmin ? normalized : normalized.map(projectSpectatorMatch);
-      const merged = isAdmin
+      const projected = canRecordGame ? normalized : normalized.map(projectSpectatorMatch);
+      const merged = canRecordGame
         ? projected
         : mergeMatches(
             stateRef.current.matches.filter((match) => match.status !== 'inProgress'),
@@ -152,7 +152,7 @@ export function subscribeCurrentMatchPointer(params: {
 
 export function subscribeActiveMatchState(params: {
   activeMatchId: string | null;
-  isAdmin: boolean;
+  canRecordGame: boolean;
   scorerMode: boolean;
   stateRef: RefLike<DemoState>;
   skipFirestoreWriteRef: RefLike<boolean>;
@@ -161,7 +161,7 @@ export function subscribeActiveMatchState(params: {
 }) {
   const {
     activeMatchId,
-    isAdmin,
+    canRecordGame,
     scorerMode,
     stateRef,
     skipFirestoreWriteRef,
@@ -187,7 +187,7 @@ export function subscribeActiveMatchState(params: {
 
   const sanitizeSpectatorState = (data: SharedGameState): SharedGameState => {
     const active = stateRef.current.matches.find((match) => match.id === matchId);
-    return applyLineupVisibility(data, active, isAdmin);
+    return applyLineupVisibility(data, active, canRecordGame);
   };
 
   const shouldSkipSnapshotForScorer = () => {
@@ -565,7 +565,7 @@ export function syncPresenceHeartbeat(params: {
 export function syncGameStateWrite(params: {
   state: DemoState;
   scorerMode: boolean;
-  isAdmin: boolean;
+  canRecordGame: boolean;
   stateRef: RefLike<DemoState>;
   skipFirestoreWriteRef: RefLike<boolean>;
   lastStateKeyRef: RefLike<string>;
@@ -576,7 +576,7 @@ export function syncGameStateWrite(params: {
   const {
     state,
     scorerMode,
-    isAdmin,
+    canRecordGame,
     stateRef,
     skipFirestoreWriteRef,
     lastStateKeyRef,
@@ -585,7 +585,7 @@ export function syncGameStateWrite(params: {
     writeTimerRef,
   } = params;
   if (!scorerMode) return;
-  if (!isAdmin) return;
+  if (!canRecordGame) return;
   const matchId = state.activeMatchId;
   const currentUid = auth.currentUser?.uid ?? null;
   if (!matchId || !currentUid) return;
@@ -769,7 +769,7 @@ export function syncScheduleMatchesWrite(params: {
 }
 
 export function syncLiveScorePatch(params: {
-  isAdmin: boolean;
+  canRecordGame: boolean;
   activeMatchId: string | null;
   matches: MatchSchedule[];
   homeScore: number;
@@ -777,8 +777,8 @@ export function syncLiveScorePatch(params: {
   lastLiveScoreSyncKeyRef: RefLike<string>;
   pushMatchUpdate: (matchId: string, overrides?: Partial<MatchSchedule>) => Promise<unknown> | unknown;
 }) {
-  const { isAdmin, activeMatchId, matches, homeScore, awayScore, lastLiveScoreSyncKeyRef, pushMatchUpdate } = params;
-  if (!isAdmin) return;
+  const { canRecordGame, activeMatchId, matches, homeScore, awayScore, lastLiveScoreSyncKeyRef, pushMatchUpdate } = params;
+  if (!canRecordGame) return;
   const matchId = activeMatchId;
   if (!matchId) return;
   const activeMatch = matches.find((match) => match.id === matchId);

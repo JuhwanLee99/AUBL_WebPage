@@ -65,10 +65,7 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
       !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
   void _applySystemUiChrome() {
-    unawaited(SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.manual,
-      overlays: SystemUiOverlay.values,
-    ));
+    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     SystemChrome.setSystemUIOverlayStyle(AppTheme.systemUiStyle);
   }
 

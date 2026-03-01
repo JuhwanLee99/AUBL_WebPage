@@ -16,10 +16,10 @@ import '../../core/webview/auth_sync/webview_auth_sync_state.dart';
 class ScorekeeperWebViewScreen extends StatefulWidget {
   const ScorekeeperWebViewScreen({
     super.key,
-    required this.isAdmin,
+    required this.canUseScorekeeper,
   });
 
-  final bool isAdmin;
+  final bool canUseScorekeeper;
 
   @override
   State<ScorekeeperWebViewScreen> createState() =>
@@ -29,12 +29,9 @@ class ScorekeeperWebViewScreen extends StatefulWidget {
 class _ScorekeeperWebViewScreenState extends State<ScorekeeperWebViewScreen> {
   static const Color _chromeColor = Color(0xFF0F172A);
   static const SystemUiOverlayStyle _overlayStyle = SystemUiOverlayStyle(
-    statusBarColor: _chromeColor,
     statusBarIconBrightness: Brightness.light,
     statusBarBrightness: Brightness.dark,
-    systemNavigationBarColor: _chromeColor,
     systemNavigationBarIconBrightness: Brightness.light,
-    systemNavigationBarDividerColor: _chromeColor,
   );
 
   final AuthBridgeService _authBridgeService = AuthBridgeService();
@@ -47,10 +44,7 @@ class _ScorekeeperWebViewScreenState extends State<ScorekeeperWebViewScreen> {
   String? _error;
 
   void _applySystemUiChrome() {
-    unawaited(SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.manual,
-      overlays: SystemUiOverlay.values,
-    ));
+    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     SystemChrome.setSystemUIOverlayStyle(_overlayStyle);
   }
 
@@ -175,11 +169,11 @@ class _ScorekeeperWebViewScreenState extends State<ScorekeeperWebViewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.isAdmin) {
+    if (!widget.canUseScorekeeper) {
       return Scaffold(
         appBar: AppBar(title: const Text('기록실')),
         body: const Center(
-          child: Text('관리자 권한이 없어 기록실에 접근할 수 없습니다.'),
+          child: Text('관리자 또는 기록원 권한이 없어 기록실에 접근할 수 없습니다.'),
         ),
       );
     }

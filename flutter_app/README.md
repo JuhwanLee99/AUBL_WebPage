@@ -318,6 +318,34 @@ dart run tool/layer_dependency_checker.dart
 - `android/key.properties.example`을 복사해 실제 값 주입 후 `flutter build appbundle --release --dart-define-from-file=env/prod.json`
 - iOS는 Xcode에서 Runner Signing(Team/Bundle ID) 설정 후 Archive → TestFlight 업로드
 
+### 버전 관리 체크포인트 (Android/iOS)
+
+- 단일 소스는 `pubspec.yaml`의 `version: <semver>+<buildNumber>` 입니다.
+- Android
+  - `buildNumber`가 Play Console의 `versionCode`로 사용됩니다.
+  - 새 업로드 시 기존 최고 `versionCode`보다 반드시 커야 합니다.
+- iOS
+  - `CFBundleShortVersionString`/`CFBundleVersion`는 `Info.plist`에서
+    `$(FLUTTER_BUILD_NAME)`/`$(FLUTTER_BUILD_NUMBER)`를 참조합니다.
+  - iOS Archive 전에 아래 명령으로 Flutter iOS 설정 파일을 갱신하세요.
+
+```bash
+cd flutter_app
+flutter build ios --release --no-codesign \
+  --build-name=1.0.2 \
+  --build-number=10 \
+  --dart-define-from-file=env/prod.json
+```
+
+- 갱신 확인 파일
+  - `ios/Flutter/Generated.xcconfig`
+  - `ios/Flutter/flutter_export_environment.sh`
+  - 두 파일의 `FLUTTER_BUILD_NUMBER` 값이 목표 빌드 번호와 같아야 합니다.
+- Xcode에서 이전 빌드 번호가 계속 보이면
+  - Xcode 종료 후 다시 열기
+  - Product > Clean Build Folder
+  - 필요 시 `DerivedData` 정리 후 재아카이브
+
 ---
 
 ## 개발 이력

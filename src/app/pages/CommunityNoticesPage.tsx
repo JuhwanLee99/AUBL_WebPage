@@ -13,6 +13,7 @@ type FilterValue = NoticeCategory | 'ALL';
 const FILTERS: { label: string; value: FilterValue }[] = [
   { label: '전체', value: 'ALL' },
   { label: '긴급', value: '긴급' },
+  { label: '심판/기록원 모집', value: '심판/기록원 모집' },
   { label: '경기공지', value: '경기공지' },
   { label: '징계', value: '징계' },
   { label: '일반', value: '일반' },
@@ -218,6 +219,7 @@ export default function CommunityNoticesPage() {
 function getCategoryColor(category: string) {
   switch(category) {
     case '긴급': return '#f87171';
+    case '심판/기록원 모집': return '#22c55e';
     case '징계': return '#fb923c';
     case '경기공지': return '#60a5fa';
     case 'ALL': return '#cbd5e1';

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -20,8 +21,9 @@ class MoreScreen extends StatefulWidget {
 
 class _MoreScreenState extends State<MoreScreen> {
   StreamSubscription<User?>? _authSub;
-  int _adminClaimRequestId = 0;
+  int _roleRequestId = 0;
   bool _isAdmin = false;
+  bool _isScorer = false;
   bool _checking = true;
   bool _loggedIn = false;
   bool _loadingNotif = true;
@@ -48,7 +50,10 @@ class _MoreScreenState extends State<MoreScreen> {
     setState(() {
       _loggedIn = user != null;
       _checking = false;
-      if (user == null) _isAdmin = false;
+      if (user == null) {
+        _isAdmin = false;
+        _isScorer = false;
+      }
     });
 
     if (user == null) {
@@ -57,16 +62,35 @@ class _MoreScreenState extends State<MoreScreen> {
     }
 
     unawaited(NotificationService.instance.updateUserInquiryTopic(user.uid));
-    unawaited(_refreshAdminClaim(user));
+    unawaited(_refreshRoleFlags(user));
   }
 
-  Future<void> _refreshAdminClaim(User user) async {
-    final requestId = ++_adminClaimRequestId;
+  Future<void> _refreshRoleFlags(User user) async {
+    final requestId = ++_roleRequestId;
     try {
       final token = await user.getIdTokenResult();
-      if (!mounted || requestId != _adminClaimRequestId) return;
-      setState(() => _isAdmin = token.claims?['admin'] == true);
-    } catch (_) {}
+      var isAdmin = token.claims?['admin'] == true;
+      var isScorer = false;
+      if (!isAdmin) {
+        final roleDoc = await FirebaseFirestore.instance
+            .collection('roles')
+            .doc(user.uid)
+            .get();
+        final data = roleDoc.data();
+        isScorer = roleDoc.exists && data?['role'] == 'scorer';
+      }
+      if (!mounted || requestId != _roleRequestId) return;
+      setState(() {
+        _isAdmin = isAdmin;
+        _isScorer = isScorer;
+      });
+    } catch (_) {
+      if (!mounted || requestId != _roleRequestId) return;
+      setState(() {
+        _isAdmin = false;
+        _isScorer = false;
+      });
+    }
   }
 
   @override
@@ -296,6 +320,7 @@ class _MoreScreenState extends State<MoreScreen> {
       setState(() {
         _loggedIn = false;
         _isAdmin = false;
+        _isScorer = false;
         _checking = false;
       });
     }
@@ -414,9 +439,9 @@ class _MoreScreenState extends State<MoreScreen> {
           //   onTap: () => _push(const PredictionScreen()),
           // ),
 
-          if (!_checking && _loggedIn && _isAdmin) ...[
+          if (!_checking && _loggedIn && (_isAdmin || _isScorer)) ...[
             const Divider(height: 32),
-            const _SectionTitle('관리자'),
+            _SectionTitle(_isAdmin ? '관리자' : '기록원'),
             _MenuTile(
               icon: Icons.fact_check,
               label: '기록원',
@@ -435,29 +460,39 @@ class _MoreScreenState extends State<MoreScreen> {
               },
             ),
             _MenuTile(
-              icon: Icons.scoreboard,
-              label: '스코어보드',
+              icon: Icons.edit_note,
+              label: '경기 기록 수정',
               onTap: () => _push(const AppWebViewScreen(
-                path: WebRouteContracts.scoreboard,
-                title: '스코어보드',
+                path: WebRouteContracts.adminGames,
+                title: '경기 기록 수정',
               )),
             ),
-            _MenuTile(
-              icon: Icons.admin_panel_settings,
-              label: '관리자 패널',
-              onTap: () => _push(const AppWebViewScreen(
-                path: WebRouteContracts.admin,
-                title: '관리자',
-              )),
-            ),
-            _MenuTile(
-              icon: Icons.edit_calendar,
-              label: '일정 관리',
-              onTap: () => _push(const AppWebViewScreen(
-                path: WebRouteContracts.scheduleManage,
-                title: '일정 관리',
-              )),
-            ),
+            if (_isAdmin) ...[
+              _MenuTile(
+                icon: Icons.scoreboard,
+                label: '스코어보드',
+                onTap: () => _push(const AppWebViewScreen(
+                  path: WebRouteContracts.scoreboard,
+                  title: '스코어보드',
+                )),
+              ),
+              _MenuTile(
+                icon: Icons.admin_panel_settings,
+                label: '관리자 패널',
+                onTap: () => _push(const AppWebViewScreen(
+                  path: WebRouteContracts.admin,
+                  title: '관리자',
+                )),
+              ),
+              _MenuTile(
+                icon: Icons.edit_calendar,
+                label: '일정 관리',
+                onTap: () => _push(const AppWebViewScreen(
+                  path: WebRouteContracts.scheduleManage,
+                  title: '일정 관리',
+                )),
+              ),
+            ],
           ],
 
           const Divider(height: 32),

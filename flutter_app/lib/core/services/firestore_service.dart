@@ -274,6 +274,7 @@ class FirestoreService {
     required String title,
     required String category,
     required String content,
+    required String uid,
     required String author,
     bool isImportant = false,
     bool allowComments = true,
@@ -282,11 +283,34 @@ class FirestoreService {
       'title': title,
       'category': category,
       'content': content,
+      'uid': uid,
       'author': author,
       'createdAt': DateTime.now().millisecondsSinceEpoch,
       'isImportant': isImportant,
       'allowComments': allowComments,
     });
+  }
+
+  Future<void> updateNotice({
+    required String noticeId,
+    required String title,
+    required String category,
+    required String content,
+    bool isImportant = false,
+    bool allowComments = true,
+  }) {
+    return _db.collection('notices').doc(noticeId).update({
+      'title': title,
+      'category': category,
+      'content': content,
+      'isImportant': isImportant,
+      'allowComments': allowComments,
+      'updatedAt': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  Future<void> deleteNotice(String noticeId) {
+    return _db.collection('notices').doc(noticeId).delete();
   }
 
   Stream<List<NoticeComment>> watchNoticeComments(String noticeId) {

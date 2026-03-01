@@ -36,12 +36,9 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
     with WidgetsBindingObserver {
   static const Color _chromeColor = Color(0xFF0F172A);
   static const SystemUiOverlayStyle _overlayStyle = SystemUiOverlayStyle(
-    statusBarColor: _chromeColor,
     statusBarIconBrightness: Brightness.light,
     statusBarBrightness: Brightness.dark,
-    systemNavigationBarColor: _chromeColor,
     systemNavigationBarIconBrightness: Brightness.light,
-    systemNavigationBarDividerColor: _chromeColor,
   );
   final AuthBridgeService _authBridgeService = AuthBridgeService();
   late final WebViewController _controller;
@@ -60,10 +57,7 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
   void _applySystemUiChrome() {
-    unawaited(SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.manual,
-      overlays: SystemUiOverlay.values,
-    ));
+    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     SystemChrome.setSystemUIOverlayStyle(_overlayStyle);
   }
 

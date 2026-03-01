@@ -8,18 +8,34 @@ service cloud.firestore {
   }
 
   function coachRoleDoc() {
-    return get(/databases/$(database)/documents/roles/$(request.auth.uid));
+    return get(/databases/(default)/documents/roles/$(request.auth.uid));
+  }
+
+  function isScorer() {
+    return request.auth != null
+      && coachRoleDoc().data.role == 'scorer';
+  }
+
+  function isScorerMatchUpdate() {
+    return isScorer()
+      && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'homeScore',
+        'awayScore',
+        'lineups',
+        'benches',
+        'postGame',
+        'status',
+        'lineupPublic',
+        'liveVideoUrl',
+        'liveDelaySeconds',
+        'updatedAt',
+      ]);
   }
 
   function isCoachOfTeam(teamId) {
     return request.auth != null
       && coachRoleDoc().data.role == 'coach'
       && coachRoleDoc().data.teamId == teamId;
-  }
-
-  function isTeamMember(teamId) {
-    return request.auth != null
-      && exists(/databases/$(database)/documents/teams/$(teamId)/members/$(request.auth.uid));
   }
 
   function isValidPresenceCreate(visitorId) {
@@ -56,14 +72,27 @@ service cloud.firestore {
     // 경기 일정
     match /matches/{matchId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || isScorerMatchUpdate();
     }
 
     // [수정됨] 공지사항 및 댓글 규칙
     match /notices/{noticeId} {
-      // 공지사항 자체는 누구나 읽기 가능, 쓰기는 관리자만
+      // 공지사항 자체는 누구나 읽기 가능
       allow read: if true;
-      allow write: if isAdmin();
+      // 생성은 관리자만 허용
+      allow create: if isAdmin();
+      // 수정은 관리자 또는 작성자 본인만 허용 (작성자 uid 변경 불가)
+      allow update: if request.auth != null && (
+        isAdmin() || (
+          request.auth.uid == resource.data.uid
+          && request.resource.data.uid == resource.data.uid
+        )
+      );
+      // 삭제는 관리자 또는 작성자 본인만 허용
+      allow delete: if request.auth != null && (
+        isAdmin() || request.auth.uid == resource.data.uid
+      );
 
       // [추가] 공지사항 하위의 댓글 컬렉션 규칙
       match /comments/{commentId} {
@@ -103,15 +132,15 @@ service cloud.firestore {
     // 실시간 경기 상태 (스코어보드/문자중계)
     match /matchStates/{matchId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isScorer();
 
       match /feed/{entryId} {
         allow read: if true;
-        allow write: if isAdmin();
+        allow write: if isAdmin() || isScorer();
       }
       match /events/{entryId} {
         allow read: if true;
-        allow write: if isAdmin();
+        allow write: if isAdmin() || isScorer();
       }
 
       match /presence/{visitorId} {

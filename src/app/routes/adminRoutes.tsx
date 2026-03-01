@@ -11,26 +11,93 @@ import AdminGamesPage from '../pages/admin/AdminGamesPage';
 import AdminGameEditPage from '../pages/admin/AdminGameEditPage';
 import AdminPowerRankingPage from '../pages/admin/AdminPowerRankingPage';
 import { RequireAdmin } from '@shared/auth/RequireAdmin';
+import { RequireScorerOrAdmin } from '@shared/auth/RequireScorerOrAdmin';
+import { useAdmin } from '@shared/auth/useAdmin';
+
+function AdminIndexRedirect() {
+  const { isAdmin, canEditGameRecords, loading } = useAdmin();
+
+  if (loading) {
+    return (
+      <div style={{ padding: '32px', textAlign: 'center', color: '#cbd5e1' }}>
+        권한 확인 중...
+      </div>
+    );
+  }
+
+  if (isAdmin) return <Navigate to="landing" replace />;
+  if (canEditGameRecords) return <Navigate to="games" replace />;
+  return <Navigate to="/access-denied" replace />;
+}
 
 export const adminRoutes: RouteObject[] = [
   {
     path: 'admin',
     element: (
-      <RequireAdmin>
+      <RequireScorerOrAdmin>
         <AdminLayoutPage />
-      </RequireAdmin>
+      </RequireScorerOrAdmin>
     ),
     children: [
-      { index: true, element: <Navigate to="landing" replace /> },
-      { path: 'landing', element: <AdminLandingPage /> },
-      { path: 'intro', element: <AdminIntroPage /> },
-      { path: 'rules', element: <AdminRulesPage /> },
-      { path: 'teams', element: <AdminTeamsPage /> },
-      { path: 'roles', element: <AdminRolesPage /> },
+      { index: true, element: <AdminIndexRedirect /> },
+      {
+        path: 'landing',
+        element: (
+          <RequireAdmin>
+            <AdminLandingPage />
+          </RequireAdmin>
+        ),
+      },
+      {
+        path: 'intro',
+        element: (
+          <RequireAdmin>
+            <AdminIntroPage />
+          </RequireAdmin>
+        ),
+      },
+      {
+        path: 'rules',
+        element: (
+          <RequireAdmin>
+            <AdminRulesPage />
+          </RequireAdmin>
+        ),
+      },
+      {
+        path: 'teams',
+        element: (
+          <RequireAdmin>
+            <AdminTeamsPage />
+          </RequireAdmin>
+        ),
+      },
+      {
+        path: 'roles',
+        element: (
+          <RequireAdmin>
+            <AdminRolesPage />
+          </RequireAdmin>
+        ),
+      },
       { path: 'games', element: <AdminGamesPage /> },
       { path: 'games/:matchId', element: <AdminGameEditPage /> },
-      { path: 'power-ranking', element: <AdminPowerRankingPage /> },
-      { path: 'maintenance', element: <AdminMaintenancePage /> },
+      {
+        path: 'power-ranking',
+        element: (
+          <RequireAdmin>
+            <AdminPowerRankingPage />
+          </RequireAdmin>
+        ),
+      },
+      {
+        path: 'maintenance',
+        element: (
+          <RequireAdmin>
+            <AdminMaintenancePage />
+          </RequireAdmin>
+        ),
+      },
     ],
   },
 ];

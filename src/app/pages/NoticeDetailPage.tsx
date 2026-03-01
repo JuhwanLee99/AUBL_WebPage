@@ -16,7 +16,7 @@ import { useAdmin } from '../../shared/auth/useAdmin';
 import type { Notice } from '../../shared/types';
 import RichTextEditor from '../../shared/components/editor/RichTextEditor';
 import RichTextViewer from '../../shared/components/editor/RichTextViewer';
-import { isDeltaEmpty, plainTextToDelta } from '../../shared/components/editor/quillUtils';
+import { isDeltaEmpty } from '../../shared/components/editor/quillUtils';
 
 interface Comment {
   id: string;
@@ -297,6 +297,7 @@ export default function NoticeDetailPage() {
 function getCategoryColor(category: string) {
   switch(category) {
     case '긴급': return '#f87171';
+    case '심판/기록원 모집': return '#22c55e';
     case '징계': return '#fb923c';
     case '경기공지': return '#60a5fa';
     default: return '#94a3b8';

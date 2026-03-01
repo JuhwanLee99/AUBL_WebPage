@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { firestore } from '../../../shared/firebase/client';
 import { triggerMatchImport } from '../../../core/api/backendClient';
+import { useAdmin } from '../../../shared/auth/useAdmin';
 import type {
   MatchSchedule,
   PlayerSlot,
@@ -529,6 +530,7 @@ function TotalsEditor({ home, away, onChange }: TotalsEditorProps) {
 export default function AdminGameEditPage() {
   const { matchId } = useParams<{ matchId: string }>();
   const navigate = useNavigate();
+  const { isAdmin } = useAdmin();
 
   const [match, setMatch] = useState<MatchSchedule | null>(null);
   const [loading, setLoading] = useState(true);
@@ -841,44 +843,46 @@ export default function AdminGameEditPage() {
       </div>
 
       {/* ── 백엔드 반영 ── */}
-      <div
-        style={{
-          ...cardStyle,
-          borderColor: 'rgba(234,179,8,0.35)',
-          background: 'linear-gradient(135deg, rgba(15,23,42,0.78), rgba(41,35,15,0.78))',
-        }}
-      >
-        <h3 style={{ margin: '0 0 4px', color: '#fde68a' }}>백엔드 반영</h3>
-        <p style={{ margin: '0 0 16px', color: '#92400e', fontSize: '13px' }}>
-          Firestore 저장 후 아래 버튼을 눌러야 랭킹 · 기록 페이지에 수정 내용이 반영됩니다.
-        </p>
-
-        {importResult && (
-          <div
-            style={{
-              padding: '10px 14px',
-              borderRadius: '10px',
-              marginBottom: '14px',
-              background: importResult.ok ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
-              border: `1px solid ${importResult.ok ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)'}`,
-              color: importResult.ok ? '#4ade80' : '#f87171',
-              fontSize: '13px',
-              fontWeight: 700,
-            }}
-          >
-            {importResult.msg}
-          </div>
-        )}
-
-        <button
-          type="button"
-          onClick={() => { void handleImport(); }}
-          disabled={importing}
-          style={{ ...btnDanger, opacity: importing ? 0.6 : 1 }}
+      {isAdmin && (
+        <div
+          style={{
+            ...cardStyle,
+            borderColor: 'rgba(234,179,8,0.35)',
+            background: 'linear-gradient(135deg, rgba(15,23,42,0.78), rgba(41,35,15,0.78))',
+          }}
         >
-          {importing ? '처리 중...' : '백엔드 재임포트 실행'}
-        </button>
-      </div>
+          <h3 style={{ margin: '0 0 4px', color: '#fde68a' }}>백엔드 반영</h3>
+          <p style={{ margin: '0 0 16px', color: '#92400e', fontSize: '13px' }}>
+            Firestore 저장 후 아래 버튼을 눌러야 랭킹 · 기록 페이지에 수정 내용이 반영됩니다.
+          </p>
+
+          {importResult && (
+            <div
+              style={{
+                padding: '10px 14px',
+                borderRadius: '10px',
+                marginBottom: '14px',
+                background: importResult.ok ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
+                border: `1px solid ${importResult.ok ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)'}`,
+                color: importResult.ok ? '#4ade80' : '#f87171',
+                fontSize: '13px',
+                fontWeight: 700,
+              }}
+            >
+              {importResult.msg}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => { void handleImport(); }}
+            disabled={importing}
+            style={{ ...btnDanger, opacity: importing ? 0.6 : 1 }}
+          >
+            {importing ? '처리 중...' : '백엔드 재임포트 실행'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
