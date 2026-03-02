@@ -127,6 +127,8 @@ const normalizeCreatedAt = (value: unknown): number => {
   return 0;
 };
 
+const UNIQUE_PLAY_URL = 'https://unique-play.com/league/57?item=%5Bobject%20Object%5D';
+
 const formatNoticeDate = (value: number) => {
   if (!value) return '-';
   return new Intl.DateTimeFormat('ko-KR', {
@@ -1478,6 +1480,51 @@ export default function LandingPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Unique Play CTA */}
+      <section
+        className="cta-band"
+        style={{
+          borderRadius: 'var(--surface-radius-lg)',
+          padding: 'var(--cta-padding)',
+          background: 'linear-gradient(120deg, rgba(59, 130, 246, 0.15), rgba(16, 185, 129, 0.14))',
+          border: '1px solid rgba(148, 163, 184, 0.25)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '18px',
+          flexWrap: 'wrap',
+        }}
+      >
+        <div style={{ display: 'grid', gap: '6px', minWidth: '220px' }}>
+          <span style={{ fontSize: 'clamp(11px, 2.8vw, 12px)', letterSpacing: '0.05em', fontWeight: 800, color: '#93c5fd' }}>
+            UNIQUE-PLAY
+          </span>
+          <p style={{ margin: 0, fontSize: 'clamp(18px, 4.8vw, 20px)', fontWeight: 900, color: '#dbeafe' }}>
+            유니크 플레이에서 리그 정보를 확인하세요.
+          </p>
+          <span style={{ color: '#bfdbfe', opacity: 0.9, fontWeight: 600, fontSize: 'clamp(13px, 3.5vw, 14px)' }}>
+            경기/리그 관련 외부 페이지로 바로 이동할 수 있습니다.
+          </span>
+        </div>
+        <a
+          href={UNIQUE_PLAY_URL}
+          target="_blank"
+          rel="noreferrer"
+          style={{
+            padding: '14px 18px',
+            borderRadius: '12px',
+            fontWeight: 800,
+            fontSize: 'clamp(14px, 3.6vw, 15px)',
+            backgroundColor: '#0f172a',
+            color: '#f8fafc',
+            border: '1px solid rgba(15, 23, 42, 0.6)',
+            boxShadow: '0 10px 30px rgba(15, 23, 42, 0.28)',
+          }}
+        >
+          유니크 플레이 바로가기 →
+        </a>
       </section>
 
       {/* Social CTA */}

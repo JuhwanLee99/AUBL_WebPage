@@ -32,6 +32,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  static const String _uniquePlayUrl =
+      'https://unique-play.com/league/57?item=%5Bobject%20Object%5D';
   final _fs = FirestoreService();
   final PageController _noticeController =
       PageController(viewportFraction: 0.92);
@@ -334,6 +336,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(height: 24),
 
                         // ── 소셜 CTA ──
+                        _buildUniquePlayCta(),
+                        const SizedBox(height: 12),
                         _buildSocialCta(),
                         const SizedBox(height: 16),
                       ],
@@ -764,6 +768,65 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ],
     );
+  }
+
+  // ── Unique Play CTA ──
+  Widget _buildUniquePlayCta() {
+    return GestureDetector(
+      onTap: _openUniquePlay,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0x992563EB), Color(0x991D4ED8), Color(0x9910B981)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Padding(
+          padding: EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(Icons.sports_baseball, color: Colors.white, size: 24),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('유니크 플레이',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600)),
+                    SizedBox(height: 2),
+                    Text('리그 페이지 바로가기',
+                        style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  ],
+                ),
+              ),
+              Icon(Icons.open_in_new, color: Colors.white70, size: 18),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openUniquePlay() async {
+    final webUri = Uri.parse(_uniquePlayUrl);
+    try {
+      final openedApp = await launchUrl(
+        webUri,
+        mode: LaunchMode.externalNonBrowserApplication,
+      );
+      if (openedApp) return;
+    } catch (_) {
+      // fall through to browser fallback
+    }
+
+    if (await canLaunchUrl(webUri)) {
+      await launchUrl(webUri, mode: LaunchMode.externalApplication);
+    }
   }
 
   // ── 소셜 CTA ──
