@@ -140,6 +140,19 @@ export interface InquiryComment {
   createdAt: number;
 }
 
+export type PlayerRegistrationCategory = '선수 등록' | '유니폼 등록';
+
+export interface PlayerRegistrationPost {
+  id: string;
+  title: string;
+  content: string;
+  author: string;
+  uid: string;
+  category: PlayerRegistrationCategory;
+  createdAt: number;
+  updatedAt?: number;
+}
+
 export interface UserProfile {
   uid: string;
   email?: string | null;

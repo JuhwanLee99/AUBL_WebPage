@@ -38,6 +38,22 @@ service cloud.firestore {
       && coachRoleDoc().data.teamId == teamId;
   }
 
+  function isCoachRole() {
+    return request.auth != null
+      && coachRoleDoc().data.role == 'coach';
+  }
+
+  function canReadPlayerRegistrationBoard() {
+    // 선수/스태프 여부는 현재 규칙에서 직접 판별이 어려워 로그인 사용자로 제한하고
+    // 상세 등급 검증은 앱/웹에서 역할 정보 기반으로 추가 제어한다.
+    return request.auth != null;
+  }
+
+  function canWritePlayerRegistrationCategory(category) {
+    return (category == '선수 등록' && isAdmin())
+      || (category == '유니폼 등록' && (isAdmin() || isCoachRole()));
+  }
+
   function isValidPresenceCreate(visitorId) {
     return request.resource.data.keys().hasOnly(['visitorId', 'isAnonymous', 'lastHeartbeat', 'expiresAt'])
       && request.resource.data.visitorId == visitorId
@@ -127,6 +143,34 @@ service cloud.firestore {
           isAdmin() || request.auth.uid == resource.data.uid
         );
       }
+    }
+
+    // 선수 등록 게시판
+    match /playerRegistrationPosts/{postId} {
+      allow read: if canReadPlayerRegistrationBoard();
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.category in ['선수 등록', '유니폼 등록']
+        && canWritePlayerRegistrationCategory(request.resource.data.category);
+      allow update: if request.auth != null
+        && request.resource.data.uid == resource.data.uid
+        && (
+          isAdmin()
+          || (
+            request.auth.uid == resource.data.uid
+            && request.resource.data.category in ['선수 등록', '유니폼 등록']
+            && canWritePlayerRegistrationCategory(request.resource.data.category)
+          )
+        );
+      allow delete: if request.auth != null
+        && (
+          isAdmin()
+          || (
+            request.auth.uid == resource.data.uid
+            && resource.data.category in ['선수 등록', '유니폼 등록']
+            && canWritePlayerRegistrationCategory(resource.data.category)
+          )
+        );
     }
 
     // 실시간 경기 상태 (스코어보드/문자중계)

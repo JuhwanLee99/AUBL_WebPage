@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/models/notice.dart';
 import '../../app/shell_controller.dart';
 import '../../core/services/cache_service.dart';
+import '../../core/services/community_access_service.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/background_logo.dart';
@@ -13,6 +14,7 @@ import '../../core/widgets/editor/delta_utils.dart';
 import '../../core/widgets/editor/rich_text_editor.dart';
 import 'inquiry_board_screen.dart';
 import 'notice_detail_screen.dart';
+import 'player_registration_board_screen.dart';
 
 class CommunityScreen extends StatefulWidget {
   const CommunityScreen({super.key});
@@ -23,6 +25,7 @@ class CommunityScreen extends StatefulWidget {
 
 class CommunityScreenState extends State<CommunityScreen> {
   final _fs = FirestoreService();
+  final _accessService = CommunityAccessService();
   final TextEditingController _searchController = TextEditingController();
   List<Notice> _notices = [];
   bool _loading = true;
@@ -30,6 +33,15 @@ class CommunityScreenState extends State<CommunityScreen> {
   String _searchQuery = '';
   ValueNotifier<int>? _refreshNotifier;
   bool _isAdmin = false;
+  CommunityAccess _communityAccess = const CommunityAccess(
+    roleLabel: '방문자',
+    isLoggedIn: false,
+    isAdmin: false,
+    isScorer: false,
+    isCoach: false,
+    isStaff: false,
+    isPlayer: false,
+  );
 
   static const _categories = ['전체', '긴급', '심판/기록원 모집', '경기공지', '징계', '일반'];
   static const _writeCategories = ['일반', '심판/기록원 모집', '징계', '경기공지', '긴급'];
@@ -39,6 +51,7 @@ class CommunityScreenState extends State<CommunityScreen> {
     super.initState();
     _loadNotices();
     _checkAdmin();
+    _loadCommunityAccess();
   }
 
   @override
@@ -96,6 +109,15 @@ class CommunityScreenState extends State<CommunityScreen> {
       CacheService.instance.cacheNotices(notices);
     } catch (_) {
       if (mounted && _loading) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadCommunityAccess() async {
+    try {
+      final access = await _accessService.resolveCurrentUserAccess();
+      if (mounted) setState(() => _communityAccess = access);
+    } catch (_) {
+      // ignore
     }
   }
 
@@ -178,6 +200,10 @@ class CommunityScreenState extends State<CommunityScreen> {
 
                       // ── 건의/문의 배너 ──
                       _buildInquiryBanner(),
+                      const Divider(height: 1),
+
+                      // ── 선수 등록 게시판 배너 ──
+                      _buildPlayerRegistrationBanner(),
                       const Divider(height: 1),
 
                       // ── 카테고리 필터 ──
@@ -570,6 +596,83 @@ class CommunityScreenState extends State<CommunityScreen> {
               ),
             ),
             Icon(Icons.chevron_right, color: AppTheme.slate500, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlayerRegistrationBanner() {
+    final canAccess = _communityAccess.isPlayerOrAbove;
+    return GestureDetector(
+      onTap: () async {
+        if (!canAccess) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('선수 등급 이상 계정만 접근할 수 있습니다.')),
+          );
+          return;
+        }
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute(
+              builder: (_) => const PlayerRegistrationBoardScreen()),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              const Color(0xFF34D399).withValues(alpha: 0.15),
+              AppTheme.slate800.withValues(alpha: 0.5),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: canAccess
+                ? AppTheme.slate700
+                : const Color(0xFFF87171).withValues(alpha: 0.5),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              canAccess ? Icons.badge_outlined : Icons.lock_outline,
+              color: canAccess ? const Color(0xFF34D399) : AppTheme.red500,
+              size: 28,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '선수 등록 게시판',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    canAccess
+                        ? '선수 등록(관리자), 유니폼 등록(감독/관리자)'
+                        : '선수 등급 이상만 접근 가능',
+                    style: const TextStyle(
+                      color: AppTheme.slate400,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              canAccess ? Icons.chevron_right : Icons.lock,
+              color: AppTheme.slate500,
+              size: 20,
+            ),
           ],
         ),
       ),

@@ -21,6 +21,9 @@ import NoticeDetailPage from '../pages/NoticeDetailPage';
 import InquiryBoardPage from '../pages/InquiryBoardPage';
 import InquiryWritePage from '../pages/InquiryWritePage';
 import InquiryDetailPage from '../pages/InquiryDetailPage';
+import PlayerRegistrationBoardPage from '../pages/PlayerRegistrationBoardPage';
+import PlayerRegistrationWritePage from '../pages/PlayerRegistrationWritePage';
+import PlayerRegistrationDetailPage from '../pages/PlayerRegistrationDetailPage';
 import PlayerDetailPage from '../pages/PlayerDetailPage';
 import MatchSchedulePage from '../pages/MatchSchedulePage';
 import ScheduleResultsPage from '../pages/ScheduleResultsPage';
@@ -33,6 +36,7 @@ import AccessDeniedPage from '../pages/AccessDeniedPage';
 import AccountPage from '../pages/AccountPage';
 import GroupDrawPage from '@features/front/pages/GroupDrawPage';
 import { RequireAdmin } from '@shared/auth/RequireAdmin';
+import { RequirePlayerOrAbove } from '@shared/auth/RequirePlayerOrAbove';
 
 export const publicRoutes: RouteObject[] = [
   {
@@ -109,6 +113,30 @@ export const publicRoutes: RouteObject[] = [
       { path: 'inquiry', element: <InquiryBoardPage /> },
       { path: 'inquiry/new', element: <InquiryWritePage /> },
       { path: 'inquiry/:inquiryId', element: <InquiryDetailPage /> },
+      {
+        path: 'player-registration',
+        element: (
+          <RequirePlayerOrAbove>
+            <PlayerRegistrationBoardPage />
+          </RequirePlayerOrAbove>
+        ),
+      },
+      {
+        path: 'player-registration/new',
+        element: (
+          <RequirePlayerOrAbove>
+            <PlayerRegistrationWritePage />
+          </RequirePlayerOrAbove>
+        ),
+      },
+      {
+        path: 'player-registration/:postId',
+        element: (
+          <RequirePlayerOrAbove>
+            <PlayerRegistrationDetailPage />
+          </RequirePlayerOrAbove>
+        ),
+      },
     ],
   },
   {

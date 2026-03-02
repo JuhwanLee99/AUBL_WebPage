@@ -5,6 +5,7 @@ import '../models/match.dart';
 import '../models/match_state.dart';
 import '../models/notice.dart';
 import '../models/notice_comment.dart';
+import '../models/player_registration_post.dart';
 import '../models/team.dart';
 import '../models/team_member.dart';
 import '../models/team_notice.dart';
@@ -396,6 +397,41 @@ class FirestoreService {
         .collection('comments')
         .doc(commentId)
         .delete();
+  }
+
+  // ────────────────────────────────────────────
+  // Player Registration Board
+  // ────────────────────────────────────────────
+
+  Future<List<PlayerRegistrationPost>> getPlayerRegistrationPosts(
+      {int limit = 50}) async {
+    final snap = await _db
+        .collection('playerRegistrationPosts')
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .get();
+    return snap.docs.map(PlayerRegistrationPost.fromFirestore).toList();
+  }
+
+  Future<PlayerRegistrationPost?> getPlayerRegistrationPost(
+      String postId) async {
+    final doc =
+        await _db.collection('playerRegistrationPosts').doc(postId).get();
+    if (!doc.exists) return null;
+    return PlayerRegistrationPost.fromFirestore(doc);
+  }
+
+  Future<void> addPlayerRegistrationPost(PlayerRegistrationPost post) {
+    return _db.collection('playerRegistrationPosts').add(post.toFirestore());
+  }
+
+  Future<void> updatePlayerRegistrationPost(
+      String postId, Map<String, dynamic> data) {
+    return _db.collection('playerRegistrationPosts').doc(postId).update(data);
+  }
+
+  Future<void> deletePlayerRegistrationPost(String postId) {
+    return _db.collection('playerRegistrationPosts').doc(postId).delete();
   }
 
   // ────────────────────────────────────────────

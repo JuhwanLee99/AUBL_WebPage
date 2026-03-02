@@ -2,7 +2,8 @@ import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { firestore } from '../../shared/firebase/client';
-import type { Notice, InquiryPost } from '../../shared/types';
+import { useCommunityAccess } from '../../shared/auth/useCommunityAccess';
+import type { Notice, InquiryPost, PlayerRegistrationPost } from '../../shared/types';
 
 // 스타일 상수
 const cardStyle = {
@@ -44,6 +45,8 @@ const linkStyle = {
 export default function CommunityPage() {
   const [displayNotices, setDisplayNotices] = useState<Notice[]>([]);
   const [recentInquiries, setRecentInquiries] = useState<InquiryPost[]>([]);
+  const [recentPlayerRegistrations, setRecentPlayerRegistrations] = useState<PlayerRegistrationPost[]>([]);
+  const { isPlayerOrAbove } = useCommunityAccess();
 
   useEffect(() => {
     const fetchInquiries = async () => {
@@ -82,168 +85,260 @@ export default function CommunityPage() {
     void fetchAndSortNotices();
   }, []);
 
+  useEffect(() => {
+    if (!isPlayerOrAbove) {
+      setRecentPlayerRegistrations([]);
+      return;
+    }
+    const fetchPlayerRegistrations = async () => {
+      try {
+        const q = query(collection(firestore, 'playerRegistrationPosts'), orderBy('createdAt', 'desc'), limit(5));
+        const snap = await getDocs(q);
+        setRecentPlayerRegistrations(snap.docs.map((d) => ({ id: d.id, ...d.data() } as PlayerRegistrationPost)));
+      } catch (err) {
+        console.error('선수 등록 게시판 불러오기 실패', err);
+      }
+    };
+    void fetchPlayerRegistrations();
+  }, [isPlayerOrAbove]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', minHeight: '60vh' }}>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '24px' }}>
-      
-      {/* 왼쪽: AUBL 갤러리 미리보기 */}
-      <section style={cardStyle}>
-        <div style={headerStyle}>
-          <h2 style={titleStyle}>⚾ AUBL 갤러리</h2>
-          <Link to="gallery" style={linkStyle}>
-            전체보기 &rarr;
-          </Link>
-        </div>
-        <div style={{ flex: 1, background: '#fff', borderRadius: '12px', overflow: 'hidden', position: 'relative', minHeight: '400px' }}>
-          {/* iframe 클릭 방지 및 미리보기용 오버레이 */}
-          <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'transparent' }} />
-          <iframe
-            title="Gallery Preview"
-            src="https://gall.dcinside.com/mgallery/board/lists/?id=aubl"
-            style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none', opacity: 0.7 }}
-            tabIndex={-1}
-          />
-          <div style={{
-            position: 'absolute',
-            bottom: '20px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 20,
-            background: 'rgba(15, 23, 42, 0.9)',
-            padding: '10px 20px',
-            borderRadius: '20px',
-            color: '#fff',
-            fontWeight: 700,
-            fontSize: '14px',
-            whiteSpace: 'nowrap'
-          }}>
-            <Link to="gallery" style={{ color: 'inherit', textDecoration: 'none' }}>갤러리 입장하기</Link>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '24px' }}>
+        {/* 좌상: 공지사항 */}
+        <section style={cardStyle}>
+          <div style={headerStyle}>
+            <h2 style={titleStyle}>📢 공지사항</h2>
+            <Link to="notices" style={linkStyle}>
+              더보기 &rarr;
+            </Link>
           </div>
-        </div>
-      </section>
-
-      {/* 오른쪽: 공지사항 미리보기 */}
-      <section style={cardStyle}>
-        <div style={headerStyle}>
-          <h2 style={titleStyle}>📢 공지사항</h2>
-          <Link to="notices" style={linkStyle}>
-            더보기 &rarr;
-          </Link>
-        </div>
-        
-        {/* flex: 1을 주어 남은 공간을 채우게 하되, 내용이 넘치면 hidden 처리 (개수 제한으로 조절) */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
-          {displayNotices.length === 0 ? (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
-              등록된 공지사항이 없습니다.
-            </div>
-          ) : (
-            displayNotices.map(notice => (
-              <Link 
-                key={notice.id} 
-                to={`notices/${notice.id}`}
-                style={{ 
-                  textDecoration: 'none',
-                  background: 'rgba(255,255,255,0.03)',
-                  padding: '14px 16px',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(148,163,184,0.1)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  transition: 'all 0.2s',
-                  // Hover 효과는 CSS 클래스로 빼는 게 좋으나 인라인으로 구현 시 제외
-                }}
-              >
-                <span style={{ 
-                  fontSize: '12px', 
-                  padding: '2px 6px', 
-                  borderRadius: '4px', 
-                  fontWeight: 800,
-                  background: getCategoryColor(notice.category),
-                  color: '#0f172a',
-                  minWidth: 'fit-content'
-                }}>
-                  {notice.category}
-                </span>
-                <span style={{ color: '#e2e8f0', fontWeight: 600, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {notice.title}
-                </span>
-                <span style={{ color: '#64748b', fontSize: '12px', minWidth: 'fit-content' }}>
-                  {new Date(notice.createdAt).toLocaleDateString()}
-                </span>
-              </Link>
-            ))
-          )}
-        </div>
-      </section>
-    </div>
-
-    {/* 건의/문의 게시판 */}
-    <section style={cardStyle}>
-      <div style={headerStyle}>
-        <h2 style={titleStyle}>💬 건의/문의 게시판</h2>
-        <Link to="inquiry" style={linkStyle}>
-          더보기 &rarr;
-        </Link>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {recentInquiries.length === 0 ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', padding: '24px 0' }}>
-            아직 게시글이 없습니다.
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
+            {displayNotices.length === 0 ? (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
+                등록된 공지사항이 없습니다.
+              </div>
+            ) : (
+              displayNotices.map((notice) => (
+                <Link
+                  key={notice.id}
+                  to={`notices/${notice.id}`}
+                  style={{
+                    textDecoration: 'none',
+                    background: 'rgba(255,255,255,0.03)',
+                    padding: '14px 16px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(148,163,184,0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: '12px',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      fontWeight: 800,
+                      background: getCategoryColor(notice.category),
+                      color: '#0f172a',
+                      minWidth: 'fit-content',
+                    }}
+                  >
+                    {notice.category}
+                  </span>
+                  <span style={{ color: '#e2e8f0', fontWeight: 600, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {notice.title}
+                  </span>
+                  <span style={{ color: '#64748b', fontSize: '12px', minWidth: 'fit-content' }}>
+                    {new Date(notice.createdAt).toLocaleDateString()}
+                  </span>
+                </Link>
+              ))
+            )}
           </div>
-        ) : (
-          recentInquiries.map((post) => (
-            <Link
-              key={post.id}
-              to={`inquiry/${post.id}`}
+        </section>
+
+        {/* 우상: 건의/문의 */}
+        <section style={cardStyle}>
+          <div style={headerStyle}>
+            <h2 style={titleStyle}>💬 건의/문의 게시판</h2>
+            <Link to="inquiry" style={linkStyle}>
+              더보기 &rarr;
+            </Link>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {recentInquiries.length === 0 ? (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', padding: '24px 0' }}>
+                아직 게시글이 없습니다.
+              </div>
+            ) : (
+              recentInquiries.map((post) => (
+                <Link
+                  key={post.id}
+                  to={`inquiry/${post.id}`}
+                  style={{
+                    textDecoration: 'none',
+                    background: 'rgba(255,255,255,0.03)',
+                    padding: '12px 16px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(148,163,184,0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    pointerEvents: post.isPrivate ? 'none' : 'auto',
+                    opacity: post.isPrivate ? 0.65 : 1,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      fontWeight: 800,
+                      background: post.platform === 'app' ? '#818cf8' : '#34d399',
+                      color: '#0f172a',
+                      minWidth: 'fit-content',
+                    }}
+                  >
+                    {post.platform === 'app' ? '앱' : '웹'}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      fontWeight: 800,
+                      background: getInquiryCategoryColor(post.category),
+                      color: '#0f172a',
+                      minWidth: 'fit-content',
+                    }}
+                  >
+                    {post.category}
+                  </span>
+                  {post.isPrivate && <span style={{ fontSize: '12px' }}>🔒</span>}
+                  <span style={{ color: '#e2e8f0', fontWeight: 600, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {post.isPrivate ? '비밀글입니다.' : post.title}
+                  </span>
+                  <span style={{ color: '#64748b', fontSize: '12px', minWidth: 'fit-content' }}>
+                    {new Date(post.createdAt).toLocaleDateString()}
+                  </span>
+                </Link>
+              ))
+            )}
+          </div>
+        </section>
+
+        {/* 좌하: 선수 등록 */}
+        <section style={cardStyle}>
+          <div style={headerStyle}>
+            <h2 style={titleStyle}>🧢 선수 등록 게시판</h2>
+            <Link to="player-registration" style={linkStyle}>
+              더보기 &rarr;
+            </Link>
+          </div>
+          {!isPlayerOrAbove ? (
+            <div
               style={{
-                textDecoration: 'none',
-                background: 'rgba(255,255,255,0.03)',
-                padding: '12px 16px',
-                borderRadius: '10px',
-                border: '1px solid rgba(148,163,184,0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                pointerEvents: post.isPrivate ? 'none' : 'auto',
-                opacity: post.isPrivate ? 0.65 : 1,
+                borderRadius: '12px',
+                border: '1px solid rgba(248,113,113,0.35)',
+                background: 'rgba(127,29,29,0.35)',
+                color: '#fecaca',
+                padding: '14px',
+                lineHeight: 1.7,
+                fontWeight: 700,
               }}
             >
-              <span style={{
-                fontSize: '11px',
-                padding: '2px 6px',
-                borderRadius: '4px',
-                fontWeight: 800,
-                background: post.platform === 'app' ? '#818cf8' : '#34d399',
-                color: '#0f172a',
-                minWidth: 'fit-content',
-              }}>
-                {post.platform === 'app' ? '앱' : '웹'}
-              </span>
-              <span style={{
-                fontSize: '11px',
-                padding: '2px 6px',
-                borderRadius: '4px',
-                fontWeight: 800,
-                background: getInquiryCategoryColor(post.category),
-                color: '#0f172a',
-                minWidth: 'fit-content',
-              }}>
-                {post.category}
-              </span>
-              {post.isPrivate && <span style={{ fontSize: '12px' }}>🔒</span>}
-              <span style={{ color: '#e2e8f0', fontWeight: 600, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {post.isPrivate ? '비밀글입니다.' : post.title}
-              </span>
-              <span style={{ color: '#64748b', fontSize: '12px', minWidth: 'fit-content' }}>
-                {new Date(post.createdAt).toLocaleDateString()}
-              </span>
+              선수 등급 이상 계정만 접근할 수 있습니다.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {recentPlayerRegistrations.length === 0 ? (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', padding: '24px 0' }}>
+                  아직 게시글이 없습니다.
+                </div>
+              ) : (
+                recentPlayerRegistrations.map((post) => (
+                  <Link
+                    key={post.id}
+                    to={`player-registration/${post.id}`}
+                    style={{
+                      textDecoration: 'none',
+                      background: 'rgba(255,255,255,0.03)',
+                      padding: '12px 16px',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(148,163,184,0.1)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        fontWeight: 800,
+                        background: getPlayerRegistrationCategoryColor(post.category),
+                        color: '#0f172a',
+                        minWidth: 'fit-content',
+                      }}
+                    >
+                      {post.category}
+                    </span>
+                    <span style={{ color: '#e2e8f0', fontWeight: 600, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {post.title}
+                    </span>
+                    <span style={{ color: '#64748b', fontSize: '12px', minWidth: 'fit-content' }}>
+                      {new Date(post.createdAt).toLocaleDateString()}
+                    </span>
+                  </Link>
+                ))
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* 우하: 갤러리 */}
+        <section style={cardStyle}>
+          <div style={headerStyle}>
+            <h2 style={titleStyle}>⚾ AUBL 갤러리</h2>
+            <Link to="gallery" style={linkStyle}>
+              전체보기 &rarr;
             </Link>
-          ))
-        )}
+          </div>
+          <div style={{ flex: 1, background: '#fff', borderRadius: '12px', overflow: 'hidden', position: 'relative', minHeight: '400px' }}>
+            <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'transparent' }} />
+            <iframe
+              title="Gallery Preview"
+              src="https://gall.dcinside.com/mgallery/board/lists/?id=aubl"
+              style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none', opacity: 0.7 }}
+              tabIndex={-1}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                bottom: '20px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 20,
+                background: 'rgba(15, 23, 42, 0.9)',
+                padding: '10px 20px',
+                borderRadius: '20px',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: '14px',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <Link to="gallery" style={{ color: 'inherit', textDecoration: 'none' }}>
+                갤러리 입장하기
+              </Link>
+            </div>
+          </div>
+        </section>
       </div>
-    </section>
     </div>
   );
 }
@@ -263,6 +358,14 @@ function getCategoryColor(category: string) {
     case '심판/기록원 모집': return '#22c55e';
     case '징계': return '#fb923c';
     case '경기공지': return '#60a5fa';
+    default: return '#94a3b8';
+  }
+}
+
+function getPlayerRegistrationCategoryColor(category: string) {
+  switch (category) {
+    case '선수 등록': return '#f87171';
+    case '유니폼 등록': return '#34d399';
     default: return '#94a3b8';
   }
 }
