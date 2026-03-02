@@ -28,7 +28,7 @@ class _PlayerRegistrationWriteScreenState
   final _fs = FirestoreService();
   final _titleCtrl = TextEditingController();
   String _contentDelta = '';
-  String _category = '유니폼 등록';
+  String _category = '선수 등록';
   bool _submitting = false;
 
   bool get _isEditMode => widget.editPost != null;

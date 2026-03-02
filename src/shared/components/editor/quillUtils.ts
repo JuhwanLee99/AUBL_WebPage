@@ -1,6 +1,24 @@
 import { QuillDeltaToHtmlConverter } from 'quill-delta-to-html';
 import DOMPurify from 'dompurify';
 
+export const AUBL_TABLE_EMBED_KEY = 'aublTable';
+
+const TABLE_MIN_ROWS = 2;
+const TABLE_MAX_ROWS = 400;
+const TABLE_MIN_COLS = 2;
+const TABLE_MAX_COLS = 40;
+
+export interface AublTableData {
+  rows: number;
+  cols: number;
+  cells: string[][];
+}
+
+type DeltaOp = {
+  insert?: unknown;
+  attributes?: Record<string, unknown>;
+};
+
 /** Delta JSON string 여부 판별 */
 export function isJsonDelta(s: string): boolean {
   if (!s || !s.trim().startsWith('{')) return false;
@@ -15,16 +33,12 @@ export function isJsonDelta(s: string): boolean {
 /** Delta JSON → 안전한 HTML 변환 (XSS sanitize 포함) */
 export function deltaToHtml(deltaJson: string): string {
   try {
-    const { ops } = JSON.parse(deltaJson);
-    const converter = new QuillDeltaToHtmlConverter(ops, {
-      inlineStyles: true,
-      linkTarget: '_blank',
-      encodeHtml: false,
-    });
-    const raw = converter.convert();
+    const parsed = JSON.parse(deltaJson) as { ops?: DeltaOp[] };
+    if (!Array.isArray(parsed.ops)) return '';
+    const raw = convertDeltaOpsToHtml(parsed.ops);
     return DOMPurify.sanitize(raw, {
-      ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 's', 'a', 'ul', 'ol', 'li', 'span', 'h1', 'h2', 'h3', 'blockquote', 'img', 'iframe'],
-      ALLOWED_ATTR: ['href', 'target', 'rel', 'style', 'class', 'src', 'alt', 'width', 'height', 'frameborder', 'allowfullscreen', 'allow', 'loading'],
+      ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 's', 'a', 'ul', 'ol', 'li', 'span', 'h1', 'h2', 'h3', 'blockquote', 'img', 'iframe', 'div', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
+      ALLOWED_ATTR: ['href', 'target', 'rel', 'style', 'class', 'src', 'alt', 'width', 'height', 'frameborder', 'allowfullscreen', 'allow', 'loading', 'colspan', 'rowspan'],
     });
   } catch {
     return '';
@@ -71,6 +85,7 @@ export function deltaToPreviewText(deltaJson: string): string {
         if (op.insert && typeof op.insert === 'object') {
           if ('image' in op.insert) return '[이미지]';
           if ('video' in op.insert) return '[동영상]';
+          if (AUBL_TABLE_EMBED_KEY in op.insert) return '[표]';
         }
         return '';
       })
@@ -92,4 +107,120 @@ export function isDeltaEmpty(deltaJson: string): boolean {
   } catch {
     return true;
   }
+}
+
+export function createAublTableData(rows = 3, cols = 3): AublTableData {
+  return normalizeAublTableData({ rows, cols });
+}
+
+export function resizeAublTableData(table: AublTableData, rows: number, cols: number): AublTableData {
+  const safeRows = clampInt(rows, TABLE_MIN_ROWS, TABLE_MAX_ROWS);
+  const safeCols = clampInt(cols, TABLE_MIN_COLS, TABLE_MAX_COLS);
+  const nextCells = Array.from({ length: safeRows }, (_, rowIdx) => (
+    Array.from({ length: safeCols }, (_, colIdx) => (
+      table.cells[rowIdx]?.[colIdx] ?? defaultTableCell(rowIdx, colIdx)
+    ))
+  ));
+  return { rows: safeRows, cols: safeCols, cells: nextCells };
+}
+
+export function normalizeAublTableData(raw: unknown): AublTableData {
+  let decoded = raw;
+  if (typeof raw === 'string') {
+    try {
+      decoded = JSON.parse(raw);
+    } catch {
+      decoded = null;
+    }
+  }
+  const src = (decoded && typeof decoded === 'object' ? decoded : {}) as {
+    rows?: unknown;
+    cols?: unknown;
+    cells?: unknown;
+  };
+  const rows = clampInt(src.rows, TABLE_MIN_ROWS, TABLE_MAX_ROWS, 3);
+  const cols = clampInt(src.cols, TABLE_MIN_COLS, TABLE_MAX_COLS, 3);
+  const srcCells = Array.isArray(src.cells) ? src.cells : [];
+  const cells = Array.from({ length: rows }, (_, rowIdx) => (
+    Array.from({ length: cols }, (_, colIdx) => {
+      const row = srcCells[rowIdx];
+      if (Array.isArray(row)) {
+        const cell = row[colIdx];
+        if (typeof cell === 'string') return cell;
+        if (cell == null) return defaultTableCell(rowIdx, colIdx);
+        return String(cell);
+      }
+      return defaultTableCell(rowIdx, colIdx);
+    })
+  ));
+  return { rows, cols, cells };
+}
+
+export function extractAublTableData(insert: unknown): AublTableData | null {
+  if (!insert || typeof insert !== 'object' || Array.isArray(insert)) return null;
+  const record = insert as Record<string, unknown>;
+  if (!(AUBL_TABLE_EMBED_KEY in record)) return null;
+  return normalizeAublTableData(record[AUBL_TABLE_EMBED_KEY]);
+}
+
+export function renderAublTableHtml(tableData: AublTableData): string {
+  const rowsHtml = tableData.cells.map((row, rowIdx) => (
+    `<tr>${row.map((cell) => {
+      const tag = rowIdx === 0 ? 'th' : 'td';
+      const text = cell.trim() ? escapeHtml(cell) : '&nbsp;';
+      return `<${tag}>${text}</${tag}>`;
+    }).join('')}</tr>`
+  )).join('');
+  return `<div class="rt-aubl-table-wrap"><table class="rt-aubl-table"><tbody>${rowsHtml}</tbody></table></div>`;
+}
+
+function convertDeltaOpsToHtml(ops: DeltaOp[]): string {
+  const chunks: string[] = [];
+  let pending: DeltaOp[] = [];
+
+  const flushPending = () => {
+    if (pending.length === 0) return;
+    const converter = new QuillDeltaToHtmlConverter(pending as never[], {
+      inlineStyles: true,
+      linkTarget: '_blank',
+      encodeHtml: false,
+    });
+    chunks.push(converter.convert());
+    pending = [];
+  };
+
+  for (const op of ops) {
+    const tableData = extractAublTableData(op.insert);
+    if (tableData) {
+      flushPending();
+      chunks.push(renderAublTableHtml(tableData));
+      continue;
+    }
+    pending.push(op);
+  }
+  flushPending();
+  return chunks.join('');
+}
+
+function clampInt(value: unknown, min: number, max: number, fallback = min): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  const i = Math.floor(n);
+  if (i < min) return min;
+  if (i > max) return max;
+  return i;
+}
+
+function defaultTableCell(rowIdx: number, colIdx: number): string {
+  if (rowIdx === 0) return `항목${colIdx + 1}`;
+  return '';
+}
+
+function escapeHtml(input: string): string {
+  return input
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }

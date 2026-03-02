@@ -111,7 +111,7 @@ export default function PlayerRegistrationDetailPage() {
   if (!post) return <div style={{ color: '#f87171', padding: '40px', textAlign: 'center' }}>게시글이 없습니다.</div>;
 
   if (!isPlayerOrAbove) {
-    return <div style={{ color: '#f87171', padding: '40px', textAlign: 'center' }}>선수 등급 이상만 접근할 수 있습니다.</div>;
+    return <div style={{ color: '#f87171', padding: '40px', textAlign: 'center' }}>선수/기록원 등급 이상만 접근할 수 있습니다.</div>;
   }
 
   const inputStyle: React.CSSProperties = {

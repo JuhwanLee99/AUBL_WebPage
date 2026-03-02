@@ -609,7 +609,7 @@ class CommunityScreenState extends State<CommunityScreen> {
         if (!canAccess) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('선수 등급 이상 계정만 접근할 수 있습니다.')),
+            const SnackBar(content: Text('선수/기록원 등급 이상 계정만 접근할 수 있습니다.')),
           );
           return;
         }
@@ -659,7 +659,7 @@ class CommunityScreenState extends State<CommunityScreen> {
                   Text(
                     canAccess
                         ? '선수 등록(관리자), 유니폼 등록(감독/관리자)'
-                        : '선수 등급 이상만 접근 가능',
+                        : '선수/기록원 등급 이상만 접근 가능',
                     style: const TextStyle(
                       color: AppTheme.slate400,
                       fontSize: 12,

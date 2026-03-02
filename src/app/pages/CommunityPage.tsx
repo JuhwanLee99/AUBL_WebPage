@@ -46,7 +46,7 @@ export default function CommunityPage() {
   const [displayNotices, setDisplayNotices] = useState<Notice[]>([]);
   const [recentInquiries, setRecentInquiries] = useState<InquiryPost[]>([]);
   const [recentPlayerRegistrations, setRecentPlayerRegistrations] = useState<PlayerRegistrationPost[]>([]);
-  const { isPlayerOrAbove } = useCommunityAccess();
+  const { isPlayerOrAbove, loading: communityAccessLoading } = useCommunityAccess();
 
   useEffect(() => {
     const fetchInquiries = async () => {
@@ -86,6 +86,7 @@ export default function CommunityPage() {
   }, []);
 
   useEffect(() => {
+    if (communityAccessLoading) return;
     if (!isPlayerOrAbove) {
       setRecentPlayerRegistrations([]);
       return;
@@ -100,7 +101,7 @@ export default function CommunityPage() {
       }
     };
     void fetchPlayerRegistrations();
-  }, [isPlayerOrAbove]);
+  }, [isPlayerOrAbove, communityAccessLoading]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', minHeight: '60vh' }}>
@@ -250,7 +251,7 @@ export default function CommunityPage() {
                 fontWeight: 700,
               }}
             >
-              선수 등급 이상 계정만 접근할 수 있습니다.
+              선수/기록원 등급 이상 계정만 접근할 수 있습니다.
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>

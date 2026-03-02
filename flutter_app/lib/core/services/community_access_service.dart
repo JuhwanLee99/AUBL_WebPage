@@ -23,7 +23,7 @@ class CommunityAccess {
   final bool isPlayer;
 
   bool get isPlayerOrAbove =>
-      isLoggedIn && (isAdmin || isCoach || isStaff || isPlayer);
+      isLoggedIn && (isAdmin || isScorer || isCoach || isStaff || isPlayer);
   bool get canWritePlayerRegistration => isLoggedIn && isAdmin;
   bool get canWriteUniformRegistration => isLoggedIn && (isAdmin || isCoach);
 }
@@ -94,6 +94,14 @@ class CommunityAccessService {
       final membership = await _fs.findUserTeamMembership(user.uid);
       if (membership != null) {
         final role = membership['role'] as String? ?? 'player';
+        final teamId = membership['teamId'] as String?;
+        if (teamId != null && (role == 'player' || role == 'staff')) {
+          await _syncMemberRoleDoc(
+            uid: user.uid,
+            role: role,
+            teamId: teamId,
+          );
+        }
         if (role == 'coach') {
           return const CommunityAccess(
             roleLabel: '감독',
@@ -139,5 +147,31 @@ class CommunityAccessService {
       isStaff: false,
       isPlayer: false,
     );
+  }
+
+  Future<void> _syncMemberRoleDoc({
+    required String uid,
+    required String role,
+    required String teamId,
+  }) async {
+    try {
+      String teamName = teamId;
+      final team = await _fs.getTeam(teamId);
+      if (team != null) teamName = team.name;
+
+      await FirebaseFirestore.instance.collection('roles').doc(uid).set(
+        {
+          'uid': uid,
+          'role': role,
+          'teamId': teamId,
+          'teamName': teamName,
+          'syncedBy': 'membership-sync',
+          'syncedAt': DateTime.now().millisecondsSinceEpoch,
+        },
+        SetOptions(merge: true),
+      );
+    } catch (_) {
+      // ignore sync failure
+    }
   }
 }

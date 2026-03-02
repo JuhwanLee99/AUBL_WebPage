@@ -43,15 +43,49 @@ service cloud.firestore {
       && coachRoleDoc().data.role == 'coach';
   }
 
+  function isPlayerOrStaffRole() {
+    return request.auth != null
+      && coachRoleDoc().data.role in ['player', 'staff'];
+  }
+
   function canReadPlayerRegistrationBoard() {
-    // 선수/스태프 여부는 현재 규칙에서 직접 판별이 어려워 로그인 사용자로 제한하고
-    // 상세 등급 검증은 앱/웹에서 역할 정보 기반으로 추가 제어한다.
-    return request.auth != null;
+    return request.auth != null
+      && (
+        isAdmin()
+        || isScorer()
+        || isCoachRole()
+        || isPlayerOrStaffRole()
+      );
   }
 
   function canWritePlayerRegistrationCategory(category) {
     return (category == '선수 등록' && isAdmin())
       || (category == '유니폼 등록' && (isAdmin() || isCoachRole()));
+  }
+
+  function canSelfSyncPlayerOrStaffRole(userId) {
+    return request.auth != null
+      && request.auth.uid == userId
+      && request.resource.data.keys().hasOnly([
+        'uid',
+        'role',
+        'teamId',
+        'teamName',
+        'syncedBy',
+        'syncedAt',
+      ])
+      && request.resource.data.uid == request.auth.uid
+      && request.resource.data.role in ['player', 'staff']
+      && request.resource.data.teamId is string
+      && request.resource.data.teamName is string
+      && request.resource.data.syncedBy == 'membership-sync'
+      && request.resource.data.syncedAt is int
+      && exists(/databases/(default)/documents/teams/$(request.resource.data.teamId)/members/$(request.auth.uid))
+      && get(/databases/(default)/documents/teams/$(request.resource.data.teamId)/members/$(request.auth.uid)).data.role == request.resource.data.role
+      && (
+        !exists(/databases/(default)/documents/roles/$(userId))
+        || resource.data.role in ['player', 'staff']
+      );
   }
 
   function isValidPresenceCreate(visitorId) {
@@ -227,7 +261,7 @@ service cloud.firestore {
     // 팀 권한 (감독 지정)
     match /roles/{userId} {
       allow read: if isAdmin() || (request.auth != null && request.auth.uid == userId);
-      allow write: if isAdmin();
+      allow write: if isAdmin() || canSelfSyncPlayerOrStaffRole(userId);
     }
 
     // 팀 정보 및 팀원

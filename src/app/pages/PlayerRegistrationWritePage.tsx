@@ -12,7 +12,7 @@ export default function PlayerRegistrationWritePage() {
   const [currentUser, setCurrentUser] = useState(auth.currentUser);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [category, setCategory] = useState<PlayerRegistrationCategory>('유니폼 등록');
+  const [category, setCategory] = useState<PlayerRegistrationCategory>('선수 등록');
   const [submitting, setSubmitting] = useState(false);
   const {
     loading: roleLoading,

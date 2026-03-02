@@ -100,7 +100,7 @@ export default function PlayerRegistrationBoardPage() {
             fontWeight: 700,
           }}
         >
-          이 게시판은 선수 등급 이상 계정만 접근할 수 있습니다.
+          이 게시판은 선수/기록원 등급 이상 계정만 접근할 수 있습니다.
           {!isAuthenticated && (
             <>
               {' '}
@@ -150,7 +150,7 @@ export default function PlayerRegistrationBoardPage() {
           fontWeight: 600,
         }}
       >
-        선수 등급 이상만 열람 가능하며, 말머리별 작성 권한은 다음과 같습니다. `선수 등록`: 관리자만, `유니폼 등록`:
+        선수/기록원 등급 이상만 열람 가능하며, 말머리별 작성 권한은 다음과 같습니다. `선수 등록`: 관리자만, `유니폼 등록`:
         감독/관리자
       </div>
 

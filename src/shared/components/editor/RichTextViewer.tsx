@@ -46,6 +46,12 @@ export default function RichTextViewer({ content, style }: Props) {
           .rt-viewer blockquote { border-left: 3px solid #475569; padding-left: 1em; color: #94a3b8; margin: 0.5em 0; }
           .rt-viewer img { max-width: 100%; border-radius: 8px; margin: 8px 0; display: block; }
           .rt-viewer iframe { width: 100%; aspect-ratio: 16/9; border: none; border-radius: 8px; margin: 8px 0; display: block; }
+          .rt-viewer .rt-aubl-table-wrap { width: 100%; overflow-x: auto; margin: 10px 0; border: 1px solid rgba(148,163,184,0.28); border-radius: 10px; background: rgba(15,23,42,0.4); }
+          .rt-viewer .rt-aubl-table { width: max-content; min-width: 100%; border-collapse: collapse; }
+          .rt-viewer .rt-aubl-table th,
+          .rt-viewer .rt-aubl-table td { border: 1px solid rgba(148,163,184,0.25); padding: 8px 10px; text-align: left; min-width: 120px; }
+          .rt-viewer .rt-aubl-table th { background: rgba(30,41,59,0.85); color: #f8fafc; font-weight: 700; }
+          .rt-viewer .rt-aubl-table td { background: rgba(15,23,42,0.55); color: #e2e8f0; }
         `}</style>
         <div
           className="rt-viewer"

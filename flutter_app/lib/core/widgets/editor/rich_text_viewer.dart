@@ -6,6 +6,7 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'delta_utils.dart';
+import 'table_embed.dart';
 
 /// Delta JSON 또는 plain text를 렌더링하는 읽기 전용 뷰어
 class RichTextViewer extends StatefulWidget {
@@ -83,7 +84,11 @@ class _RichTextViewerState extends State<RichTextViewer> {
         onLaunchUrl: (url) {
           unawaited(_launchExternal(url));
         },
-        embedBuilders: [_ImageEmbedBuilder(), _VideoEmbedBuilder()],
+        embedBuilders: [
+          _ImageEmbedBuilder(),
+          _VideoEmbedBuilder(),
+          const AublTableEmbedBuilder(),
+        ],
         customStyles: DefaultStyles(
           color: widget.color,
           paragraph: DefaultTextBlockStyle(

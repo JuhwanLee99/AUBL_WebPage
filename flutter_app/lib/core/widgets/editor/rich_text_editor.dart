@@ -3,11 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'delta_utils.dart';
+import 'table_embed.dart';
 
 /// 게시글/댓글 리치 텍스트 에디터
 ///
 /// [mini] = true: 댓글용 미니 툴바 (볼드/이탤릭/링크)
-/// [mini] = false: 게시글용 풀 툴바 (볼드/이탤릭/밑줄/목록/링크/이미지/동영상)
+/// [mini] = false: 게시글용 풀 툴바 (볼드/이탤릭/밑줄/목록/링크/표/이미지/동영상)
 class RichTextEditor extends StatefulWidget {
   const RichTextEditor({
     super.key,
@@ -44,7 +45,8 @@ class _RichTextEditorState extends State<RichTextEditor> {
   void didUpdateWidget(covariant RichTextEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
     // 외부에서 value가 빈 값으로 리셋될 때 (예: 댓글 등록 후 초기화)
-    if (widget.initialValue != oldWidget.initialValue && isDeltaEmpty(widget.initialValue)) {
+    if (widget.initialValue != oldWidget.initialValue &&
+        isDeltaEmpty(widget.initialValue)) {
       _ignoreNextChange = true;
       _controller.removeListener(_onControllerChanged);
       _controller.dispose();
@@ -81,13 +83,16 @@ class _RichTextEditorState extends State<RichTextEditor> {
           decoration: const InputDecoration(
             hintText: 'https://... 또는 Google Drive 공유 링크',
             hintStyle: TextStyle(color: Color(0xFF64748b)),
-            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF334155))),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF3b82f6))),
+            enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Color(0xFF334155))),
+            focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Color(0xFF3b82f6))),
           ),
           onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('취소')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('취소')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
             child: const Text('삽입', style: TextStyle(color: Color(0xFF3b82f6))),
@@ -97,7 +102,8 @@ class _RichTextEditorState extends State<RichTextEditor> {
     );
     if (url != null && url.isNotEmpty && mounted) {
       final imageUrl = toGoogleDriveImageUrl(url);
-      final index = _controller.selection.baseOffset.clamp(0, _controller.document.length - 1);
+      final index = _controller.selection.baseOffset
+          .clamp(0, _controller.document.length - 1);
       _controller.document.insert(index, BlockEmbed.image(imageUrl));
     }
   }
@@ -116,13 +122,16 @@ class _RichTextEditorState extends State<RichTextEditor> {
           decoration: const InputDecoration(
             hintText: 'https://www.youtube.com/watch?v=...',
             hintStyle: TextStyle(color: Color(0xFF64748b)),
-            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF334155))),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF3b82f6))),
+            enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Color(0xFF334155))),
+            focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Color(0xFF3b82f6))),
           ),
           onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('취소')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('취소')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
             child: const Text('삽입', style: TextStyle(color: Color(0xFF3b82f6))),
@@ -132,14 +141,53 @@ class _RichTextEditorState extends State<RichTextEditor> {
     );
     if (url != null && url.isNotEmpty && mounted) {
       final embedUrl = toYouTubeEmbedUrl(url);
-      final index = _controller.selection.baseOffset.clamp(0, _controller.document.length - 1);
+      final index = _controller.selection.baseOffset
+          .clamp(0, _controller.document.length - 1);
       _controller.document.insert(index, BlockEmbed.video(embedUrl));
     }
   }
 
+  Future<void> _showTableDialog() async {
+    final tableData = await showAublTableEditorDialog(
+      context: context,
+      initialData: AublTableData.initial(),
+      title: '표 삽입',
+    );
+    if (tableData == null || !mounted) return;
+    var index = _controller.selection.baseOffset;
+    if (index < 0) index = _controller.document.length - 1;
+    _controller.replaceText(
+      index,
+      0,
+      buildAublTableEmbeddable(tableData),
+      TextSelection.collapsed(offset: index + 1),
+    );
+  }
+
+  Future<void> _editTableEmbed(
+    BuildContext dialogContext,
+    EmbedContext embedContext,
+    AublTableData tableData,
+  ) async {
+    final updated = await showAublTableEditorDialog(
+      context: dialogContext,
+      initialData: tableData,
+      title: '표 편집',
+    );
+    if (updated == null || !mounted) return;
+    final offset = embedContext.node.documentOffset;
+    embedContext.controller.replaceText(
+      offset,
+      1,
+      buildAublTableEmbeddable(updated),
+      TextSelection.collapsed(offset: offset + 1),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final toolbarConfigs = widget.mini ? _miniToolbarConfigs : _fullToolbarConfigs;
+    final toolbarConfigs =
+        widget.mini ? _miniToolbarConfigs : _fullToolbarConfigs;
 
     return Container(
       decoration: BoxDecoration(
@@ -187,12 +235,19 @@ class _RichTextEditorState extends State<RichTextEditor> {
                   ? []
                   : [
                       QuillToolbarCustomButtonOptions(
-                        icon: const Icon(Icons.image_outlined, size: 18, color: Color(0xFF94a3b8)),
+                        icon: const Icon(Icons.image_outlined,
+                            size: 18, color: Color(0xFF94a3b8)),
                         onPressed: _showImageUrlDialog,
                       ),
                       QuillToolbarCustomButtonOptions(
-                        icon: const Icon(Icons.video_library_outlined, size: 18, color: Color(0xFF94a3b8)),
+                        icon: const Icon(Icons.video_library_outlined,
+                            size: 18, color: Color(0xFF94a3b8)),
                         onPressed: _showVideoUrlDialog,
+                      ),
+                      QuillToolbarCustomButtonOptions(
+                        icon: const Icon(Icons.table_chart_outlined,
+                            size: 18, color: Color(0xFF94a3b8)),
+                        onPressed: _showTableDialog,
                       ),
                     ],
               iconTheme: const QuillIconTheme(
@@ -226,7 +281,11 @@ class _RichTextEditorState extends State<RichTextEditor> {
                   autoFocus: false,
                   expands: false,
                   scrollable: true,
-                  embedBuilders: [_ImageEmbedBuilder(), _VideoEmbedBuilder()],
+                  embedBuilders: [
+                    _ImageEmbedBuilder(),
+                    _VideoEmbedBuilder(),
+                    AublTableEmbedBuilder(onEditRequested: _editTableEmbed),
+                  ],
                   customStyles: const DefaultStyles(
                     color: Color(0xFFe2e8f0),
                     placeHolder: DefaultTextBlockStyle(
@@ -237,7 +296,8 @@ class _RichTextEditorState extends State<RichTextEditor> {
                       null,
                     ),
                     paragraph: DefaultTextBlockStyle(
-                      TextStyle(color: Color(0xFFe2e8f0), fontSize: 15, height: 1.6),
+                      TextStyle(
+                          color: Color(0xFFe2e8f0), fontSize: 15, height: 1.6),
                       HorizontalSpacing.zero,
                       VerticalSpacing.zero,
                       VerticalSpacing.zero,
@@ -274,7 +334,8 @@ class _ImageEmbedBuilder extends EmbedBuilder {
         child: CachedNetworkImage(
           imageUrl: url,
           fit: BoxFit.cover,
-          errorWidget: (_, __, ___) => const Icon(Icons.broken_image, color: Color(0xFF64748b), size: 48),
+          errorWidget: (_, __, ___) => const Icon(Icons.broken_image,
+              color: Color(0xFF64748b), size: 48),
         ),
       ),
     );

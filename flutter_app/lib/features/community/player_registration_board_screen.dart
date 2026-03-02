@@ -134,7 +134,7 @@ class _PlayerRegistrationBoardScreenState
                         color: const Color(0xFFF87171).withValues(alpha: 0.4)),
                   ),
                   child: const Text(
-                    '선수 등록 게시판은 선수 등급 이상만 접근할 수 있습니다.',
+                    '선수 등록 게시판은 선수/기록원 등급 이상만 접근할 수 있습니다.',
                     style: TextStyle(
                       color: Color(0xFFFECACA),
                       fontSize: 13,
@@ -163,7 +163,7 @@ class _PlayerRegistrationBoardScreenState
                         ),
                       ),
                       child: const Text(
-                        '열람: 선수 등급 이상\n작성: 선수 등록(관리자), 유니폼 등록(감독/관리자)',
+                        '열람: 선수/기록원 등급 이상\n작성: 선수 등록(관리자), 유니폼 등록(감독/관리자)',
                         style: TextStyle(
                           color: AppTheme.blue400,
                           fontSize: 12,
