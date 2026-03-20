@@ -665,8 +665,15 @@ export default function AdminGameEditPage() {
     setImporting(true);
     setImportResult(null);
     try {
-      await triggerMatchImport(matchId);
-      setImportResult({ ok: true, msg: '백엔드 재임포트 요청이 완료되었습니다.' });
+      const result = await triggerMatchImport(matchId);
+      if (!result) {
+        setImportResult({ ok: true, msg: '백엔드 재임포트 요청이 완료되었습니다.' });
+      } else {
+        setImportResult({
+          ok: true,
+          msg: `백엔드 재임포트 완료: 경기 ${result.gamesProcessed}건, 타자로그 ${result.batterLogsInserted}건, 투수로그 ${result.pitcherLogsInserted}건`,
+        });
+      }
     } catch (err) {
       setImportResult({ ok: false, msg: err instanceof Error ? err.message : '재임포트 요청 실패' });
     } finally {

@@ -67,6 +67,8 @@ export interface Notice {
   title: string;
   category: NoticeCategory;
   content: string; // 간단한 텍스트 또는 HTML
+  uid?: string;
+  authorUid?: string;
   author: string;
   createdAt: number;
   isImportant?: boolean; // 긴급/중요 상단 고정용
@@ -161,4 +163,48 @@ export interface UserProfile {
   createdAt?: string | null;
   lastSignInAt?: string | null;
   updatedAt?: number | null;
+}
+
+export type ModerationAction = 'report' | 'block';
+
+export interface ModerationReportPayload {
+  action: ModerationAction;
+  reasonType: string;
+  reasonDetail: string;
+  targetUid: string;
+  targetLabel: string;
+  contentDomain: string;
+  contentId: string;
+  contentPreview: string;
+  parentContentId?: string;
+  contextId?: string;
+}
+
+export interface ModerationReport {
+  id: string;
+  action: ModerationAction;
+  reasonType: string;
+  reasonDetail?: string;
+  reporterUid: string;
+  reporterLabel?: string;
+  targetUid: string;
+  targetLabel: string;
+  contentDomain: string;
+  contentId: string;
+  contentPreview: string;
+  parentContentId?: string;
+  contextId?: string;
+  status: string;
+  createdAt: number;
+  reviewedAt?: number;
+  reviewedBy?: string;
+  reviewNote?: string;
+}
+
+export interface BlockedUserEntry {
+  uid: string;
+  label: string;
+  blockedAt: number;
+  lastReasonType?: string;
+  lastContentDomain?: string;
 }

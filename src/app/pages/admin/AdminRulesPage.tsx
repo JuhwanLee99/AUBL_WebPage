@@ -21,6 +21,12 @@ const inputStyle: CSSProperties = {
 
 const labelStyle: CSSProperties = { color: '#cbd5e1', fontWeight: 800, fontSize: '13px', marginBottom: '6px', display: 'block' };
 
+type RulesPastePayload = {
+  chapters: RuleChapter[];
+  hostOrder?: string[];
+  appendixText?: string;
+};
+
 export default function AdminRulesPage() {
   const { content, updateContent } = useContent();
   const rules = content.rules;
@@ -57,10 +63,24 @@ export default function AdminRulesPage() {
     setError(null);
 
     let chapters: RuleChapter[];
+    let nextHostOrder = parsedHostOrder;
+    let nextAppendixText = appendixText;
     try {
       const parsed = JSON.parse(chaptersDraft) as unknown;
-      if (!Array.isArray(parsed)) throw new Error('chapters는 배열이어야 합니다.');
-      chapters = parsed as RuleChapter[];
+      if (Array.isArray(parsed)) {
+        chapters = parsed as RuleChapter[];
+      } else if (parsed && typeof parsed === 'object' && Array.isArray((parsed as RulesPastePayload).chapters)) {
+        const payload = parsed as RulesPastePayload;
+        chapters = payload.chapters;
+        if (Array.isArray(payload.hostOrder)) {
+          nextHostOrder = payload.hostOrder.map((line) => `${line ?? ''}`.trim()).filter(Boolean);
+        }
+        if (typeof payload.appendixText === 'string') {
+          nextAppendixText = payload.appendixText;
+        }
+      } else {
+        throw new Error('chapters 배열 또는 { chapters, hostOrder?, appendixText? } 형식이어야 합니다.');
+      }
       const valid = chapters.every(
         (chapter) =>
           chapter &&
@@ -81,11 +101,17 @@ export default function AdminRulesPage() {
         headerBadge,
         headerTitle,
         headerDescription,
-        appendixText,
-        hostOrder: parsedHostOrder,
+        appendixText: nextAppendixText,
+        hostOrder: nextHostOrder,
         chapters,
       },
     });
+    if (nextHostOrder !== parsedHostOrder) {
+      setHostOrderDraft(nextHostOrder.join('\n'));
+    }
+    if (nextAppendixText !== appendixText) {
+      setAppendixText(nextAppendixText);
+    }
     setStatus('회칙 콘텐츠를 저장했습니다.');
   };
 
@@ -102,7 +128,13 @@ export default function AdminRulesPage() {
           <div><label style={labelStyle}>헤더 설명</label><textarea style={{ ...inputStyle, minHeight: '80px', fontFamily: 'inherit' }} value={headerDescription} onChange={(e) => setHeaderDescription(e.target.value)} /></div>
           <div><label style={labelStyle}>주최 순서 (줄바꿈)</label><textarea style={{ ...inputStyle, minHeight: '100px', fontFamily: 'inherit' }} value={hostOrderDraft} onChange={(e) => setHostOrderDraft(e.target.value)} /></div>
           <div><label style={labelStyle}>부칙</label><textarea style={{ ...inputStyle, minHeight: '70px', fontFamily: 'inherit' }} value={appendixText} onChange={(e) => setAppendixText(e.target.value)} /></div>
-          <div><label style={labelStyle}>chapters JSON</label><textarea style={{ ...inputStyle, minHeight: '240px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }} value={chaptersDraft} onChange={(e) => setChaptersDraft(e.target.value)} /></div>
+          <div>
+            <label style={labelStyle}>chapters JSON</label>
+            <textarea style={{ ...inputStyle, minHeight: '240px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }} value={chaptersDraft} onChange={(e) => setChaptersDraft(e.target.value)} />
+            <div style={{ marginTop: '6px', color: '#94a3b8', fontSize: '12px' }}>
+              {'배열 형식(chapters) 또는 객체 형식({ chapters, hostOrder, appendixText }) 모두 저장할 수 있습니다.'}
+            </div>
+          </div>
         </div>
 
         <div style={{ marginTop: '12px' }}>

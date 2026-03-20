@@ -7,6 +7,7 @@ import {
   getPlayerSearchIndex,
   getPlayoffSummaries,
   getPowerRankings,
+  getRecordFilterOptions,
   getRecordOverview,
   getSeasons,
   getTeamRecordStandings,
@@ -20,16 +21,18 @@ import {
   type RecordPlayoffDivision,
   type RecordRegulation,
   type RecordScope,
+  type RecordFilterOptions,
   type RecordsOverview,
   type SeasonSummary,
   type TeamRecordStanding,
 } from '../../shared/api/backendClient';
 import {
+  buildBatterSortOptions,
+  buildGroupOptions,
+  buildPitcherSortOptions,
+  buildPlayoffDivisionOptions,
+  buildScopeOptions,
   DEFAULT_RECORD_FILTERS,
-  PLAYOFF_DIVISION_OPTIONS,
-  RECORD_GROUP_OPTIONS,
-  RECORD_SCOPE_OPTIONS,
-  RECORD_SCOPE_OPTIONS_NO_PLAYOFF,
   matchesRecordFilters,
   supportsPlayoffFiltering,
   toRecordFilterParams,
@@ -59,30 +62,6 @@ const TAB_OPTIONS: Array<{ value: RecordsTab; label: string }> = [
   { value: 'pitchers', label: '투수기록' },
   { value: 'batters', label: '타자기록' },
   { value: 'power', label: '파워랭킹' },
-];
-
-const BATTER_SORT_OPTIONS: Array<{ value: BatterRankingSort; label: string }> = [
-  { value: 'battingAverage', label: 'AVG' },
-  { value: 'ops', label: 'OPS' },
-  { value: 'onBasePct', label: 'OBP' },
-  { value: 'sluggingPct', label: 'SLG' },
-  { value: 'hits', label: 'H' },
-  { value: 'homeRuns', label: 'HR' },
-  { value: 'rbi', label: 'RBI' },
-  { value: 'gamesPlayed', label: 'G' },
-  { value: 'plateAppearance', label: 'PA' },
-  { value: 'stolenBases', label: 'SB' },
-];
-
-const PITCHER_SORT_OPTIONS: Array<{ value: PitcherRankingSort; label: string }> = [
-  { value: 'era', label: 'ERA' },
-  { value: 'whip', label: 'WHIP' },
-  { value: 'strikeouts', label: 'K' },
-  { value: 'wins', label: 'W' },
-  { value: 'saves', label: 'SV' },
-  { value: 'inningsPitched', label: 'IP' },
-  { value: 'walksAllowed', label: 'BB' },
-  { value: 'gamesPlayed', label: 'G' },
 ];
 
 function hasJerseyValue(value: string | null | undefined): boolean {
@@ -200,6 +179,7 @@ export default function RecordPage() {
   const [warning, setWarning] = useState<string | null>(null);
   const [powerError, setPowerError] = useState<string | null>(null);
   const [playoffFilterEnabled, setPlayoffFilterEnabled] = useState(false);
+  const [recordFilterOptions, setRecordFilterOptions] = useState<RecordFilterOptions | null>(null);
   const [topBatterSort, setTopBatterSort] = useState<BatterRankingSort>('ops');
   const [topPitcherSort, setTopPitcherSort] = useState<PitcherRankingSort>('era');
 
@@ -227,6 +207,37 @@ export default function RecordPage() {
   const currentFilters = useMemo<RecordFilterState>(
     () => ({ scope, group, playoffDivision }),
     [scope, group, playoffDivision],
+  );
+
+  const batterSortOptions = useMemo(
+    () => buildBatterSortOptions(recordFilterOptions),
+    [recordFilterOptions],
+  );
+  const pitcherSortOptions = useMemo(
+    () => buildPitcherSortOptions(recordFilterOptions),
+    [recordFilterOptions],
+  );
+  const groupOptions = useMemo(
+    () => buildGroupOptions(recordFilterOptions),
+    [recordFilterOptions],
+  );
+  const playoffDivisionOptions = useMemo(
+    () => buildPlayoffDivisionOptions(recordFilterOptions),
+    [recordFilterOptions],
+  );
+  const resolvedTopBatterSort = useMemo(
+    () =>
+      batterSortOptions.some((item) => item.value === topBatterSort)
+        ? topBatterSort
+        : (batterSortOptions[0]?.value ?? topBatterSort),
+    [batterSortOptions, topBatterSort],
+  );
+  const resolvedTopPitcherSort = useMemo(
+    () =>
+      pitcherSortOptions.some((item) => item.value === topPitcherSort)
+        ? topPitcherSort
+        : (pitcherSortOptions[0]?.value ?? topPitcherSort),
+    [pitcherSortOptions, topPitcherSort],
   );
 
   const updateParams = useCallback(
@@ -392,6 +403,36 @@ export default function RecordPage() {
   useEffect(() => {
     if (!selectedSeason) return;
     let isMounted = true;
+    getRecordFilterOptions(selectedSeason.id)
+      .then((options) => {
+        if (!isMounted) return;
+        setRecordFilterOptions(options);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setRecordFilterOptions(null);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedSeason]);
+
+  useEffect(() => {
+    if (group === 'ALL') return;
+    if (groupOptions.some((item) => item.value === group)) return;
+    updateParams({ group: null });
+  }, [group, groupOptions, updateParams]);
+
+  useEffect(() => {
+    if (playoffDivision === 'ALL') return;
+    if (playoffDivisionOptions.some((item) => item.value === playoffDivision)) return;
+    updateParams({ playoffDivision: null });
+  }, [playoffDivision, playoffDivisionOptions, updateParams]);
+
+  useEffect(() => {
+    if (!selectedSeason) return;
+    let isMounted = true;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
@@ -416,7 +457,7 @@ export default function RecordPage() {
     const battersTopPromise = getBatterRankings({
       seasonId: selectedSeason.id,
       limit: 0,
-      sort: topBatterSort,
+      sort: resolvedTopBatterSort,
       filters: filterParams,
       regulation: 'IN',
     });
@@ -424,7 +465,7 @@ export default function RecordPage() {
     const pitchersTopPromise = getPitcherRankings({
       seasonId: selectedSeason.id,
       limit: 0,
-      sort: topPitcherSort,
+      sort: resolvedTopPitcherSort,
       filters: filterParams,
       regulation: 'IN',
     });
@@ -621,7 +662,7 @@ export default function RecordPage() {
     return () => {
       isMounted = false;
     };
-  }, [selectedSeason, currentFilters, regulation, topBatterSort, topPitcherSort]);
+  }, [selectedSeason, currentFilters, regulation, resolvedTopBatterSort, resolvedTopPitcherSort]);
 
   useEffect(() => {
     if (playoffFilterEnabled) return;
@@ -696,10 +737,10 @@ export default function RecordPage() {
         rank: row.rank,
         name: row.playerName,
         team: `${row.teamName}${row.jerseyNumber ? ` · #${row.jerseyNumber}` : ''}`,
-        value: formatTopBatterValue(row, topBatterSort),
+        value: formatTopBatterValue(row, resolvedTopBatterSort),
         link: `/records/player/${row.playerId}`,
       })),
-    [topBatterSort, topInBatters],
+    [resolvedTopBatterSort, topInBatters],
   );
 
   const topPitcherRows = useMemo<TopFiveRow[]>(
@@ -709,10 +750,10 @@ export default function RecordPage() {
         rank: row.rank,
         name: row.playerName,
         team: `${row.teamName}${row.jerseyNumber ? ` · #${row.jerseyNumber}` : ''}`,
-        value: formatTopPitcherValue(row, topPitcherSort),
+        value: formatTopPitcherValue(row, resolvedTopPitcherSort),
         link: `/records/player/${row.playerId}`,
       })),
-    [topInPitchers, topPitcherSort],
+    [resolvedTopPitcherSort, topInPitchers],
   );
 
   const playoffStageSummary = useMemo<PlayoffStageSummaryRow[]>(() => {
@@ -750,7 +791,10 @@ export default function RecordPage() {
     return total / filteredStandingsBySearch.length;
   }, [filteredStandingsBySearch]);
 
-  const scopeOptions = playoffFilterEnabled ? RECORD_SCOPE_OPTIONS : RECORD_SCOPE_OPTIONS_NO_PLAYOFF;
+  const scopeOptions = useMemo(
+    () => buildScopeOptions(recordFilterOptions, playoffFilterEnabled),
+    [recordFilterOptions, playoffFilterEnabled],
+  );
 
   return (
     <div style={{ display: 'grid', gap: '22px' }} ref={sectionRef}>
@@ -786,10 +830,10 @@ export default function RecordPage() {
             scopeOptions={scopeOptions}
             onScopeChange={setScope}
             group={group}
-            groupOptions={RECORD_GROUP_OPTIONS}
+            groupOptions={groupOptions}
             onGroupChange={setGroup}
             playoffDivision={playoffDivision}
-            playoffDivisionOptions={PLAYOFF_DIVISION_OPTIONS}
+            playoffDivisionOptions={playoffDivisionOptions}
             playoffFilterEnabled={playoffFilterEnabled}
             onPlayoffDivisionChange={setPlayoffDivision}
             searchTerm={searchTerm}
@@ -852,10 +896,10 @@ export default function RecordPage() {
           pitcherCount={pitchers.length}
           topBatters={topBatterRows}
           topPitchers={topPitcherRows}
-          topBatterSort={topBatterSort}
-          topPitcherSort={topPitcherSort}
-          batterSortOptions={BATTER_SORT_OPTIONS}
-          pitcherSortOptions={PITCHER_SORT_OPTIONS}
+          topBatterSort={resolvedTopBatterSort}
+          topPitcherSort={resolvedTopPitcherSort}
+          batterSortOptions={batterSortOptions}
+          pitcherSortOptions={pitcherSortOptions}
           onTopBatterSortChange={setTopBatterSort}
           onTopPitcherSortChange={setTopPitcherSort}
         />
@@ -892,8 +936,8 @@ export default function RecordPage() {
           searchTerm={searchTerm}
           onToggleTeamSearch={toggleTeamSearch}
           onToggleRegulationFromCell={toggleRegulationFromCell}
-          topSort={topBatterSort}
-          topSortOptions={BATTER_SORT_OPTIONS}
+          topSort={resolvedTopBatterSort}
+          topSortOptions={batterSortOptions}
           onTopSortChange={setTopBatterSort}
         />
       )}
@@ -914,8 +958,8 @@ export default function RecordPage() {
           searchTerm={searchTerm}
           onToggleTeamSearch={toggleTeamSearch}
           onToggleRegulationFromCell={toggleRegulationFromCell}
-          topSort={topPitcherSort}
-          topSortOptions={PITCHER_SORT_OPTIONS}
+          topSort={resolvedTopPitcherSort}
+          topSortOptions={pitcherSortOptions}
           onTopSortChange={setTopPitcherSort}
         />
       )}

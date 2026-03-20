@@ -341,20 +341,18 @@ function normalizeRuleChapters(value: unknown, fallback: RuleChapter[]): RuleCha
   const chapters: RuleChapter[] = [];
   for (const chapter of value) {
     if (!chapter || typeof chapter !== 'object') continue;
-    const title = typeof (chapter as { title?: unknown }).title === 'string' ? (chapter as { title: string }).title.trim() : '';
-    const id = typeof (chapter as { id?: unknown }).id === 'string' ? (chapter as { id: string }).id.trim() : '';
-    const accent = typeof (chapter as { accent?: unknown }).accent === 'string' ? (chapter as { accent: string }).accent.trim() : '#60a5fa';
+    const title = typeof (chapter as { title?: unknown }).title === 'string' ? (chapter as { title: string }).title : '';
+    const id = typeof (chapter as { id?: unknown }).id === 'string' ? (chapter as { id: string }).id : '';
+    const accent = typeof (chapter as { accent?: unknown }).accent === 'string' ? (chapter as { accent: string }).accent : '#60a5fa';
     const rawArticles = (chapter as { articles?: unknown }).articles;
     if (!title || !id || !Array.isArray(rawArticles)) continue;
 
     const articles: RuleArticle[] = rawArticles
       .map((article) => {
         if (!article || typeof article !== 'object') return null;
-        const articleTitle = typeof (article as { title?: unknown }).title === 'string' ? (article as { title: string }).title.trim() : '';
+        const articleTitle = typeof (article as { title?: unknown }).title === 'string' ? (article as { title: string }).title : '';
         const rawBody = (article as { body?: unknown }).body;
-        const body = Array.isArray(rawBody)
-          ? rawBody.filter((line): line is string => typeof line === 'string').map((line) => line.trim())
-          : [];
+        const body = Array.isArray(rawBody) ? rawBody.filter((line): line is string => typeof line === 'string') : [];
         if (!articleTitle || !body.length) return null;
         return { title: articleTitle, body };
       })
@@ -364,29 +362,7 @@ function normalizeRuleChapters(value: unknown, fallback: RuleChapter[]): RuleCha
     chapters.push({ id, title, accent, articles });
   }
   if (!chapters.length) return fallback;
-
-  const incomingById = new Map(chapters.map((chapter) => [chapter.id, chapter]));
-
-  const mergeArticles = (incoming: RuleChapter['articles'], defaults: RuleChapter['articles']) => {
-    const incomingByTitle = new Map(incoming.map((article) => [article.title, article]));
-    const merged = defaults.map((article) => incomingByTitle.get(article.title) ?? article);
-    const extra = incoming.filter((article) => !defaults.some((def) => def.title === article.title));
-    return [...merged, ...extra];
-  };
-
-  const mergedWithDefaults = fallback.map((defaultChapter) => {
-    const incoming = incomingById.get(defaultChapter.id);
-    if (!incoming) return defaultChapter;
-    return {
-      id: incoming.id || defaultChapter.id,
-      title: incoming.title || defaultChapter.title,
-      accent: incoming.accent || defaultChapter.accent,
-      articles: mergeArticles(incoming.articles, defaultChapter.articles),
-    };
-  });
-
-  const extraChapters = chapters.filter((chapter) => !fallback.some((def) => def.id === chapter.id));
-  return [...mergedWithDefaults, ...extraChapters];
+  return chapters;
 }
 
 function normalizeContentPatch(input: Partial<ContentState>): Partial<ContentState> {

@@ -50,8 +50,14 @@ export default function AdminPowerRankingPage() {
     setConfirming(false);
     setRunning(true);
     try {
-      await rebuildPowerRanking({ fromYear, toYear });
-      setResult({ ok: true, message: `${fromYear}~${toYear}년 파워랭킹 재계산 완료` });
+      const response = await rebuildPowerRanking({ fromYear, toYear });
+      const status = response?.status ? `상태: ${response.status}` : '상태: 확인 불가';
+      const runId = response?.runId ? `runId: ${response.runId}` : 'runId: 없음';
+      const startedAt = response?.startedAt ? `시작시각: ${response.startedAt}` : '시작시각: 없음';
+      setResult({
+        ok: true,
+        message: `${fromYear}~${toYear}년 파워랭킹 재계산 요청 완료 (${status}, ${runId}, ${startedAt})`,
+      });
     } catch (e) {
       setResult({ ok: false, message: e instanceof Error ? e.message : String(e) });
     } finally {

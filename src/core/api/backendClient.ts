@@ -32,7 +32,20 @@ async function fetchApi<T>(path: string, init?: RequestInit): Promise<T> {
     try { detail = await res.text(); } catch { /* ignore */ }
     throw new Error(`API error ${res.status}: ${res.statusText}${detail ? ` — ${detail}` : ''}`);
   }
-  return res.json();
+  if (res.status === 204) {
+    return null as T;
+  }
+
+  const raw = await res.text();
+  if (!raw.trim()) {
+    return null as T;
+  }
+
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return JSON.parse(raw) as T;
+  }
+  return raw as T;
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -313,6 +326,7 @@ export interface TeamSummary {
   id: number;
   teamName: string;
   teamCode: string;
+  active: boolean;
 }
 
 export interface TeamRecordStanding {
@@ -399,6 +413,62 @@ export interface PlayerRosterResponse {
   nextCursor: string | null;
   hasNext: boolean;
   totalCount: number;
+}
+
+export interface RecordFilterOptionGroup {
+  partCode: string;
+  group: string;
+  label: string;
+  order: number;
+}
+
+export interface RecordFilterOptions {
+  seasonId: number;
+  groups: RecordFilterOptionGroup[];
+  scopes: string[];
+  playoffDivisions: string[];
+  regulations: string[];
+  defaultRegulation: 'IN' | 'OUT' | null;
+  batterSortOptions: BatterRankingSort[];
+  pitcherSortOptions: PitcherRankingSort[];
+}
+
+export interface PlayerSearchResult {
+  playerId: number;
+  playerName: string;
+  teamId: number;
+  teamName: string;
+  jerseyNumber: string;
+  seasonId: number;
+}
+
+export interface PlayerProfile {
+  playerId: number;
+  playerName: string;
+  seasonId: number;
+  teamId: number;
+  teamName: string;
+  teamCode: string;
+  jerseyNumber: string;
+}
+
+export interface SeasonTeam {
+  seasonId: number;
+  teamId: number;
+  teamName: string;
+  teamCode: string;
+}
+
+export interface FirestoreImportResult {
+  gamesProcessed: number;
+  batterLogsInserted: number;
+  pitcherLogsInserted: number;
+}
+
+export interface PowerRankingRebuildResult {
+  runId: string | null;
+  startedAt: string | null;
+  status: string | null;
 }
 
 export type RecordScope = 'ALL' | 'LEAGUE' | 'PLAYOFF';
@@ -531,7 +601,7 @@ function applyRecordFilters(params: URLSearchParams, filters: RecordFilterParams
   const playoffDivision =
     filters.playoffDivision && filters.playoffDivision !== 'ALL' ? filters.playoffDivision : null;
   if (playoffDivision) {
-    params.set('seasonType', playoffDivision);
+    params.set('playoffDivision', playoffDivision);
     params.set('division', playoffDivision);
   }
 }
@@ -880,6 +950,7 @@ function normalizeTeams(raw: unknown): TeamSummary[] {
         id,
         teamName,
         teamCode: toStringValue(row.teamCode ?? row.team_code ?? row.code),
+        active: Boolean(row.active ?? true),
       } satisfies TeamSummary;
     })
     .filter((item): item is TeamSummary => item !== null)
@@ -994,7 +1065,9 @@ export async function getPlayoffSummaries(
     throw new Error('seasonId is required and must be a positive integer.');
   }
   const params = new URLSearchParams({ seasonId: String(seasonId), view: 'teams' });
-  applyRecordFilters(params, filters);
+  if (filters?.playoffDivision && filters.playoffDivision !== 'ALL') {
+    params.set('tier', filters.playoffDivision);
+  }
   let raw: unknown;
   try {
     raw = await fetchApi<unknown>(`/api/records/playoffs?${params.toString()}`);
@@ -1114,13 +1187,220 @@ export async function getPowerRankingSeasonScores(params: {
 export async function rebuildPowerRanking(params: {
   fromYear: number;
   toYear: number;
-}): Promise<void> {
+}): Promise<PowerRankingRebuildResult | null> {
   const query = new URLSearchParams({
     fromYear: String(params.fromYear),
     toYear: String(params.toYear),
   });
-  await fetchApi<unknown>(`/api/admin/records/power-ranking/rebuild?${query.toString()}`, {
+  const raw = await fetchApi<unknown>(`/api/admin/records/power-ranking/rebuild?${query.toString()}`, {
     method: 'POST',
+  });
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  return {
+    runId: toStringValue(row.runId) || null,
+    startedAt: toStringValue(row.startedAt) || null,
+    status: toStringValue(row.status) || null,
+  };
+}
+
+export async function getRecordFilterOptions(seasonId: number): Promise<RecordFilterOptions | null> {
+  if (!Number.isInteger(seasonId) || seasonId <= 0) {
+    throw new Error('seasonId is required and must be a positive integer.');
+  }
+  let raw: unknown;
+  try {
+    raw = await fetchApi<unknown>(`/api/records/filter-options?seasonId=${seasonId}`);
+  } catch (err) {
+    if (isNotFoundError(err)) return null;
+    throw err;
+  }
+
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  const groupItems = Array.isArray(row.groups) ? row.groups : [];
+  const groups = groupItems
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const groupRow = item as Record<string, unknown>;
+      const partCode = toStringValue(groupRow.partCode ?? groupRow.part_code);
+      const group = toStringValue(groupRow.group);
+      if (!partCode || !group) return null;
+      return {
+        partCode,
+        group,
+        label: toStringValue(groupRow.label) || `${group}조`,
+        order: toFiniteNumber(groupRow.order) ?? 0,
+      } satisfies RecordFilterOptionGroup;
+    })
+    .filter((item): item is RecordFilterOptionGroup => item !== null)
+    .sort((a, b) => a.order - b.order || a.partCode.localeCompare(b.partCode));
+
+  const rawBatterSorts = Array.isArray(row.batterSortOptions) ? row.batterSortOptions : [];
+  const batterSortOptions = rawBatterSorts
+    .map((item) => (typeof item === 'string' ? item : ''))
+    .filter((item): item is BatterRankingSort =>
+      [
+        'battingAverage',
+        'hits',
+        'homeRuns',
+        'rbi',
+        'ops',
+        'sluggingPct',
+        'onBasePct',
+        'gamesPlayed',
+        'plateAppearance',
+        'stolenBases',
+      ].includes(item),
+    );
+
+  const rawPitcherSorts = Array.isArray(row.pitcherSortOptions) ? row.pitcherSortOptions : [];
+  const pitcherSortOptions = rawPitcherSorts
+    .map((item) => (typeof item === 'string' ? item : ''))
+    .filter((item): item is PitcherRankingSort =>
+      ['era', 'whip', 'strikeouts', 'wins', 'saves', 'inningsPitched', 'walksAllowed', 'gamesPlayed'].includes(item),
+    );
+
+  const toStringArray = (value: unknown): string[] =>
+    Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+
+  const rawDefaultRegulation = toStringValue(row.defaultRegulation).toUpperCase();
+
+  return {
+    seasonId: toFiniteNumber(row.seasonId) ?? seasonId,
+    groups,
+    scopes: toStringArray(row.scopes),
+    playoffDivisions: toStringArray(row.playoffDivisions),
+    regulations: toStringArray(row.regulations),
+    defaultRegulation: rawDefaultRegulation === 'IN' || rawDefaultRegulation === 'OUT' ? rawDefaultRegulation : null,
+    batterSortOptions,
+    pitcherSortOptions,
+  };
+}
+
+export async function searchPlayers(params: {
+  seasonId: number;
+  q: string;
+  teamId?: number;
+  limit?: number;
+}): Promise<PlayerSearchResult[]> {
+  if (!Number.isInteger(params.seasonId) || params.seasonId <= 0) {
+    throw new Error('seasonId is required and must be a positive integer.');
+  }
+  const keyword = params.q.trim();
+  if (!keyword) {
+    throw new Error('q is required.');
+  }
+
+  const query = new URLSearchParams({
+    seasonId: String(params.seasonId),
+    q: keyword,
+  });
+  if (params.teamId != null && Number.isInteger(params.teamId) && params.teamId > 0) {
+    query.set('teamId', String(params.teamId));
+  }
+  if (params.limit != null && Number.isFinite(params.limit)) {
+    query.set('limit', String(Math.max(1, Math.min(50, Math.trunc(params.limit)))));
+  }
+
+  let raw: unknown;
+  try {
+    raw = await fetchApi<unknown>(`/api/players/search?${query.toString()}`);
+  } catch (err) {
+    if (isNotFoundError(err)) return [];
+    throw err;
+  }
+
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const row = item as Record<string, unknown>;
+      const playerId = toFiniteNumber(row.playerId ?? row.player_id);
+      const teamId = toFiniteNumber(row.teamId ?? row.team_id);
+      const seasonId = toFiniteNumber(row.seasonId ?? row.season_id);
+      const playerName = toStringValue(row.playerName ?? row.player_name ?? row.name);
+      const teamName = toStringValue(row.teamName ?? row.team_name);
+      if (playerId == null || teamId == null || seasonId == null || !playerName) return null;
+      return {
+        playerId,
+        playerName,
+        teamId,
+        teamName,
+        jerseyNumber: toDisplayString(row.jerseyNumber ?? row.backNumber ?? row.uniformNumber ?? row.number),
+        seasonId,
+      } satisfies PlayerSearchResult;
+    })
+    .filter((item): item is PlayerSearchResult => item !== null);
+}
+
+export async function getPlayerProfile(playerId: number, seasonId?: number): Promise<PlayerProfile | null> {
+  if (!Number.isInteger(playerId) || playerId <= 0) {
+    throw new Error('playerId is required and must be a positive integer.');
+  }
+  const qs = seasonId && Number.isInteger(seasonId) && seasonId > 0 ? `?seasonId=${seasonId}` : '';
+  let raw: unknown;
+  try {
+    raw = await fetchApi<unknown>(`/api/players/${playerId}/profile${qs}`);
+  } catch (err) {
+    if (isNotFoundError(err)) return null;
+    throw err;
+  }
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  const resolvedPlayerId = toFiniteNumber(row.playerId ?? row.player_id);
+  const resolvedSeasonId = toFiniteNumber(row.seasonId ?? row.season_id);
+  const teamId = toFiniteNumber(row.teamId ?? row.team_id);
+  if (resolvedPlayerId == null || resolvedSeasonId == null || teamId == null) return null;
+
+  return {
+    playerId: resolvedPlayerId,
+    playerName: toStringValue(row.playerName ?? row.player_name ?? row.name),
+    seasonId: resolvedSeasonId,
+    teamId,
+    teamName: toStringValue(row.teamName ?? row.team_name),
+    teamCode: toStringValue(row.teamCode ?? row.team_code),
+    jerseyNumber: toDisplayString(row.jerseyNumber ?? row.backNumber ?? row.uniformNumber ?? row.number),
+  };
+}
+
+export async function getSeasonTeams(seasonId: number): Promise<SeasonTeam[]> {
+  if (!Number.isInteger(seasonId) || seasonId <= 0) {
+    throw new Error('seasonId is required and must be a positive integer.');
+  }
+  let raw: unknown;
+  try {
+    raw = await fetchApi<unknown>(`/api/seasons/${seasonId}/teams`);
+  } catch (err) {
+    if (isNotFoundError(err)) return [];
+    throw err;
+  }
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const row = item as Record<string, unknown>;
+      const resolvedSeasonId = toFiniteNumber(row.seasonId ?? row.season_id);
+      const teamId = toFiniteNumber(row.teamId ?? row.team_id ?? row.id);
+      const teamName = toStringValue(row.teamName ?? row.team_name ?? row.name);
+      if (resolvedSeasonId == null || teamId == null || !teamName) return null;
+      return {
+        seasonId: resolvedSeasonId,
+        teamId,
+        teamName,
+        teamCode: toStringValue(row.teamCode ?? row.team_code),
+      } satisfies SeasonTeam;
+    })
+    .filter((item): item is SeasonTeam => item !== null)
+    .sort((a, b) => a.teamName.localeCompare(b.teamName, 'ko'));
+}
+
+export async function updateTeamActive(teamId: number, active: boolean): Promise<void> {
+  if (!Number.isInteger(teamId) || teamId <= 0) {
+    throw new Error('teamId is required and must be a positive integer.');
+  }
+  await fetchApi<unknown>(`/api/admin/teams/${teamId}/active?active=${active ? 'true' : 'false'}`, {
+    method: 'PATCH',
   });
 }
 
@@ -1229,10 +1509,24 @@ export async function getPlayerGameLogs(
 
 // ── Firestore Import (admin) ──
 
-export async function triggerMatchImport(matchId: string): Promise<void> {
-  await fetchApi(`/api/import/firestore/matches/${matchId}`, { method: 'POST' });
+export async function triggerMatchImport(matchId: string): Promise<FirestoreImportResult | null> {
+  const raw = await fetchApi<unknown>(`/api/import/firestore/matches/${matchId}`, { method: 'POST' });
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  return {
+    gamesProcessed: toFiniteNumber(row.gamesProcessed) ?? 0,
+    batterLogsInserted: toFiniteNumber(row.batterLogsInserted) ?? 0,
+    pitcherLogsInserted: toFiniteNumber(row.pitcherLogsInserted) ?? 0,
+  };
 }
 
-export async function triggerBulkImport(): Promise<void> {
-  await fetchApi('/api/import/firestore/matches', { method: 'POST' });
+export async function triggerBulkImport(): Promise<FirestoreImportResult | null> {
+  const raw = await fetchApi<unknown>('/api/import/firestore/matches', { method: 'POST' });
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  return {
+    gamesProcessed: toFiniteNumber(row.gamesProcessed) ?? 0,
+    batterLogsInserted: toFiniteNumber(row.batterLogsInserted) ?? 0,
+    pitcherLogsInserted: toFiniteNumber(row.pitcherLogsInserted) ?? 0,
+  };
 }

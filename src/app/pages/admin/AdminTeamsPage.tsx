@@ -1,6 +1,7 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { useContent } from '../../../shared/state/contentProvider';
 import type { GroupLetter } from '../../../shared/lib/teamGroups';
+import { getTeams, updateTeamActive, type TeamSummary } from '../../../core/api/backendClient';
 
 const cardStyle: CSSProperties = {
   borderRadius: '16px',
@@ -30,6 +31,11 @@ export default function AdminTeamsPage() {
 
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [backendStatus, setBackendStatus] = useState<string | null>(null);
+  const [backendError, setBackendError] = useState<string | null>(null);
+  const [backendTeams, setBackendTeams] = useState<TeamSummary[]>([]);
+  const [backendLoading, setBackendLoading] = useState(false);
+  const [activeUpdatingIds, setActiveUpdatingIds] = useState<Set<number>>(new Set());
 
   const [pageBadge, setPageBadge] = useState(teams.pageBadge);
   const [pageTitle, setPageTitle] = useState(teams.pageTitle);
@@ -47,6 +53,24 @@ export default function AdminTeamsPage() {
     };
     queueMicrotask(syncDraft);
   }, [teams]);
+
+  const loadBackendTeams = useCallback(async () => {
+    setBackendLoading(true);
+    setBackendError(null);
+    try {
+      const items = await getTeams();
+      setBackendTeams(items);
+    } catch (err) {
+      setBackendTeams([]);
+      setBackendError(err instanceof Error ? err.message : '백엔드 팀 목록을 불러오지 못했습니다.');
+    } finally {
+      setBackendLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadBackendTeams();
+  }, [loadBackendTeams]);
 
   const saveTeams = () => {
     setError(null);
@@ -86,10 +110,37 @@ export default function AdminTeamsPage() {
     setStatus('참가팀·조편성을 저장했습니다.');
   };
 
+  const toggleTeamActive = async (team: TeamSummary, nextActive: boolean) => {
+    setBackendStatus(null);
+    setBackendError(null);
+    setActiveUpdatingIds((prev) => {
+      const next = new Set(prev);
+      next.add(team.id);
+      return next;
+    });
+    try {
+      await updateTeamActive(team.id, nextActive);
+      setBackendTeams((prev) =>
+        prev.map((item) => (item.id === team.id ? { ...item, active: nextActive } : item)),
+      );
+      setBackendStatus(`${team.teamName} 팀을 ${nextActive ? '활성' : '비활성'}으로 변경했습니다.`);
+    } catch (err) {
+      setBackendError(err instanceof Error ? err.message : '팀 활성/비활성 변경에 실패했습니다.');
+    } finally {
+      setActiveUpdatingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(team.id);
+        return next;
+      });
+    }
+  };
+
   return (
     <div style={{ display: 'grid', gap: '14px' }}>
       {status && <div style={{ ...cardStyle, borderColor: 'rgba(34,197,94,0.45)', color: '#bbf7d0', fontWeight: 800 }}>{status}</div>}
       {error && <div style={{ ...cardStyle, borderColor: 'rgba(248,113,113,0.45)', color: '#fecaca', fontWeight: 800 }}>{error}</div>}
+      {backendStatus && <div style={{ ...cardStyle, borderColor: 'rgba(34,197,94,0.45)', color: '#bbf7d0', fontWeight: 800 }}>{backendStatus}</div>}
+      {backendError && <div style={{ ...cardStyle, borderColor: 'rgba(248,113,113,0.45)', color: '#fecaca', fontWeight: 800 }}>{backendError}</div>}
 
       <section style={cardStyle}>
         <h3 style={{ margin: '0 0 12px', color: '#e2e8f0' }}>참가팀 · 조편성 편집</h3>
@@ -108,6 +159,79 @@ export default function AdminTeamsPage() {
           <button type="button" onClick={saveTeams} style={{ ...inputStyle, width: 'auto', cursor: 'pointer', fontWeight: 800 }}>
             팀/조편성 저장
           </button>
+        </div>
+      </section>
+
+      <section style={cardStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+          <h3 style={{ margin: 0, color: '#e2e8f0' }}>백엔드 팀 활성/비활성 관리</h3>
+          <button
+            type="button"
+            onClick={() => { void loadBackendTeams(); }}
+            style={{ ...inputStyle, width: 'auto', cursor: 'pointer', fontWeight: 800 }}
+            disabled={backendLoading}
+          >
+            {backendLoading ? '불러오는 중...' : '목록 새로고침'}
+          </button>
+        </div>
+        <div style={{ display: 'grid', gap: '8px', marginTop: '10px' }}>
+          {backendTeams.map((team) => {
+            const busy = activeUpdatingIds.has(team.id);
+            return (
+              <div
+                key={team.id}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr auto auto',
+                  gap: '10px',
+                  alignItems: 'center',
+                  border: '1px solid rgba(148,163,184,0.2)',
+                  borderRadius: '10px',
+                  padding: '10px 12px',
+                  background: 'rgba(15,23,42,0.45)',
+                }}
+              >
+                <div>
+                  <div style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '14px' }}>{team.teamName}</div>
+                  <div style={{ color: '#94a3b8', fontSize: '12px' }}>
+                    ID: {team.id} · teamCode: {team.teamCode || '-'}
+                  </div>
+                </div>
+                <span
+                  style={{
+                    color: team.active ? '#86efac' : '#fca5a5',
+                    fontWeight: 800,
+                    fontSize: '12px',
+                    border: `1px solid ${team.active ? 'rgba(34,197,94,0.35)' : 'rgba(248,113,113,0.35)'}`,
+                    borderRadius: '999px',
+                    padding: '3px 10px',
+                  }}
+                >
+                  {team.active ? 'ACTIVE' : 'INACTIVE'}
+                </span>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    void toggleTeamActive(team, !team.active);
+                  }}
+                  style={{
+                    ...inputStyle,
+                    width: 'auto',
+                    cursor: busy ? 'not-allowed' : 'pointer',
+                    fontWeight: 800,
+                    borderColor: team.active ? 'rgba(248,113,113,0.35)' : 'rgba(34,197,94,0.35)',
+                    color: team.active ? '#fecaca' : '#bbf7d0',
+                  }}
+                >
+                  {busy ? '처리 중...' : team.active ? '비활성화' : '활성화'}
+                </button>
+              </div>
+            );
+          })}
+          {!backendLoading && backendTeams.length === 0 && (
+            <div style={{ color: '#94a3b8', fontSize: '13px' }}>백엔드 팀 목록이 비어 있습니다.</div>
+          )}
         </div>
       </section>
     </div>

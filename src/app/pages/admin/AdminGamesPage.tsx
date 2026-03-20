@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { firestore } from '../../../shared/firebase/client';
+import { triggerBulkImport } from '../../../core/api/backendClient';
 import type { MatchSchedule } from '../../../shared/state/demoStore';
 
 const cardStyle: CSSProperties = {
@@ -47,6 +48,8 @@ export default function AdminGamesPage() {
   const [matches, setMatches] = useState<MatchSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [bulkImporting, setBulkImporting] = useState(false);
+  const [bulkImportResult, setBulkImportResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -69,6 +72,29 @@ export default function AdminGamesPage() {
     void load();
   }, []);
 
+  const runBulkImport = async () => {
+    setBulkImporting(true);
+    setBulkImportResult(null);
+    try {
+      const result = await triggerBulkImport();
+      if (!result) {
+        setBulkImportResult({ ok: true, msg: '전체 재임포트 요청 완료 (응답 본문 없음)' });
+        return;
+      }
+      setBulkImportResult({
+        ok: true,
+        msg: `전체 재임포트 완료: 경기 ${result.gamesProcessed}건, 타자로그 ${result.batterLogsInserted}건, 투수로그 ${result.pitcherLogsInserted}건`,
+      });
+    } catch (err) {
+      setBulkImportResult({
+        ok: false,
+        msg: err instanceof Error ? err.message : '전체 재임포트 요청 실패',
+      });
+    } finally {
+      setBulkImporting(false);
+    }
+  };
+
   if (loading) {
     return <div style={{ color: '#94a3b8', padding: '20px' }}>불러오는 중...</div>;
   }
@@ -88,6 +114,30 @@ export default function AdminGamesPage() {
         <p style={{ margin: '0 0 16px', color: '#64748b', fontSize: '13px' }}>
           경기를 클릭하면 라인업 · 박스스코어를 수정할 수 있습니다.
         </p>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => { void runBulkImport(); }}
+            disabled={bulkImporting}
+            style={{
+              borderRadius: '10px',
+              border: '1px solid rgba(16,185,129,0.35)',
+              background: bulkImporting ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.2)',
+              color: '#a7f3d0',
+              padding: '8px 14px',
+              fontWeight: 800,
+              fontSize: '13px',
+              cursor: bulkImporting ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {bulkImporting ? '전체 재임포트 실행 중...' : '전체 재임포트 실행'}
+          </button>
+          {bulkImportResult && (
+            <span style={{ color: bulkImportResult.ok ? '#86efac' : '#fca5a5', fontSize: '12px', fontWeight: 700 }}>
+              {bulkImportResult.ok ? '✓' : '✗'} {bulkImportResult.msg}
+            </span>
+          )}
+        </div>
 
         {matches.length === 0 ? (
           <div style={{ color: '#64748b', fontSize: '14px', padding: '20px 0' }}>

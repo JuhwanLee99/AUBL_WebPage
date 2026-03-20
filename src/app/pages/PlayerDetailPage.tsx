@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
+  getPlayerProfile,
   getPlayerGameLogs,
-  getPlayerSearchIndex,
+  getSeasonTeams,
+  searchPlayers,
   getPlayerStats,
   getSeasons,
   type BatterGameLog,
@@ -10,6 +12,7 @@ import {
   type PitcherGameLog,
   type PitcherStat,
   type PlayerLookup,
+  type SeasonTeam,
   type PlayerStatsSummary,
   type SeasonSummary,
 } from '../../shared/api/backendClient';
@@ -48,6 +51,7 @@ export default function PlayerDetailPage() {
   const [searchSeasonId, setSearchSeasonId] = useState<number | null>(null);
   const [viewSeasonId, setViewSeasonId] = useState<number | null>(null);
   const [searchCandidates, setSearchCandidates] = useState<PlayerLookup[]>([]);
+  const [seasonTeams, setSeasonTeams] = useState<SeasonTeam[]>([]);
   const [searchIndexLoading, setSearchIndexLoading] = useState<boolean>(false);
   const [searchIndexError, setSearchIndexError] = useState<string | null>(null);
   const [selectedTeamName, setSelectedTeamName] = useState<string>('ALL');
@@ -93,21 +97,17 @@ export default function PlayerDetailPage() {
   useEffect(() => {
     if (searchSeasonId == null) return;
     let isMounted = true;
-    setSearchIndexLoading(true);
+    setSearchCandidates([]);
+    setSelectedTeamName('ALL');
     setSearchIndexError(null);
-    getPlayerSearchIndex(searchSeasonId)
+    getSeasonTeams(searchSeasonId)
       .then((items) => {
         if (!isMounted) return;
-        setSearchCandidates(items);
+        setSeasonTeams(items);
       })
-      .catch((err: unknown) => {
+      .catch(() => {
         if (!isMounted) return;
-        setSearchCandidates([]);
-        setSearchIndexError(err instanceof Error ? err.message : '선수 검색 인덱스를 불러오지 못했습니다.');
-      })
-      .finally(() => {
-        if (!isMounted) return;
-        setSearchIndexLoading(false);
+        setSeasonTeams([]);
       });
     return () => {
       isMounted = false;
@@ -115,28 +115,100 @@ export default function PlayerDetailPage() {
   }, [searchSeasonId]);
 
   useEffect(() => {
+    if (searchSeasonId == null) return;
+    const term = searchInput.trim();
+    if (!term) {
+      setSearchCandidates([]);
+      setSearchIndexLoading(false);
+      setSearchIndexError(null);
+      return;
+    }
+
+    const selectedTeam =
+      selectedTeamName === 'ALL'
+        ? null
+        : seasonTeams.find((team) => normalizeTeamKey(team.teamName) === normalizeTeamKey(selectedTeamName)) ?? null;
+
+    let isMounted = true;
+    setSearchIndexLoading(true);
+    setSearchIndexError(null);
+    const timer = window.setTimeout(() => {
+      searchPlayers({
+        seasonId: searchSeasonId,
+        q: term,
+        teamId: selectedTeam?.teamId,
+        limit: 50,
+      })
+        .then((items) => {
+          if (!isMounted) return;
+          setSearchCandidates(
+            items.map((item) => ({
+              playerId: item.playerId,
+              playerName: item.playerName,
+              teamName: item.teamName,
+              jerseyNumber: item.jerseyNumber,
+              seasonId: item.seasonId,
+              seasonYear: null,
+            })),
+          );
+        })
+        .catch((err: unknown) => {
+          if (!isMounted) return;
+          setSearchCandidates([]);
+          setSearchIndexError(err instanceof Error ? err.message : '선수 검색 결과를 불러오지 못했습니다.');
+        })
+        .finally(() => {
+          if (!isMounted) return;
+          setSearchIndexLoading(false);
+        });
+    }, 300);
+
+    return () => {
+      isMounted = false;
+      window.clearTimeout(timer);
+    };
+  }, [searchInput, searchSeasonId, selectedTeamName, seasonTeams]);
+
+  useEffect(() => {
     if (currentPlayerId == null) return;
     let isMounted = true;
     setLoading(true);
     setError(null);
     getPlayerStats(currentPlayerId, viewSeasonId ?? undefined)
-      .then((data) => {
+      .then(async (data) => {
         if (!isMounted) return;
-        setStats(data);
+        let mergedData = data;
+        if (!data.teamName || !data.jerseyNumber) {
+          try {
+            const profile = await getPlayerProfile(currentPlayerId, viewSeasonId ?? undefined);
+            if (profile) {
+              mergedData = {
+                ...data,
+                teamName: data.teamName || profile.teamName,
+                jerseyNumber: data.jerseyNumber || profile.jerseyNumber,
+                playerName: data.playerName || profile.playerName,
+              };
+            }
+          } catch {
+            // ignore profile fallback failure
+          }
+        }
+        if (!isMounted) return;
+        setStats(mergedData);
         setSelectedPlayerInput(String(currentPlayerId));
-        setSearchInput((prev) => prev || data.playerName || '');
+        setSearchInput((prev) => prev || mergedData.playerName || '');
         setVisitedPlayers((prev) => {
           const current = {
             playerId: currentPlayerId,
-            playerName: data.playerName,
-            teamName: data.teamName,
-            jerseyNumber: data.jerseyNumber,
+            playerName: mergedData.playerName,
+            teamName: mergedData.teamName,
+            jerseyNumber: mergedData.jerseyNumber,
           };
           const merged = [current, ...prev.filter((item) => item.playerId !== current.playerId)];
           return merged.slice(0, 20);
         });
-        const batterSeasonIds = [...new Set(data.batterStats.map((item) => item.seasonId))].sort((a, b) => b - a);
-        const pitcherSeasonIds = [...new Set(data.pitcherStats.map((item) => item.seasonId))].sort((a, b) => b - a);
+        const batterSeasonIds = [...new Set(mergedData.batterStats.map((item) => item.seasonId))].sort((a, b) => b - a);
+        const pitcherSeasonIds = [...new Set(mergedData.pitcherStats.map((item) => item.seasonId))].sort((a, b) => b - a);
         setSelectedBatterSeasonId((prev) =>
           prev != null && batterSeasonIds.includes(prev) ? prev : (batterSeasonIds[0] ?? null),
         );
@@ -192,9 +264,9 @@ export default function PlayerDetailPage() {
   const seasonYearById = useMemo(() => new Map(seasons.map((season) => [season.id, season.year])), [seasons]);
 
   const teamOptions = useMemo(() => {
-    const source = searchCandidates.map((item) => item.teamName).filter(Boolean);
+    const source = seasonTeams.map((item) => item.teamName).filter(Boolean);
     return [...new Set(source)].sort((a, b) => a.localeCompare(b, 'ko'));
-  }, [searchCandidates]);
+  }, [seasonTeams]);
 
   useEffect(() => {
     if (selectedTeamName === 'ALL') return;
@@ -515,7 +587,7 @@ export default function PlayerDetailPage() {
           </button>
         </div>
 
-        {searchIndexLoading && <span style={{ color: '#94a3b8', fontSize: '12px' }}>선수 검색 인덱스를 불러오는 중...</span>}
+        {searchIndexLoading && <span style={{ color: '#94a3b8', fontSize: '12px' }}>선수 검색 결과를 불러오는 중...</span>}
         {!searchIndexLoading && searchIndexError && <span style={{ color: '#fca5a5', fontSize: '12px' }}>{searchIndexError}</span>}
 
         {nameFilteredCandidates.length > 0 && (
