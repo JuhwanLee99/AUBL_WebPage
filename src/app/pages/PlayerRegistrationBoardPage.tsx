@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { firestore } from '../../shared/firebase/client';
 import { useCommunityAccess } from '../../shared/auth/useCommunityAccess';
+import { useBlockedUserIds } from '../../shared/moderation/useBlockedUsers';
 import type { PlayerRegistrationCategory, PlayerRegistrationPost } from '../../shared/types';
 
 type CategoryFilter = PlayerRegistrationCategory | 'ALL';
@@ -19,6 +20,7 @@ export default function PlayerRegistrationBoardPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingPosts, setLoadingPosts] = useState(true);
   const navigate = useNavigate();
+  const { blockedUserIds } = useBlockedUserIds();
   const {
     loading: roleLoading,
     isAuthenticated,
@@ -48,14 +50,14 @@ export default function PlayerRegistrationBoardPage() {
   }, [isPlayerOrAbove]);
 
   const filteredPosts = useMemo(() => {
-    let result = posts;
+    let result = posts.filter((post) => !blockedUserIds.has(post.uid));
     if (categoryFilter !== 'ALL') result = result.filter((p) => p.category === categoryFilter);
     const q = searchQuery.trim().toLowerCase();
     if (q) {
       result = result.filter((p) => `${p.title} ${p.author}`.toLowerCase().includes(q));
     }
     return result;
-  }, [posts, categoryFilter, searchQuery]);
+  }, [posts, categoryFilter, searchQuery, blockedUserIds]);
 
   const canWriteAny = canWritePlayerRegistration || canWriteUniformRegistration;
 

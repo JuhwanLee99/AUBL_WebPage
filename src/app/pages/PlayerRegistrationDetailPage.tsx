@@ -6,7 +6,19 @@ import RichTextEditor from '../../shared/components/editor/RichTextEditor';
 import RichTextViewer from '../../shared/components/editor/RichTextViewer';
 import { isDeltaEmpty } from '../../shared/components/editor/quillUtils';
 import { useCommunityAccess } from '../../shared/auth/useCommunityAccess';
-import type { PlayerRegistrationCategory, PlayerRegistrationPost } from '../../shared/types';
+import { useBlockedUserIds } from '../../shared/moderation/useBlockedUsers';
+import {
+  blockUserAndReport,
+  buildContentPreview,
+  currentUserLabel,
+  promptModerationReason,
+  reportContent,
+} from '../../shared/moderation/moderationService';
+import type {
+  ModerationReportPayload,
+  PlayerRegistrationCategory,
+  PlayerRegistrationPost,
+} from '../../shared/types';
 
 export default function PlayerRegistrationDetailPage() {
   const { postId } = useParams<{ postId: string }>();
@@ -26,6 +38,7 @@ export default function PlayerRegistrationDetailPage() {
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
   const [editCategory, setEditCategory] = useState<PlayerRegistrationCategory>('유니폼 등록');
+  const { blockedUserIds } = useBlockedUserIds();
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => setCurrentUser(user));
@@ -107,11 +120,73 @@ export default function PlayerRegistrationDetailPage() {
     }
   };
 
+  const handleModerationAction = async (action: 'report' | 'block') => {
+    if (!post || !currentUser) {
+      window.alert('로그인 후 신고/차단할 수 있습니다.');
+      return;
+    }
+    if (post.uid === currentUser.uid) {
+      window.alert('본인 계정은 신고하거나 차단할 수 없습니다.');
+      return;
+    }
+    if (action === 'block' && !post.uid) {
+      window.alert('작성자 정보가 없어 차단할 수 없습니다.');
+      return;
+    }
+
+    const reason = await promptModerationReason(action === 'block' ? '차단' : '신고');
+    if (!reason) return;
+
+    const payload: ModerationReportPayload = {
+      action,
+      reasonType: reason.reasonCode,
+      reasonDetail: reason.detail,
+      targetUid: post.uid,
+      targetLabel: post.author || post.uid || '알 수 없는 사용자',
+      contentDomain: 'playerRegistrationPost',
+      contentId: post.id,
+      contentPreview: buildContentPreview(`${post.title}\n${post.content}`),
+    };
+
+    try {
+      if (action === 'block') {
+        await blockUserAndReport(currentUser.uid, currentUserLabel(currentUser), payload);
+        window.alert('사용자를 차단하고 운영팀에 신고했습니다.');
+      } else {
+        await reportContent(currentUser.uid, currentUserLabel(currentUser), payload);
+        window.alert('신고가 접수되었습니다. 운영팀이 확인 후 조치합니다.');
+      }
+    } catch (error) {
+      window.alert(`신고 처리 중 오류가 발생했습니다: ${String(error)}`);
+    }
+  };
+
   if (roleLoading || loading) return <div style={{ color: '#94a3b8', padding: '40px', textAlign: 'center' }}>로딩 중...</div>;
   if (!post) return <div style={{ color: '#f87171', padding: '40px', textAlign: 'center' }}>게시글이 없습니다.</div>;
 
   if (!isPlayerOrAbove) {
     return <div style={{ color: '#f87171', padding: '40px', textAlign: 'center' }}>선수/기록원 등급 이상만 접근할 수 있습니다.</div>;
+  }
+
+  const isBlockedPost = blockedUserIds.has(post.uid);
+  if (isBlockedPost) {
+    return (
+      <div style={{ color: '#f8fafc', maxWidth: '900px', margin: '0 auto', paddingBottom: '40px' }}>
+        <div
+          style={{
+            borderRadius: '14px',
+            border: '1px solid rgba(248,113,113,0.35)',
+            background: 'rgba(127,29,29,0.35)',
+            color: '#fecaca',
+            padding: '18px 20px',
+            lineHeight: 1.7,
+            fontWeight: 700,
+          }}
+        >
+          차단한 사용자의 게시글입니다. 계정 화면에서 차단을 해제하면 다시 볼 수 있습니다.
+        </div>
+      </div>
+    );
   }
 
   const inputStyle: React.CSSProperties = {
@@ -133,22 +208,42 @@ export default function PlayerRegistrationDetailPage() {
         >
           &larr; 목록으로
         </button>
-        {canEdit && !isEditing && (
+        {!isEditing ? (
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              onClick={() => setIsEditing(true)}
-              style={{ padding: '6px 12px', borderRadius: '6px', background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer' }}
-            >
-              수정
-            </button>
-            <button
-              onClick={handleDelete}
-              style={{ padding: '6px 12px', borderRadius: '6px', background: '#ef4444', color: '#fff', border: 'none', cursor: 'pointer' }}
-            >
-              삭제
-            </button>
+            {currentUser && currentUser.uid !== post.uid && (
+              <>
+                <button
+                  onClick={() => void handleModerationAction('report')}
+                  style={{ padding: '6px 12px', borderRadius: '6px', background: 'rgba(59,130,246,0.2)', color: '#bfdbfe', border: '1px solid rgba(59,130,246,0.5)', cursor: 'pointer' }}
+                >
+                  게시글 신고
+                </button>
+                <button
+                  onClick={() => void handleModerationAction('block')}
+                  style={{ padding: '6px 12px', borderRadius: '6px', background: 'rgba(239,68,68,0.18)', color: '#fecaca', border: '1px solid rgba(239,68,68,0.45)', cursor: 'pointer' }}
+                >
+                  작성자 차단
+                </button>
+              </>
+            )}
+            {canEdit && (
+              <>
+                <button
+                  onClick={() => setIsEditing(true)}
+                  style={{ padding: '6px 12px', borderRadius: '6px', background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer' }}
+                >
+                  수정
+                </button>
+                <button
+                  onClick={handleDelete}
+                  style={{ padding: '6px 12px', borderRadius: '6px', background: '#ef4444', color: '#fff', border: 'none', cursor: 'pointer' }}
+                >
+                  삭제
+                </button>
+              </>
+            )}
           </div>
-        )}
+        ) : null}
       </div>
 
       <article

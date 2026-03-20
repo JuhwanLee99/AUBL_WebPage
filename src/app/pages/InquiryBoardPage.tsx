@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { firestore, auth } from '../../shared/firebase/client';
 import { useAdmin } from '../../shared/auth/useAdmin';
+import { useBlockedUserIds } from '../../shared/moderation/useBlockedUsers';
 import type { InquiryPost, InquiryPlatform, InquiryCategory, InquiryStatus } from '../../shared/types';
 
 type PlatformFilter = InquiryPlatform | 'ALL';
@@ -39,6 +40,7 @@ export default function InquiryBoardPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentUser, setCurrentUser] = useState(auth.currentUser);
   const { isAdmin } = useAdmin();
+  const { blockedUserIds } = useBlockedUserIds();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -60,7 +62,7 @@ export default function InquiryBoardPage() {
   }, []);
 
   const filteredPosts = useMemo(() => {
-    let result = posts;
+    let result = posts.filter((post) => !blockedUserIds.has(post.uid));
     if (platformFilter !== 'ALL') result = result.filter((p) => p.platform === platformFilter);
     if (categoryFilter !== 'ALL') result = result.filter((p) => p.category === categoryFilter);
     if (statusFilter !== 'ALL') result = result.filter((p) => (p.status ?? '미처리') === statusFilter);
@@ -72,7 +74,7 @@ export default function InquiryBoardPage() {
       );
     }
     return result;
-  }, [posts, platformFilter, categoryFilter, statusFilter, searchQuery]);
+  }, [posts, platformFilter, categoryFilter, statusFilter, searchQuery, blockedUserIds]);
 
   const isAccessible = (post: InquiryPost) =>
     !post.isPrivate || currentUser?.uid === post.uid || isAdmin;

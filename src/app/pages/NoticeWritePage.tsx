@@ -27,6 +27,8 @@ export default function NoticeWritePage() {
         title,
         category,
         content,
+        uid: auth.currentUser?.uid ?? '',
+        authorUid: auth.currentUser?.uid ?? '',
         author: auth.currentUser?.email?.split('@')[0] ?? 'Admin', // 이메일 ID 사용
         createdAt: Date.now(),
         allowComments, // [추가] 저장 시 포함

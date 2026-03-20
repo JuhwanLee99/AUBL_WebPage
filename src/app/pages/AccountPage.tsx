@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../shared/auth/AuthProvider';
 import { useAdmin } from '../../shared/auth/useAdmin';
+import { useBlockedUsers } from '../../shared/moderation/useBlockedUsers';
+import { unblockUser } from '../../shared/moderation/moderationService';
 
 export default function AccountPage() {
   const { user, logout, deleteAccount } = useAuth();
@@ -9,6 +11,8 @@ export default function AccountPage() {
   const [deleting, setDeleting] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [unblockingUid, setUnblockingUid] = useState<string | null>(null);
+  const { blockedUsers, loading: blockedLoading, uid } = useBlockedUsers();
 
   if (!user) {
     return (
@@ -54,6 +58,18 @@ export default function AccountPage() {
       setDeleteError(message);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleUnblock = async (blockedUid: string) => {
+    if (!uid) return;
+    setUnblockingUid(blockedUid);
+    try {
+      await unblockUser(uid, blockedUid);
+    } catch (error) {
+      window.alert(`차단 해제 실패: ${String(error)}`);
+    } finally {
+      setUnblockingUid(null);
     }
   };
 
@@ -177,6 +193,74 @@ export default function AccountPage() {
           <Link to="/terms" style={{ color: '#93c5fd' }}>이용약관</Link>
           을 따릅니다.
         </p>
+      </div>
+
+      <div
+        style={{
+          borderRadius: '18px',
+          border: '1px solid rgba(248,113,113,0.25)',
+          background: 'linear-gradient(140deg, rgba(127,29,29,0.22), rgba(30,41,59,0.28))',
+          padding: '18px',
+          boxShadow: '0 14px 34px rgba(0,0,0,0.28)',
+          display: 'grid',
+          gap: '10px',
+        }}
+      >
+        <div style={{ display: 'grid', gap: '4px' }}>
+          <h3 style={{ margin: 0, color: '#fecaca', fontSize: '18px', fontWeight: 900 }}>차단한 사용자</h3>
+          <p style={{ margin: 0, color: '#cbd5e1', fontSize: '12px', lineHeight: 1.6 }}>
+            차단 시 해당 사용자의 게시글/댓글이 커뮤니티에서 즉시 숨겨집니다.
+          </p>
+        </div>
+
+        {blockedLoading ? (
+          <div style={{ color: '#94a3b8', fontWeight: 700 }}>차단 목록을 불러오는 중...</div>
+        ) : blockedUsers.length === 0 ? (
+          <div style={{ color: '#94a3b8', fontWeight: 700 }}>현재 차단한 사용자가 없습니다.</div>
+        ) : (
+          <div style={{ display: 'grid', gap: '8px' }}>
+            {blockedUsers.map((blocked) => (
+              <div
+                key={blocked.uid}
+                style={{
+                  borderRadius: '12px',
+                  border: '1px solid rgba(248,113,113,0.28)',
+                  background: 'rgba(2,6,23,0.45)',
+                  padding: '10px 12px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '10px',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div style={{ display: 'grid', gap: '4px' }}>
+                  <div style={{ color: '#fee2e2', fontWeight: 800, fontSize: '14px' }}>{blocked.label}</div>
+                  <div style={{ color: '#94a3b8', fontSize: '12px' }}>
+                    차단일: {blocked.blockedAt > 0 ? new Date(blocked.blockedAt).toLocaleString('ko-KR') : '-'}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleUnblock(blocked.uid)}
+                  disabled={unblockingUid === blocked.uid}
+                  style={{
+                    padding: '7px 11px',
+                    borderRadius: '9px',
+                    border: '1px solid rgba(148,163,184,0.4)',
+                    background: 'rgba(148,163,184,0.16)',
+                    color: '#e2e8f0',
+                    fontWeight: 800,
+                    fontSize: '12px',
+                    cursor: unblockingUid === blocked.uid ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {unblockingUid === blocked.uid ? '처리 중...' : '차단 해제'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

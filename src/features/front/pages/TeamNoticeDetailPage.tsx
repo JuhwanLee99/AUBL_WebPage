@@ -6,6 +6,14 @@ import { useAuth } from '@shared/auth/AuthProvider';
 import { useAdmin } from '@shared/auth/useAdmin';
 import { useTeamRole } from '@shared/auth/useTeamRole';
 import { decodeTeamId } from '@shared/lib/teamDirectory';
+import { useBlockedUserIds } from '@shared/moderation/useBlockedUsers';
+import {
+  blockUserAndReport,
+  buildContentPreview,
+  currentUserLabel,
+  promptModerationReason,
+  reportContent,
+} from '@shared/moderation/moderationService';
 import type { TeamNotice, TeamNoticeComment } from '@shared/types';
 import RichTextEditor from '@shared/components/editor/RichTextEditor';
 import RichTextViewer from '@shared/components/editor/RichTextViewer';
@@ -25,6 +33,7 @@ export default function TeamNoticeDetailPage() {
   const { user } = useAuth();
   const { isAdmin } = useAdmin();
   const { isCoach, coachTeamId } = useTeamRole();
+  const { blockedUserIds } = useBlockedUserIds();
   const teamDocId = teamId ?? '';
   const teamName = teamDocId ? decodeTeamId(teamDocId) : '팀';
   const canManage = Boolean(teamDocId && (isAdmin || (isCoach && coachTeamId === teamDocId)));
@@ -221,15 +230,63 @@ export default function TeamNoticeDetailPage() {
     }
   };
 
+  const handleModerationAction = async (
+    action: 'report' | 'block',
+    comment: TeamNoticeComment,
+  ) => {
+    if (!user || !noticeId || !teamDocId) {
+      window.alert('로그인 후 신고/차단할 수 있습니다.');
+      return;
+    }
+    if (!comment.uid) {
+      window.alert('작성자 정보가 없어 신고/차단할 수 없습니다.');
+      return;
+    }
+    if (comment.uid === user.uid) {
+      window.alert('본인 계정은 신고하거나 차단할 수 없습니다.');
+      return;
+    }
+
+    const reason = await promptModerationReason(action === 'block' ? '차단' : '신고');
+    if (!reason) return;
+
+    const payload = {
+      action,
+      reasonType: reason.reasonCode,
+      reasonDetail: reason.detail,
+      targetUid: comment.uid,
+      targetLabel: comment.author || comment.uid,
+      contentDomain: 'teamNoticeComment',
+      contentId: comment.id,
+      parentContentId: noticeId,
+      contextId: `${teamDocId}:${noticeId}`,
+      contentPreview: buildContentPreview(comment.content),
+    };
+
+    try {
+      if (action === 'block') {
+        await blockUserAndReport(user.uid, currentUserLabel(user), payload);
+        setCommentStatus('사용자를 차단하고 운영팀에 신고했습니다.');
+      } else {
+        await reportContent(user.uid, currentUserLabel(user), payload);
+        setCommentStatus('신고가 접수되었습니다. 운영팀이 확인 후 조치합니다.');
+      }
+      setCommentError(null);
+    } catch {
+      setCommentError('신고 처리 중 문제가 발생했습니다.');
+    }
+  };
+
   const canDeleteComment = useMemo(
     () => (comment: TeamNoticeComment) => Boolean(user && (comment.uid === user.uid || canManage)),
     [user, canManage],
   );
 
   const groupedComments = useMemo(() => {
+    const visibleComments = comments.filter((comment) => !blockedUserIds.has(comment.uid));
     const roots: TeamNoticeComment[] = [];
     const repliesMap = new Map<string, TeamNoticeComment[]>();
-    comments.forEach((comment) => {
+    visibleComments.forEach((comment) => {
       if (!comment.parentId) {
         roots.push(comment);
         return;
@@ -240,7 +297,11 @@ export default function TeamNoticeDetailPage() {
     roots.sort((a, b) => a.createdAt - b.createdAt);
     repliesMap.forEach((list) => list.sort((a, b) => a.createdAt - b.createdAt));
     return { roots, repliesMap };
-  }, [comments]);
+  }, [comments, blockedUserIds]);
+  const visibleCommentCount = useMemo(
+    () => comments.filter((comment) => !blockedUserIds.has(comment.uid)).length,
+    [comments, blockedUserIds],
+  );
 
   return (
     <div style={{ display: 'grid', gap: '18px' }}>
@@ -301,7 +362,7 @@ export default function TeamNoticeDetailPage() {
       <section style={cardBase}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
           <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900 }}>댓글</h2>
-          <span style={{ color: '#94a3b8', fontSize: '12px' }}>{comments.length}개</span>
+          <span style={{ color: '#94a3b8', fontSize: '12px' }}>{visibleCommentCount}개</span>
         </div>
 
         {liveAlert && (
@@ -418,6 +479,42 @@ export default function TeamNoticeDetailPage() {
                       >
                         답글
                       </button>
+                    )}
+                    {user && user.uid !== comment.uid && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => void handleModerationAction('report', comment)}
+                          disabled={commentBusy}
+                          style={{
+                            padding: '6px 10px',
+                            borderRadius: '10px',
+                            border: '1px solid rgba(96,165,250,0.45)',
+                            background: 'rgba(59,130,246,0.14)',
+                            color: '#bfdbfe',
+                            fontWeight: 800,
+                            cursor: commentBusy ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          신고
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleModerationAction('block', comment)}
+                          disabled={commentBusy}
+                          style={{
+                            padding: '6px 10px',
+                            borderRadius: '10px',
+                            border: '1px solid rgba(248,113,113,0.5)',
+                            background: 'rgba(248,113,113,0.12)',
+                            color: '#fecaca',
+                            fontWeight: 800,
+                            cursor: commentBusy ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          차단
+                        </button>
+                      </>
                     )}
                     {canDeleteComment(comment) && (
                       <button
@@ -543,6 +640,42 @@ export default function TeamNoticeDetailPage() {
                               >
                                 좋아요 {replyLikeCount}
                               </button>
+                              {user && user.uid !== reply.uid && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleModerationAction('report', reply)}
+                                    disabled={commentBusy}
+                                    style={{
+                                      padding: '6px 10px',
+                                      borderRadius: '10px',
+                                      border: '1px solid rgba(96,165,250,0.45)',
+                                      background: 'rgba(59,130,246,0.14)',
+                                      color: '#bfdbfe',
+                                      fontWeight: 800,
+                                      cursor: commentBusy ? 'not-allowed' : 'pointer',
+                                    }}
+                                  >
+                                    신고
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleModerationAction('block', reply)}
+                                    disabled={commentBusy}
+                                    style={{
+                                      padding: '6px 10px',
+                                      borderRadius: '10px',
+                                      border: '1px solid rgba(248,113,113,0.5)',
+                                      background: 'rgba(248,113,113,0.12)',
+                                      color: '#fecaca',
+                                      fontWeight: 800,
+                                      cursor: commentBusy ? 'not-allowed' : 'pointer',
+                                    }}
+                                  >
+                                    차단
+                                  </button>
+                                </>
+                              )}
                               {canDeleteComment(reply) && (
                                 <button
                                   type="button"

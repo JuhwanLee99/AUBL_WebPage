@@ -17,6 +17,15 @@ import type { Notice } from '../../shared/types';
 import RichTextEditor from '../../shared/components/editor/RichTextEditor';
 import RichTextViewer from '../../shared/components/editor/RichTextViewer';
 import { isDeltaEmpty } from '../../shared/components/editor/quillUtils';
+import { useBlockedUserIds } from '../../shared/moderation/useBlockedUsers';
+import {
+  blockUserAndReport,
+  buildContentPreview,
+  currentUserLabel,
+  promptModerationReason,
+  reportContent,
+} from '../../shared/moderation/moderationService';
+import type { ModerationReportPayload } from '../../shared/types';
 
 interface Comment {
   id: string;
@@ -44,6 +53,7 @@ export default function NoticeDetailPage() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentText, setCommentText] = useState('');
   const [currentUser, setCurrentUser] = useState(auth.currentUser);
+  const { blockedUserIds } = useBlockedUserIds();
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => setCurrentUser(user));
@@ -149,11 +159,74 @@ export default function NoticeDetailPage() {
     }
   };
 
+  const handleModerationAction = async ({
+    action,
+    targetUid,
+    targetLabel,
+    contentDomain,
+    contentId,
+    contentPreview,
+    parentContentId,
+  }: {
+    action: 'report' | 'block';
+    targetUid: string;
+    targetLabel: string;
+    contentDomain: string;
+    contentId: string;
+    contentPreview: string;
+    parentContentId?: string;
+  }) => {
+    if (!currentUser) {
+      window.alert('로그인 후 신고/차단할 수 있습니다.');
+      return;
+    }
+
+    if (action === 'block' && !targetUid) {
+      window.alert('작성자 정보가 없어 차단할 수 없습니다.');
+      return;
+    }
+    if (targetUid && targetUid === currentUser.uid) {
+      window.alert('본인 계정은 신고하거나 차단할 수 없습니다.');
+      return;
+    }
+
+    const reason = await promptModerationReason(action === 'block' ? '차단' : '신고');
+    if (!reason) return;
+
+    const payload: ModerationReportPayload = {
+      action,
+      reasonType: reason.reasonCode,
+      reasonDetail: reason.detail,
+      targetUid,
+      targetLabel,
+      contentDomain,
+      contentId,
+      parentContentId,
+      contextId: noticeId,
+      contentPreview,
+    };
+
+    try {
+      if (action === 'block') {
+        await blockUserAndReport(currentUser.uid, currentUserLabel(currentUser), payload);
+        window.alert('사용자를 차단하고 운영팀에 신고했습니다.');
+      } else {
+        await reportContent(currentUser.uid, currentUserLabel(currentUser), payload);
+        window.alert('신고가 접수되었습니다. 운영팀이 확인 후 조치합니다.');
+      }
+    } catch (error) {
+      window.alert(`신고 처리 중 오류가 발생했습니다: ${String(error)}`);
+    }
+  };
+
   if (loading) return <div style={{ color: '#94a3b8', padding: '40px', textAlign: 'center' }}>로딩 중...</div>;
   if (!notice) return <div style={{ color: '#f87171', padding: '40px', textAlign: 'center' }}>공지사항이 없습니다.</div>;
 
   // [중요] 댓글 허용 여부 확인 (undefined면 true로 간주)
   const isCommentsAllowed = notice.allowComments ?? true;
+  const noticeOwnerUid = notice.uid ?? notice.authorUid ?? '';
+  const isBlockedPost = Boolean(noticeOwnerUid && blockedUserIds.has(noticeOwnerUid));
+  const visibleComments = comments.filter((comment) => !blockedUserIds.has(comment.uid));
 
   return (
     <div style={{ maxWidth: '1100px', margin: '0 auto', color: '#f8fafc', paddingBottom: '40px' }}>
@@ -216,19 +289,61 @@ export default function NoticeDetailPage() {
                 {new Date(notice.createdAt).toLocaleString()} · {notice.author}
               </span>
             </div>
+            {currentUser && (!noticeOwnerUid || noticeOwnerUid !== currentUser.uid) && (
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                <button
+                  onClick={() =>
+                    void handleModerationAction({
+                      action: 'report',
+                      targetUid: noticeOwnerUid,
+                      targetLabel: notice.author || noticeOwnerUid || '작성자 미확인',
+                      contentDomain: 'noticePost',
+                      contentId: notice.id,
+                      contentPreview: buildContentPreview(`${notice.title}\n${notice.content}`),
+                    })
+                  }
+                  style={{ padding: '6px 12px', borderRadius: '6px', background: 'rgba(59,130,246,0.2)', color: '#bfdbfe', border: '1px solid rgba(59,130,246,0.5)', cursor: 'pointer' }}
+                >
+                  게시글 신고
+                </button>
+                {noticeOwnerUid ? (
+                  <button
+                    onClick={() =>
+                      void handleModerationAction({
+                        action: 'block',
+                        targetUid: noticeOwnerUid,
+                        targetLabel: notice.author || noticeOwnerUid,
+                        contentDomain: 'noticePost',
+                        contentId: notice.id,
+                        contentPreview: buildContentPreview(`${notice.title}\n${notice.content}`),
+                      })
+                    }
+                    style={{ padding: '6px 12px', borderRadius: '6px', background: 'rgba(239,68,68,0.18)', color: '#fecaca', border: '1px solid rgba(239,68,68,0.45)', cursor: 'pointer' }}
+                  >
+                    작성자 차단
+                  </button>
+                ) : null}
+              </div>
+            )}
             <h1 style={{ fontSize: '28px', fontWeight: 900, margin: '0 0 24px 0', lineHeight: 1.3 }}>{notice.title}</h1>
             <div style={{ borderTop: '1px solid rgba(148,163,184,0.1)', paddingTop: '24px' }}>
-              <RichTextViewer content={notice.content} style={{ fontSize: '16px', lineHeight: 1.8 }} />
+              {isBlockedPost ? (
+                <div style={{ color: '#fecaca', lineHeight: 1.8 }}>
+                  차단한 사용자의 게시글입니다. 계정 화면에서 차단을 해제하면 다시 볼 수 있습니다.
+                </div>
+              ) : (
+                <RichTextViewer content={notice.content} style={{ fontSize: '16px', lineHeight: 1.8 }} />
+              )}
             </div>
           </>
         )}
       </article>
 
       {/* [수정] 댓글 섹션: allowComments가 false이면 숨김 */}
-      {isCommentsAllowed ? (
+      {isCommentsAllowed && !isBlockedPost ? (
         <section style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '16px', padding: '24px', border: '1px solid rgba(148, 163, 184, 0.1)' }}>
           <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            댓글 <span style={{ color: '#94a3b8', fontSize: '14px', fontWeight: 400 }}>{comments.length}</span>
+            댓글 <span style={{ color: '#94a3b8', fontSize: '14px', fontWeight: 400 }}>{visibleComments.length}</span>
           </h3>
 
           <div style={{ display: 'flex', gap: '8px', marginBottom: '32px', alignItems: 'flex-end' }}>
@@ -259,7 +374,7 @@ export default function NoticeDetailPage() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {comments.map((comment) => (
+            {visibleComments.map((comment) => (
               <div key={comment.id} style={{ padding: '16px', background: '#1e293b', borderRadius: '12px', border: '1px solid rgba(148, 163, 184, 0.1)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -268,26 +383,64 @@ export default function NoticeDetailPage() {
                       {new Date(comment.createdAt).toLocaleString()}
                     </span>
                   </div>
-                  {(currentUser?.uid === comment.uid || isAdmin) && (
-                    <button 
-                      onClick={() => handleDeleteComment(comment.id)}
-                      style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}
-                    >
-                      삭제
-                    </button>
-                  )}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    {currentUser && currentUser.uid !== comment.uid && (
+                      <>
+                        <button
+                          onClick={() =>
+                            void handleModerationAction({
+                              action: 'report',
+                              targetUid: comment.uid,
+                              targetLabel: comment.author || comment.uid,
+                              contentDomain: 'noticeComment',
+                              contentId: comment.id,
+                              parentContentId: notice.id,
+                              contentPreview: buildContentPreview(comment.content),
+                            })
+                          }
+                          style={{ background: 'transparent', border: 'none', color: '#93c5fd', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}
+                        >
+                          신고
+                        </button>
+                        <button
+                          onClick={() =>
+                            void handleModerationAction({
+                              action: 'block',
+                              targetUid: comment.uid,
+                              targetLabel: comment.author || comment.uid,
+                              contentDomain: 'noticeComment',
+                              contentId: comment.id,
+                              parentContentId: notice.id,
+                              contentPreview: buildContentPreview(comment.content),
+                            })
+                          }
+                          style={{ background: 'transparent', border: 'none', color: '#fca5a5', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}
+                        >
+                          차단
+                        </button>
+                      </>
+                    )}
+                    {(currentUser?.uid === comment.uid || isAdmin) && (
+                      <button 
+                        onClick={() => handleDeleteComment(comment.id)}
+                        style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}
+                      >
+                        삭제
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <RichTextViewer content={comment.content} style={{ fontSize: '15px', lineHeight: 1.5, color: '#cbd5e1' }} />
               </div>
             ))}
-            {comments.length === 0 && (
+            {visibleComments.length === 0 && (
               <div style={{ textAlign: 'center', color: '#64748b', padding: '20px 0' }}>아직 댓글이 없습니다.</div>
             )}
           </div>
         </section>
       ) : (
         <div style={{ textAlign: 'center', color: '#64748b', padding: '20px', background: 'rgba(15, 23, 42, 0.4)', borderRadius: '16px' }}>
-          댓글 작성이 허용되지 않은 게시글입니다.
+          {isBlockedPost ? '차단한 사용자의 게시글이라 댓글이 숨겨졌습니다.' : '댓글 작성이 허용되지 않은 게시글입니다.'}
         </div>
       )}
     </div>

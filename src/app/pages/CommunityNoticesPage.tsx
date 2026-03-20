@@ -4,6 +4,7 @@ import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { firestore } from '../../shared/firebase/client';
 import { useAdmin } from '../../shared/auth/useAdmin';
 import { deltaToPreviewText } from '../../shared/components/editor/quillUtils';
+import { useBlockedUserIds } from '../../shared/moderation/useBlockedUsers';
 import type { Notice, NoticeCategory } from '../../shared/types';
 
 // 필터 타입 정의
@@ -24,6 +25,7 @@ export default function CommunityNoticesPage() {
   const [activeFilter, setActiveFilter] = useState<FilterValue>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const { isAdmin } = useAdmin();
+  const { blockedUserIds } = useBlockedUserIds();
   const navigate = useNavigate();
 
   // 1. 컴포넌트 로드 시 '전체' 공지사항을 한 번만 불러옵니다.
@@ -42,10 +44,16 @@ export default function CommunityNoticesPage() {
 
   // 2. 현재 선택된 필터에 따라 보여줄 목록을 계산합니다. (Client-side Filtering)
   const filteredNotices = useMemo(() => {
+    const visibleNotices = notices.filter((notice) => {
+      const ownerUid = notice.uid ?? notice.authorUid ?? '';
+      if (!ownerUid) return true;
+      return !blockedUserIds.has(ownerUid);
+    });
+
     const categoryFiltered =
       activeFilter === 'ALL'
-        ? notices
-        : notices.filter((notice) => notice.category === activeFilter);
+        ? visibleNotices
+        : visibleNotices.filter((notice) => notice.category === activeFilter);
 
     const q = searchQuery.trim().toLowerCase();
     if (!q) return categoryFiltered;
@@ -53,7 +61,7 @@ export default function CommunityNoticesPage() {
     return categoryFiltered.filter((notice) =>
       `${notice.title} ${deltaToPreviewText(notice.content)} ${notice.author}`.toLowerCase().includes(q),
     );
-  }, [notices, activeFilter, searchQuery]);
+  }, [notices, activeFilter, searchQuery, blockedUserIds]);
 
   return (
     <div style={{ color: '#f8fafc', maxWidth: '1100px', margin: '0 auto', paddingBottom: '40px' }}>

@@ -10,6 +10,7 @@ import AdminMaintenancePage from '../pages/admin/AdminMaintenancePage';
 import AdminGamesPage from '../pages/admin/AdminGamesPage';
 import AdminGameEditPage from '../pages/admin/AdminGameEditPage';
 import AdminPowerRankingPage from '../pages/admin/AdminPowerRankingPage';
+import AdminModerationPage from '../pages/admin/AdminModerationPage';
 import { RequireAdmin } from '@shared/auth/RequireAdmin';
 import { RequireScorerOrAdmin } from '@shared/auth/RequireScorerOrAdmin';
 import { useAdmin } from '@shared/auth/useAdmin';
@@ -95,6 +96,14 @@ export const adminRoutes: RouteObject[] = [
         element: (
           <RequireAdmin>
             <AdminMaintenancePage />
+          </RequireAdmin>
+        ),
+      },
+      {
+        path: 'moderation',
+        element: (
+          <RequireAdmin>
+            <AdminModerationPage />
           </RequireAdmin>
         ),
       },
