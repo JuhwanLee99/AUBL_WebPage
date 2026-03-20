@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:timeago/timeago.dart' as timeago;
@@ -8,6 +10,7 @@ import '../../app/shell_controller.dart';
 import '../../core/services/cache_service.dart';
 import '../../core/services/community_access_service.dart';
 import '../../core/services/firestore_service.dart';
+import '../../core/services/moderation_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/background_logo.dart';
 import '../../core/widgets/editor/delta_utils.dart';
@@ -26,12 +29,14 @@ class CommunityScreen extends StatefulWidget {
 class CommunityScreenState extends State<CommunityScreen> {
   final _fs = FirestoreService();
   final _accessService = CommunityAccessService();
+  final _moderationService = ModerationService();
   final TextEditingController _searchController = TextEditingController();
   List<Notice> _notices = [];
   bool _loading = true;
   String _selectedCategory = '전체';
   String _searchQuery = '';
   ValueNotifier<int>? _refreshNotifier;
+  StreamSubscription<User?>? _authSub;
   bool _isAdmin = false;
   CommunityAccess _communityAccess = const CommunityAccess(
     roleLabel: '방문자',
@@ -46,12 +51,23 @@ class CommunityScreenState extends State<CommunityScreen> {
   static const _categories = ['전체', '긴급', '심판/기록원 모집', '경기공지', '징계', '일반'];
   static const _writeCategories = ['일반', '심판/기록원 모집', '징계', '경기공지', '긴급'];
 
+  void _handleRefreshSignal() {
+    _loadNotices();
+    _checkAdmin();
+    _loadCommunityAccess();
+  }
+
   @override
   void initState() {
     super.initState();
     _loadNotices();
     _checkAdmin();
     _loadCommunityAccess();
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((_) {
+      if (!mounted) return;
+      _checkAdmin();
+      _loadCommunityAccess();
+    });
   }
 
   @override
@@ -59,15 +75,16 @@ class CommunityScreenState extends State<CommunityScreen> {
     super.didChangeDependencies();
     final notifier = ShellController.of(context)?.refreshNotifier;
     if (notifier != _refreshNotifier) {
-      _refreshNotifier?.removeListener(_loadNotices);
+      _refreshNotifier?.removeListener(_handleRefreshSignal);
       _refreshNotifier = notifier;
-      _refreshNotifier?.addListener(_loadNotices);
+      _refreshNotifier?.addListener(_handleRefreshSignal);
     }
   }
 
   @override
   void dispose() {
-    _refreshNotifier?.removeListener(_loadNotices);
+    _refreshNotifier?.removeListener(_handleRefreshSignal);
+    _authSub?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -80,7 +97,10 @@ class CommunityScreenState extends State<CommunityScreen> {
 
   Future<void> _checkAdmin() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      if (mounted) setState(() => _isAdmin = false);
+      return;
+    }
     final token = await user.getIdTokenResult();
     if (mounted) setState(() => _isAdmin = token.claims?['admin'] == true);
   }
@@ -121,15 +141,18 @@ class CommunityScreenState extends State<CommunityScreen> {
     }
   }
 
-  List<Notice> get _filteredNotices {
+  List<Notice> _filteredNotices(Set<String> blockedUserIds) {
     final categoryFiltered = _selectedCategory == '전체'
         ? _notices
         : _notices.where((n) => n.category == _selectedCategory).toList();
+    final visible = categoryFiltered
+        .where((notice) => !blockedUserIds.contains(notice.uid))
+        .toList();
 
     final q = _searchQuery.trim().toLowerCase();
-    if (q.isEmpty) return categoryFiltered;
+    if (q.isEmpty) return visible;
 
-    return categoryFiltered.where((n) {
+    return visible.where((n) {
       final title = n.title.toLowerCase();
       final content = deltaToPreviewText(n.content).toLowerCase();
       final author = n.author.toLowerCase();
@@ -175,7 +198,7 @@ class CommunityScreenState extends State<CommunityScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final filtered = _filteredNotices;
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
 
     return Scaffold(
       appBar: AppBar(title: const Text('커뮤니티')),
@@ -185,229 +208,245 @@ class CommunityScreenState extends State<CommunityScreen> {
               child: const Icon(Icons.edit),
             )
           : null,
-      body: Stack(
-        children: [
-          const BackgroundLogo(saturation: 0.85),
-          _loading
-              ? const Center(child: CircularProgressIndicator())
-              : RefreshIndicator(
-                  onRefresh: _loadNotices,
-                  child: ListView(
-                    children: [
-                      // ── 갤러리 배너 ──
-                      _buildGalleryBanner(),
-                      const Divider(height: 1),
+      body: StreamBuilder<Set<String>>(
+        stream: currentUid == null
+            ? Stream.value(<String>{})
+            : _moderationService.watchBlockedUserIds(currentUid),
+        builder: (context, blockedSnapshot) {
+          final blockedUserIds = blockedSnapshot.data ?? const <String>{};
+          final filtered = _filteredNotices(blockedUserIds);
 
-                      // ── 건의/문의 배너 ──
-                      _buildInquiryBanner(),
-                      const Divider(height: 1),
+          return Stack(
+            children: [
+              const BackgroundLogo(saturation: 0.85),
+              _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : RefreshIndicator(
+                      onRefresh: _loadNotices,
+                      child: ListView(
+                        children: [
+                          // ── 갤러리 배너 ──
+                          _buildGalleryBanner(),
+                          const Divider(height: 1),
 
-                      // ── 선수 등록 게시판 배너 ──
-                      _buildPlayerRegistrationBanner(),
-                      const Divider(height: 1),
+                          // ── 건의/문의 배너 ──
+                          _buildInquiryBanner(),
+                          const Divider(height: 1),
 
-                      // ── 카테고리 필터 ──
-                      SizedBox(
-                        height: 48,
-                        child: ListView(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          children: _categories.map((cat) {
-                            final selected = cat == _selectedCategory;
-                            final color = cat == '전체'
-                                ? AppTheme.blue400
-                                : _categoryColor(cat);
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: ChoiceChip(
-                                label: Text(cat,
-                                    style: TextStyle(
-                                        color: selected ? Colors.white : color,
-                                        fontSize: 13)),
-                                selected: selected,
-                                selectedColor: color,
-                                onSelected: (_) =>
-                                    setState(() => _selectedCategory = cat),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
+                          // ── 선수 등록 게시판 배너 ──
+                          _buildPlayerRegistrationBanner(),
+                          const Divider(height: 1),
 
-                      // ── 검색 ──
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
-                        child: TextField(
-                          controller: _searchController,
-                          onChanged: (value) =>
-                              setState(() => _searchQuery = value),
-                          textInputAction: TextInputAction.search,
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 14),
-                          decoration: InputDecoration(
-                            hintText: '제목, 내용, 작성자 검색',
-                            hintStyle: const TextStyle(
-                                color: AppTheme.slate500, fontSize: 13),
-                            prefixIcon: const Icon(Icons.search,
-                                color: AppTheme.slate500, size: 20),
-                            suffixIcon: _searchQuery.isEmpty
-                                ? null
-                                : IconButton(
-                                    icon: const Icon(Icons.close,
-                                        color: AppTheme.slate500, size: 18),
-                                    onPressed: () {
-                                      _searchController.clear();
-                                      setState(() => _searchQuery = '');
-                                    },
+                          // ── 카테고리 필터 ──
+                          SizedBox(
+                            height: 48,
+                            child: ListView(
+                              scrollDirection: Axis.horizontal,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              children: _categories.map((cat) {
+                                final selected = cat == _selectedCategory;
+                                final color = cat == '전체'
+                                    ? AppTheme.blue400
+                                    : _categoryColor(cat);
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: ChoiceChip(
+                                    label: Text(cat,
+                                        style: TextStyle(
+                                            color:
+                                                selected ? Colors.white : color,
+                                            fontSize: 13)),
+                                    selected: selected,
+                                    selectedColor: color,
+                                    onSelected: (_) =>
+                                        setState(() => _selectedCategory = cat),
                                   ),
-                            filled: true,
-                            fillColor: AppTheme.slate800.withValues(alpha: 0.5),
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 10),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(
-                                  color:
-                                      AppTheme.slate700.withValues(alpha: 0.6)),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(
-                                  color:
-                                      AppTheme.slate700.withValues(alpha: 0.6)),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(
-                                  color:
-                                      AppTheme.blue500.withValues(alpha: 0.9)),
+                                );
+                              }).toList(),
                             ),
                           ),
-                        ),
-                      ),
 
-                      // ── 공지 수 ──
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 4),
-                        child: Text(
-                          '${filtered.length}개 공지',
-                          style: const TextStyle(
-                              color: AppTheme.slate500, fontSize: 12),
-                        ),
-                      ),
-
-                      // ── 공지 목록 ──
-                      if (filtered.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.all(32),
-                          child: Center(
-                            child: Text(
-                              _searchQuery.trim().isEmpty
-                                  ? '공지가 없습니다.'
-                                  : '검색 결과가 없습니다.',
-                              style: const TextStyle(color: AppTheme.slate500),
-                            ),
-                          ),
-                        )
-                      else
-                        ...filtered.map((n) {
-                          final ago = timeago.format(
-                            DateTime.fromMillisecondsSinceEpoch(n.createdAt),
-                            locale: 'ko',
-                          );
-                          final attachment =
-                              summarizeDeltaAttachments(n.content);
-                          return Padding(
+                          // ── 검색 ──
+                          Padding(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 3),
-                            child: ListTile(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              tileColor:
-                                  AppTheme.slate800.withValues(alpha: 0.5),
-                              onTap: () {
-                                Navigator.of(context)
-                                    .push(
-                                      MaterialPageRoute<void>(
-                                        builder: (_) =>
-                                            NoticeDetailScreen(notice: n),
+                                horizontal: 12, vertical: 4),
+                            child: TextField(
+                              controller: _searchController,
+                              onChanged: (value) =>
+                                  setState(() => _searchQuery = value),
+                              textInputAction: TextInputAction.search,
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 14),
+                              decoration: InputDecoration(
+                                hintText: '제목, 내용, 작성자 검색',
+                                hintStyle: const TextStyle(
+                                    color: AppTheme.slate500, fontSize: 13),
+                                prefixIcon: const Icon(Icons.search,
+                                    color: AppTheme.slate500, size: 20),
+                                suffixIcon: _searchQuery.isEmpty
+                                    ? null
+                                    : IconButton(
+                                        icon: const Icon(Icons.close,
+                                            color: AppTheme.slate500, size: 18),
+                                        onPressed: () {
+                                          _searchController.clear();
+                                          setState(() => _searchQuery = '');
+                                        },
                                       ),
-                                    )
-                                    .then((_) => _loadNotices());
-                              },
-                              leading: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: _categoryColor(n.category)
-                                      .withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(4),
+                                filled: true,
+                                fillColor:
+                                    AppTheme.slate800.withValues(alpha: 0.5),
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 10),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide(
+                                      color: AppTheme.slate700
+                                          .withValues(alpha: 0.6)),
                                 ),
-                                child: Text(
-                                  n.category,
-                                  style: TextStyle(
-                                    color: _categoryColor(n.category),
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide(
+                                      color: AppTheme.slate700
+                                          .withValues(alpha: 0.6)),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide(
+                                      color: AppTheme.blue500
+                                          .withValues(alpha: 0.9)),
                                 ),
                               ),
-                              title: Text(
-                                n.title,
-                                style: const TextStyle(
-                                    color: Colors.white, fontSize: 14),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    '${n.author} · $ago',
-                                    style: const TextStyle(
-                                        color: AppTheme.slate500, fontSize: 12),
-                                  ),
-                                  if (attachment.hasAny) ...[
-                                    const SizedBox(height: 4),
-                                    Wrap(
-                                      spacing: 6,
-                                      runSpacing: 4,
-                                      children: [
-                                        if (attachment.hasImage)
-                                          _buildAttachmentBadge(
-                                            icon: Icons.image_outlined,
-                                            label: '이미지',
-                                          ),
-                                        if (attachment.hasVideo)
-                                          _buildAttachmentBadge(
-                                            icon: Icons.videocam_outlined,
-                                            label: '동영상',
-                                          ),
-                                        if (attachment.hasLink)
-                                          _buildAttachmentBadge(
-                                            icon: Icons.link,
-                                            label: '링크',
-                                          ),
-                                      ],
-                                    ),
-                                  ],
-                                ],
-                              ),
-                              trailing: const Icon(Icons.chevron_right,
-                                  size: 18, color: AppTheme.slate500),
                             ),
-                          );
-                        }),
-                      const SizedBox(height: 32),
-                    ],
-                  ),
-                ),
-        ],
+                          ),
+
+                          // ── 공지 수 ──
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 4),
+                            child: Text(
+                              '${filtered.length}개 공지',
+                              style: const TextStyle(
+                                  color: AppTheme.slate500, fontSize: 12),
+                            ),
+                          ),
+
+                          // ── 공지 목록 ──
+                          if (filtered.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.all(32),
+                              child: Center(
+                                child: Text(
+                                  _searchQuery.trim().isEmpty
+                                      ? '공지가 없습니다.'
+                                      : '검색 결과가 없습니다.',
+                                  style:
+                                      const TextStyle(color: AppTheme.slate500),
+                                ),
+                              ),
+                            )
+                          else
+                            ...filtered.map((n) {
+                              final ago = timeago.format(
+                                DateTime.fromMillisecondsSinceEpoch(
+                                    n.createdAt),
+                                locale: 'ko',
+                              );
+                              final attachment =
+                                  summarizeDeltaAttachments(n.content);
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 3),
+                                child: ListTile(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  tileColor:
+                                      AppTheme.slate800.withValues(alpha: 0.5),
+                                  onTap: () {
+                                    Navigator.of(context)
+                                        .push(
+                                          MaterialPageRoute<void>(
+                                            builder: (_) =>
+                                                NoticeDetailScreen(notice: n),
+                                          ),
+                                        )
+                                        .then((_) => _loadNotices());
+                                  },
+                                  leading: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: _categoryColor(n.category)
+                                          .withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      n.category,
+                                      style: TextStyle(
+                                        color: _categoryColor(n.category),
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  title: Text(
+                                    n.title,
+                                    style: const TextStyle(
+                                        color: Colors.white, fontSize: 14),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  subtitle: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        '${n.author} · $ago',
+                                        style: const TextStyle(
+                                            color: AppTheme.slate500,
+                                            fontSize: 12),
+                                      ),
+                                      if (attachment.hasAny) ...[
+                                        const SizedBox(height: 4),
+                                        Wrap(
+                                          spacing: 6,
+                                          runSpacing: 4,
+                                          children: [
+                                            if (attachment.hasImage)
+                                              _buildAttachmentBadge(
+                                                icon: Icons.image_outlined,
+                                                label: '이미지',
+                                              ),
+                                            if (attachment.hasVideo)
+                                              _buildAttachmentBadge(
+                                                icon: Icons.videocam_outlined,
+                                                label: '동영상',
+                                              ),
+                                            if (attachment.hasLink)
+                                              _buildAttachmentBadge(
+                                                icon: Icons.link,
+                                                label: '링크',
+                                              ),
+                                          ],
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  trailing: const Icon(Icons.chevron_right,
+                                      size: 18, color: AppTheme.slate500),
+                                ),
+                              );
+                            }),
+                          const SizedBox(height: 32),
+                        ],
+                      ),
+                    ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -606,14 +645,19 @@ class CommunityScreenState extends State<CommunityScreen> {
     final canAccess = _communityAccess.isPlayerOrAbove;
     return GestureDetector(
       onTap: () async {
-        if (!canAccess) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
+        final messenger = ScaffoldMessenger.of(context);
+        final navigator = Navigator.of(context);
+        final latestAccess = await _accessService.resolveCurrentUserAccess();
+        if (mounted) {
+          setState(() => _communityAccess = latestAccess);
+        }
+        if (!latestAccess.isPlayerOrAbove) {
+          messenger.showSnackBar(
             const SnackBar(content: Text('선수/기록원 등급 이상 계정만 접근할 수 있습니다.')),
           );
           return;
         }
-        await Navigator.of(context).push<void>(
+        await navigator.push<void>(
           MaterialPageRoute(
               builder: (_) => const PlayerRegistrationBoardScreen()),
         );
@@ -682,8 +726,7 @@ class CommunityScreenState extends State<CommunityScreen> {
   Widget _buildGalleryBanner() {
     return GestureDetector(
       onTap: () async {
-        final uri =
-            Uri.parse('https://gall.dcinside.com/mini/board/lists/?id=aubl');
+        final uri = Uri.parse('https://m.dcinside.com/board/aubl');
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
         }

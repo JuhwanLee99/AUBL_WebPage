@@ -8,6 +8,7 @@ import '../../core/services/account_deletion_service.dart';
 import '../../core/services/auth_session_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/services/firestore_service.dart';
+import '../../core/services/moderation_service.dart';
 import '../../core/services/notification_service.dart';
 import '../auth/login_webview_screen.dart';
 
@@ -20,6 +21,7 @@ class AccountScreen extends StatefulWidget {
 
 class _AccountScreenState extends State<AccountScreen> {
   final _fs = FirestoreService();
+  final _moderationService = ModerationService();
   final _accountDeletionService = AccountDeletionService();
   bool _loading = true;
   bool _deleting = false;
@@ -344,7 +346,7 @@ class _AccountScreenState extends State<AccountScreen> {
                                           AppTheme.orange500,
                                           AppTheme.amber400,
                                         ])
-                                  : null,
+                                      : null,
                               color: (_isAdmin || _isScorer)
                                   ? null
                                   : _roleAccent().withValues(alpha: 0.2),
@@ -383,6 +385,8 @@ class _AccountScreenState extends State<AccountScreen> {
                                 .substring(0, 16) ??
                             '-'),
 
+                    const SizedBox(height: 20),
+                    _buildBlockedUsersSection(user),
                     const SizedBox(height: 24),
                     SizedBox(
                       width: double.infinity,
@@ -447,6 +451,120 @@ class _AccountScreenState extends State<AccountScreen> {
                     ),
                   ],
                 ),
+    );
+  }
+
+  Widget _buildBlockedUsersSection(User user) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.slate800.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.slate700),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '차단한 사용자',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            '차단하면 해당 사용자의 게시글과 댓글이 커뮤니티에서 즉시 숨겨집니다.',
+            style: TextStyle(
+              color: AppTheme.slate400,
+              fontSize: 12,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 10),
+          StreamBuilder<List<BlockedUserEntry>>(
+            stream: _moderationService.watchBlockedUsers(user.uid),
+            builder: (context, snapshot) {
+              final blockedUsers = snapshot.data ?? const <BlockedUserEntry>[];
+              if (blockedUsers.isEmpty) {
+                return const Text(
+                  '현재 차단한 사용자가 없습니다.',
+                  style: TextStyle(
+                    color: AppTheme.slate500,
+                    fontSize: 12,
+                  ),
+                );
+              }
+
+              return Column(
+                children: blockedUsers.map((entry) {
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.slate900.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.slate700),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                entry.label,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                entry.uid,
+                                style: const TextStyle(
+                                  color: AppTheme.slate500,
+                                  fontSize: 11,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () async {
+                            await _moderationService.unblockUser(
+                              blockerUid: user.uid,
+                              blockedUid: entry.uid,
+                            );
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('사용자 차단을 해제했습니다.'),
+                              ),
+                            );
+                          },
+                          child: const Text(
+                            '차단 해제',
+                            style: TextStyle(
+                              color: AppTheme.blue400,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 

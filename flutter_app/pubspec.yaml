@@ -1,7 +1,7 @@
 name: aubl_flutter_app
 description: AUBL hybrid mobile app (Flutter + WebView)
 publish_to: "none"
-version: 1.0.2+11
+version: 1.0.6+15
 
 environment:
   sdk: ">=3.4.0 <4.0.0"

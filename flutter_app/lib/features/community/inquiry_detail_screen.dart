@@ -4,11 +4,20 @@ import 'package:timeago/timeago.dart' as timeago;
 
 import '../../core/models/inquiry_post.dart';
 import '../../core/services/firestore_service.dart';
+import '../../core/services/moderation_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/editor/delta_utils.dart';
+import '../../core/widgets/moderation/e911_emergency_icon.dart';
+import '../../core/widgets/moderation/moderation_dialogs.dart';
 import '../../core/widgets/editor/rich_text_editor.dart';
 import '../../core/widgets/editor/rich_text_viewer.dart';
 import 'inquiry_write_screen.dart';
+
+enum _InquiryModerationAction {
+  report,
+  block,
+  delete,
+}
 
 class InquiryDetailScreen extends StatefulWidget {
   const InquiryDetailScreen({super.key, required this.post});
@@ -21,6 +30,7 @@ class InquiryDetailScreen extends StatefulWidget {
 
 class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
   final _fs = FirestoreService();
+  final _moderationService = ModerationService();
   String _commentDelta = '';
   int _editorKey = 0;
   late InquiryPost _post;
@@ -57,6 +67,93 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
         '경기/기록 오류' => const Color(0xFFFB923C),
         _ => AppTheme.slate400,
       };
+
+  String _currentUserLabel(User user) {
+    return user.displayName ?? user.email ?? user.uid;
+  }
+
+  String _clipPreview(String raw, {int maxLength = 180}) {
+    final text = raw.replaceAll('\n', ' ').trim();
+    if (text.length <= maxLength) return text;
+    return '${text.substring(0, maxLength)}...';
+  }
+
+  Future<void> _handleModerationAction({
+    required _InquiryModerationAction action,
+    required String targetUid,
+    required String targetLabel,
+    required String contentDomain,
+    required String contentId,
+    required String contentPreview,
+    String? parentContentId,
+  }) async {
+    final reporter = _user;
+    if (reporter == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('로그인 후 신고/차단할 수 있습니다.')),
+      );
+      return;
+    }
+    if (targetUid.isEmpty || targetUid == reporter.uid) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('본인 계정은 신고하거나 차단할 수 없습니다.')),
+      );
+      return;
+    }
+    if (action == _InquiryModerationAction.delete) return;
+
+    final reason = await showModerationReasonDialog(
+      context,
+      title: action == _InquiryModerationAction.block ? '사용자 차단' : '콘텐츠 신고',
+      confirmLabel: action == _InquiryModerationAction.block ? '차단' : '신고',
+    );
+    if (reason == null) return;
+
+    final payload = ModerationReportPayload(
+      action: action == _InquiryModerationAction.block ? 'block' : 'report',
+      reasonType: reason.reasonCode,
+      reasonDetail: reason.detail,
+      targetUid: targetUid,
+      targetLabel: targetLabel,
+      contentDomain: contentDomain,
+      contentId: contentId,
+      parentContentId: parentContentId,
+      contentPreview: _clipPreview(contentPreview),
+    );
+
+    try {
+      if (action == _InquiryModerationAction.block) {
+        await _moderationService.blockUserAndReport(
+          blockerUid: reporter.uid,
+          blockerLabel: _currentUserLabel(reporter),
+          payload: payload,
+        );
+      } else {
+        await _moderationService.reportContent(
+          reporterUid: reporter.uid,
+          reporterLabel: _currentUserLabel(reporter),
+          payload: payload,
+        );
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            action == _InquiryModerationAction.block
+                ? '사용자를 차단하고 운영팀에 신고했습니다.'
+                : '신고가 접수되었습니다. 운영팀이 확인 후 조치합니다.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('신고 처리 중 오류가 발생했습니다: $e')),
+      );
+    }
+  }
 
   Future<void> _postComment() async {
     if (isDeltaEmpty(_commentDelta) || _user == null) return;
@@ -103,6 +200,12 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final viewer = _user;
+    final canModeratePost = viewer != null &&
+        _post.uid.isNotEmpty &&
+        _post.uid != viewer.uid &&
+        _isAccessible;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('건의/문의'),
@@ -116,7 +219,6 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
                       builder: (_) => InquiryWriteScreen(editPost: _post)),
                 );
                 if (updated == true && mounted) {
-                  // 수정 후 최신 데이터 다시 로드
                   final fresh = await _fs.getInquiry(_post.id);
                   if (fresh != null && mounted) setState(() => _post = fresh);
                 }
@@ -127,218 +229,352 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
               onPressed: _deletePost,
             ),
           ],
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                if (!_isAccessible)
-                  // ── 비밀글 접근 불가 ──
-                  const Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 48),
-                      child: Column(
-                        children: [
-                          Icon(Icons.lock_outline,
-                              size: 56, color: AppTheme.slate500),
-                          SizedBox(height: 16),
-                          Text('비밀글입니다.',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700)),
-                          SizedBox(height: 8),
-                          Text('작성자와 관리자만 열람할 수 있습니다.',
-                              style: TextStyle(
-                                  color: AppTheme.slate500, fontSize: 13)),
-                        ],
-                      ),
-                    ),
-                  )
-                else ...[
-                  // ── 뱃지 & 메타 ──
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      _badge(_post.platform == 'app' ? '앱' : '웹',
-                          _platformColor(_post.platform)),
-                      _badge(_post.category, _categoryColor(_post.category)),
-                      // 처리 상태
-                      if (_isAdmin)
-                        _buildStatusDropdown()
-                      else
-                        _badge(_post.status, _statusColor(_post.status)),
-                      if (_post.isPrivate)
-                        const Icon(Icons.lock_outline,
-                            size: 14, color: AppTheme.slate500),
-                    ],
-                  ),
-
-                  const SizedBox(height: 12),
-                  // ── 제목 ──
-                  Text(_post.title,
-                      style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white)),
-                  const SizedBox(height: 6),
-                  // ── 작성자·날짜 ──
-                  Text(
-                    '${_post.author} · ${timeago.format(DateTime.fromMillisecondsSinceEpoch(_post.createdAt), locale: 'ko')}',
-                    style:
-                        const TextStyle(color: AppTheme.slate500, fontSize: 12),
-                  ),
-                  const Divider(height: 28),
-                  // ── 본문 ──
-                  RichTextViewer(
-                      content: _post.content,
-                      fontSize: 14,
-                      color: AppTheme.slate300,
-                      lineHeight: 1.7),
-                  const SizedBox(height: 32),
-
-                  // ── 댓글 ──
-                  const Text('댓글',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 10),
-                  StreamBuilder<List<InquiryComment>>(
-                    stream: _fs.watchInquiryComments(_post.id),
-                    builder: (ctx, snap) {
-                      final comments = snap.data ?? [];
-                      if (comments.isEmpty) {
-                        return const Text('아직 댓글이 없습니다.',
-                            style: TextStyle(
-                                color: AppTheme.slate500, fontSize: 13));
-                      }
-                      return Column(
-                        children: comments.map((c) {
-                          final isMine = c.uid == _user?.uid;
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(c.author,
-                                        style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w500)),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      timeago.format(
-                                          DateTime.fromMillisecondsSinceEpoch(
-                                              c.createdAt),
-                                          locale: 'ko'),
-                                      style: const TextStyle(
-                                          color: AppTheme.slate500,
-                                          fontSize: 11),
-                                    ),
-                                    if (isMine || _isAdmin) ...[
-                                      const Spacer(),
-                                      GestureDetector(
-                                        onTap: () => _fs.deleteInquiryComment(
-                                            _post.id, c.id),
-                                        child: const Text('삭제',
-                                            style: TextStyle(
-                                                color: Color(0xFFF87171),
-                                                fontSize: 11)),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                RichTextViewer(
-                                    content: c.content,
-                                    fontSize: 13,
-                                    color: AppTheme.slate300),
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                      );
-                    },
-                  ),
-                ],
+          if (canModeratePost)
+            PopupMenuButton<_InquiryModerationAction>(
+              icon: const E911EmergencyIcon(color: Color(0xFFE3E3E3)),
+              onSelected: (action) {
+                _handleModerationAction(
+                  action: action,
+                  targetUid: _post.uid,
+                  targetLabel: _post.author,
+                  contentDomain: 'inquiryPost',
+                  contentId: _post.id,
+                  contentPreview:
+                      '${_post.title}\n${deltaToPreviewText(_post.content)}',
+                );
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: _InquiryModerationAction.report,
+                  child: Text('게시글 신고'),
+                ),
+                PopupMenuItem(
+                  value: _InquiryModerationAction.block,
+                  child: Text('작성자 차단'),
+                ),
               ],
             ),
-          ),
+        ],
+      ),
+      body: StreamBuilder<Set<String>>(
+        stream: viewer == null
+            ? Stream.value(<String>{})
+            : _moderationService.watchBlockedUserIds(viewer.uid),
+        builder: (context, blockedSnapshot) {
+          final blockedUserIds = blockedSnapshot.data ?? const <String>{};
+          final isPostBlocked = blockedUserIds.contains(_post.uid);
 
-          // ── 댓글 입력창 (접근 가능) ──
-          if (_isAccessible)
-            Container(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-              decoration: const BoxDecoration(
-                color: AppTheme.slate800,
-                border: Border(top: BorderSide(color: AppTheme.slate700)),
-              ),
-              child: SafeArea(
-                top: false,
-                child: _user == null
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            constraints: const BoxConstraints(minHeight: 60),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 18),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1e293b),
-                              borderRadius: BorderRadius.circular(10),
-                              border:
-                                  Border.all(color: const Color(0xFF334155)),
-                            ),
-                            child: const Text(
-                              '로그인이 필요합니다.',
-                              style: TextStyle(
-                                color: AppTheme.slate400,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
+          return Column(
+            children: [
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    if (isPostBlocked)
+                      const Center(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 48),
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.block,
+                                size: 56,
+                                color: AppTheme.slate500,
                               ),
-                            ),
+                              SizedBox(height: 16),
+                              Text(
+                                '차단한 사용자의 게시글입니다.',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                '계정 화면에서 차단을 해제하면 다시 볼 수 있습니다.',
+                                style: TextStyle(
+                                  color: AppTheme.slate500,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 6),
-                          const Align(
-                            alignment: Alignment.centerRight,
-                            child: Icon(Icons.send, color: AppTheme.slate600),
-                          ),
-                        ],
+                        ),
                       )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        mainAxisSize: MainAxisSize.min,
+                    else if (!_isAccessible)
+                      const Center(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 48),
+                          child: Column(
+                            children: [
+                              Icon(Icons.lock_outline,
+                                  size: 56, color: AppTheme.slate500),
+                              SizedBox(height: 16),
+                              Text('비밀글입니다.',
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700)),
+                              SizedBox(height: 8),
+                              Text('작성자와 관리자만 열람할 수 있습니다.',
+                                  style: TextStyle(
+                                      color: AppTheme.slate500, fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                      )
+                    else ...[
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          RichTextEditor(
-                            key: ValueKey(_editorKey),
-                            onChanged: (v) => _commentDelta = v,
-                            mini: true,
-                            placeholder: '댓글을 입력하세요...',
-                            minHeight: 60,
-                          ),
-                          const SizedBox(height: 6),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: IconButton(
-                              icon: const Icon(Icons.send,
-                                  color: AppTheme.blue400),
-                              onPressed: _postComment,
-                            ),
-                          ),
+                          _badge(_post.platform == 'app' ? '앱' : '웹',
+                              _platformColor(_post.platform)),
+                          _badge(
+                              _post.category, _categoryColor(_post.category)),
+                          if (_isAdmin)
+                            _buildStatusDropdown()
+                          else
+                            _badge(_post.status, _statusColor(_post.status)),
+                          if (_post.isPrivate)
+                            const Icon(Icons.lock_outline,
+                                size: 14, color: AppTheme.slate500),
                         ],
                       ),
+                      const SizedBox(height: 12),
+                      Text(_post.title,
+                          style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white)),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${_post.author} · ${timeago.format(DateTime.fromMillisecondsSinceEpoch(_post.createdAt), locale: 'ko')}',
+                        style: const TextStyle(
+                            color: AppTheme.slate500, fontSize: 12),
+                      ),
+                      const Divider(height: 28),
+                      RichTextViewer(
+                          content: _post.content,
+                          fontSize: 14,
+                          color: AppTheme.slate300,
+                          lineHeight: 1.7),
+                      const SizedBox(height: 32),
+                      const Text(
+                        '댓글',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        '게시글/댓글 우측 메뉴에서 신고 또는 차단할 수 있습니다.',
+                        style:
+                            TextStyle(color: AppTheme.slate500, fontSize: 11),
+                      ),
+                      const SizedBox(height: 10),
+                      StreamBuilder<List<InquiryComment>>(
+                        stream: _fs.watchInquiryComments(_post.id),
+                        builder: (ctx, snap) {
+                          final comments = (snap.data ?? [])
+                              .where((c) => !blockedUserIds.contains(c.uid))
+                              .toList();
+                          if (comments.isEmpty) {
+                            return const Text(
+                              '아직 댓글이 없습니다.',
+                              style: TextStyle(
+                                  color: AppTheme.slate500, fontSize: 13),
+                            );
+                          }
+                          return Column(
+                            children: comments.map((c) {
+                              final isMine = c.uid == viewer?.uid;
+                              final canReport = viewer != null &&
+                                  c.uid.isNotEmpty &&
+                                  c.uid != viewer.uid;
+                              final canDelete = isMine || _isAdmin;
+                              final showMenu = canDelete || canReport;
+
+                              return Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 6),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(c.author,
+                                            style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w500)),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          timeago.format(
+                                              DateTime
+                                                  .fromMillisecondsSinceEpoch(
+                                                      c.createdAt),
+                                              locale: 'ko'),
+                                          style: const TextStyle(
+                                              color: AppTheme.slate500,
+                                              fontSize: 11),
+                                        ),
+                                        if (showMenu) ...[
+                                          const Spacer(),
+                                          PopupMenuButton<
+                                              _InquiryModerationAction>(
+                                            padding: EdgeInsets.zero,
+                                            icon: const E911EmergencyIcon(
+                                              size: 18,
+                                              color: Color(0xFFE3E3E3),
+                                            ),
+                                            onSelected: (action) {
+                                              if (action ==
+                                                  _InquiryModerationAction
+                                                      .delete) {
+                                                _fs.deleteInquiryComment(
+                                                    _post.id, c.id);
+                                                return;
+                                              }
+                                              _handleModerationAction(
+                                                action: action,
+                                                targetUid: c.uid,
+                                                targetLabel: c.author,
+                                                contentDomain: 'inquiryComment',
+                                                contentId: c.id,
+                                                parentContentId: _post.id,
+                                                contentPreview:
+                                                    deltaToPreviewText(
+                                                        c.content),
+                                              );
+                                            },
+                                            itemBuilder: (context) {
+                                              final items = <PopupMenuEntry<
+                                                  _InquiryModerationAction>>[];
+                                              if (canDelete) {
+                                                items.add(
+                                                  const PopupMenuItem(
+                                                    value:
+                                                        _InquiryModerationAction
+                                                            .delete,
+                                                    child: Text('댓글 삭제'),
+                                                  ),
+                                                );
+                                              }
+                                              if (canReport) {
+                                                if (items.isNotEmpty) {
+                                                  items.add(
+                                                      const PopupMenuDivider());
+                                                }
+                                                items.addAll(const [
+                                                  PopupMenuItem(
+                                                    value:
+                                                        _InquiryModerationAction
+                                                            .report,
+                                                    child: Text('댓글 신고'),
+                                                  ),
+                                                  PopupMenuItem(
+                                                    value:
+                                                        _InquiryModerationAction
+                                                            .block,
+                                                    child: Text('작성자 차단'),
+                                                  ),
+                                                ]);
+                                              }
+                                              return items;
+                                            },
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    RichTextViewer(
+                                        content: c.content,
+                                        fontSize: 13,
+                                        color: AppTheme.slate300),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          );
+                        },
+                      ),
+                    ],
+                  ],
+                ),
               ),
-            ),
-        ],
+              if (_isAccessible && !isPostBlocked)
+                Container(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                  decoration: const BoxDecoration(
+                    color: AppTheme.slate800,
+                    border: Border(top: BorderSide(color: AppTheme.slate700)),
+                  ),
+                  child: SafeArea(
+                    top: false,
+                    child: viewer == null
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                constraints:
+                                    const BoxConstraints(minHeight: 60),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 18),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1e293b),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                      color: const Color(0xFF334155)),
+                                ),
+                                child: const Text(
+                                  '로그인이 필요합니다.',
+                                  style: TextStyle(
+                                    color: AppTheme.slate400,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              const Align(
+                                alignment: Alignment.centerRight,
+                                child:
+                                    Icon(Icons.send, color: AppTheme.slate600),
+                              ),
+                            ],
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              RichTextEditor(
+                                key: ValueKey(_editorKey),
+                                onChanged: (v) => _commentDelta = v,
+                                mini: true,
+                                placeholder: '댓글을 입력하세요...',
+                                minHeight: 60,
+                              ),
+                              const SizedBox(height: 6),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: IconButton(
+                                  icon: const Icon(Icons.send,
+                                      color: AppTheme.blue400),
+                                  onPressed: _postComment,
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
