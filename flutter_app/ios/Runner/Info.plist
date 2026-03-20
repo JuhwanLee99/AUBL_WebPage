@@ -2,8 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>GIDClientID</key>
-	<string>74667071214-iq7c3abld8b63atm7n3814c0dmcj6cu0.apps.googleusercontent.com</string>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -12,6 +12,16 @@
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>AUBL</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -23,22 +33,24 @@
 			</array>
 		</dict>
 	</array>
-	<key>CFBundleInfoDictionaryVersion</key>
-	<string>6.0</string>
-	<key>CFBundleName</key>
-	<string>AUBL</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-	<key>CFBundleShortVersionString</key>
-	<string>$(FLUTTER_BUILD_NAME)</string>
-	<key>CFBundleSignature</key>
-	<string>????</string>
 	<key>CFBundleVersion</key>
-	<string>$(FLUTTER_BUILD_NUMBER)</string>
-	<key>LSRequiresIPhoneOS</key>
-	<true/>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>GIDClientID</key>
+	<string>74667071214-iq7c3abld8b63atm7n3814c0dmcj6cu0.apps.googleusercontent.com</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>문의 또는 건의 과정에서 필요한 이미지 저장 기능을 제공하기 위해 사진 보관함 저장 권한이 필요할 수 있습니다.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>문의 또는 건의 과정에서 필요한 스크린샷/이미지를 선택해 전달하기 위해 사진 보관함 접근 권한이 필요합니다.</string>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -56,17 +68,5 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>CADisableMinimumFrameDurationOnPhone</key>
-	<true/>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>문의 또는 건의 과정에서 필요한 스크린샷/이미지를 선택해 전달하기 위해 사진 보관함 접근 권한이 필요합니다.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>문의 또는 건의 과정에서 필요한 이미지 저장 기능을 제공하기 위해 사진 보관함 저장 권한이 필요할 수 있습니다.</string>
 </dict>
 </plist>
