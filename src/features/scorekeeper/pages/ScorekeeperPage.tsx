@@ -2462,11 +2462,14 @@ export default function ScorekeeperPage() {
       away: { runs: state.score.away, hits: liveHits.away, errors: liveErrors.away },
     };
 
-    const lineScore =
-      manualSource?.lineScore && manualSource.lineScore.innings.length
-        ? manualSource.lineScore
-        : activeMatch?.postGame?.lineScore && activeMatch.postGame.lineScore.innings.length
-          ? activeMatch.postGame.lineScore
+    const manualLineScore = manualSource?.lineScore;
+    const postGameLineScore = activeMatch?.postGame?.lineScore;
+    const hasManualLineScoreInnings = Array.isArray(manualLineScore?.innings) && manualLineScore.innings.length > 0;
+    const hasPostGameLineScoreInnings = Array.isArray(postGameLineScore?.innings) && postGameLineScore.innings.length > 0;
+    const lineScore = hasManualLineScoreInnings
+      ? manualLineScore
+      : hasPostGameLineScoreInnings
+        ? postGameLineScore
         : {
             innings: inningsHeader,
             home: liveLine.home,

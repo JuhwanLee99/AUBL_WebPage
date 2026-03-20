@@ -351,14 +351,15 @@ export default function ScoreboardPanel({
       away: { runs: state.score.away, hits: liveHits.away, errors: liveErrors.away },
     };
 
-    const lineScore =
-      effectivePostGame?.lineScore && effectivePostGame.lineScore.innings.length
-        ? effectivePostGame.lineScore
-        : {
-            innings: inningsHeader,
-            home: liveLine.home,
-            away: liveLine.away,
-          };
+    const postGameLineScore = effectivePostGame?.lineScore;
+    const hasPostGameLineScoreInnings = Array.isArray(postGameLineScore?.innings) && postGameLineScore.innings.length > 0;
+    const lineScore = hasPostGameLineScoreInnings
+      ? postGameLineScore
+      : {
+          innings: inningsHeader,
+          home: liveLine.home,
+          away: liveLine.away,
+        };
     const baseInnings = Array.from({ length: 9 }, (_v, idx) => idx + 1);
     const hasExtras = (lineScore?.innings?.length ?? 0) > 9;
     const innings = hasExtras ? [...baseInnings, '10+'] : baseInnings;
