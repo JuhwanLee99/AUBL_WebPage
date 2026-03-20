@@ -3,7 +3,6 @@ import 'dart:math' as math;
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:url_launcher/url_launcher.dart';
 
@@ -16,6 +15,7 @@ import '../../core/services/cache_service.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/match_time.dart';
 import '../../app/shell_controller.dart';
 import '../../core/webview/app_webview_screen.dart';
 import '../../core/widgets/background_logo.dart';
@@ -111,8 +111,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     for (final m in all) {
       if (m.isCompleted) completed.add(m);
-      if (m.startTime != null) {
-        final dateStr = m.startTime!.substring(0, 10);
+      final dateStr = matchStartDateKey(m.startTime);
+      if (dateStr != null) {
         if (dateStr == todayStr && m.status == 'scheduled') {
           today.add(m);
         } else if (dateStr == tomorrowStr && m.status == 'scheduled') {
@@ -421,13 +421,8 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       children: List.generate(_completedMatches.length, (idx) {
         final m = _completedMatches[idx];
-        String dateLabel = '';
-        if (m.startTime != null) {
-          try {
-            final dt = DateTime.parse(m.startTime!);
-            dateLabel = DateFormat('M/d (E)', 'ko').format(dt);
-          } catch (_) {}
-        }
+        final dateLabel =
+            formatMatchStartTime(m.startTime, pattern: 'M/d (E)') ?? '';
 
         return Container(
           width: double.infinity,
@@ -1235,12 +1230,8 @@ class _LiveMatchCard extends StatelessWidget {
   }
 
   String _formatDateTime(String startTime) {
-    try {
-      final dt = DateTime.parse(startTime);
-      return DateFormat('M/d (E) HH:mm', 'ko').format(dt);
-    } catch (_) {
-      return startTime;
-    }
+    return formatMatchStartTime(startTime, pattern: 'M/d (E) HH:mm') ??
+        startTime;
   }
 
   Widget _bsoRow(String label, int value, int max, Color color) {
@@ -1322,17 +1313,11 @@ class _SchedulePreviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    String dateLabel = '';
-    String timeLabel = '';
-    if (match.startTime != null) {
-      try {
-        final dt = DateTime.parse(match.startTime!);
-        dateLabel = DateFormat('M/d (E)', 'ko').format(dt);
-        timeLabel = DateFormat('HH:mm').format(dt);
-      } catch (_) {
-        dateLabel = match.startTime!;
-      }
-    }
+    final dateLabel =
+        formatMatchStartTime(match.startTime, pattern: 'M/d (E)') ??
+            (match.startTime ?? '');
+    final timeLabel =
+        formatMatchStartTime(match.startTime, pattern: 'HH:mm') ?? '';
 
     return Container(
       width: 200,

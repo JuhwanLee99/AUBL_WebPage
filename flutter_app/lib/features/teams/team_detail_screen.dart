@@ -10,6 +10,7 @@ import '../../core/models/team_member.dart';
 import '../../core/models/team_notice.dart';
 import '../../core/services/team_image_cache_manager.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/match_time.dart';
 import '../../core/webview/app_webview_screen.dart';
 import '../../core/widgets/editor/delta_utils.dart';
 import '../../core/widgets/editor/rich_text_editor.dart';
@@ -706,7 +707,8 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   fontSize: 14),
             )
           : Text(
-              match.startTime?.substring(0, 10) ?? '',
+              formatMatchStartTime(match.startTime, pattern: 'yyyy-MM-dd') ??
+                  '',
               style: const TextStyle(color: AppTheme.slate400, fontSize: 12),
             ),
       onTap: () {

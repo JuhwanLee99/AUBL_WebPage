@@ -78,65 +78,64 @@ void main() {
       expect(result.pitcherStats.first.inningsPitched, closeTo(18.1, 0.0001));
     });
 
-    test('falls back ranking endpoint and legacy sort key for batters',
-        () async {
+    test('serializes modern record filters for batter rankings', () async {
       final seen = <Uri>[];
       final client = MockClient((request) async {
         seen.add(request.url);
-
         if (request.url.path == '/api/rankings/batters') {
-          return http.Response('Not found', 404);
+          return http.Response('[]', 200,
+              headers: {'content-type': 'application/json'});
         }
-
-        if (request.url.path == '/api/records/batters') {
-          final sort = request.url.queryParameters['sort'];
-          if (sort == 'battingAverage') {
-            return http.Response('Bad request', 400);
-          }
-          if (sort == 'avg') {
-            return http.Response(
-              jsonEncode([
-                {
-                  'rank': 1,
-                  'player_id': '77',
-                  'player_name': '레거시 타자',
-                  'team_name': '레거시 팀',
-                  'season_id': '2024',
-                  'avg': '0.355',
-                  'obp': '0.410',
-                  'slg': '0.520',
-                  'ops': '0.930',
-                  'hits': '21',
-                  'hr': '3',
-                  'rbi': '14',
-                }
-              ]),
-              200,
-              headers: {'content-type': 'application/json'},
-            );
-          }
-        }
-
-        return http.Response('Unhandled', 500);
+        return http.Response('Not found', 404);
       });
 
       final service =
           BackendApiService(client: client, tokenProvider: () async => null);
-      final result = await service.getBatterRankings(
+      await service.getBatterRankings(
         seasonId: 2024,
         sort: BatterRankingSort.battingAverage,
+        filters: const RecordFilterParams(
+          scope: RecordScope.playoff,
+          group: RecordGroup.a,
+          playoffDivision: RecordPlayoffDivision.eutteum,
+        ),
       );
 
-      expect(result, hasLength(1));
-      expect(result.first.playerId, 77);
-      expect(result.first.playerName, '레거시 타자');
-      expect(result.first.battingAverage, closeTo(0.355, 0.0001));
+      final rankingUri = seen.firstWhere(
+        (uri) => uri.path == '/api/rankings/batters',
+      );
+      expect(rankingUri.queryParameters['scope'], 'PLAYOFF');
+      expect(rankingUri.queryParameters['group'], 'A');
+      expect(rankingUri.queryParameters['partCode'], '1');
+      expect(rankingUri.queryParameters['playoffDivision'], 'EUTTEUM');
+      expect(rankingUri.queryParameters['division'], 'EUTTEUM');
+      expect(rankingUri.queryParameters.containsKey('seasonType'), false);
+    });
 
-      final attemptedSorts = seen
-          .where((uri) => uri.path == '/api/records/batters')
-          .map((uri) => uri.queryParameters['sort'])
-          .toList();
-      expect(attemptedSorts, containsAllInOrder(['battingAverage', 'avg']));
+    test('maps playoffDivision filter to tier on playoffs endpoint', () async {
+      Uri? seenUri;
+      final client = MockClient((request) async {
+        if (request.url.path == '/api/records/playoffs') {
+          seenUri = request.url;
+          return http.Response('[]', 200,
+              headers: {'content-type': 'application/json'});
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final service =
+          BackendApiService(client: client, tokenProvider: () async => null);
+      await service.getPlayoffSummaries(
+        2025,
+        filters: const RecordFilterParams(
+          playoffDivision: RecordPlayoffDivision.beogeum,
+        ),
+      );
+
+      expect(seenUri, isNotNull);
+      expect(seenUri!.queryParameters['seasonId'], '2025');
+      expect(seenUri!.queryParameters['view'], 'teams');
+      expect(seenUri!.queryParameters['tier'], 'BEOGEUM');
     });
 
     test('retries rankings without filters when filtered request returns 400',

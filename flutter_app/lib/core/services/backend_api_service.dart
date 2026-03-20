@@ -42,6 +42,18 @@ class BackendApiService {
     return jsonDecode(res.body);
   }
 
+  Future<dynamic> _patch(String path, {Map<String, String>? query}) async {
+    final uri = Uri.parse('$_baseUrl$path').replace(queryParameters: query);
+    final headers = await _authHeaders();
+    final res = await _client.patch(uri, headers: headers);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw _ApiException(
+          res.statusCode, 'API error ${res.statusCode}: ${res.reasonPhrase}');
+    }
+    if (res.body.isEmpty) return null;
+    return jsonDecode(res.body);
+  }
+
   bool _isNotFoundError(Object err) =>
       err is _ApiException && err.statusCode == 404;
 
@@ -253,8 +265,11 @@ class BackendApiService {
     RecordFilterParams? filters,
   }) async {
     _validatePositiveInt(seasonId, 'seasonId');
-    final query = <String, String>{'seasonId': '$seasonId'};
-    _applyRecordFilters(query, filters);
+    final query = <String, String>{'seasonId': '$seasonId', 'view': 'teams'};
+    if (filters?.playoffDivision != null &&
+        filters?.playoffDivision != RecordPlayoffDivision.all) {
+      query['tier'] = filters!.playoffDivision!.wire;
+    }
 
     dynamic raw;
     try {
@@ -262,7 +277,7 @@ class BackendApiService {
     } catch (err) {
       if (_isBadRequestError(err) && _hasActiveRecordFilters(filters)) {
         raw = await _get('/api/records/playoffs',
-            query: {'seasonId': '$seasonId'});
+            query: {'seasonId': '$seasonId', 'view': 'teams'});
       } else if (_isNotFoundError(err)) {
         return [];
       } else {
@@ -383,6 +398,231 @@ class BackendApiService {
         })
         .whereType<PowerRankingApiRow>()
         .toList();
+  }
+
+  Future<List<TeamSummary>> getTeams() async {
+    dynamic raw;
+    try {
+      raw = await _get('/api/teams');
+    } catch (err) {
+      if (!_isNotFoundError(err)) rethrow;
+      raw = await _get('/api/team');
+    }
+    if (raw is! List) return [];
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map((row) {
+          final id = _toInt(row['id'] ?? row['teamId']);
+          final teamName = _toString(row['teamName'] ?? row['team_name'] ?? row['name']);
+          if (id <= 0 || teamName.isEmpty) return null;
+          return TeamSummary(
+            id: id,
+            teamName: teamName,
+            teamCode: _toString(row['teamCode'] ?? row['team_code'] ?? row['code']),
+            active: _toBool(row['active'] ?? true),
+          );
+        })
+        .whereType<TeamSummary>()
+        .toList()
+      ..sort((a, b) => a.teamName.compareTo(b.teamName));
+  }
+
+  Future<List<SeasonTeam>> getSeasonTeams(int seasonId) async {
+    _validatePositiveInt(seasonId, 'seasonId');
+    dynamic raw;
+    try {
+      raw = await _get('/api/seasons/$seasonId/teams');
+    } catch (err) {
+      if (_isNotFoundError(err)) return [];
+      rethrow;
+    }
+    if (raw is! List) return [];
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map((row) {
+          final resolvedSeasonId = _toInt(row['seasonId'] ?? row['season_id']);
+          final teamId = _toInt(row['teamId'] ?? row['team_id'] ?? row['id']);
+          final teamName = _toString(row['teamName'] ?? row['team_name'] ?? row['name']);
+          if (resolvedSeasonId <= 0 || teamId <= 0 || teamName.isEmpty) return null;
+          return SeasonTeam(
+            seasonId: resolvedSeasonId,
+            teamId: teamId,
+            teamName: teamName,
+            teamCode: _toString(row['teamCode'] ?? row['team_code']),
+          );
+        })
+        .whereType<SeasonTeam>()
+        .toList()
+      ..sort((a, b) => a.teamName.compareTo(b.teamName));
+  }
+
+  Future<RecordFilterOptions?> getRecordFilterOptions(int seasonId) async {
+    _validatePositiveInt(seasonId, 'seasonId');
+    dynamic raw;
+    try {
+      raw = await _get('/api/records/filter-options', query: {'seasonId': '$seasonId'});
+    } catch (err) {
+      if (_isNotFoundError(err)) return null;
+      rethrow;
+    }
+    if (raw is! Map<String, dynamic>) return null;
+
+    final groups = _toList(raw['groups'])
+        .map((row) {
+          final partCode = _toString(row['partCode'] ?? row['part_code']);
+          final group = _recordGroupFromWire(_toString(row['group']));
+          if (partCode.isEmpty || group == null || group == RecordGroup.all) {
+            return null;
+          }
+          return RecordFilterGroupOption(
+            partCode: partCode,
+            group: group,
+            label: _toString(row['label'], '${group.wire}조'),
+            order: _toInt(row['order']),
+          );
+        })
+        .whereType<RecordFilterGroupOption>()
+        .toList()
+      ..sort((a, b) => a.order.compareTo(b.order));
+
+    final scopes = _toDynamicList(raw['scopes'])
+        .map((item) => _recordScopeFromWire(item?.toString()))
+        .whereType<RecordScope>()
+        .toList();
+
+    final playoffDivisions = _toDynamicList(raw['playoffDivisions'])
+        .map((item) => _recordPlayoffDivisionFromWire(item?.toString()))
+        .whereType<RecordPlayoffDivision>()
+        .toList();
+
+    final regulations = _toDynamicList(raw['regulations'])
+        .map((item) => _recordRegulationFromWire(item?.toString()))
+        .whereType<RecordRegulation>()
+        .toList();
+
+    final batterSortOptions = _toDynamicList(raw['batterSortOptions'])
+        .map((item) => _batterSortFromWire(item?.toString()))
+        .whereType<BatterRankingSort>()
+        .toList();
+
+    final pitcherSortOptions = _toDynamicList(raw['pitcherSortOptions'])
+        .map((item) => _pitcherSortFromWire(item?.toString()))
+        .whereType<PitcherRankingSort>()
+        .toList();
+
+    final defaultRegulation =
+        _recordRegulationFromWire(_toString(raw['defaultRegulation']));
+
+    return RecordFilterOptions(
+      seasonId: _toInt(raw['seasonId'], seasonId),
+      groups: groups,
+      scopes: scopes,
+      playoffDivisions: playoffDivisions,
+      regulations: regulations,
+      defaultRegulation: defaultRegulation,
+      batterSortOptions: batterSortOptions,
+      pitcherSortOptions: pitcherSortOptions,
+    );
+  }
+
+  Future<List<PlayerSearchResult>> searchPlayers({
+    required int seasonId,
+    required String q,
+    int? teamId,
+    int? limit,
+  }) async {
+    _validatePositiveInt(seasonId, 'seasonId');
+    final keyword = q.trim();
+    if (keyword.isEmpty) return [];
+    final query = <String, String>{
+      'seasonId': '$seasonId',
+      'q': keyword,
+    };
+    if (teamId != null && teamId > 0) query['teamId'] = '$teamId';
+    if (limit != null) {
+      final clamped = limit.clamp(1, 50);
+      query['limit'] = '$clamped';
+    }
+
+    dynamic raw;
+    try {
+      raw = await _get('/api/players/search', query: query);
+    } catch (err) {
+      if (_isNotFoundError(err)) return [];
+      rethrow;
+    }
+    if (raw is! List) return [];
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map((row) {
+          final playerId = _toInt(row['playerId'] ?? row['player_id']);
+          final teamId = _toInt(row['teamId'] ?? row['team_id']);
+          final resolvedSeasonId = _toInt(row['seasonId'] ?? row['season_id']);
+          final playerName = _toString(row['playerName'] ?? row['player_name'] ?? row['name']);
+          if (playerId <= 0 || teamId <= 0 || resolvedSeasonId <= 0 || playerName.isEmpty) {
+            return null;
+          }
+          return PlayerSearchResult(
+            playerId: playerId,
+            playerName: playerName,
+            teamId: teamId,
+            teamName: _toString(row['teamName'] ?? row['team_name']),
+            jerseyNumber: _toDisplayString(
+              row['jerseyNumber'] ??
+                  row['backNumber'] ??
+                  row['uniformNumber'] ??
+                  row['number'],
+            ),
+            seasonId: resolvedSeasonId,
+          );
+        })
+        .whereType<PlayerSearchResult>()
+        .toList();
+  }
+
+  Future<PlayerProfile?> getPlayerProfile(int playerId, {int? seasonId}) async {
+    _validatePositiveInt(playerId, 'playerId');
+    final query = <String, String>{};
+    if (seasonId != null && seasonId > 0) query['seasonId'] = '$seasonId';
+    dynamic raw;
+    try {
+      raw = await _get('/api/players/$playerId/profile',
+          query: query.isEmpty ? null : query);
+    } catch (err) {
+      if (_isNotFoundError(err)) return null;
+      rethrow;
+    }
+    if (raw is! Map<String, dynamic>) return null;
+    final resolvedPlayerId = _toInt(raw['playerId'] ?? raw['player_id']);
+    final resolvedSeasonId = _toInt(raw['seasonId'] ?? raw['season_id']);
+    final teamId = _toInt(raw['teamId'] ?? raw['team_id']);
+    if (resolvedPlayerId <= 0 || resolvedSeasonId <= 0 || teamId <= 0) {
+      return null;
+    }
+
+    return PlayerProfile(
+      playerId: resolvedPlayerId,
+      playerName: _toString(raw['playerName'] ?? raw['player_name'] ?? raw['name']),
+      seasonId: resolvedSeasonId,
+      teamId: teamId,
+      teamName: _toString(raw['teamName'] ?? raw['team_name']),
+      teamCode: _toString(raw['teamCode'] ?? raw['team_code']),
+      jerseyNumber: _toDisplayString(
+        raw['jerseyNumber'] ??
+            raw['backNumber'] ??
+            raw['uniformNumber'] ??
+            raw['number'],
+      ),
+    );
+  }
+
+  Future<void> updateTeamActive({
+    required int teamId,
+    required bool active,
+  }) async {
+    _validatePositiveInt(teamId, 'teamId');
+    await _patch('/api/admin/teams/$teamId/active',
+        query: {'active': active ? 'true' : 'false'});
   }
 
   // -- Player Search / Roster --
@@ -672,7 +912,7 @@ class BackendApiService {
 
     if (filters.playoffDivision != null &&
         filters.playoffDivision != RecordPlayoffDivision.all) {
-      query['seasonType'] = filters.playoffDivision!.wire;
+      query['playoffDivision'] = filters.playoffDivision!.wire;
       query['division'] = filters.playoffDivision!.wire;
     }
   }
@@ -706,6 +946,90 @@ class BackendApiService {
       case RecordGroup.all:
         return null;
     }
+  }
+
+  RecordScope? _recordScopeFromWire(String? value) {
+    final raw = (value ?? '').trim().toUpperCase();
+    switch (raw) {
+      case 'ALL':
+        return RecordScope.all;
+      case 'LEAGUE':
+        return RecordScope.league;
+      case 'PLAYOFF':
+        return RecordScope.playoff;
+      default:
+        return null;
+    }
+  }
+
+  RecordGroup? _recordGroupFromWire(String? value) {
+    final raw = (value ?? '').trim().toUpperCase();
+    switch (raw) {
+      case 'ALL':
+        return RecordGroup.all;
+      case 'A':
+        return RecordGroup.a;
+      case 'B':
+        return RecordGroup.b;
+      case 'C':
+        return RecordGroup.c;
+      case 'D':
+        return RecordGroup.d;
+      case 'E':
+        return RecordGroup.e;
+      case 'F':
+        return RecordGroup.f;
+      case 'G':
+        return RecordGroup.g;
+      case 'H':
+        return RecordGroup.h;
+      default:
+        return null;
+    }
+  }
+
+  RecordPlayoffDivision? _recordPlayoffDivisionFromWire(String? value) {
+    final raw = (value ?? '').trim().toUpperCase();
+    switch (raw) {
+      case 'ALL':
+        return RecordPlayoffDivision.all;
+      case 'EUTTEUM':
+        return RecordPlayoffDivision.eutteum;
+      case 'BEOGEUM':
+        return RecordPlayoffDivision.beogeum;
+      default:
+        return null;
+    }
+  }
+
+  RecordRegulation? _recordRegulationFromWire(String? value) {
+    final raw = (value ?? '').trim().toUpperCase();
+    switch (raw) {
+      case 'ALL':
+        return RecordRegulation.all;
+      case 'IN':
+        return RecordRegulation.inRule;
+      case 'OUT':
+        return RecordRegulation.out;
+      default:
+        return null;
+    }
+  }
+
+  BatterRankingSort? _batterSortFromWire(String? value) {
+    final raw = (value ?? '').trim();
+    for (final item in BatterRankingSort.values) {
+      if (item.wire == raw) return item;
+    }
+    return null;
+  }
+
+  PitcherRankingSort? _pitcherSortFromWire(String? value) {
+    final raw = (value ?? '').trim();
+    for (final item in PitcherRankingSort.values) {
+      if (item.wire == raw) return item;
+    }
+    return null;
   }
 
   BatterRanking? _normalizeBatterRankingRow(
@@ -911,6 +1235,11 @@ class BackendApiService {
     if (value is Map<String, dynamic>) {
       return [value];
     }
+    return [];
+  }
+
+  List<dynamic> _toDynamicList(dynamic value) {
+    if (value is List) return value;
     return [];
   }
 
@@ -1222,6 +1551,70 @@ class SeasonSummary {
   final int year;
 }
 
+class TeamSummary {
+  const TeamSummary({
+    required this.id,
+    required this.teamName,
+    required this.teamCode,
+    required this.active,
+  });
+
+  final int id;
+  final String teamName;
+  final String teamCode;
+  final bool active;
+}
+
+class SeasonTeam {
+  const SeasonTeam({
+    required this.seasonId,
+    required this.teamId,
+    required this.teamName,
+    required this.teamCode,
+  });
+
+  final int seasonId;
+  final int teamId;
+  final String teamName;
+  final String teamCode;
+}
+
+class RecordFilterGroupOption {
+  const RecordFilterGroupOption({
+    required this.partCode,
+    required this.group,
+    required this.label,
+    required this.order,
+  });
+
+  final String partCode;
+  final RecordGroup group;
+  final String label;
+  final int order;
+}
+
+class RecordFilterOptions {
+  const RecordFilterOptions({
+    required this.seasonId,
+    required this.groups,
+    required this.scopes,
+    required this.playoffDivisions,
+    required this.regulations,
+    required this.defaultRegulation,
+    required this.batterSortOptions,
+    required this.pitcherSortOptions,
+  });
+
+  final int seasonId;
+  final List<RecordFilterGroupOption> groups;
+  final List<RecordScope> scopes;
+  final List<RecordPlayoffDivision> playoffDivisions;
+  final List<RecordRegulation> regulations;
+  final RecordRegulation? defaultRegulation;
+  final List<BatterRankingSort> batterSortOptions;
+  final List<PitcherRankingSort> pitcherSortOptions;
+}
+
 class TeamRecordStanding {
   const TeamRecordStanding({
     required this.teamId,
@@ -1332,6 +1725,44 @@ class PlayerLookup {
   final String jerseyNumber;
   final int seasonId;
   final int? seasonYear;
+}
+
+class PlayerSearchResult {
+  const PlayerSearchResult({
+    required this.playerId,
+    required this.playerName,
+    required this.teamId,
+    required this.teamName,
+    required this.jerseyNumber,
+    required this.seasonId,
+  });
+
+  final int playerId;
+  final String playerName;
+  final int teamId;
+  final String teamName;
+  final String jerseyNumber;
+  final int seasonId;
+}
+
+class PlayerProfile {
+  const PlayerProfile({
+    required this.playerId,
+    required this.playerName,
+    required this.seasonId,
+    required this.teamId,
+    required this.teamName,
+    required this.teamCode,
+    required this.jerseyNumber,
+  });
+
+  final int playerId;
+  final String playerName;
+  final int seasonId;
+  final int teamId;
+  final String teamName;
+  final String teamCode;
+  final String jerseyNumber;
 }
 
 class PlayerRosterItem {

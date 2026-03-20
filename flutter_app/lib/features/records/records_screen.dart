@@ -53,6 +53,7 @@ class RecordsScreenState extends State<RecordsScreen>
   String? _warning;
   String? _powerError;
   bool _playoffFilterEnabled = false;
+  RecordFilterOptions? _recordFilterOptions;
 
   RecordsOverview? _overview;
   List<TeamRecordStanding> _teamStandings = [];
@@ -108,6 +109,288 @@ class RecordsScreenState extends State<RecordsScreen>
     setState(fn);
   }
 
+  List<RecordScope> get _scopeOptions {
+    final scopes =
+        _recordFilterOptions?.scopes.toSet().toList() ?? <RecordScope>[];
+    final normalized = scopes.isEmpty
+        ? [RecordScope.all, RecordScope.league, RecordScope.playoff]
+        : scopes;
+    final output = <RecordScope>[RecordScope.all];
+    if (normalized.contains(RecordScope.league)) {
+      output.add(RecordScope.league);
+    }
+    if (_playoffFilterEnabled && normalized.contains(RecordScope.playoff)) {
+      output.add(RecordScope.playoff);
+    }
+    return output;
+  }
+
+  List<RecordGroup> get _groupOptions {
+    final groups = _recordFilterOptions?.groups
+            .map((item) => item.group)
+            .toSet()
+            .toList() ??
+        <RecordGroup>[];
+    if (groups.isEmpty) {
+      return const [
+        RecordGroup.all,
+        RecordGroup.a,
+        RecordGroup.b,
+        RecordGroup.c,
+        RecordGroup.d,
+        RecordGroup.e,
+        RecordGroup.f,
+        RecordGroup.g,
+        RecordGroup.h,
+      ];
+    }
+    final sorted = [...groups]..sort((a, b) => a.wire.compareTo(b.wire));
+    return [RecordGroup.all, ...sorted];
+  }
+
+  List<RecordPlayoffDivision> get _playoffDivisionOptions {
+    final divisions = _recordFilterOptions?.playoffDivisions.toSet().toList() ??
+        <RecordPlayoffDivision>[];
+    if (divisions.isEmpty) {
+      return const [
+        RecordPlayoffDivision.all,
+        RecordPlayoffDivision.eutteum,
+        RecordPlayoffDivision.beogeum,
+      ];
+    }
+    final sorted = [...divisions]..sort((a, b) => a.wire.compareTo(b.wire));
+    return [RecordPlayoffDivision.all, ...sorted];
+  }
+
+  List<RecordRegulation> get _regulationOptions {
+    final regulations = _recordFilterOptions?.regulations.toSet().toList() ??
+        <RecordRegulation>[];
+    if (regulations.isEmpty) {
+      return const [RecordRegulation.inRule, RecordRegulation.out];
+    }
+    final sorted = [...regulations]..sort((a, b) => a.wire.compareTo(b.wire));
+    return sorted;
+  }
+
+  List<_SortItem<BatterRankingSort>> get _batterSortItems {
+    final items = _recordFilterOptions?.batterSortOptions ?? const [];
+    final normalized = items.isEmpty
+        ? const [
+            BatterRankingSort.battingAverage,
+            BatterRankingSort.ops,
+            BatterRankingSort.onBasePct,
+            BatterRankingSort.sluggingPct,
+            BatterRankingSort.hits,
+            BatterRankingSort.homeRuns,
+            BatterRankingSort.rbi,
+            BatterRankingSort.gamesPlayed,
+            BatterRankingSort.plateAppearance,
+            BatterRankingSort.stolenBases,
+          ]
+        : items;
+    return normalized
+        .map((item) => _SortItem<BatterRankingSort>(
+            value: item, label: _batterSortLabel(item)))
+        .toList();
+  }
+
+  List<_SortItem<PitcherRankingSort>> get _pitcherSortItems {
+    final items = _recordFilterOptions?.pitcherSortOptions ?? const [];
+    final normalized = items.isEmpty
+        ? const [
+            PitcherRankingSort.era,
+            PitcherRankingSort.whip,
+            PitcherRankingSort.strikeouts,
+            PitcherRankingSort.wins,
+            PitcherRankingSort.saves,
+            PitcherRankingSort.inningsPitched,
+            PitcherRankingSort.walksAllowed,
+            PitcherRankingSort.gamesPlayed,
+          ]
+        : items;
+    return normalized
+        .map((item) => _SortItem<PitcherRankingSort>(
+            value: item, label: _pitcherSortLabel(item)))
+        .toList();
+  }
+
+  String _scopeText(RecordScope value) {
+    switch (value) {
+      case RecordScope.all:
+        return '전체';
+      case RecordScope.league:
+        return '리그';
+      case RecordScope.playoff:
+        return '플레이오프';
+    }
+  }
+
+  String _groupText(RecordGroup value) {
+    if (value == RecordGroup.all) return '전체조';
+    return '${value.wire}조';
+  }
+
+  String _playoffDivisionText(RecordPlayoffDivision value) {
+    switch (value) {
+      case RecordPlayoffDivision.all:
+        return '전체';
+      case RecordPlayoffDivision.eutteum:
+        return '으뜸';
+      case RecordPlayoffDivision.beogeum:
+        return '버금';
+    }
+  }
+
+  String _batterSortLabel(BatterRankingSort value) {
+    switch (value) {
+      case BatterRankingSort.battingAverage:
+        return 'AVG';
+      case BatterRankingSort.hits:
+        return 'H';
+      case BatterRankingSort.homeRuns:
+        return 'HR';
+      case BatterRankingSort.rbi:
+        return 'RBI';
+      case BatterRankingSort.onBasePct:
+        return 'OBP';
+      case BatterRankingSort.sluggingPct:
+        return 'SLG';
+      case BatterRankingSort.ops:
+        return 'OPS';
+      case BatterRankingSort.gamesPlayed:
+        return 'G';
+      case BatterRankingSort.plateAppearance:
+        return 'PA';
+      case BatterRankingSort.stolenBases:
+        return 'SB';
+    }
+  }
+
+  String _pitcherSortLabel(PitcherRankingSort value) {
+    switch (value) {
+      case PitcherRankingSort.era:
+        return 'ERA';
+      case PitcherRankingSort.whip:
+        return 'WHIP';
+      case PitcherRankingSort.strikeouts:
+        return 'K';
+      case PitcherRankingSort.wins:
+        return 'W';
+      case PitcherRankingSort.saves:
+        return 'SV';
+      case PitcherRankingSort.inningsPitched:
+        return 'IP';
+      case PitcherRankingSort.walksAllowed:
+        return 'BB';
+      case PitcherRankingSort.gamesPlayed:
+        return 'G';
+    }
+  }
+
+  RecordsFilterState _normalizeFiltersForOptions(
+    RecordsFilterState current,
+    RecordFilterOptions? options,
+  ) {
+    var next = current;
+
+    final optionScopes = options?.scopes.toSet().toList() ?? <RecordScope>[];
+    final allowedScopes = optionScopes.isEmpty
+        ? [RecordScope.all, RecordScope.league, RecordScope.playoff]
+        : [
+            RecordScope.all,
+            if (optionScopes.contains(RecordScope.league)) RecordScope.league,
+            if (optionScopes.contains(RecordScope.playoff) &&
+                _playoffFilterEnabled)
+              RecordScope.playoff,
+          ];
+    if (!allowedScopes.contains(next.scope)) {
+      next = next.copyWith(scope: allowedScopes.first);
+    }
+
+    final optionGroups =
+        options?.groups.map((item) => item.group).toSet().toList() ??
+            <RecordGroup>[];
+    final allowedGroups = optionGroups.isEmpty
+        ? const [
+            RecordGroup.all,
+            RecordGroup.a,
+            RecordGroup.b,
+            RecordGroup.c,
+            RecordGroup.d,
+            RecordGroup.e,
+            RecordGroup.f,
+            RecordGroup.g,
+            RecordGroup.h,
+          ]
+        : [RecordGroup.all, ...optionGroups];
+    if (!allowedGroups.contains(next.group)) {
+      next = next.copyWith(group: RecordGroup.all);
+    }
+
+    final optionDivisions =
+        options?.playoffDivisions.toSet().toList() ?? <RecordPlayoffDivision>[];
+    final allowedDivisions = optionDivisions.isEmpty
+        ? const [
+            RecordPlayoffDivision.all,
+            RecordPlayoffDivision.eutteum,
+            RecordPlayoffDivision.beogeum
+          ]
+        : [RecordPlayoffDivision.all, ...optionDivisions];
+    if (!allowedDivisions.contains(next.playoffDivision)) {
+      next = next.copyWith(playoffDivision: RecordPlayoffDivision.all);
+    }
+    if (next.scope != RecordScope.playoff &&
+        next.playoffDivision != RecordPlayoffDivision.all) {
+      next = next.copyWith(playoffDivision: RecordPlayoffDivision.all);
+    }
+
+    final allowedRegulations = options?.regulations.toSet().toList() ??
+        const [RecordRegulation.inRule, RecordRegulation.out];
+    if (!allowedRegulations.contains(next.regulation)) {
+      final fallback = options?.defaultRegulation ??
+          (allowedRegulations.isEmpty
+              ? RecordRegulation.inRule
+              : allowedRegulations.first);
+      next = next.copyWith(regulation: fallback);
+    }
+
+    final allowedBatterSorts = (options?.batterSortOptions ??
+            const [
+              BatterRankingSort.battingAverage,
+              BatterRankingSort.ops,
+              BatterRankingSort.onBasePct,
+              BatterRankingSort.sluggingPct,
+              BatterRankingSort.hits,
+              BatterRankingSort.homeRuns,
+              BatterRankingSort.rbi,
+              BatterRankingSort.gamesPlayed,
+              BatterRankingSort.plateAppearance,
+              BatterRankingSort.stolenBases,
+            ])
+        .toSet();
+    if (!allowedBatterSorts.contains(next.topBatterSort)) {
+      next = next.copyWith(topBatterSort: allowedBatterSorts.first);
+    }
+
+    final allowedPitcherSorts = (options?.pitcherSortOptions ??
+            const [
+              PitcherRankingSort.era,
+              PitcherRankingSort.whip,
+              PitcherRankingSort.strikeouts,
+              PitcherRankingSort.wins,
+              PitcherRankingSort.saves,
+              PitcherRankingSort.inningsPitched,
+              PitcherRankingSort.walksAllowed,
+              PitcherRankingSort.gamesPlayed,
+            ])
+        .toSet();
+    if (!allowedPitcherSorts.contains(next.topPitcherSort)) {
+      next = next.copyWith(topPitcherSort: allowedPitcherSorts.first);
+    }
+
+    return next;
+  }
+
   Future<void> _loadInitial() async {
     setState(() {
       _initializing = true;
@@ -135,6 +418,7 @@ class RecordsScreenState extends State<RecordsScreen>
         _initializing = false;
       });
 
+      await _loadFilterOptions(selectedSeasonId);
       await _reloadRecords();
     } catch (err) {
       if (!mounted) return;
@@ -143,6 +427,40 @@ class RecordsScreenState extends State<RecordsScreen>
         _initializing = false;
       });
     }
+  }
+
+  Future<void> _loadFilterOptions(int seasonId) async {
+    try {
+      final options = await _api.getRecordFilterOptions(seasonId);
+      if (!mounted) return;
+      final nextFilters = _normalizeFiltersForOptions(_filters, options);
+      setState(() {
+        _recordFilterOptions = options;
+        _filters = nextFilters;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _recordFilterOptions = null;
+      });
+    }
+  }
+
+  Future<void> _changeSeason(int seasonId, SeasonSummary fallbackSeason) async {
+    if (seasonId == _seasonId) return;
+    final nextSeason = _seasons.firstWhere(
+      (e) => e.id == seasonId,
+      orElse: () => fallbackSeason,
+    );
+    setState(() {
+      _seasonId = seasonId;
+      _recordFilterOptions = null;
+      _filters = _filters.copyWith(
+        rankingYear: _filters.rankingYear ?? (nextSeason.year + 1),
+      );
+    });
+    await _loadFilterOptions(seasonId);
+    await _reloadRecords();
   }
 
   Future<void> _reloadRecords() async {
@@ -189,6 +507,17 @@ class RecordsScreenState extends State<RecordsScreen>
       _warning = result.warningMessage;
       _loading = false;
     });
+
+    if (!result.playoffFilterEnabled && _filters.scope == RecordScope.playoff) {
+      setState(() {
+        _filters = _filters.copyWith(
+          scope: RecordScope.all,
+          playoffDivision: RecordPlayoffDivision.all,
+        );
+      });
+      await _reloadRecords();
+      return;
+    }
 
     if (_tabCtrl.index == RecordsHubTab.power.index) {
       await _loadPowerRankings();
@@ -375,14 +704,19 @@ class _FilterDropdown<T> extends StatelessWidget {
 class _RegulationFilter extends StatelessWidget {
   const _RegulationFilter({
     required this.value,
+    required this.available,
     required this.onChanged,
   });
 
   final RecordRegulation value;
+  final List<RecordRegulation> available;
   final ValueChanged<RecordRegulation> onChanged;
 
   @override
   Widget build(BuildContext context) {
+    final options = available.isEmpty
+        ? const [RecordRegulation.inRule, RecordRegulation.out]
+        : available;
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
@@ -390,17 +724,18 @@ class _RegulationFilter extends StatelessWidget {
         border: Border.all(color: AppTheme.slate700),
       ),
       child: Row(
-        children: [
-          _regButton(
-              label: 'IN',
-              active: value == RecordRegulation.inRule,
-              onTap: () => onChanged(RecordRegulation.inRule)),
-          const SizedBox(width: 6),
-          _regButton(
-              label: 'OUT',
-              active: value == RecordRegulation.out,
-              onTap: () => onChanged(RecordRegulation.out)),
-        ],
+        children: options
+            .map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: _regButton(
+                  label: item == RecordRegulation.out ? 'OUT' : 'IN',
+                  active: value == item,
+                  onTap: () => onChanged(item),
+                ),
+              ),
+            )
+            .toList(),
       ),
     );
   }
@@ -502,8 +837,8 @@ class _Card extends StatelessWidget {
                 const Spacer(),
                 Text(
                   hint!,
-                  style: const TextStyle(
-                      color: AppTheme.slate500, fontSize: 10),
+                  style:
+                      const TextStyle(color: AppTheme.slate500, fontSize: 10),
                 ),
               ],
             ],

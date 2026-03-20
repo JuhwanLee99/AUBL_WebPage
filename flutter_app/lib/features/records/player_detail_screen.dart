@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/services/backend_api_service.dart';
@@ -30,8 +32,11 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   int? _viewSeasonId;
 
   List<PlayerLookup> _searchCandidates = [];
+  List<SeasonTeam> _seasonTeams = [];
   bool _searchIndexLoading = false;
   String? _searchIndexError;
+  Timer? _searchDebounceTimer;
+  int _searchRequestSeq = 0;
 
   String _selectedTeamName = 'ALL';
   String _searchInput = '';
@@ -70,6 +75,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
   @override
   void dispose() {
+    _searchDebounceTimer?.cancel();
     if (_ownsApi) {
       _api.dispose();
     }
@@ -88,7 +94,8 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         }
       });
       if (_searchSeasonId != null) {
-        _loadSearchIndex();
+        await _loadSeasonTeams();
+        _schedulePlayerSearch();
       }
     } catch (err) {
       if (!mounted) return;
@@ -98,21 +105,14 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     }
   }
 
-  Future<void> _loadSearchIndex() async {
+  Future<void> _loadSeasonTeams() async {
     final seasonId = _searchSeasonId;
     if (seasonId == null) return;
-
-    setState(() {
-      _searchIndexLoading = true;
-      _searchIndexError = null;
-    });
-
     try {
-      final items = await _api.getPlayerSearchIndex(seasonId);
+      final teams = await _api.getSeasonTeams(seasonId);
       if (!mounted) return;
       setState(() {
-        _searchCandidates = items;
-        _searchIndexLoading = false;
+        _seasonTeams = teams;
         if (_selectedTeamName != 'ALL' &&
             !_teamOptions.contains(_selectedTeamName)) {
           _selectedTeamName = 'ALL';
@@ -120,6 +120,77 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       });
     } catch (err) {
       if (!mounted) return;
+      setState(() {
+        _seasonTeams = [];
+        _selectedTeamName = 'ALL';
+        _searchIndexError = '시즌 팀 목록을 불러오지 못했습니다: $err';
+      });
+    }
+  }
+
+  int? get _selectedTeamId {
+    if (_selectedTeamName == 'ALL') return null;
+    final selectedKey = _normalizeKeyword(_selectedTeamName);
+    for (final team in _seasonTeams) {
+      if (_normalizeKeyword(team.teamName) == selectedKey) {
+        return team.teamId;
+      }
+    }
+    return null;
+  }
+
+  void _schedulePlayerSearch() {
+    _searchDebounceTimer?.cancel();
+    _searchDebounceTimer =
+        Timer(const Duration(milliseconds: 300), _performPlayerSearch);
+  }
+
+  Future<void> _performPlayerSearch() async {
+    final seasonId = _searchSeasonId;
+    final keyword = _searchInput.trim();
+    if (seasonId == null) return;
+
+    if (keyword.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _searchCandidates = [];
+        _searchIndexLoading = false;
+        _searchIndexError = null;
+      });
+      return;
+    }
+
+    final seq = ++_searchRequestSeq;
+    setState(() {
+      _searchIndexLoading = true;
+      _searchIndexError = null;
+    });
+
+    try {
+      final items = await _api.searchPlayers(
+        seasonId: seasonId,
+        q: keyword,
+        teamId: _selectedTeamId,
+        limit: 50,
+      );
+      if (!mounted || seq != _searchRequestSeq) return;
+      setState(() {
+        _searchCandidates = items
+            .map(
+              (item) => PlayerLookup(
+                playerId: item.playerId,
+                playerName: item.playerName,
+                teamName: item.teamName,
+                jerseyNumber: item.jerseyNumber,
+                seasonId: item.seasonId,
+                seasonYear: null,
+              ),
+            )
+            .toList();
+        _searchIndexLoading = false;
+      });
+    } catch (err) {
+      if (!mounted || seq != _searchRequestSeq) return;
       setState(() {
         _searchCandidates = [];
         _searchIndexLoading = false;
@@ -137,8 +208,31 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     });
 
     try {
-      final stats =
-          await _api.getPlayerStats(playerId, seasonId: _viewSeasonId);
+      var stats = await _api.getPlayerStats(playerId, seasonId: _viewSeasonId);
+      if (stats.teamName.trim().isEmpty || stats.jerseyNumber.trim().isEmpty) {
+        try {
+          final profile =
+              await _api.getPlayerProfile(playerId, seasonId: _viewSeasonId);
+          if (profile != null) {
+            stats = PlayerStatsResponse(
+              playerId: stats.playerId,
+              playerName: stats.playerName.trim().isNotEmpty
+                  ? stats.playerName
+                  : profile.playerName,
+              teamName: stats.teamName.trim().isNotEmpty
+                  ? stats.teamName
+                  : profile.teamName,
+              jerseyNumber: stats.jerseyNumber.trim().isNotEmpty
+                  ? stats.jerseyNumber
+                  : profile.jerseyNumber,
+              batterStats: stats.batterStats,
+              pitcherStats: stats.pitcherStats,
+            );
+          }
+        } catch (_) {
+          // Ignore profile fallback error and keep stats response.
+        }
+      }
       if (!mounted) return;
 
       final batterSeasonIds = stats.batterStats
@@ -323,7 +417,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   }
 
   List<String> get _teamOptions {
-    final source = _searchCandidates
+    final source = _seasonTeams
         .map((e) => e.teamName)
         .where((e) => e.trim().isNotEmpty)
         .toSet()
@@ -381,7 +475,8 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   Widget build(BuildContext context) {
     final content = RefreshIndicator(
       onRefresh: () async {
-        await _loadSearchIndex();
+        await _loadSeasonTeams();
+        await _performPlayerSearch();
         if (_currentPlayerId != null) {
           await _loadPlayer(_currentPlayerId!);
         }
@@ -473,8 +568,10 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                     if (value == null || value == _searchSeasonId) return;
                     setState(() {
                       _searchSeasonId = value;
+                      _searchCandidates = [];
+                      _selectedTeamName = 'ALL';
                     });
-                    _loadSearchIndex();
+                    _loadSeasonTeams().then((_) => _schedulePlayerSearch());
                   },
                 ),
               ),
@@ -503,6 +600,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                   onChanged: (value) {
                     if (value == null) return;
                     setState(() => _selectedTeamName = value);
+                    _schedulePlayerSearch();
                   },
                 ),
               ),
@@ -513,7 +611,10 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
             children: [
               Expanded(
                 child: TextField(
-                  onChanged: (value) => setState(() => _searchInput = value),
+                  onChanged: (value) {
+                    setState(() => _searchInput = value);
+                    _schedulePlayerSearch();
+                  },
                   decoration: const InputDecoration(
                     labelText: '선수 이름 검색',
                     hintText: '예: 홍길동',
@@ -583,13 +684,13 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
           if (_searchIndexLoading)
             const Padding(
               padding: EdgeInsets.only(top: 8),
-              child: Text('선수 검색 인덱스를 불러오는 중...',
+              child: Text('선수 검색 결과를 불러오는 중...',
                   style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
             ),
           if (_searchIndexError != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: Text('검색 인덱스 오류: $_searchIndexError',
+              child: Text('검색 오류: $_searchIndexError',
                   style: const TextStyle(color: AppTheme.red500, fontSize: 12)),
             ),
           if (_nameFilteredCandidates.isNotEmpty) ...[

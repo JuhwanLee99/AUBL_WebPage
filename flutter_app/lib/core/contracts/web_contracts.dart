@@ -6,6 +6,7 @@ class WebRouteContracts {
   static const String scoreboard = '/scoreboard';
   static const String admin = '/admin';
   static const String adminGames = '/admin/games';
+  static const String adminModeration = '/admin/moderation';
   static const String scheduleManage = '/schedule/manage';
 
   static const String scoreboardTextPrefix = '/scoreboard-text/';

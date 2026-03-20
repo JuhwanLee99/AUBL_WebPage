@@ -7,6 +7,7 @@ import '../../core/models/match.dart' as m;
 import '../../app/shell_controller.dart';
 import '../../core/contracts/web_contracts.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/match_time.dart';
 import '../../core/widgets/background_logo.dart';
 import '../../core/widgets/match_status_badge.dart';
 import '../../core/data/team_groups.dart';
@@ -250,9 +251,7 @@ class _AllMatchesTabState extends State<_AllMatchesTab> {
     // 날짜별 그룹핑
     final grouped = <String, List<m.Match>>{};
     for (final match in widget.matches) {
-      final dateKey = (match.startTime != null && match.startTime!.length >= 10)
-          ? match.startTime!.substring(0, 10)
-          : 'unknown';
+      final dateKey = matchStartDateKey(match.startTime) ?? 'unknown';
       (grouped[dateKey] ??= []).add(match);
     }
 
@@ -434,15 +433,11 @@ class _MatchCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    String dateLabel = '';
-    if (match.startTime != null) {
-      try {
-        final dt = DateTime.parse(match.startTime!);
-        dateLabel = DateFormat('M/d (E) HH:mm', 'ko').format(dt);
-      } catch (_) {
-        dateLabel = match.startTime!.substring(0, 10);
-      }
-    }
+    final dateLabel = formatMatchStartTime(
+          match.startTime,
+          pattern: 'M/d (E) HH:mm',
+        ) ??
+        (match.startTime ?? '');
 
     return GestureDetector(
       onTap: onTap,
