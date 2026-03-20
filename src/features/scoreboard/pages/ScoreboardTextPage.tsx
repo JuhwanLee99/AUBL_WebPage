@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ScoreboardFrame from '../components/ScoreboardFrame';
 import { useDemoStore, buildGameRecord } from '@shared/state/demoStore';
-import type { PlayEvent, ErrorDetails, RunnerAdvanceOutcome, BattedBallDetails, PlayerSlot } from '@shared/state/demoStore';
+import type { PlayEvent, ErrorDetails, RunnerAdvanceOutcome, BattedBallDetails, PlayerSlot, PostGamePitcherLine, PostGameRecord } from '@shared/state/demoStore';
 import StatsTable from '@shared/components/StatsTable';
 import RemovedPlayersPanel from '@shared/components/RemovedPlayersPanel';
 import { GameTimerDisplay } from '@shared/components/GameTimerDisplay';
@@ -45,6 +45,126 @@ function emptyBatterLine(): BatterLine {
 
 function emptyPitcherLine(): PitcherLine {
   return { bf: 0, outs: 0, hits: 0, hr: 0, bb: 0, hbp: 0, so: 0, pitches: 0, strikes: 0, balls: 0 };
+}
+
+function toFinite(value: unknown, fallback = 0): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function parseIpToOuts(ip: unknown): number {
+  const value = Math.max(0, toFinite(ip, 0));
+  const whole = Math.trunc(value);
+  const decimal = Math.round((value - whole) * 10);
+  if (decimal >= 0 && decimal <= 2) {
+    return whole * 3 + decimal;
+  }
+  return Math.round(value * 3);
+}
+
+function toManualStatus(slot: string | undefined): BatterStatLine['status'] {
+  if (slot === '대수비' || slot === '대타' || slot === '대주자') return slot;
+  return undefined;
+}
+
+function buildManualPlayerStats(record: PostGameRecord | null | undefined): {
+  hitters: { home: BatterStatLine[]; away: BatterStatLine[] };
+  pitchers: { home: PitcherStatLine[]; away: PitcherStatLine[] };
+} | null {
+  if (!record) return null;
+
+  const toBatterArray = (side: 'home' | 'away'): BatterStatLine[] =>
+    (record.batters?.[side] ?? [])
+      .filter((row) => (row.name ?? '').trim())
+      .map((row) => ({
+        name: row.name ?? '',
+        pos: row.pos ?? '',
+        order: row.order ?? null,
+        status: toManualStatus(row.slot),
+        pa: toFinite(row.pa, 0),
+        ab: toFinite(row.ab, 0),
+        h: toFinite(row.h, 0),
+        singles: toFinite(row.singles, 0),
+        doubles: toFinite(row.doubles, 0),
+        triples: toFinite(row.triples, 0),
+        hr: toFinite(row.hr, 0),
+        bb: toFinite(row.bb, 0),
+        ci: 0,
+        fc: toFinite(row.fc, 0),
+        hbp: toFinite(row.hbp, 0),
+        so: toFinite(row.so, 0),
+        sac: toFinite(row.sac, 0),
+        r: toFinite(row.r, 0),
+        rbi: toFinite(row.rbi, 0),
+      }));
+
+  const toPitcherArray = (side: 'home' | 'away'): PitcherStatLine[] =>
+    (record.pitchers?.[side] ?? [])
+      .filter((row) => (row.name ?? '').trim())
+      .map((row, idx) => {
+        const slot = (row.slot ?? '').trim();
+        const appearanceOrder = slot === '선발' ? 0 : idx + 1;
+        return {
+          name: row.name ?? '',
+          pos: 'P',
+          status: slot === '대수비' ? '대수비' : undefined,
+          bf: toFinite(row.bf, 0),
+          pitches: toFinite(row.pitches, 0),
+          strikes: 0,
+          balls: 0,
+          outs: parseIpToOuts(row.ip),
+          h: toFinite(row.h, 0),
+          hr: toFinite(row.hr, 0),
+          bb: toFinite(row.bb, 0),
+          hbp: toFinite(row.hbp, 0),
+          so: toFinite(row.so, 0),
+          r: toFinite(row.r, 0),
+          er: toFinite(row.er, 0),
+          appearanceOrder,
+          appearanceLabel: slot || (idx === 0 ? '선발' : `계투(${idx})`),
+        };
+      });
+
+  return {
+    hitters: {
+      home: toBatterArray('home'),
+      away: toBatterArray('away'),
+    },
+    pitchers: {
+      home: toPitcherArray('home'),
+      away: toPitcherArray('away'),
+    },
+  };
+}
+
+function toIpDecimalFromOuts(outs: number): number {
+  const safeOuts = Math.max(0, Math.trunc(toFinite(outs, 0)));
+  return Number(`${Math.floor(safeOuts / 3)}.${safeOuts % 3}`);
+}
+
+function toPostGamePitcherLineFromLive(row: PitcherStatLine): PostGamePitcherLine {
+  const outs = toFinite(row.outs, 0);
+  const bb = toFinite(row.bb, 0);
+  const hbp = toFinite(row.hbp, 0);
+  const bf = toFinite(row.bf, 0);
+  const ab = Math.max(0, bf - bb - hbp);
+  const er = toFinite(row.er, 0);
+  return {
+    name: row.name,
+    slot: row.appearanceLabel ?? row.status ?? '',
+    ip: toIpDecimalFromOuts(outs),
+    bf,
+    ab,
+    h: toFinite(row.h, 0),
+    hr: toFinite(row.hr, 0),
+    bb,
+    hbp,
+    so: toFinite(row.so, 0),
+    r: toFinite(row.r, 0),
+    er,
+    pitches: toFinite(row.pitches, 0),
+    era: outs > 0 ? Number(((er * 27) / outs).toFixed(2)) : 0,
+  };
 }
 
 type CsvPreviewSection = {
@@ -181,6 +301,7 @@ export default function ScoreboardTextPage() {
     [state.matches, state.activeMatchId],
   );
   const isPracticeMode = (activeMatch?.recordMode ?? 'official') === 'practice';
+  const isManualInputMode = (activeMatch?.scoreInputMode ?? 'live') === 'manual';
   const lineupVisible = isAdmin || state.gameStarted || Boolean(activeMatch?.lineupPublic);
   const hasLiveOverlay = useMemo(() => Boolean((activeMatch?.liveVideoUrl || '').trim()), [activeMatch?.liveVideoUrl]);
   const noActiveMatch = !state.activeMatchId;
@@ -229,10 +350,26 @@ export default function ScoreboardTextPage() {
 
   // [중요] buildPlayerStats가 이제 고유 키 로직을 따름
   const playerStats = useMemo(() => buildPlayerStats(recordPayload, { practiceMode: isPracticeMode }), [recordPayload, isPracticeMode]);
+  const postGameDetail = activeMatch?.postGame ?? (isManualInputMode ? activeMatch?.manualEntryDraft ?? null : null);
+  const postGamePlayerStats = useMemo(() => buildManualPlayerStats(postGameDetail), [postGameDetail]);
+  const displayPlayerStats = postGamePlayerStats ?? playerStats;
+  const postGameDetailWithPitcherFallback = useMemo(() => {
+    if (!postGameDetail) return null;
+    const source = postGameDetail.pitchers;
+    const homeExisting = source?.home ?? [];
+    const awayExisting = source?.away ?? [];
+    const home = homeExisting.length ? homeExisting : displayPlayerStats.pitchers.home.map(toPostGamePitcherLineFromLive);
+    const away = awayExisting.length ? awayExisting : displayPlayerStats.pitchers.away.map(toPostGamePitcherLineFromLive);
+    if (home === homeExisting && away === awayExisting) return postGameDetail;
+    return {
+      ...postGameDetail,
+      pitchers: { home, away },
+    };
+  }, [postGameDetail, displayPlayerStats.pitchers.home, displayPlayerStats.pitchers.away]);
 
   // 현재 타자/투수 기록은 feed 텍스트 파싱이 아니라, 기록원과 동일한 집계(playerStats)에서 조회한다.
   const batterToday = useMemo(() => {
-    const stat = playerStats.hitters[hittingSide].find((line) => isSamePlayerName(line.name, currentBatter));
+    const stat = displayPlayerStats.hitters[hittingSide].find((line) => isSamePlayerName(line.name, currentBatter));
     if (!stat) return emptyBatterLine();
     return {
       pa: stat.pa,
@@ -246,10 +383,10 @@ export default function ScoreboardTextPage() {
       so: stat.so,
       sac: stat.sac,
     };
-  }, [playerStats.hitters, hittingSide, currentBatter]);
+  }, [displayPlayerStats.hitters, hittingSide, currentBatter]);
 
   const pitcherToday = useMemo(() => {
-    const stat = playerStats.pitchers[defenseSide].find((line) => isSamePlayerName(line.name, currentPitcher));
+    const stat = displayPlayerStats.pitchers[defenseSide].find((line) => isSamePlayerName(line.name, currentPitcher));
     if (!stat) return emptyPitcherLine();
     return {
       bf: stat.bf,
@@ -263,13 +400,12 @@ export default function ScoreboardTextPage() {
       strikes: stat.strikes,
       balls: stat.balls,
     };
-  }, [playerStats.pitchers, defenseSide, currentPitcher]);
+  }, [displayPlayerStats.pitchers, defenseSide, currentPitcher]);
   
   const postSummary = useMemo(
-    () => buildPostGameSummary(playerStats.hitters, playerStats.pitchers, state.score),
-    [playerStats.hitters, playerStats.pitchers, state.score],
+    () => buildPostGameSummary(displayPlayerStats.hitters, displayPlayerStats.pitchers, state.score),
+    [displayPlayerStats.hitters, displayPlayerStats.pitchers, state.score],
   );
-  const postGameDetail = activeMatch?.postGame ?? null;
   const displayItems = useMemo(() => buildDisplayItems(feed, events, jerseyMap), [feed, events, jerseyMap]);
   const sections = useMemo(() => groupByInning(displayItems), [displayItems]);
   const collapsedMap = useMemo(() => {
@@ -383,9 +519,9 @@ export default function ScoreboardTextPage() {
         <div className={state.gameOver ? 'live-feed-section game-over' : 'live-feed-section'}>
           {state.gameOver ? (
             <>
-              {postGameDetail ? (
+              {postGameDetailWithPitcherFallback ? (
                 <PostGameDetailSection
-                  detail={postGameDetail}
+                  detail={postGameDetailWithPitcherFallback}
                   teams={{ home: state.teamNames.home, away: state.teamNames.away }}
                   actionSlot={
                     <button
@@ -439,46 +575,84 @@ export default function ScoreboardTextPage() {
                   }
                 />
               )}
-              <div
-                style={{
-                  border: '1px solid rgba(148,163,184,0.3)',
-                  borderRadius: '12px',
-                  padding: '8px 10px',
-                  background: 'rgba(255,255,255,0.02)',
-                  display: 'grid',
-                  gridTemplateRows: 'auto minmax(0, 1fr)',
-                  gap: '6px',
-                  minHeight: 0,
-                  maxHeight: showReplay ? '1100px' : '240px',
-                  transition: 'max-height 180ms ease',
-                  overflow: 'hidden',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
-                  <div style={{ display: 'grid', gap: '4px' }}>
-                    <span style={{ fontWeight: 900, fontSize: '14px', color: '#e2e8f0' }}>문자중계 다시보기</span>
-                    <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>경기 종료 후 기록 전체를 확인할 수 있습니다.</span>
-                  </div>
-                  <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 800 }}>항상 펼쳐짐</span>
+              {isManualInputMode ? (
+                <div
+                  style={{
+                    border: '1px dashed rgba(148,163,184,0.45)',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    background: 'rgba(148,163,184,0.08)',
+                    color: '#cbd5e1',
+                    fontWeight: 800,
+                    textAlign: 'center',
+                  }}
+                >
+                  문자중계 없음
                 </div>
-                {showReplay ? (
-                  <div
-                    style={{
-                      borderRadius: '10px',
-                      border: '1px solid rgba(148,163,184,0.25)',
-                      background: 'rgba(15,23,42,0.55)',
-                      padding: '8px',
-                      minHeight: 0,
-                      height: '100%',
-                      maxHeight: '100%',
-                      overflowY: 'auto',
-                      alignSelf: 'stretch',
-                    }}
-                  >
-                    <LiveFeed sections={sections} collapsedMap={collapsedMap} gameOverInfo={gameOverInfo} isMobile={isMobile} />
+              ) : (
+                <div
+                  style={{
+                    border: '1px solid rgba(148,163,184,0.3)',
+                    borderRadius: '12px',
+                    padding: '8px 10px',
+                    background: 'rgba(255,255,255,0.02)',
+                    display: 'grid',
+                    gridTemplateRows: 'auto minmax(0, 1fr)',
+                    gap: '6px',
+                    minHeight: 0,
+                    maxHeight: showReplay ? '1100px' : '240px',
+                    transition: 'max-height 180ms ease',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ display: 'grid', gap: '4px' }}>
+                      <span style={{ fontWeight: 900, fontSize: '14px', color: '#e2e8f0' }}>문자중계 다시보기</span>
+                      <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>경기 종료 후 기록 전체를 확인할 수 있습니다.</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (state.activeMatchId) {
+                          selectMatch(state.activeMatchId);
+                        }
+                        actions.loadMoreFeed();
+                        setShowReplay(true);
+                      }}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(59,130,246,0.55)',
+                        background: 'rgba(59,130,246,0.12)',
+                        color: '#bfdbfe',
+                        fontSize: '12px',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                      }}
+                      title="완료 경기 문자중계를 다시 불러옵니다"
+                    >
+                      문자중계 불러오기
+                    </button>
                   </div>
-                ) : null}
-              </div>
+                  {showReplay ? (
+                    <div
+                      style={{
+                        borderRadius: '10px',
+                        border: '1px solid rgba(148,163,184,0.25)',
+                        background: 'rgba(15,23,42,0.55)',
+                        padding: '8px',
+                        minHeight: 0,
+                        height: '100%',
+                        maxHeight: '100%',
+                        overflowY: 'auto',
+                        alignSelf: 'stretch',
+                      }}
+                    >
+                      <LiveFeed sections={sections} collapsedMap={collapsedMap} gameOverInfo={gameOverInfo} isMobile={isMobile} />
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -505,7 +679,9 @@ export default function ScoreboardTextPage() {
               />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>총 {feed.length}건</span>
+              <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>
+                {isManualInputMode ? '수기 입력 모드' : `총 ${feed.length}건`}
+              </span>
               {!noActiveMatch && (
                 <button
                   type="button"
@@ -570,56 +746,74 @@ export default function ScoreboardTextPage() {
               )}
             </div>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '6px' }}>
-            <button
-              type="button"
-              onClick={() => {
-                actions.loadMoreFeed();
-                setFeedExpanded(true);
-              }}
-              disabled={feedExpanded}
+          {isManualInputMode ? (
+            <div
               style={{
-                padding: '6px 10px',
-                borderRadius: '10px',
-                border: '1px solid rgba(148,163,184,0.5)',
-                background: feedExpanded ? 'rgba(148,163,184,0.12)' : 'rgba(59,130,246,0.12)',
-                color: feedExpanded ? '#94a3b8' : '#93c5fd',
-                fontWeight: 800,
-                fontSize: '12px',
-                cursor: feedExpanded ? 'not-allowed' : 'pointer',
+                borderRadius: '14px',
+                border: '1px dashed rgba(148,163,184,0.45)',
+                background: 'rgba(148,163,184,0.08)',
+                padding: '18px 14px',
+                color: '#cbd5e1',
+                fontWeight: 900,
+                textAlign: 'center',
               }}
-              title={feedExpanded ? '이전 이닝까지 불러왔습니다' : '이전 이닝 더보기'}
             >
-              {feedExpanded ? '이전 이닝 불러옴' : '이전 이닝 더보기'}
-            </button>
-          </div>
-          <LiveFeed sections={sections} collapsedMap={collapsedMap} gameOverInfo={gameOverInfo} isMobile={isMobile} />
-          <div
-            style={{
-              borderRadius: '14px',
-              border: '1px solid rgba(148,163,184,0.25)',
-              background: 'rgba(15,23,42,0.5)',
-              padding: '12px',
-              display: 'grid',
-              gap: '10px',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
-              <span style={{ fontWeight: 900, fontSize: '15px', color: '#e2e8f0' }}>필드 상황</span>
-              <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 800 }}>베이스 · 볼카운트 · 수비 위치</span>
+              문자중계 없음
             </div>
-            <FieldView
-              bases={state.bases}
-              inning={state.inning}
-              half={state.half}
-              outs={state.outs}
-              balls={state.balls}
-              strikes={state.strikes}
-              batterName={currentBatter}
-              defenseAssignments={defenseAssignments}
-              isMobile={isMobile}
-            />
-          </div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    actions.loadMoreFeed();
+                    setFeedExpanded(true);
+                  }}
+                  disabled={feedExpanded}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(148,163,184,0.5)',
+                    background: feedExpanded ? 'rgba(148,163,184,0.12)' : 'rgba(59,130,246,0.12)',
+                    color: feedExpanded ? '#94a3b8' : '#93c5fd',
+                    fontWeight: 800,
+                    fontSize: '12px',
+                    cursor: feedExpanded ? 'not-allowed' : 'pointer',
+                  }}
+                  title={feedExpanded ? '이전 이닝까지 불러왔습니다' : '이전 이닝 더보기'}
+                >
+                  {feedExpanded ? '이전 이닝 불러옴' : '이전 이닝 더보기'}
+                </button>
+              </div>
+              <LiveFeed sections={sections} collapsedMap={collapsedMap} gameOverInfo={gameOverInfo} isMobile={isMobile} />
+              <div
+                style={{
+                  borderRadius: '14px',
+                  border: '1px solid rgba(148,163,184,0.25)',
+                  background: 'rgba(15,23,42,0.5)',
+                  padding: '12px',
+                  display: 'grid',
+                  gap: '10px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 900, fontSize: '15px', color: '#e2e8f0' }}>필드 상황</span>
+                  <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 800 }}>베이스 · 볼카운트 · 수비 위치</span>
+                </div>
+                <FieldView
+                  bases={state.bases}
+                  inning={state.inning}
+                  half={state.half}
+                  outs={state.outs}
+                  balls={state.balls}
+                  strikes={state.strikes}
+                  batterName={currentBatter}
+                  defenseAssignments={defenseAssignments}
+                  isMobile={isMobile}
+                />
+              </div>
+            </>
+          )}
         </>
           )}
         </div>
@@ -627,13 +821,13 @@ export default function ScoreboardTextPage() {
 
       <div className="stats-grid">
         <div style={{ display: 'grid', gap: '8px' }}>
-          <StatsTable title={`${state.teamNames.away} 타자 기록`} stats={playerStats.hitters.away} variant="batter" density="compact" />
-          <StatsTable title={`${state.teamNames.away} 투수 기록`} stats={playerStats.pitchers.away} variant="pitcher" density="compact" />
+          <StatsTable title={`${state.teamNames.away} 타자 기록`} stats={displayPlayerStats.hitters.away} variant="batter" density="compact" />
+          <StatsTable title={`${state.teamNames.away} 투수 기록`} stats={displayPlayerStats.pitchers.away} variant="pitcher" density="compact" />
 
         </div>
         <div style={{ display: 'grid', gap: '8px' }}>
-          <StatsTable title={`${state.teamNames.home} 타자 기록`} stats={playerStats.hitters.home} variant="batter" density="compact" />
-          <StatsTable title={`${state.teamNames.home} 투수 기록`} stats={playerStats.pitchers.home} variant="pitcher" density="compact" />
+          <StatsTable title={`${state.teamNames.home} 타자 기록`} stats={displayPlayerStats.hitters.home} variant="batter" density="compact" />
+          <StatsTable title={`${state.teamNames.home} 투수 기록`} stats={displayPlayerStats.pitchers.home} variant="pitcher" density="compact" />
         </div>
       </div>
 
@@ -1808,6 +2002,7 @@ function classifyResult(result: string) {
   if (normalized.includes('몸에맞는공')) return 'hbp' as const;
   if (normalized.includes('타격방해')) return 'ci' as const; // [추가]
   if (normalized.includes('야수선택') || normalized.toUpperCase().includes('F.C')) return 'fc' as const; // [추가]
+  if (normalized.includes('실책') || /E[1-9]/i.test(normalized)) return 'error' as const;
   if (normalized.includes('희생플라이')) return 'sac' as const;
   if (normalized.includes('희생번트')) return 'sac' as const; // [추가] 희생번트도 sac으로 분류
   if (normalized.includes('낫아웃')) return 'so_reach' as const;
@@ -1890,7 +2085,19 @@ function eventLookupKey(payload: { inning: number; half: Half; order: number; pi
 function formatErrorDetail(error: PlayEvent['error']) {
   if (!error) return '';
   if (typeof error === 'string') return error.trim();
-  const parts = [error.errorType, error.fielderPos, error.context]
+  const extraCalls = error.extraCalls?.length
+    ? error.extraCalls
+      .map((call) => {
+        const callLabel = call.type === 'runner_obstruction' ? '주루 방해(수비)' : '주자 수비방해';
+        const outcome =
+          call.outcome == null
+            ? ''
+            : `:${typeof call.outcome === 'number' ? (call.outcome >= 4 ? '홈(득점)' : `${call.outcome}루`) : formatRunnerOutcomeLabel(call.outcome)}`;
+        return `${callLabel}(${call.base + 1}루${outcome})`;
+      })
+      .join(' / ')
+    : '';
+  const parts = [error.errorType, error.fielderPos, error.context, extraCalls]
     .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
     .map((part) => part.trim());
   return parts.join(' · ');
@@ -2141,7 +2348,7 @@ function groupByInning(items: DisplayItem[]) {
 function colorizeText(text: string) {
   // 기존 패턴에 '투수 교체', '타자 교체', '대수비', '대타', '대주자' 등 추가
   const pattern =
-    /(\d+\s*안타|\d+\s*아웃|득점|점수|도루\s*성공|도루\s*실패|도루|안타|2루타|3루타|루타|홈런|볼넷|몸에\s*맞는\s*공|몸에맞는공|HBP|HP|사구|아웃|삼진|낫아웃|견제사|실책|E[1-6]|WP|PB|BK|야수선택|FC|F\.C|투수\s*교체|타자\s*교체|대수비|대타|대주자)/g;
+    /(\d+\s*안타|\d+\s*아웃|득점|점수|도루\s*성공|도루\s*실패|도루|안타|2루타|3루타|루타|홈런|볼넷|몸에\s*맞는\s*공|몸에맞는공|HBP|HP|사구|아웃|삼진|낫아웃|견제사|실책|E[1-9]|WP|PB|BK|야수선택|FC|F\.C|투수\s*교체|타자\s*교체|대수비|대타|대주자)/g;
   
   const colorMap: Record<string, string> = {
     득점: '#facc15',
@@ -2976,12 +3183,19 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
         break;
       case 'ci':
         stat.pa += 1;
-        stat.bb += 1;
+        stat.ci += 1;
         if (pitcherStat) {
           pitcherStat.bf += 1;
         }
         break;
       case 'fc':
+        stat.pa += 1;
+        stat.ab += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+        }
+        break;
+      case 'error':
         stat.pa += 1;
         stat.ab += 1;
         if (pitcherStat) {
@@ -3052,7 +3266,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
       return;
     }
 
-    if (kind === 'single' || kind === 'double' || kind === 'triple' || kind === 'fc' || kind === 'so_reach') {
+    if (kind === 'single' || kind === 'double' || kind === 'triple' || kind === 'fc' || kind === 'so_reach' || kind === 'error') {
       const targetBase = kind === 'double' ? 1 : kind === 'triple' ? 2 : 0;
       const placed = placeRunnerOnBase(name, targetBase);
       if (placed.scored) {
@@ -3621,11 +3835,33 @@ function formatRunnerNotes(runners: string[]) {
 function formatErrorSummary(error?: ErrorDetails | string | null) {
   if (!error) return '-';
   if (typeof error === 'string') return error;
-  const context = error.context ? ` · ${error.context}` : '';
-  return `${error.errorType} · ${error.fielderPos}${context}`;
+  const details: string[] = [];
+  const context = error.context?.trim();
+  if (context) details.push(context);
+  const batted = formatBattedBallDetails(error.battedBall);
+  if (batted !== '-') details.push(`타구 ${batted}`);
+  if (error.extraCalls?.length) {
+    const calls = error.extraCalls
+      .map((call) => {
+        const callLabel = call.type === 'runner_obstruction' ? '주루 방해(수비)' : '주자 수비방해';
+        const base = `${call.base + 1}루`;
+        const outcome =
+          call.outcome == null
+            ? ''
+            : `:${typeof call.outcome === 'number' ? (call.outcome >= 4 ? '홈(득점)' : `${call.outcome}루`) : formatRunnerOutcomeLabel(call.outcome)}`;
+        return `${callLabel}(${base}${outcome})`;
+      })
+      .join(' / ');
+    if (calls) details.push(calls);
+  }
+  return details.length
+    ? `${error.errorType} · ${error.fielderPos} · ${details.join(' · ')}`
+    : `${error.errorType} · ${error.fielderPos}`;
 }
 
-function formatErrorField(error: ErrorDetails | string | null | undefined, field: Exclude<keyof ErrorDetails, 'advanceResults'>) {
+type ErrorSummaryField = 'fielderPos' | 'errorType' | 'context';
+
+function formatErrorField(error: ErrorDetails | string | null | undefined, field: ErrorSummaryField) {
   if (!error || typeof error === 'string') return '-';
   return error[field] || '-';
 }
@@ -3687,8 +3923,18 @@ function classifyKboResult(event: PlayEvent) {
   if (event.type === 'hbp' || normalized.includes('몸에맞는공')) return 'HP';
   if (event.type === 'sac' || normalized.includes('희생')) return 'SAC';
   if (event.type === 'error' || normalized.includes('실책')) return 'E';
-  if (normalized.includes('병살')) return 'GDP';
-  if (normalized.includes('삼진')) return 'K';
+  if (normalized.includes('병살')) {
+    if (event.dpRoute && event.dpRoute.length > 0) {
+      return `GDP(${event.dpRoute.join('-')})`;
+    }
+    return 'GDP';
+  }
+  if (normalized.includes('삼진')) {
+    if (event.strikeType === 'looking' || normalized.includes('루킹')) {
+      return 'Kc';
+    }
+    return 'K';
+  }
   if (event.type === 'steal') return 'SB';
   if (event.type === 'steal_fail') return 'CS';
   if (event.type === 'runner_out') return 'RUN OUT';
@@ -4015,7 +4261,7 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
     if (normalized.includes('몸에맞는공')) return 'hbp';
     if (normalized.includes('볼넷') || normalized.includes('고의4구') || normalized.includes('4구')) return 'walk';
     if (normalized.includes('야수선택') || normalized.toUpperCase().includes('F.C')) return 'fc';
-    if (normalized.includes('실책') || /E[1-6]/i.test(result)) return 'error';
+    if (normalized.includes('실책') || /E[1-9]/i.test(result)) return 'error';
     if (normalized.includes('삼진') || normalized.includes('아웃')) return 'out';
     return 'play';
   };

@@ -53,18 +53,9 @@ export function subscribeMatchesSnapshot(params: {
   skipMatchesWriteRef: RefLike<boolean>;
   matchesReadyRef: RefLike<boolean>;
   skipFirestoreWriteRef: RefLike<boolean>;
-  notifiedMatchStartRef: RefLike<Set<string>>;
   dispatch: DemoDispatch;
 }) {
-  const {
-    canRecordGame,
-    stateRef,
-    skipMatchesWriteRef,
-    matchesReadyRef,
-    skipFirestoreWriteRef,
-    notifiedMatchStartRef,
-    dispatch,
-  } = params;
+  const { canRecordGame, stateRef, skipMatchesWriteRef, matchesReadyRef, skipFirestoreWriteRef, dispatch } = params;
   const liveQuery = query(collection(firestore, 'matches'), orderBy('startTime', 'asc'));
 
   return onSnapshot(
@@ -94,31 +85,6 @@ export function subscribeMatchesSnapshot(params: {
           skipFirestoreWriteRef.current = true;
           dispatch({ type: 'syncActiveMatch', matchId: live.id });
         }
-      }
-
-      if (typeof window !== 'undefined' && typeof Notification !== 'undefined') {
-        const started = projected.filter((match) => match.status === 'inProgress');
-        started.forEach((match) => {
-          if (notifiedMatchStartRef.current.has(match.id)) return;
-          const permission = Notification.permission;
-          const show = () => {
-            const title = '경기 시작';
-            const body = `${match.homeTeamName} vs ${match.awayTeamName} · ${new Date(match.startTime).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`;
-            try {
-              new Notification(title, { body });
-              notifiedMatchStartRef.current.add(match.id);
-            } catch {
-              // ignore notification failures
-            }
-          };
-          if (permission === 'granted') {
-            show();
-          } else if (permission === 'default') {
-            void Notification.requestPermission().then((result) => {
-              if (result === 'granted') show();
-            });
-          }
-        });
       }
     },
     (error) => {
@@ -270,18 +236,33 @@ export function subscribeFeedAndEvents(params: {
   const maxEntries = isScorer && scorerMode ? SCORER_FEED_LIMIT : spectatorFeedLimit;
 
   const feedQuery = completed
-    ? query(collection(firestore, 'matchStates', matchId, 'feed'), orderBy('createdAt', 'asc'))
+    ? collection(firestore, 'matchStates', matchId, 'feed')
     : query(collection(firestore, 'matchStates', matchId, 'feed'), orderBy('createdAt', 'desc'), limit(maxEntries));
   const eventsQuery = completed
-    ? query(collection(firestore, 'matchStates', matchId, 'events'), orderBy('createdAt', 'asc'))
+    ? collection(firestore, 'matchStates', matchId, 'events')
     : query(collection(firestore, 'matchStates', matchId, 'events'), orderBy('createdAt', 'desc'), limit(maxEntries));
 
+  const loadLegacyFeedAndEvents = async (fallback: { inning: number; half: 'top' | 'bottom' }) => {
+    const stateSnap = await getDoc(doc(firestore, 'matchStates', matchId));
+    if (!stateSnap.exists()) return { feedEntries: [] as PlayLog[], eventEntries: [] as PlayEvent[] };
+    const legacy = stateSnap.data() as SharedGameState & { feed?: unknown; events?: unknown };
+    return {
+      feedEntries: normalizeFeed(legacy.feed, fallback),
+      eventEntries: normalizeEvents(legacy.events, fallback),
+    };
+  };
+
   const prime = async () => {
+    const fallback = { inning: stateRef.current.inning, half: stateRef.current.half };
     try {
       const [feedSnap, eventsSnap] = await Promise.all([getDocs(feedQuery), getDocs(eventsQuery)]);
-      const fallback = { inning: stateRef.current.inning, half: stateRef.current.half };
-      const feedEntries = normalizeFeed(feedSnap.docs.map((docSnap) => docSnap.data()), fallback);
-      const eventEntries = normalizeEvents(eventsSnap.docs.map((docSnap) => docSnap.data()), fallback);
+      let feedEntries = normalizeFeed(feedSnap.docs.map((docSnap) => docSnap.data()), fallback);
+      let eventEntries = normalizeEvents(eventsSnap.docs.map((docSnap) => docSnap.data()), fallback);
+      if (completed) {
+        const legacy = await loadLegacyFeedAndEvents(fallback);
+        if (legacy.feedEntries.length > feedEntries.length) feedEntries = legacy.feedEntries;
+        if (legacy.eventEntries.length > eventEntries.length) eventEntries = legacy.eventEntries;
+      }
       if (stateRef.current.activeMatchId !== matchId) return;
       skipFirestoreWriteRef.current = true;
       lastFeedLengthRef.current = feedEntries.length;
@@ -289,7 +270,21 @@ export function subscribeFeedAndEvents(params: {
       dispatch({ type: 'setFeed', feed: feedEntries });
       dispatch({ type: 'setEvents', events: eventEntries });
     } catch {
-      // ignore prefetch errors; realtime listener below will retry on updates
+      if (!completed) {
+        // ignore prefetch errors; realtime listener below will retry on updates
+        return;
+      }
+      try {
+        const legacy = await loadLegacyFeedAndEvents(fallback);
+        if (stateRef.current.activeMatchId !== matchId) return;
+        skipFirestoreWriteRef.current = true;
+        lastFeedLengthRef.current = legacy.feedEntries.length;
+        lastEventsLengthRef.current = legacy.eventEntries.length;
+        dispatch({ type: 'setFeed', feed: legacy.feedEntries });
+        dispatch({ type: 'setEvents', events: legacy.eventEntries });
+      } catch {
+        // ignore legacy fallback errors
+      }
     }
   };
   void prime();
@@ -605,12 +600,14 @@ export function syncGameStateWrite(params: {
   writeTimerRef.current = setTimeout(() => {
     writeTimerRef.current = null; // 타이머 ref 해제 — 다음 user action이 새 타이머를 세팅할 수 있게
     const run = async () => {
-      const snapshot = snapshotState(stateRef.current);
+      const liveState = stateRef.current;
+      const liveMatchId = liveState.activeMatchId;
+      if (!liveMatchId || liveMatchId !== matchId) return;
+      const snapshot = snapshotState(liveState);
       const { matches: _matches, feed: _feed, events: _events, onlineViewerCount: _onlineViewerCount, ...core } = snapshot;
-      const key = JSON.stringify({ matchId, core });
+      const key = JSON.stringify({ matchId: liveMatchId, core });
 
       if (key !== lastStateKeyRef.current) {
-        lastStateKeyRef.current = key;
         const payload = {
           ...pruneUndefined({
             ...core,
@@ -619,26 +616,29 @@ export function syncGameStateWrite(params: {
           feed: deleteField(),
           events: deleteField(),
         };
-        await setDoc(doc(firestore, 'matchStates', matchId), payload, { merge: true });
+        await setDoc(doc(firestore, 'matchStates', liveMatchId), payload, { merge: true });
+        lastStateKeyRef.current = key;
       }
 
-      const newFeedCount = stateRef.current.feed.length - lastFeedLengthRef.current;
-      const newEventCount = stateRef.current.events.length - lastEventsLengthRef.current;
+      const latestState = stateRef.current;
+      if (latestState.activeMatchId !== liveMatchId) return;
+      const newFeedCount = latestState.feed.length - lastFeedLengthRef.current;
+      const newEventCount = latestState.events.length - lastEventsLengthRef.current;
       const needsFeedDelete = newFeedCount < 0;
       const needsEventDelete = newEventCount < 0;
       const needsFeedAdd = newFeedCount > 0;
       const needsEventAdd = newEventCount > 0;
 
       if (!needsFeedDelete && !needsEventDelete && !needsFeedAdd && !needsEventAdd) {
-        lastFeedLengthRef.current = stateRef.current.feed.length;
-        lastEventsLengthRef.current = stateRef.current.events.length;
+        lastFeedLengthRef.current = latestState.feed.length;
+        lastEventsLengthRef.current = latestState.events.length;
         return;
       }
 
       const deleteLatest = async (collectionName: 'feed' | 'events', count: number) => {
         if (count <= 0) return;
         const q = query(
-          collection(firestore, 'matchStates', matchId, collectionName),
+          collection(firestore, 'matchStates', liveMatchId, collectionName),
           orderBy('createdAt', 'desc'),
           limit(count),
         );
@@ -659,32 +659,34 @@ export function syncGameStateWrite(params: {
       }
 
       if (needsFeedAdd || needsEventAdd) {
+        const writableState = stateRef.current;
+        if (writableState.activeMatchId !== liveMatchId) return;
         const batch = writeBatch(firestore);
         const now = Date.now();
 
         if (needsFeedAdd) {
-          const newEntries = stateRef.current.feed.slice(-newFeedCount);
+          const newEntries = writableState.feed.slice(-newFeedCount);
           newEntries.forEach((entry, idx) => {
             const createdAt =
               typeof entry.createdAt === 'number' && Number.isFinite(entry.createdAt)
                 ? entry.createdAt
                 : now + idx;
             batch.set(
-              doc(collection(firestore, 'matchStates', matchId, 'feed')),
+              doc(collection(firestore, 'matchStates', liveMatchId, 'feed')),
               pruneUndefined({ ...entry, createdAt }),
             );
           });
         }
 
         if (needsEventAdd) {
-          const newEntries = stateRef.current.events.slice(0, newEventCount);
+          const newEntries = writableState.events.slice(0, newEventCount);
           newEntries.forEach((entry, idx) => {
             const createdAt =
               typeof entry.createdAt === 'number' && Number.isFinite(entry.createdAt)
                 ? entry.createdAt
                 : now + idx;
             batch.set(
-              doc(collection(firestore, 'matchStates', matchId, 'events')),
+              doc(collection(firestore, 'matchStates', liveMatchId, 'events')),
               pruneUndefined({ ...entry, createdAt }),
             );
           });
@@ -693,12 +695,27 @@ export function syncGameStateWrite(params: {
         await batch.commit();
       }
 
-      lastFeedLengthRef.current = stateRef.current.feed.length;
-      lastEventsLengthRef.current = stateRef.current.events.length;
+      const finalState = stateRef.current;
+      if (finalState.activeMatchId !== liveMatchId) return;
+      lastFeedLengthRef.current = finalState.feed.length;
+      lastEventsLengthRef.current = finalState.events.length;
     };
 
-    void run().catch(() => {
-      // ignore sync errors; will retry on next state change
+    const scheduleRetry = () => {
+      if (writeTimerRef.current) return;
+      writeTimerRef.current = setTimeout(() => {
+        writeTimerRef.current = null;
+        void run().catch((retryError) => {
+          console.error('[firestore] game state sync retry failed', retryError);
+          scheduleRetry();
+        });
+      }, WRITE_DEBOUNCE_MS);
+    };
+
+    void run().catch((error) => {
+      console.error('[firestore] game state sync failed', error);
+      // 상태 변경이 없어도 저장 누락이 남지 않도록 백그라운드 재시도한다.
+      scheduleRetry();
     });
   }, WRITE_DEBOUNCE_MS);
 }
@@ -721,12 +738,14 @@ export function syncScheduleMatchesWrite(params: {
   const key = JSON.stringify(
     matches.map((match) => ({
       id: match.id,
+      seasonId: match.seasonId ?? null,
       status: match.status,
       startTime: match.startTime,
       notes: match.notes ?? null,
       division: match.division ?? null,
       venue: match.venue,
       recordMode: match.recordMode ?? 'official',
+      scoreInputMode: match.scoreInputMode ?? 'live',
       homeTeamName: match.homeTeamName,
       awayTeamName: match.awayTeamName,
       liveVideoUrl: match.liveVideoUrl ?? null,
@@ -738,6 +757,7 @@ export function syncScheduleMatchesWrite(params: {
       lineups: match.lineups ?? null,
       benches: match.benches ?? null,
       postGame: match.postGame ?? null,
+      manualEntryDraft: match.manualEntryDraft ?? null,
     })),
   );
   if (key === lastMatchesKeyRef.current) return;

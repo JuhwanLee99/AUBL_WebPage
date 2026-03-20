@@ -1,12 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
+import { doc, setDoc } from 'firebase/firestore';
 import { TEAMS } from '@shared/lib/mockData';
 import { buildGameRecord, canPitcherBat, useDemoStore } from '@shared/state/demoStore';
 import type {
   BattedBallDetails,
+  ErrorExtraCall,
   ErrorDetails,
+  MatchSchedule,
+  MatchScoreInputMode,
   PlayEvent,
+  PostGameBatterLine,
+  PostGamePitcherLine,
+  PostGameRecord,
+  PostGameTotals,
+  PlayerSlot,
   RunnerAdvanceOutcome,
   RunnerAdvanceSelections,
 } from '@shared/state/demoStore';
@@ -16,6 +25,9 @@ import type { BatterStatLine, PitcherStatLine } from '@shared/types/scoreStats';
 import { useAuth } from '@shared/auth/AuthProvider';
 import { BoxScoreTable } from '@features/scoreboard/components/ScoreboardPanel';
 import { GameTimerDisplay } from '@shared/components/GameTimerDisplay';
+import { triggerMatchImport } from '@core/api/backendClient';
+import { firestore } from '@shared/firebase/client';
+import ManualRecordEntryPanel from '@features/scorekeeper/components/ManualRecordEntryPanel';
 
 // 동명이인 구분을 위한 고유 이름 생성 헬퍼 함수 추가
 // 이미 (등번호)가 붙어있으면 덧붙이지 않도록 안전장치 추가
@@ -30,6 +42,166 @@ const getUniqueName = (name: string, number: string | number | undefined | null)
   return `${name}${suffix}`;
 };
 
+const MANUAL_BASE_INNINGS = Array.from({ length: 9 }, (_v, idx) => idx + 1);
+
+const toFiniteNumber = (value: unknown, fallback = 0) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const buildDefaultManualBatter = (slot?: PlayerSlot, order?: number): PostGameBatterLine => ({
+  name: slot ? getUniqueName(slot.name, slot.number) : '',
+  pos: slot?.pos ?? '',
+  order,
+  slot: slot?.substitutionType ?? (slot ? '선발' : ''),
+  pa: 0,
+  ab: 0,
+  h: 0,
+  singles: 0,
+  doubles: 0,
+  triples: 0,
+  hr: 0,
+  bb: 0,
+  hbp: 0,
+  so: 0,
+  sac: 0,
+  fc: 0,
+  r: 0,
+  rbi: 0,
+  sb: 0,
+});
+
+const buildDefaultManualPitcher = (slot?: PlayerSlot, substitutionLabel?: string): PostGamePitcherLine => ({
+  name: slot ? getUniqueName(slot.name, slot.number) : '',
+  slot: substitutionLabel ?? slot?.substitutionType ?? (slot ? '선발' : ''),
+  result: '',
+  ip: 0,
+  h: 0,
+  hr: 0,
+  bb: 0,
+  hbp: 0,
+  so: 0,
+  r: 0,
+  er: 0,
+});
+
+function normalizeManualBattersBySide(
+  raw: PostGameRecord['batters'] | undefined,
+  lineups: MatchSchedule['lineups'] | undefined,
+) {
+  const toRows = (side: Side) => {
+    const rows = raw?.[side];
+    if (Array.isArray(rows) && rows.length) {
+      return rows
+        .filter((row) => (row.name ?? '').toString().trim())
+        .map((row) => ({
+          ...buildDefaultManualBatter(),
+          ...row,
+          name: String(row.name ?? '').trim(),
+          pos: typeof row.pos === 'string' ? row.pos : '',
+          slot: typeof row.slot === 'string' ? row.slot : '',
+        }));
+    }
+    const lineup = lineups?.[side] ?? [];
+    const defaults = lineup
+      .filter((slot) => slot.name.trim() && slot.pos.toUpperCase() !== 'P')
+      .map((slot, idx) => buildDefaultManualBatter(slot, idx + 1));
+    return defaults.length ? defaults : [buildDefaultManualBatter()];
+  };
+  return {
+    home: toRows('home'),
+    away: toRows('away'),
+  };
+}
+
+function normalizeManualPitchersBySide(
+  raw: PostGameRecord['pitchers'] | undefined,
+  lineups: MatchSchedule['lineups'] | undefined,
+  benches: MatchSchedule['benches'] | undefined,
+) {
+  const toRows = (side: Side) => {
+    const rows = raw?.[side];
+    if (Array.isArray(rows) && rows.length) {
+      return rows
+        .filter((row) => (row.name ?? '').toString().trim())
+        .map((row) => ({
+          ...buildDefaultManualPitcher(),
+          ...row,
+          name: String(row.name ?? '').trim(),
+          slot: typeof row.slot === 'string' ? row.slot : '',
+          result: typeof row.result === 'string' ? row.result : '',
+        }));
+    }
+
+    const seen = new Set<string>();
+    const push = (slot: PlayerSlot, target: PostGamePitcherLine[], defaultLabel?: string) => {
+      if (!slot.name.trim()) return;
+      if (slot.pos.toUpperCase() !== 'P') return;
+      const name = getUniqueName(slot.name, slot.number);
+      if (!name || seen.has(name)) return;
+      seen.add(name);
+      target.push(buildDefaultManualPitcher(slot, defaultLabel));
+    };
+
+    const seeded: PostGamePitcherLine[] = [];
+    (lineups?.[side] ?? []).forEach((slot) => push(slot, seeded, '선발'));
+    (benches?.[side] ?? []).forEach((slot) => push(slot, seeded, '투수교체'));
+    return seeded.length ? seeded : [buildDefaultManualPitcher()];
+  };
+  return {
+    home: toRows('home'),
+    away: toRows('away'),
+  };
+}
+
+function buildManualDraft(match: MatchSchedule): PostGameRecord {
+  const source = match.manualEntryDraft ?? match.postGame;
+  const sourceLine = source?.lineScore;
+  const inningCount = Math.max(
+    sourceLine?.innings?.length ?? 0,
+    sourceLine?.home?.length ?? 0,
+    sourceLine?.away?.length ?? 0,
+    MANUAL_BASE_INNINGS.length,
+  );
+  const innings = Array.from({ length: inningCount }, (_v, idx) => idx + 1);
+  const lineScore = {
+    innings,
+    home: innings.map((_v, idx) => toFiniteNumber(sourceLine?.home?.[idx], 0)),
+    away: innings.map((_v, idx) => toFiniteNumber(sourceLine?.away?.[idx], 0)),
+  };
+
+  const defaultTotals: PostGameTotals = {
+    home: { runs: toFiniteNumber(match.homeScore, 0), hits: 0, errors: 0, lob: 0 },
+    away: { runs: toFiniteNumber(match.awayScore, 0), hits: 0, errors: 0, lob: 0 },
+  };
+  const totals = {
+    home: {
+      ...defaultTotals.home,
+      ...(source?.totals?.home ?? {}),
+      runs: toFiniteNumber(source?.totals?.home?.runs, defaultTotals.home.runs),
+      hits: toFiniteNumber(source?.totals?.home?.hits, defaultTotals.home.hits),
+      errors: toFiniteNumber(source?.totals?.home?.errors, defaultTotals.home.errors),
+      lob: toFiniteNumber(source?.totals?.home?.lob, defaultTotals.home.lob ?? 0),
+    },
+    away: {
+      ...defaultTotals.away,
+      ...(source?.totals?.away ?? {}),
+      runs: toFiniteNumber(source?.totals?.away?.runs, defaultTotals.away.runs),
+      hits: toFiniteNumber(source?.totals?.away?.hits, defaultTotals.away.hits),
+      errors: toFiniteNumber(source?.totals?.away?.errors, defaultTotals.away.errors),
+      lob: toFiniteNumber(source?.totals?.away?.lob, defaultTotals.away.lob ?? 0),
+    },
+  };
+
+  return {
+    lineScore,
+    totals,
+    batters: normalizeManualBattersBySide(source?.batters, match.lineups),
+    pitchers: normalizeManualPitchersBySide(source?.pitchers, match.lineups, match.benches),
+    note: source?.note ?? '',
+  };
+}
+
 type Side = 'home' | 'away';
 type Half = 'top' | 'bottom';
 
@@ -38,6 +210,7 @@ const mainButtons = [
   { label: '스트라이크', color: '#facc15', action: 'strike' },
   { label: '타격 입력', color: '#3b82f6', action: 'hitMenu' },
   { label: '실행 취소', color: '#94a3b8', action: 'undo' },
+  { label: '되돌리기', color: '#64748b', action: 'redo' },
 ];
 
 const secondaryButtons = [
@@ -310,6 +483,7 @@ function getZoneOptionsForResult(result: BattedBallResultAction | null) {
   )
     return infieldGroundZoneOptions;
   if (result === 'fc') return fcZoneOptions;
+  if (result === 'reach_error') return fcZoneOptions;
   if (result === 'out_line') return lineDriveZoneOptions;
   return defaultZoneOptions;
 }
@@ -387,11 +561,31 @@ function formatErrorAdvanceResults(error?: ErrorDetails | string | null) {
 function formatErrorSummary(error?: ErrorDetails | string | null) {
   if (!error) return '-';
   if (typeof error === 'string') return error;
-  const context = error.context ? ` · ${error.context}` : '';
-  return `${error.errorType} · ${error.fielderPos}${context}`;
+  const details: string[] = [];
+  const context = error.context?.trim();
+  if (context) details.push(context);
+  const batted = formatBattedBallDetails(error.battedBall);
+  if (batted !== '-') details.push(`타구 ${batted}`);
+  if (error.extraCalls?.length) {
+    const calls = error.extraCalls
+      .map((call) => {
+        const callLabel = call.type === 'runner_obstruction' ? '주루 방해(수비)' : '주자 수비방해';
+        const base = `${call.base + 1}루`;
+        const outcome =
+          call.outcome == null
+            ? ''
+            : `:${typeof call.outcome === 'number' ? (call.outcome >= 4 ? '홈(득점)' : `${call.outcome}루`) : formatRunnerOutcomeLabel(call.outcome)}`;
+        return `${callLabel}(${base}${outcome})`;
+      })
+      .join(' / ');
+    if (calls) details.push(calls);
+  }
+  return details.length
+    ? `${error.errorType} · ${error.fielderPos} · ${details.join(' · ')}`
+    : `${error.errorType} · ${error.fielderPos}`;
 }
 
-type ErrorSummaryField = Exclude<keyof ErrorDetails, 'advanceResults'>;
+type ErrorSummaryField = 'fielderPos' | 'errorType' | 'context';
 
 function formatErrorField(error: ErrorDetails | string | null | undefined, field: ErrorSummaryField) {
   if (!error || typeof error === 'string') return '-';
@@ -746,7 +940,7 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
     if (normalized.includes('몸에맞는공')) return 'hbp';
     if (normalized.includes('볼넷') || normalized.includes('고의4구') || normalized.includes('4구')) return 'walk';
     if (normalized.includes('야수선택') || normalized.toUpperCase().includes('F.C')) return 'fc';
-    if (normalized.includes('실책') || /E[1-6]/i.test(result)) return 'error';
+    if (normalized.includes('실책') || /E[1-9]/i.test(result)) return 'error';
     if (normalized.includes('삼진') || normalized.includes('아웃')) return 'out';
     return 'play';
   };
@@ -995,6 +1189,7 @@ function classifyResult(result: string) {
   if (normalized.includes('몸에맞는공')) return 'hbp' as const;
   if (normalized.includes('타격방해')) return 'ci' as const;
   if (normalized.includes('야수선택') || normalized.toUpperCase().includes('F.C')) return 'fc' as const;
+  if (normalized.includes('실책') || /E[1-9]/i.test(normalized)) return 'error' as const;
   if (normalized.includes('희생플라이')) return 'sac' as const;
   if (normalized.includes('희생번트')) return 'sac' as const;
   if (normalized.includes('낫아웃')) return 'so_reach' as const;
@@ -1721,12 +1916,19 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
         break;
       case 'ci':
         stat.pa += 1;
-        stat.bb += 1;
+        stat.ci += 1;
         if (pitcherStat) {
           pitcherStat.bf += 1;
         }
         break;
       case 'fc':
+        stat.pa += 1;
+        stat.ab += 1;
+        if (pitcherStat) {
+          pitcherStat.bf += 1;
+        }
+        break;
+      case 'error':
         stat.pa += 1;
         stat.ab += 1;
         if (pitcherStat) {
@@ -1797,7 +1999,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
       return;
     }
 
-    if (kind === 'single' || kind === 'double' || kind === 'triple' || kind === 'fc' || kind === 'so_reach') {
+    if (kind === 'single' || kind === 'double' || kind === 'triple' || kind === 'fc' || kind === 'so_reach' || kind === 'error') {
       const targetBase = kind === 'double' ? 1 : kind === 'triple' ? 2 : 0;
       const placed = placeRunnerOnBase(name, targetBase);
       if (placed.scored) {
@@ -1930,6 +2132,122 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
   };
 }
 
+function outsToIpDecimal(outs: number): number {
+  const safeOuts = Math.max(0, Math.trunc(toFiniteNumber(outs, 0)));
+  const whole = Math.floor(safeOuts / 3);
+  const remainder = safeOuts % 3;
+  return Number(`${whole}.${remainder}`);
+}
+
+function buildAutoPostGameFromLive(
+  record: ReturnType<typeof buildGameRecord>,
+  stats: ReturnType<typeof buildPlayerStats>,
+): PostGameRecord {
+  const lineScore = record.liveStats.lineScore;
+  const inningCount = Math.max(1, lineScore.home.length, lineScore.away.length);
+  const innings = Array.from({ length: inningCount }, (_unused, idx) => idx + 1);
+  const fillLine = (line: number[]) => innings.map((_, idx) => toFiniteNumber(line[idx], 0));
+
+  const summarizeBatters = (side: Side) =>
+    stats.hitters[side].reduce(
+      (acc, row) => ({
+        ab: acc.ab + toFiniteNumber(row.ab, 0),
+        h: acc.h + toFiniteNumber(row.h, 0),
+        r: acc.r + toFiniteNumber(row.r, 0),
+        rbi: acc.rbi + toFiniteNumber(row.rbi, 0),
+      }),
+      { ab: 0, h: 0, r: 0, rbi: 0 },
+    );
+
+  const toBatters = (side: Side): PostGameBatterLine[] =>
+    stats.hitters[side].map((row) => {
+      const ab = toFiniteNumber(row.ab, 0);
+      const h = toFiniteNumber(row.h, 0);
+      return {
+        name: row.name,
+        pos: row.pos,
+        order: row.order ?? undefined,
+        slot: row.status ?? (row.order != null ? '선발' : ''),
+        pa: toFiniteNumber(row.pa, 0),
+        ab,
+        h,
+        singles: toFiniteNumber(row.singles, 0),
+        doubles: toFiniteNumber(row.doubles, 0),
+        triples: toFiniteNumber(row.triples, 0),
+        hr: toFiniteNumber(row.hr, 0),
+        bb: toFiniteNumber(row.bb, 0),
+        hbp: toFiniteNumber(row.hbp, 0),
+        so: toFiniteNumber(row.so, 0),
+        sac: toFiniteNumber(row.sac, 0),
+        fc: toFiniteNumber(row.fc, 0),
+        r: toFiniteNumber(row.r, 0),
+        rbi: toFiniteNumber(row.rbi, 0),
+        avg: ab > 0 ? Number((h / ab).toFixed(3)) : 0,
+      };
+    });
+
+  const toPitchers = (side: Side): PostGamePitcherLine[] =>
+    stats.pitchers[side].map((row) => {
+      const outs = toFiniteNumber(row.outs, 0);
+      const inningsPitched = outsToIpDecimal(outs);
+      const bb = toFiniteNumber(row.bb, 0);
+      const hbp = toFiniteNumber(row.hbp, 0);
+      const bf = toFiniteNumber(row.bf, 0);
+      const ab = Math.max(0, bf - bb - hbp);
+      const er = toFiniteNumber(row.er, 0);
+      const era = outs > 0 ? Number(((er * 27) / outs).toFixed(2)) : 0;
+      return {
+        name: row.name,
+        slot: row.appearanceLabel ?? row.status ?? '',
+        result: '',
+        ip: inningsPitched,
+        bf,
+        ab,
+        h: toFiniteNumber(row.h, 0),
+        hr: toFiniteNumber(row.hr, 0),
+        bb,
+        hbp,
+        so: toFiniteNumber(row.so, 0),
+        r: toFiniteNumber(row.r, 0),
+        er,
+        pitches: toFiniteNumber(row.pitches, 0),
+        era,
+      };
+    });
+
+  return {
+    lineScore: {
+      innings,
+      home: fillLine(lineScore.home),
+      away: fillLine(lineScore.away),
+    },
+    totals: {
+      home: {
+        runs: toFiniteNumber(record.score.home, 0),
+        hits: toFiniteNumber(record.liveStats.hits.home, 0),
+        errors: toFiniteNumber(record.liveStats.errors.home, 0),
+      },
+      away: {
+        runs: toFiniteNumber(record.score.away, 0),
+        hits: toFiniteNumber(record.liveStats.hits.away, 0),
+        errors: toFiniteNumber(record.liveStats.errors.away, 0),
+      },
+    },
+    teamBatterSummary: {
+      home: summarizeBatters('home'),
+      away: summarizeBatters('away'),
+    },
+    batters: {
+      home: toBatters('home'),
+      away: toBatters('away'),
+    },
+    pitchers: {
+      home: toPitchers('home'),
+      away: toPitchers('away'),
+    },
+  };
+}
+
 export default function ScorekeeperPage() {
   const { state, actions } = useDemoStore();
   const { matchId } = useParams<{ matchId?: string }>();
@@ -1944,8 +2262,15 @@ export default function ScorekeeperPage() {
     () => state.matches.find((match) => match.id === state.activeMatchId) ?? null,
     [state.matches, state.activeMatchId],
   );
+  const activeMatchId = activeMatch?.id ?? null;
   const isPracticeMode = (activeMatch?.recordMode ?? 'official') === 'practice';
+  const isManualInputMode = (activeMatch?.scoreInputMode ?? 'live') === 'manual';
   const [selectedMatchId, setSelectedMatchId] = useState(matchId ?? state.activeMatchId ?? '');
+  const [manualDraft, setManualDraft] = useState<PostGameRecord | null>(null);
+  const [manualNotice, setManualNotice] = useState<string | null>(null);
+  const [manualDraftSaving, setManualDraftSaving] = useState(false);
+  const [manualApplying, setManualApplying] = useState(false);
+  const manualSeedMatchRef = useRef<MatchSchedule | null>(null);
   const homeTeam = useMemo(() => TEAMS.find((t) => t.id === state.homeTeamId), [state.homeTeamId]);
   const awayTeam = useMemo(() => TEAMS.find((t) => t.id === state.awayTeamId), [state.awayTeamId]);
 
@@ -1954,7 +2279,8 @@ export default function ScorekeeperPage() {
       const timer = setTimeout(() => setSelectedMatchId(matchId), 0);
       return () => clearTimeout(timer);
     } else if (state.activeMatchId) {
-      const timer = setTimeout(() => setSelectedMatchId(state.activeMatchId), 0);
+      const activeMatchId = state.activeMatchId;
+      const timer = setTimeout(() => setSelectedMatchId(activeMatchId), 0);
       return () => clearTimeout(timer);
     }
     return;
@@ -1974,6 +2300,23 @@ export default function ScorekeeperPage() {
       navigate(`/scorekeeper/${state.activeMatchId}`, { replace: true });
     }
   }, [matchId, state.activeMatchId, navigate]);
+
+  useEffect(() => {
+    manualSeedMatchRef.current = activeMatch;
+  }, [activeMatch]);
+
+  useEffect(() => {
+    if (!activeMatchId || !isManualInputMode) {
+      setManualDraft(null);
+      setManualNotice(null);
+      return;
+    }
+    const seedMatch = manualSeedMatchRef.current;
+    if (!seedMatch) return;
+    setManualDraft(buildManualDraft(seedMatch));
+    setManualNotice(null);
+  }, [activeMatchId, activeMatch?.manualEntryDraft, activeMatch?.postGame, isManualInputMode]);
+
   const hittingSide: Side = state.half === 'top' ? 'away' : 'home';
   const defenseSide: Side = hittingSide === 'home' ? 'away' : 'home';
   const offenseLineupEntries = state.lineups[hittingSide].map((slot, idx) => ({ slot, idx }));
@@ -2055,7 +2398,17 @@ export default function ScorekeeperPage() {
   const [runnerAdvanceSelections, setRunnerAdvanceSelections] = useState<RunnerAdvanceSelections>({});
   const [multipleRunnersOutModal, setMultipleRunnersOutModal] = useState(false);
   const [lastHitWizard, setLastHitWizard] = useState<HitWizardState | null>(null);
-  const [errorOnPlayModal, setErrorOnPlayModal] = useState<null | { selections: RunnerAdvanceSelections; batterResult: 'out' | 'hold' | 1 | 2 | 3 | 4; errorType: string; context: string; fielder: string }>(null);
+  const [errorOnPlayModal, setErrorOnPlayModal] = useState<
+    null | {
+      selections: RunnerAdvanceSelections;
+      batterResult: 'out' | 'hold' | 1 | 2 | 3 | 4;
+      errorType: string;
+      context: string;
+      fielder: string;
+      battedBall?: BattedBallDetails | null;
+      extraCalls?: ErrorExtraCall[];
+    }
+  >(null);
   const [showDroppedThirdStrike, setShowDroppedThirdStrike] = useState(false);
   const [showStrikeOutTypeModal, setShowStrikeOutTypeModal] = useState(false);
   const [pendingStrikeType, setPendingStrikeType] = useState<'swinging' | 'looking' | null>(null);
@@ -2064,6 +2417,9 @@ export default function ScorekeeperPage() {
   const [battedBallType, setBattedBallType] = useState(baseBattedBallType);
   const [battedBallZone, setBattedBallZone] = useState(defaultZoneOptions[0]);
   const [gameLimitInput, setGameLimitInput] = useState('');
+  const [homeScoreInput, setHomeScoreInput] = useState('');
+  const [awayScoreInput, setAwayScoreInput] = useState('');
+  const [showFullResetConfirm, setShowFullResetConfirm] = useState(false);
   const recordPayload = useMemo(() => buildGameRecord(state), [state]);
   const { user } = useAuth();
   const [pendingExportId, setPendingExportId] = useState<string | null>(null);
@@ -2086,9 +2442,11 @@ export default function ScorekeeperPage() {
     if (lockRemainingMs <= 0) return false;
     return state.scorerUid !== (user?.uid ?? null);
   }, [hasActiveMatch, state.scorerUid, lockRemainingMs, user?.uid]);
-  const controlsDisabled = isGameOver || !isGameStarted || !hasActiveMatch || lockedByOther || state.scorerPaused;
+  const controlsDisabled = isManualInputMode || isGameOver || !isGameStarted || !hasActiveMatch || lockedByOther || state.scorerPaused;
+  const scoreAdjustDisabled = isManualInputMode || !hasActiveMatch || lockedByOther || state.scorerPaused;
   const isExporting = Boolean(pendingExportId);
   const canUndo = state.history.length > 0;
+  const canRedo = state.futureHistory.length > 0;
   const playerStats = useMemo(() => buildPlayerStats(recordPayload, { practiceMode: isPracticeMode }), [recordPayload, isPracticeMode]);
   const boxScore = useMemo(() => {
     const { lineScore: liveLine, hits: liveHits, errors: liveErrors } = recordPayload.liveStats;
@@ -2098,14 +2456,17 @@ export default function ScorekeeperPage() {
     const padInnings = (arr: number[]) =>
       inningsHeader.map((_, idx) => (arr[idx] != null ? arr[idx] : '—'));
 
-    const totals = activeMatch?.postGame?.totals ?? {
+    const manualSource = isManualInputMode ? manualDraft : null;
+    const totals = manualSource?.totals ?? activeMatch?.postGame?.totals ?? {
       home: { runs: state.score.home, hits: liveHits.home, errors: liveErrors.home },
       away: { runs: state.score.away, hits: liveHits.away, errors: liveErrors.away },
     };
 
     const lineScore =
-      activeMatch?.postGame?.lineScore && activeMatch.postGame.lineScore.innings.length
-        ? activeMatch.postGame.lineScore
+      manualSource?.lineScore && manualSource.lineScore.innings.length
+        ? manualSource.lineScore
+        : activeMatch?.postGame?.lineScore && activeMatch.postGame.lineScore.innings.length
+          ? activeMatch.postGame.lineScore
         : {
             innings: inningsHeader,
             home: liveLine.home,
@@ -2123,7 +2484,7 @@ export default function ScorekeeperPage() {
       color: side === 'home' ? '#f97316' : '#60a5fa',
     });
     return { innings, rows: [mk('away'), mk('home')] };
-  }, [recordPayload, state.inning, state.score, state.teamNames, activeMatch, homeTeam, awayTeam]);
+  }, [recordPayload, state.inning, state.score, state.teamNames, activeMatch, homeTeam, awayTeam, isManualInputMode, manualDraft]);
   const hasLiveUrlChange = liveVideoUrlInput.trim() !== state.liveVideoUrl.trim();
   const hasLiveDelayChange = parseInt(liveDelayInput || '0', 10) !== state.liveDelaySeconds;
   const battedBallDetails = useMemo<BattedBallDetails | null>(() => {
@@ -2198,6 +2559,13 @@ export default function ScorekeeperPage() {
   useEffect(() => {
     queueMicrotask(() => setLiveDelayInput(String(state.liveDelaySeconds)));
   }, [state.liveDelaySeconds]);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      setHomeScoreInput(String(state.score.home));
+      setAwayScoreInput(String(state.score.away));
+    });
+  }, [state.score.home, state.score.away]);
 
   useEffect(() => {
     if (!pendingExportId) return;
@@ -2418,10 +2786,12 @@ const handleConfirmHitWizard = () => {
         }, {});
         setErrorOnPlayModal({
           selections: initialSelections,
-          batterResult: 'hold',
+          batterResult: 1,
           errorType: errorTypeOptions[0].value,
           context: '',
           fielder: infieldFielderOptions[0],
+          battedBall: details,
+          extraCalls: [],
         });
         break;
       }
@@ -2601,6 +2971,9 @@ const handleConfirmHitWizard = () => {
       case 'undo':
         actions.undo();
         break;
+      case 'redo':
+        actions.redo();
+        break;
       default:
         break;
     }
@@ -2667,10 +3040,23 @@ const handleConfirmHitWizard = () => {
           e.preventDefault();
           setShowFoulTypeModal(true);
           break;
+        case '6':
+          e.preventDefault();
+          if (canRedo) actions.redo();
+          break;
         case 'Escape':
           e.preventDefault();
           if (canUndo) actions.undo();
           break;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        if (canRedo) actions.redo();
+      }
+      if (e.shiftKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (canRedo) actions.redo();
       }
     };
 
@@ -2692,6 +3078,7 @@ const handleConfirmHitWizard = () => {
     positionSwapModal,
     actions,
     canUndo,
+    canRedo,
     state.strikes,
     openHitWizardFlow,
   ]);
@@ -2757,6 +3144,87 @@ const handleConfirmHitWizard = () => {
     actions.saveMatchLineups(activeMatch.id, state.lineups, state.benches);
   };
 
+  const handleScoreInputModeChange = async (nextMode: MatchScoreInputMode) => {
+    if (!activeMatch || lockedByOther) return;
+    actions.updateMatch(activeMatch.id, { scoreInputMode: nextMode });
+    try {
+      await setDoc(doc(firestore, 'matches', activeMatch.id), { scoreInputMode: nextMode }, { merge: true });
+      setManualNotice(nextMode === 'manual' ? '수기 입력 모드로 전환되었습니다.' : '실시간 입력 모드로 전환되었습니다.');
+    } catch (error) {
+      console.error('[scorekeeper] scoreInputMode update failed', error);
+      setManualNotice('입력 방식 저장에 실패했습니다. 잠시 후 다시 시도해주세요.');
+    }
+  };
+
+  const handleSaveManualDraft = async () => {
+    if (!activeMatch || !manualDraft || lockedByOther) return;
+    setManualDraftSaving(true);
+    setManualNotice(null);
+    try {
+      await setDoc(
+        doc(firestore, 'matches', activeMatch.id),
+        { manualEntryDraft: manualDraft },
+        { merge: true },
+      );
+      actions.updateMatch(activeMatch.id, { manualEntryDraft: manualDraft });
+      setManualNotice('수기 기록이 중간 저장되었습니다.');
+    } catch (error) {
+      console.error('[scorekeeper] manual draft save failed', error);
+      setManualNotice('중간 저장에 실패했습니다. 권한 또는 네트워크 상태를 확인해주세요.');
+    } finally {
+      setManualDraftSaving(false);
+    }
+  };
+
+  const handleApplyManualRecord = async () => {
+    if (!activeMatch || !manualDraft || lockedByOther) return;
+    const confirmed = window.confirm('수기 기록을 최종 반영할까요?\n최종 반영 후 기록 페이지 집계에 사용됩니다.');
+    if (!confirmed) return;
+    setManualApplying(true);
+    setManualNotice(null);
+    const normalizedRecord: PostGameRecord = {
+      ...manualDraft,
+      totals: {
+        home: {
+          ...manualDraft.totals.home,
+          runs: toFiniteNumber(manualDraft.totals.home?.runs, 0),
+          hits: toFiniteNumber(manualDraft.totals.home?.hits, 0),
+          errors: toFiniteNumber(manualDraft.totals.home?.errors, 0),
+          lob: toFiniteNumber(manualDraft.totals.home?.lob, 0),
+        },
+        away: {
+          ...manualDraft.totals.away,
+          runs: toFiniteNumber(manualDraft.totals.away?.runs, 0),
+          hits: toFiniteNumber(manualDraft.totals.away?.hits, 0),
+          errors: toFiniteNumber(manualDraft.totals.away?.errors, 0),
+          lob: toFiniteNumber(manualDraft.totals.away?.lob, 0),
+        },
+      },
+    };
+    const payload: Partial<MatchSchedule> = {
+      status: 'completed',
+      homeScore: normalizedRecord.totals.home.runs,
+      awayScore: normalizedRecord.totals.away.runs,
+      postGame: normalizedRecord,
+      manualEntryDraft: normalizedRecord,
+    };
+    try {
+      await setDoc(doc(firestore, 'matches', activeMatch.id), payload, { merge: true });
+      actions.updateMatch(activeMatch.id, payload);
+      try {
+        await triggerMatchImport(activeMatch.id);
+        setManualNotice('기록 최종 반영이 완료되었습니다. 기록 페이지에 곧 반영됩니다.');
+      } catch {
+        setManualNotice('경기 기록 저장이 완료되었습니다. 집계 반영까지 잠시 기다려주세요.');
+      }
+    } catch (error) {
+      console.error('[scorekeeper] manual record apply failed', error);
+      setManualNotice('기록 최종 반영에 실패했습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setManualApplying(false);
+    }
+  };
+
   const handleStartGame = () => {
     if (!hasActiveMatch || isGameStarted || isGameOver || lockedByOther) return;
     setHitWizard(null);
@@ -2799,14 +3267,38 @@ const handleConfirmHitWizard = () => {
     }
     const endedAt = new Date().toISOString();
     setPendingExportId(endedAt);
-    actions.endGame(endedAt);
+    const postGameOverride = isManualInputMode ? undefined : buildAutoPostGameFromLive(recordPayload, playerStats);
+    actions.endGame(endedAt, postGameOverride);
   };
 
   const handleNewGame = () => {
+    if (!hasActiveMatch || lockedByOther || state.scorerPaused) return;
+    setShowFullResetConfirm(false);
     setPendingExportId(null);
     setHitWizard(null);
     setActionModal(null);
     actions.resetGame();
+  };
+
+  const openRunnerActionFromBase = (base: 0 | 1 | 2) => {
+    if (controlsDisabled) return;
+    const runnerName = state.bases[base];
+    if (!runnerName) return;
+    const offenseLineup = state.lineups[hittingSide];
+    const lineupIndex = offenseLineup.findIndex((slot) => getUniqueName(slot.name, slot.number) === runnerName);
+    setActionModal({ role: 'runner', base, name: runnerName, side: hittingSide, lineupIndex });
+  };
+
+  const applyScoreInputs = () => {
+    if (!hasActiveMatch || lockedByOther || state.scorerPaused) return;
+    const parsedHome = Number.parseInt(homeScoreInput.trim(), 10);
+    const parsedAway = Number.parseInt(awayScoreInput.trim(), 10);
+    if (Number.isNaN(parsedHome) || parsedHome < 0 || Number.isNaN(parsedAway) || parsedAway < 0) {
+      alert('점수는 0 이상의 숫자로 입력해주세요.');
+      return;
+    }
+    actions.setScore('home', parsedHome);
+    actions.setScore('away', parsedAway);
   };
 
   return (
@@ -2865,7 +3357,8 @@ const handleConfirmHitWizard = () => {
               <option value="">경기를 선택하세요</option>
               {state.matches.map((match) => (
                 <option key={match.id} value={match.id}>
-                  {match.awayTeamName} vs {match.homeTeamName} ({match.status === 'completed' ? '종료' : '예정'})
+                  {match.awayTeamName} vs {match.homeTeamName} ({match.status === 'completed' ? '종료' : '예정'}
+                  {(match.scoreInputMode ?? 'live') === 'manual' ? ' · 수기' : ''})
                 </option>
               ))}
             </select>
@@ -2893,11 +3386,29 @@ const handleConfirmHitWizard = () => {
           </div>
         </div>
         {activeMatch ? (
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', color: '#cbd5e1', fontSize: '13px' }}>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', color: '#cbd5e1', fontSize: '13px', alignItems: 'center' }}>
             <span>선택된 경기: {activeMatch.awayTeamName} vs {activeMatch.homeTeamName}</span>
             <span>일시: {formatDateTimeLabel(activeMatch.startTime)}</span>
             <span>라인업: {activeMatch.lineups ? '사전 저장됨' : '미저장'}</span>
             <span>라인업 공개: {activeMatch.lineupPublic ? '공개됨' : '비공개'}</span>
+            <span>입력 방식: {(activeMatch.scoreInputMode ?? 'live') === 'manual' ? '수기 입력' : '실시간 입력'}</span>
+            <select
+              value={activeMatch.scoreInputMode ?? 'live'}
+              onChange={(event) => void handleScoreInputModeChange(event.target.value as MatchScoreInputMode)}
+              disabled={lockedByOther || manualDraftSaving || manualApplying}
+              style={{
+                borderRadius: '8px',
+                border: '1px solid rgba(148,163,184,0.35)',
+                background: 'rgba(15,23,42,0.82)',
+                color: '#e2e8f0',
+                padding: '4px 8px',
+                fontSize: '12px',
+                cursor: lockedByOther ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <option value="live">실시간 기록</option>
+              <option value="manual">실시간 기록 안함 (수기 입력)</option>
+            </select>
           </div>
         ) : (
           <span style={{ color: '#fbbf24', fontSize: '13px' }}>현재 선택된 경기가 없습니다.</span>
@@ -2968,9 +3479,40 @@ const handleConfirmHitWizard = () => {
         </div>
       </section>
 
+      {isManualInputMode ? (
+        <section style={{ padding: '12px 18px 18px' }}>
+          {manualDraft ? (
+            <ManualRecordEntryPanel
+              draft={manualDraft}
+              homeTeamName={state.teamNames.home}
+              awayTeamName={state.teamNames.away}
+              notice={manualNotice}
+              saving={manualDraftSaving}
+              applying={manualApplying}
+              disabled={lockedByOther}
+              onDraftChange={setManualDraft}
+              onSaveDraft={() => void handleSaveManualDraft()}
+              onApply={() => void handleApplyManualRecord()}
+            />
+          ) : (
+            <div
+              style={{
+                borderRadius: '12px',
+                border: '1px dashed rgba(148,163,184,0.35)',
+                background: 'rgba(15,23,42,0.6)',
+                padding: '14px',
+                color: '#cbd5e1',
+              }}
+            >
+              수기 입력 초안을 준비 중입니다.
+            </div>
+          )}
+        </section>
+      ) : null}
+
       <div
         style={{
-          display: 'grid',
+          display: isManualInputMode ? 'none' : 'grid',
           gridTemplateColumns: '550px 960px',
           gap: '10px',
           padding: '16px',
@@ -3006,6 +3548,55 @@ const handleConfirmHitWizard = () => {
               setActionModal({ role: 'fielder', ...payload, side: defenseSide, lineupIndex });
             }}
           />
+          <div
+            style={{
+              padding: '10px 12px',
+              borderRadius: '12px',
+              border: '1px solid rgba(148,163,184,0.25)',
+              background: 'rgba(15,23,42,0.55)',
+              display: 'grid',
+              gap: '8px',
+              width: '100%',
+              maxWidth: '550px',
+              minWidth: '480px',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 900, color: '#e2e8f0' }}>주자 액션 바로가기</span>
+              <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>베이스 클릭이 어려운 화면 배율 대응</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px' }}>
+              {[0, 1, 2].map((base) => {
+                const runner = state.bases[base as 0 | 1 | 2];
+                const disabled = controlsDisabled || !runner;
+                return (
+                  <button
+                    key={`runner-quick-${base}`}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => openRunnerActionFromBase(base as 0 | 1 | 2)}
+                    style={{
+                      padding: '10px',
+                      borderRadius: '10px',
+                      border: runner ? '1px solid rgba(59,130,246,0.45)' : '1px solid rgba(148,163,184,0.25)',
+                      background: runner ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.03)',
+                      color: runner ? '#bfdbfe' : '#94a3b8',
+                      fontWeight: 800,
+                      fontSize: '12px',
+                      cursor: disabled ? 'not-allowed' : 'pointer',
+                      opacity: disabled ? 0.6 : 1,
+                      textAlign: 'left',
+                    }}
+                  >
+                    <div style={{ fontSize: '11px', opacity: 0.85 }}>{base + 1}루</div>
+                    <div style={{ marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {runner || '주자 없음'}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <div
             style={{
               padding: '14px',
@@ -3287,9 +3878,10 @@ const handleConfirmHitWizard = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '10px' }}>
               {mainButtons.map((btn) => {
                 const isUndo = btn.action === 'undo';
+                const isRedo = btn.action === 'redo';
                 const isHitMenu = btn.action === 'hitMenu';
                 const isActive = isHitMenu && Boolean(hitWizard);
-                const isDisabled = controlsDisabled || (isUndo && !canUndo);
+                const isDisabled = controlsDisabled || (isUndo && !canUndo) || (isRedo && !canRedo);
                 return (
                   <button
                     key={btn.label}
@@ -3298,17 +3890,17 @@ const handleConfirmHitWizard = () => {
                     style={{
                       padding: '14px 12px',
                       borderRadius: '12px',
-                      border: isUndo ? '1px solid rgba(148,163,184,0.35)' : 'none',
-                      background: isUndo
+                      border: isUndo || isRedo ? '1px solid rgba(148,163,184,0.35)' : 'none',
+                      background: isUndo || isRedo
                         ? isDisabled
                           ? 'rgba(148,163,184,0.12)'
                           : 'rgba(148,163,184,0.18)'
                         : btn.color,
-                      color: isUndo ? '#e2e8f0' : '#0b0f1a',
+                      color: isUndo || isRedo ? '#e2e8f0' : '#0b0f1a',
                       fontWeight: 900,
                       fontSize: '14px',
                       cursor: isDisabled ? 'not-allowed' : 'pointer',
-                      boxShadow: isUndo ? 'none' : '0 10px 22px rgba(0,0,0,0.25)',
+                      boxShadow: isUndo || isRedo ? 'none' : '0 10px 22px rgba(0,0,0,0.25)',
                       outline: isActive ? '2px solid rgba(59,130,246,0.6)' : 'none',
                       opacity: isDisabled ? 0.6 : 1,
                     }}
@@ -3326,6 +3918,7 @@ const handleConfirmHitWizard = () => {
                         {btn.action === 'strike' && '(2)'}
                         {btn.action === 'hitMenu' && '(3)'}
                         {btn.action === 'undo' && '(4)'}
+                        {btn.action === 'redo' && '(6)'}
                       </span>
                     )}
                   </button>
@@ -3380,6 +3973,180 @@ const handleConfirmHitWizard = () => {
               >
                 단축키 {shortcutsEnabled ? 'ON' : 'OFF'}
               </button>
+            </div>
+            <div
+              style={{
+                padding: '12px',
+                borderRadius: '12px',
+                border: '1px solid rgba(148,163,184,0.3)',
+                background: 'rgba(15,23,42,0.5)',
+                display: 'grid',
+                gap: '10px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 900, color: '#e2e8f0' }}>부분/전체 초기화 · 점수 보정</span>
+                <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 800 }}>기록 누락 보정용</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => actions.resetCount()}
+                  disabled={controlsDisabled}
+                  style={{
+                    padding: '10px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(148,163,184,0.35)',
+                    background: 'rgba(255,255,255,0.03)',
+                    color: '#cbd5e1',
+                    fontWeight: 800,
+                    cursor: controlsDisabled ? 'not-allowed' : 'pointer',
+                    opacity: controlsDisabled ? 0.6 : 1,
+                  }}
+                >
+                  카운트 리셋
+                </button>
+                <button
+                  type="button"
+                  onClick={() => actions.clearBases()}
+                  disabled={controlsDisabled}
+                  style={{
+                    padding: '10px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(148,163,184,0.35)',
+                    background: 'rgba(255,255,255,0.03)',
+                    color: '#cbd5e1',
+                    fontWeight: 800,
+                    cursor: controlsDisabled ? 'not-allowed' : 'pointer',
+                    opacity: controlsDisabled ? 0.6 : 1,
+                  }}
+                >
+                  주자 클리어
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowFullResetConfirm(true)}
+                  disabled={scoreAdjustDisabled}
+                  style={{
+                    padding: '10px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(248,113,113,0.45)',
+                    background: 'rgba(248,113,113,0.12)',
+                    color: '#fecaca',
+                    fontWeight: 900,
+                    cursor: scoreAdjustDisabled ? 'not-allowed' : 'pointer',
+                    opacity: scoreAdjustDisabled ? 0.6 : 1,
+                  }}
+                >
+                  전체 초기화
+                </button>
+              </div>
+              <div style={{ display: 'grid', gap: '8px', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+                {([
+                  { side: 'away' as const, label: state.teamNames.away || '원정' },
+                  { side: 'home' as const, label: state.teamNames.home || '홈' },
+                ]).map((item) => (
+                  <div
+                    key={item.side}
+                    style={{
+                      border: '1px solid rgba(148,163,184,0.25)',
+                      borderRadius: '10px',
+                      padding: '8px',
+                      display: 'grid',
+                      gap: '6px',
+                      background: 'rgba(255,255,255,0.03)',
+                    }}
+                  >
+                    <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 800 }}>{item.label} 점수</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={() => actions.adjustScore(item.side, -1)}
+                        disabled={scoreAdjustDisabled}
+                        style={{
+                          width: '30px',
+                          height: '30px',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(148,163,184,0.35)',
+                          background: 'rgba(255,255,255,0.03)',
+                          color: '#e2e8f0',
+                          fontWeight: 900,
+                          cursor: scoreAdjustDisabled ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        -
+                      </button>
+                      <span style={{ flex: 1, textAlign: 'center', fontWeight: 900, color: '#e2e8f0' }}>
+                        {state.score[item.side]}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => actions.adjustScore(item.side, 1)}
+                        disabled={scoreAdjustDisabled}
+                        style={{
+                          width: '30px',
+                          height: '30px',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(34,197,94,0.35)',
+                          background: 'rgba(34,197,94,0.1)',
+                          color: '#86efac',
+                          fontWeight: 900,
+                          cursor: scoreAdjustDisabled ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '8px', alignItems: 'center' }}>
+                <input
+                  value={awayScoreInput}
+                  onChange={(e) => setAwayScoreInput(e.target.value)}
+                  inputMode="numeric"
+                  placeholder="원정 점수"
+                  style={{
+                    borderRadius: '10px',
+                    border: '1px solid rgba(148,163,184,0.35)',
+                    padding: '10px',
+                    background: '#0f172a',
+                    color: '#e2e8f0',
+                    fontWeight: 800,
+                  }}
+                />
+                <input
+                  value={homeScoreInput}
+                  onChange={(e) => setHomeScoreInput(e.target.value)}
+                  inputMode="numeric"
+                  placeholder="홈 점수"
+                  style={{
+                    borderRadius: '10px',
+                    border: '1px solid rgba(148,163,184,0.35)',
+                    padding: '10px',
+                    background: '#0f172a',
+                    color: '#e2e8f0',
+                    fontWeight: 800,
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={applyScoreInputs}
+                  disabled={scoreAdjustDisabled}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(59,130,246,0.45)',
+                    background: 'rgba(59,130,246,0.15)',
+                    color: '#bfdbfe',
+                    fontWeight: 900,
+                    cursor: scoreAdjustDisabled ? 'not-allowed' : 'pointer',
+                    opacity: scoreAdjustDisabled ? 0.6 : 1,
+                  }}
+                >
+                  점수 적용
+                </button>
+              </div>
             </div>
             <div
               style={{
@@ -3756,6 +4523,74 @@ const handleConfirmHitWizard = () => {
         <RemovedPlayersPanel title={`교체 out (${state.teamNames.home || 'HOME'})`} players={state.removed.home} density="regular" />
       </div>
 
+      {showFullResetConfirm && (
+        <div
+          onClick={() => setShowFullResetConfirm(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'grid',
+            placeItems: 'center',
+            zIndex: 1200,
+            padding: '20px',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 'min(420px, 100%)',
+              borderRadius: '14px',
+              border: '1px solid rgba(248,113,113,0.4)',
+              background: '#0f172a',
+              padding: '16px',
+              display: 'grid',
+              gap: '12px',
+              color: '#e2e8f0',
+            }}
+          >
+            <div style={{ display: 'grid', gap: '6px' }}>
+              <span style={{ fontWeight: 900, color: '#fecaca' }}>전체 초기화 확인</span>
+              <span style={{ fontSize: '13px', color: '#cbd5e1', fontWeight: 700 }}>
+                현재 경기의 점수/카운트/주자/기록이 모두 초기화됩니다. 계속 진행할까요?
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setShowFullResetConfirm(false)}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  background: 'transparent',
+                  color: '#cbd5e1',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleNewGame}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(248,113,113,0.45)',
+                  background: 'rgba(248,113,113,0.16)',
+                  color: '#fecaca',
+                  fontWeight: 900,
+                  cursor: 'pointer',
+                }}
+              >
+                전체 초기화
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {hitWizard && (
         <HitWizardModal
           state={hitWizard}
@@ -3826,11 +4661,15 @@ const handleConfirmHitWizard = () => {
       {errorOnPlayModal && (
         <ErrorOnPlayModal
           basesState={state.bases}
+          balls={state.balls}
+          strikes={state.strikes}
           defaultFielder={errorOnPlayModal.fielder}
           defaultErrorType={errorOnPlayModal.errorType}
           defaultContext={errorOnPlayModal.context}
           defaultSelections={errorOnPlayModal.selections}
           defaultBatterResult={errorOnPlayModal.batterResult}
+          defaultBattedBall={errorOnPlayModal.battedBall}
+          defaultExtraCalls={errorOnPlayModal.extraCalls}
           onClose={() => setErrorOnPlayModal(null)}
           onBack={() => {
             setErrorOnPlayModal(null);
@@ -3838,18 +4677,15 @@ const handleConfirmHitWizard = () => {
               setHitWizard({ ...lastHitWizard, step: 'zone' });
             }
           }}
-          onConfirm={({ fielder, errorType, context, batterResult, selections, pitchResult }) => {
-            // 폭투/포일 시 볼/스트라이크 카운트 추가
-            if (pitchResult === 'ball') {
-              actions.addBall();
-            } else if (pitchResult === 'strike') {
-              actions.addStrike();
-            }
+          onConfirm={({ fielder, errorType, context, batterResult, selections, pitchResult, battedBall, extraCalls }) => {
             actions.recordError({
               fielderPos: fielder || '수비',
               errorType: decorateErrorType(errorType, fielder || '수비'),
               context,
+              pitchResult,
               advanceResults: { batter: batterResult, runners: selections },
+              battedBall,
+              extraCalls,
             });
             setErrorOnPlayModal(null);
           }}
@@ -5653,24 +6489,41 @@ function HitAdvanceModal({
 
 function ErrorOnPlayModal({
   basesState,
+  balls,
+  strikes,
   defaultFielder,
   defaultSelections,
   defaultBatterResult,
   defaultErrorType,
   defaultContext,
+  defaultBattedBall,
+  defaultExtraCalls,
   onClose,
   onBack,
   onConfirm,
 }: {
   basesState: (string | null)[];
+  balls: number;
+  strikes: number;
   defaultFielder: string;
   defaultSelections: RunnerAdvanceSelections;
   defaultBatterResult: 'out' | 'hold' | 1 | 2 | 3 | 4;
   defaultErrorType: string;
   defaultContext: string;
+  defaultBattedBall?: BattedBallDetails | null;
+  defaultExtraCalls?: ErrorExtraCall[];
   onClose: () => void;
   onBack?: () => void;
-  onConfirm: (details: { fielder: string; errorType: string; context: string; batterResult: 'out' | 'hold' | 1 | 2 | 3 | 4; selections: RunnerAdvanceSelections; pitchResult?: 'ball' | 'strike' }) => void;
+  onConfirm: (details: {
+    fielder: string;
+    errorType: string;
+    context: string;
+    batterResult: 'out' | 'hold' | 1 | 2 | 3 | 4;
+    selections: RunnerAdvanceSelections;
+    pitchResult?: 'ball' | 'strike';
+    battedBall?: BattedBallDetails | null;
+    extraCalls?: ErrorExtraCall[];
+  }) => void;
 }) {
   const [fielder, setFielder] = useState(defaultFielder);
   const [errorType, setErrorType] = useState(defaultErrorType);
@@ -5678,12 +6531,43 @@ function ErrorOnPlayModal({
   const [batterResult, setBatterResult] = useState<'out' | 'hold' | 1 | 2 | 3 | 4>(defaultBatterResult);
   const [selections, setSelections] = useState<RunnerAdvanceSelections>(defaultSelections);
   const [pitchResult, setPitchResult] = useState<'ball' | 'strike' | null>(null);
+  const [extraCallType, setExtraCallType] = useState<'' | 'runner_obstruction' | 'runner_interference'>(
+    defaultExtraCalls?.[0]?.type ?? '',
+  );
+  const [extraCallBase, setExtraCallBase] = useState<'0' | '1' | '2'>(
+    defaultExtraCalls?.[0] ? String(defaultExtraCalls[0].base) as '0' | '1' | '2' : '0',
+  );
+  const [extraCallOutcome, setExtraCallOutcome] = useState<RunnerAdvanceOutcome>(
+    defaultExtraCalls?.[0]?.outcome ?? 'advance',
+  );
+  const [extraCallNote, setExtraCallNote] = useState(defaultExtraCalls?.[0]?.note ?? '');
+  const [extraCallList, setExtraCallList] = useState<ErrorExtraCall[]>(defaultExtraCalls?.slice(1) ?? []);
 
   const isWildPitchOrPassedBall = errorType === 'WP(폭투)' || errorType === 'PB(포일)';
 
   const runners = basesState
     .map((runner, idx) => (runner ? { runner, baseIndex: idx as 0 | 1 | 2 } : null))
     .filter(Boolean) as { runner: string; baseIndex: 0 | 1 | 2 }[];
+
+  const buildDraftExtraCall = () => {
+    if (!extraCallType) return null;
+    const base = Number(extraCallBase) as 0 | 1 | 2;
+    const runnerName = basesState[base] ?? undefined;
+    return {
+      type: extraCallType,
+      base,
+      runnerName,
+      outcome: extraCallType === 'runner_obstruction' ? extraCallOutcome : 'out',
+      note: extraCallNote.trim() || undefined,
+    } as ErrorExtraCall;
+  };
+
+  const resetDraftExtraCall = () => {
+    setExtraCallType('');
+    setExtraCallBase('0');
+    setExtraCallOutcome('advance');
+    setExtraCallNote('');
+  };
 
   return (
     <div
@@ -5702,6 +6586,9 @@ function ErrorOnPlayModal({
         onClick={(e) => e.stopPropagation()}
         style={{
           width: 'min(640px, 100%)',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          overscrollBehavior: 'contain',
           background: '#0f172a',
           borderRadius: '16px',
           border: '1px solid rgba(148, 163, 184, 0.25)',
@@ -5727,6 +6614,19 @@ function ErrorOnPlayModal({
         </div>
 
         <div style={{ display: 'grid', gap: '10px' }}>
+          <div
+            style={{
+              borderRadius: '10px',
+              border: '1px dashed rgba(59,130,246,0.35)',
+              padding: '10px',
+              background: 'rgba(59,130,246,0.08)',
+              color: '#bfdbfe',
+              fontWeight: 700,
+              fontSize: '12px',
+            }}
+          >
+            타구 정보: {defaultBattedBall ? formatBattedBallDetails(defaultBattedBall) : '선택 안 함'}
+          </div>
           <div style={{ display: 'grid', gap: '6px' }}>
             <span style={{ fontWeight: 800, color: '#cbd5e1', fontSize: '13px' }}>수비수/실책 유형</span>
             <div style={{ display: 'grid', gap: '8px', gridTemplateColumns: '1fr 1fr' }}>
@@ -5918,6 +6818,145 @@ function ErrorOnPlayModal({
               }}
             />
           </div>
+          <div style={{ display: 'grid', gap: '6px' }}>
+            <span style={{ fontWeight: 800, color: '#cbd5e1', fontSize: '13px' }}>추가 판정 (선택)</span>
+            <div style={{ display: 'grid', gap: '8px', gridTemplateColumns: '1fr 100px 1fr' }}>
+              <select
+                value={extraCallType}
+                onChange={(e) => setExtraCallType(e.target.value as '' | 'runner_obstruction' | 'runner_interference')}
+                style={{
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  padding: '10px',
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                }}
+              >
+                <option value="">추가 판정 없음</option>
+                <option value="runner_obstruction">주루 방해(수비)</option>
+                <option value="runner_interference">주자 수비방해(아웃)</option>
+              </select>
+              <select
+                value={extraCallBase}
+                onChange={(e) => setExtraCallBase(e.target.value as '0' | '1' | '2')}
+                style={{
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  padding: '10px',
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                }}
+              >
+                <option value="0">1루</option>
+                <option value="1">2루</option>
+                <option value="2">3루</option>
+              </select>
+              <select
+                value={String(extraCallOutcome)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  const parsed = Number(value);
+                  if (value === 'hold' || value === 'advance' || value === 'out' || value === 'score') {
+                    setExtraCallOutcome(value as RunnerAdvanceOutcome);
+                  } else if (!Number.isNaN(parsed)) {
+                    setExtraCallOutcome(parsed as RunnerAdvanceOutcome);
+                  }
+                }}
+                disabled={extraCallType !== 'runner_obstruction'}
+                style={{
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  padding: '10px',
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  fontWeight: 800,
+                  opacity: extraCallType !== 'runner_obstruction' ? 0.5 : 1,
+                }}
+              >
+                <option value="hold">정지</option>
+                <option value="advance">+1루</option>
+                <option value="3">3루</option>
+                <option value="4">홈 득점</option>
+              </select>
+            </div>
+            <input
+              value={extraCallNote}
+              onChange={(e) => setExtraCallNote(e.target.value)}
+              placeholder="예) 1루수 주루 방해 동시 판정"
+              style={{
+                borderRadius: '10px',
+                border: '1px solid rgba(148,163,184,0.35)',
+                padding: '10px',
+                background: '#0f172a',
+                color: '#e2e8f0',
+                fontWeight: 800,
+              }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+              <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
+                여러 판정이 있으면 `추가`를 눌러 누적하세요.
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const draft = buildDraftExtraCall();
+                  if (!draft) return;
+                  setExtraCallList((prev) => [...prev, draft]);
+                  resetDraftExtraCall();
+                }}
+                disabled={!extraCallType}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(14,165,233,0.45)',
+                  background: extraCallType ? 'rgba(14,165,233,0.14)' : 'rgba(148,163,184,0.12)',
+                  color: extraCallType ? '#bae6fd' : '#94a3b8',
+                  fontWeight: 800,
+                  cursor: extraCallType ? 'pointer' : 'not-allowed',
+                }}
+              >
+                추가
+              </button>
+            </div>
+            {extraCallList.length ? (
+              <div style={{ display: 'grid', gap: '6px' }}>
+                {extraCallList.map((call, idx) => (
+                  <div
+                    key={`${call.type}-${call.base}-${idx}`}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 10px',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(148,163,184,0.25)',
+                      background: 'rgba(255,255,255,0.03)',
+                    }}
+                  >
+                    <span style={{ color: '#cbd5e1', fontSize: '12px', fontWeight: 700 }}>
+                      {call.type === 'runner_obstruction' ? '주루 방해(수비)' : '주자 수비방해(아웃)'} · {call.base + 1}루
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setExtraCallList((prev) => prev.filter((_, callIdx) => callIdx !== idx))}
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        color: '#fca5a5',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      삭제
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
@@ -5953,7 +6992,35 @@ function ErrorOnPlayModal({
           </button>
           <button
             type="button"
-            onClick={() => onConfirm({ fielder, errorType, context, batterResult, selections, pitchResult: isWildPitchOrPassedBall ? pitchResult ?? undefined : undefined })}
+            onClick={() => {
+              if (isWildPitchOrPassedBall && !pitchResult) {
+                alert('폭투/포일 기록 시 투구 결과(볼/스트라이크)를 선택해주세요.');
+                return;
+              }
+              if (isWildPitchOrPassedBall && batterResult === 'hold' && pitchResult === 'ball' && balls >= 3) {
+                alert('현재 카운트가 3볼입니다. 타자 유지로 기록할 수 없습니다. 타자 결과를 1루(볼넷)로 선택해주세요.');
+                return;
+              }
+              if (isWildPitchOrPassedBall && batterResult === 'hold' && pitchResult === 'strike' && strikes >= 2) {
+                alert('현재 카운트가 2스트라이크입니다. 타자 유지로 기록할 수 없습니다. 삼진/낫아웃 결과를 선택해주세요.');
+                return;
+              }
+              const extraCalls: ErrorExtraCall[] = [...extraCallList];
+              const draft = buildDraftExtraCall();
+              if (draft) {
+                extraCalls.push(draft);
+              }
+              onConfirm({
+                fielder,
+                errorType,
+                context,
+                batterResult,
+                selections,
+                pitchResult: isWildPitchOrPassedBall ? (pitchResult ?? undefined) : undefined,
+                battedBall: defaultBattedBall,
+                extraCalls,
+              });
+            }}
             style={{
               padding: '10px 14px',
               borderRadius: '10px',
@@ -6030,6 +7097,9 @@ function StrikeOutTypeModal({
         onClick={(e) => e.stopPropagation()}
         style={{
           width: 'min(480px, 100%)',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          overscrollBehavior: 'contain',
           background: '#0f172a',
           borderRadius: '16px',
           border: '1px solid rgba(148, 163, 184, 0.25)',
@@ -6176,6 +7246,9 @@ function FoulTypeModal({
         onClick={(e) => e.stopPropagation()}
         style={{
           width: 'min(480px, 100%)',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          overscrollBehavior: 'contain',
           background: '#0f172a',
           borderRadius: '16px',
           border: '1px solid rgba(148, 163, 184, 0.25)',
@@ -7146,7 +8219,7 @@ function ActionModal({
 }) {
   const [errorType, setErrorType] = useState(errorTypeOptions[0].value);
   const [errorContext, setErrorContext] = useState('');
-  const [errorBatterResult, setErrorBatterResult] = useState<'out' | 'hold' | 1 | 2 | 3 | 4>('hold');
+  const [errorBatterResult, setErrorBatterResult] = useState<'out' | 'hold' | 1 | 2 | 3 | 4>(1);
   const [runnerSelections, setRunnerSelections] = useState<RunnerAdvanceSelections>({});
 
   useEffect(() => {
@@ -7154,7 +8227,7 @@ function ActionModal({
     queueMicrotask(() => {
       setErrorType(errorTypeOptions[0].value);
       setErrorContext('');
-      setErrorBatterResult('hold');
+      setErrorBatterResult(1);
       const initialSelections = bases.reduce<RunnerAdvanceSelections>((acc, runner, idx) => {
         if (runner) acc[idx as 0 | 1 | 2] = 'hold';
         return acc;
@@ -7211,7 +8284,8 @@ function ActionModal({
           />
           <RunnerActionButton label="주루사" color="#ef4444" onClick={handleRunnerAction(() => actions.runnerOut(data.base))} />
           <RunnerActionButton label="런다운 아웃" color="#ef4444" onClick={handleRunnerAction(() => actions.runnerRundownOut(data.base))} />
-          <RunnerActionButton label="주루 방해" color="#f97316" onClick={handleRunnerAction(() => actions.runnerInterference(data.base))} />
+          <RunnerActionButton label="주자 수비방해(아웃)" color="#ef4444" onClick={handleRunnerAction(() => actions.runnerInterference(data.base))} />
+          <RunnerActionButton label="주루 방해(수비) +1루" color="#f97316" onClick={handleRunnerAction(() => actions.runnerObstruction(data.base, 'advance'))} />
         </>
       );
     }
@@ -7256,6 +8330,9 @@ function ActionModal({
         onClick={(e) => e.stopPropagation()}
         style={{
           width: 'min(520px, 100%)',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          overscrollBehavior: 'contain',
           background: '#0f172a',
           borderRadius: '16px',
           border: '1px solid rgba(148, 163, 184, 0.25)',
@@ -8414,12 +9491,7 @@ function TeamEditor({
       ? practicePitcherEntry
       : lineupEntries.find((entry) => entry.slot.pos.toUpperCase() === 'P');
   
-  const positionOptions = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'OF', 'IF', 'PH', 'PR'];
-  const filterPositionOptions = (value: string) => {
-    const normalized = value.trim().toUpperCase();
-    if (!normalized) return positionOptions;
-    return positionOptions.filter((option) => option.includes(normalized));
-  };
+  const positionOptions = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'P', 'OF', 'IF', 'PH', 'PR'];
 
   return (
     <div style={{ display: 'grid', gap: '8px' }}>
@@ -8508,10 +9580,9 @@ function TeamEditor({
                 width: '100%',
               }}
             />
-            <input
-              value={entry.slot.pos}
+            <select
+              value={entry.slot.pos || ''}
               onChange={(e) => onSetLineup(side, entry.idx, { pos: e.target.value })}
-              list={`lineup-pos-${side}-${entry.idx}`}
               style={{
                 background: 'rgba(255,255,255,0.04)',
                 border: '1px solid rgba(148, 163, 184, 0.25)',
@@ -8520,12 +9591,14 @@ function TeamEditor({
                 color: '#e2e8f0',
                 fontWeight: 800,
               }}
-            />
-            <datalist id={`lineup-pos-${side}-${entry.idx}`}>
-              {filterPositionOptions(entry.slot.pos).map((option) => (
-                <option key={option} value={option} />
+            >
+              <option value="">포지션</option>
+              {positionOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
               ))}
-            </datalist>
+            </select>
             <input
               value={entry.slot.number}
               onChange={(e) => onSetLineup(side, entry.idx, { number: e.target.value })}
@@ -8893,11 +9966,9 @@ function TeamEditor({
               fontWeight: 800,
             }}
           />
-          <input
-            value={benchInput.pos}
-            placeholder="포지션"
+          <select
+            value={benchInput.pos || ''}
             onChange={(e) => onChangeBenchInput({ ...benchInput, pos: e.target.value })}
-            list={`bench-pos-${side}`}
             style={{
               width: '90px',
               background: '#0b0f1a',
@@ -8907,12 +9978,14 @@ function TeamEditor({
               color: '#e2e8f0',
               fontWeight: 800,
             }}
-          />
-          <datalist id={`bench-pos-${side}`}>
-            {filterPositionOptions(benchInput.pos).map((option) => (
-              <option key={option} value={option} />
+          >
+            <option value="">포지션</option>
+            {positionOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
             ))}
-          </datalist>
+          </select>
           <select
             value={benchInput.throws}
             onChange={(e) => onChangeBenchInput({ ...benchInput, throws: e.target.value })}

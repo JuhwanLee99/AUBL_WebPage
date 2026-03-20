@@ -303,7 +303,7 @@ export function buildGameRecord(state: GameRecordSource): GameRecord {
   const liveErrors = chronologicalFeed.reduce(
     (acc, entry) => {
       const text = entry.result.replace(/\s+/g, '');
-      const hasError = text.includes('실책') || /\bE[1-6]\b/i.test(text);
+      const hasError = text.includes('실책') || /\bE[1-9]\b/i.test(text);
       if (hasError) {
         const side: Side = entry.half === 'top' ? 'home' : 'away';
         acc[side] += 1;

@@ -15,12 +15,13 @@ export function normalizeMatches(matches: unknown): MatchSchedule[] {
         startTime: new Date().toISOString(),
         venue: '미정',
         status: 'scheduled',
-        division: undefined,
+        division: 'LEAGUE',
       } satisfies MatchSchedule;
     }
     const match = entry as Partial<MatchSchedule>;
     return {
       id: typeof match.id === 'string' ? match.id : createFallbackMatchId(),
+      seasonId: typeof match.seasonId === 'number' && Number.isFinite(match.seasonId) ? Math.trunc(match.seasonId) : undefined,
       homeTeamId: typeof match.homeTeamId === 'string' ? match.homeTeamId : undefined,
       awayTeamId: typeof match.awayTeamId === 'string' ? match.awayTeamId : undefined,
       homeTeamName: typeof match.homeTeamName === 'string' ? match.homeTeamName : '미정',
@@ -29,6 +30,7 @@ export function normalizeMatches(matches: unknown): MatchSchedule[] {
       venue: typeof match.venue === 'string' ? match.venue : '미정',
       status: match.status === 'completed' || match.status === 'inProgress' ? match.status : 'scheduled',
       recordMode: match.recordMode === 'practice' ? 'practice' : 'official',
+      scoreInputMode: match.scoreInputMode === 'manual' ? 'manual' : 'live',
       liveVideoUrl: typeof match.liveVideoUrl === 'string' ? match.liveVideoUrl : undefined,
       liveDelaySeconds: typeof match.liveDelaySeconds === 'number' ? match.liveDelaySeconds : undefined,
       division: deriveMatchDivision(match.division, match.homeTeamId, match.awayTeamId),
@@ -39,6 +41,7 @@ export function normalizeMatches(matches: unknown): MatchSchedule[] {
       benches: normalizeBenches(match.benches),
       notes: typeof match.notes === 'string' ? match.notes : undefined,
       postGame: normalizePostGame(match.postGame),
+      manualEntryDraft: normalizePostGame(match.manualEntryDraft),
       deleted: match.deleted === true,
       deletedAt: typeof match.deletedAt === 'number' ? match.deletedAt : undefined,
       purgeAt: typeof match.purgeAt === 'number' ? match.purgeAt : undefined,
@@ -51,6 +54,7 @@ export function projectSpectatorMatch(match: MatchSchedule): MatchSchedule {
   const lineupVisible = Boolean(match.lineupPublic) || match.status === 'inProgress' || match.status === 'completed';
   return {
     id: match.id,
+    seasonId: match.seasonId,
     homeTeamId: match.homeTeamId,
     awayTeamId: match.awayTeamId,
     homeTeamName: match.homeTeamName,
@@ -59,6 +63,7 @@ export function projectSpectatorMatch(match: MatchSchedule): MatchSchedule {
     venue: match.venue,
     status: match.status,
     recordMode: match.recordMode ?? 'official',
+    scoreInputMode: match.scoreInputMode ?? 'live',
     liveVideoUrl: match.liveVideoUrl,
     liveDelaySeconds: match.liveDelaySeconds,
     division: match.division,

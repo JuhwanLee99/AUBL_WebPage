@@ -226,6 +226,7 @@ function normalizePitcherLine(entry: unknown): PostGamePitcherLine | null {
     'era',
   ];
   const out: Partial<PostGamePitcherLine> = { name: p.name.trim() };
+  if (typeof p.slot === 'string' && p.slot.trim()) out.slot = p.slot.trim();
   fields.forEach((key) => {
     if (key === 'name' || key === 'result') return;
     const val = asNumber((p as Record<string, unknown>)[key]);
@@ -261,7 +262,25 @@ function normalizeBatterLine(entry: unknown): PostGameBatterLine | null {
   if (Array.isArray(b.innings)) {
     out.innings = b.innings.map((v) => (typeof v === 'string' ? v : v == null ? null : String(v)));
   }
-  ['ab', 'h', 'rbi', 'r', 'sb', 'avg', 'seasonAvg'].forEach((k) => {
+  [
+    'pa',
+    'ab',
+    'h',
+    'singles',
+    'doubles',
+    'triples',
+    'hr',
+    'bb',
+    'hbp',
+    'so',
+    'sac',
+    'fc',
+    'rbi',
+    'r',
+    'sb',
+    'avg',
+    'seasonAvg',
+  ].forEach((k) => {
     const key = k as keyof PostGameBatterLine;
     const val = asNumber((b as Record<string, unknown>)[key]);
     if (val !== undefined) (out as Record<string, unknown>)[key] = val;

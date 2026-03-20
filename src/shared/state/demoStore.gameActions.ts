@@ -8,7 +8,9 @@ import type {
   DemoState,
   ErrorDetails,
   MatchSchedule,
+  PostGameRecord,
   PlayerSlot,
+  RunnerAdvanceOutcome,
   RunnerAdvanceSelections,
 } from './demoStore';
 
@@ -37,8 +39,11 @@ type GameAction =
   | { type: 'stealFail' }
   | { type: 'runnerRundownOut'; base: 0 | 1 | 2 }
   | { type: 'runnerInterference'; base: 0 | 1 | 2 }
+  | { type: 'runnerObstruction'; base: 0 | 1 | 2; outcome?: RunnerAdvanceOutcome }
   | { type: 'resetCount' }
   | { type: 'clearBases' }
+  | { type: 'setScore'; side: Side; value: number }
+  | { type: 'adjustScore'; side: Side; delta: number }
   | { type: 'nextHalf' }
   | { type: 'advanceRunners'; selections: RunnerAdvanceSelections; message: string; preserveLastPlay?: boolean }
   | { type: 'runnerStealSuccess'; base: 0 | 1 | 2 }
@@ -62,11 +67,73 @@ type GameAction =
   | { type: 'endGame'; endedAt: string }
   | { type: 'resetGame' }
   | { type: 'undo' }
+  | { type: 'redo' }
   | { type: 'setGameLimit'; minutes: number | null }
   | { type: 'pauseGameTimer' }
   | { type: 'resumeGameTimer' };
 
 type Dispatch = (action: GameAction) => void;
+
+function buildSafePostGameRecord(
+  postGame: PostGameRecord | undefined,
+  snapshot: DemoState,
+): PostGameRecord {
+  const inningsLength = Math.max(snapshot.lineScore.home.length, snapshot.lineScore.away.length);
+  const innings = Array.from({ length: inningsLength }, (_unused, idx) => idx + 1);
+  const fillLine = (line: number[]) => Array.from({ length: inningsLength }, (_unused, idx) => line[idx] ?? 0);
+
+  const base: PostGameRecord = {
+    lineScore: {
+      innings,
+      home: fillLine(snapshot.lineScore.home),
+      away: fillLine(snapshot.lineScore.away),
+    },
+    totals: {
+      home: { runs: snapshot.score.home, hits: 0, errors: 0 },
+      away: { runs: snapshot.score.away, hits: 0, errors: 0 },
+    },
+    batters: {
+      home: [],
+      away: [],
+    },
+    pitchers: {
+      home: [],
+      away: [],
+    },
+  };
+
+  if (!postGame) return base;
+
+  return {
+    ...base,
+    ...postGame,
+    lineScore: postGame.lineScore?.innings?.length
+      ? postGame.lineScore
+      : base.lineScore,
+    totals: {
+      home: {
+        ...base.totals.home,
+        ...(postGame.totals?.home ?? {}),
+        runs: snapshot.score.home,
+      },
+      away: {
+        ...base.totals.away,
+        ...(postGame.totals?.away ?? {}),
+        runs: snapshot.score.away,
+      },
+    },
+    batters: {
+      home: postGame.batters?.home ?? [],
+      away: postGame.batters?.away ?? [],
+    },
+    pitchers: {
+      home: postGame.pitchers?.home ?? [],
+      away: postGame.pitchers?.away ?? [],
+    },
+    teamBatterSummary: postGame.teamBatterSummary ?? base.teamBatterSummary,
+    note: postGame.note ?? base.note,
+  };
+}
 
 export function useGameActions(params: {
   dispatch: Dispatch;
@@ -105,8 +172,12 @@ export function useGameActions(params: {
     stealFail: () => dispatch({ type: 'stealFail' }),
     runnerRundownOut: (base: 0 | 1 | 2) => dispatch({ type: 'runnerRundownOut', base }),
     runnerInterference: (base: 0 | 1 | 2) => dispatch({ type: 'runnerInterference', base }),
+    runnerObstruction: (base: 0 | 1 | 2, outcome?: RunnerAdvanceOutcome) =>
+      dispatch({ type: 'runnerObstruction', base, outcome }),
     resetCount: () => dispatch({ type: 'resetCount' }),
     clearBases: () => dispatch({ type: 'clearBases' }),
+    setScore: (side: Side, value: number) => dispatch({ type: 'setScore', side, value }),
+    adjustScore: (side: Side, delta: number) => dispatch({ type: 'adjustScore', side, delta }),
     nextHalf: () => dispatch({ type: 'nextHalf' }),
     loadMoreFeed: () => {
       const current = spectatorFeedLimitRef.current;
@@ -162,22 +233,26 @@ export function useGameActions(params: {
         void pushMatchUpdate(matchId, { status: 'inProgress', lineupPublic: true }).catch(() => {});
       }
     },
-    endGame: (endedAt: string) => {
+    endGame: (endedAt: string, postGameOverride?: PostGameRecord) => {
       dispatch({ type: 'endGame', endedAt });
       const matchId = stateRef.current.activeMatchId;
       if (!matchId) return;
       const snapshot = stateRef.current;
       const activeMatch = snapshot.matches.find((match) => match.id === matchId);
-      const postGame = buildPostGameRecord(snapshot, activeMatch);
+      const rawPostGame = postGameOverride ?? buildPostGameRecord(snapshot, activeMatch);
+      const postGame = buildSafePostGameRecord(rawPostGame, snapshot);
       void pushMatchUpdate(matchId, {
         status: 'completed',
         homeScore: snapshot.score.home,
         awayScore: snapshot.score.away,
         postGame,
-      }).catch(() => {});
+      }).catch((error) => {
+        console.error('[match] endGame update failed', error);
+      });
     },
     resetGame: () => dispatch({ type: 'resetGame' }),
     undo: () => dispatch({ type: 'undo' }),
+    redo: () => dispatch({ type: 'redo' }),
     setGameLimit: (minutes: number | null) => dispatch({ type: 'setGameLimit', minutes }),
     pauseGameTimer: () => dispatch({ type: 'pauseGameTimer' }),
     resumeGameTimer: () => dispatch({ type: 'resumeGameTimer' }),

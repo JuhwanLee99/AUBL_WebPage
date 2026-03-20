@@ -289,6 +289,8 @@ export default function ScoreboardPanel({
     () => state.matches.find((match) => match.id === state.activeMatchId),
     [state.matches, state.activeMatchId],
   );
+  const isManualInputMode = (activeMatch?.scoreInputMode ?? 'live') === 'manual';
+  const effectivePostGame = activeMatch?.postGame ?? (isManualInputMode ? activeMatch?.manualEntryDraft : undefined);
   const lineupVisible = isAdmin || state.gameStarted || Boolean(activeMatch?.lineupPublic);
   const hittingSide = state.half === 'top' ? 'away' : 'home';
   const defenseSide = hittingSide === 'home' ? 'away' : 'home';
@@ -332,20 +334,26 @@ export default function ScoreboardPanel({
     const record = buildGameRecord(state);
 
     const { lineScore: liveLine, hits: liveHits, errors: liveErrors } = record.liveStats;
-    const maxInning = Math.max(state.inning, liveLine.home.length, liveLine.away.length);
+    const maxInning = Math.max(
+      state.inning,
+      liveLine.home.length,
+      liveLine.away.length,
+      effectivePostGame?.lineScore?.home?.length ?? 0,
+      effectivePostGame?.lineScore?.away?.length ?? 0,
+    );
     const inningsHeader = Array.from({ length: Math.max(9, maxInning) }, (_, i) => i + 1);
 
     const padInnings = (arr: number[]) =>
       inningsHeader.map((_, idx) => (arr[idx] != null ? arr[idx] : '—'));
 
-    const totals = activeMatch?.postGame?.totals ?? {
+    const totals = effectivePostGame?.totals ?? {
       home: { runs: state.score.home, hits: liveHits.home, errors: liveErrors.home },
       away: { runs: state.score.away, hits: liveHits.away, errors: liveErrors.away },
     };
 
     const lineScore =
-      activeMatch?.postGame?.lineScore && activeMatch.postGame.lineScore.innings.length
-        ? activeMatch.postGame.lineScore
+      effectivePostGame?.lineScore && effectivePostGame.lineScore.innings.length
+        ? effectivePostGame.lineScore
         : {
             innings: inningsHeader,
             home: liveLine.home,
@@ -356,14 +364,22 @@ export default function ScoreboardPanel({
     const innings = hasExtras ? [...baseInnings, '10+'] : baseInnings;
     const mk = (side: 'home' | 'away') => ({
       name: state.teamNames[side] || (side === 'home' ? homeTeam?.name : awayTeam?.name) || side.toUpperCase(),
-      runs: state.score[side],
+      runs: totals?.[side]?.runs ?? state.score[side],
       hits: totals?.[side]?.hits ?? '—',
       errors: totals?.[side]?.errors ?? '—',
       innings: padInnings(lineScore?.[side]),
       color: side === 'home' ? '#f97316' : '#60a5fa',
     });
     return { innings, rows: [mk('away'), mk('home')] };
-  }, [state, activeMatch, homeTeam, awayTeam]);
+  }, [state, homeTeam, awayTeam, effectivePostGame]);
+
+  const displayScore = useMemo(
+    () => ({
+      home: effectivePostGame?.totals?.home?.runs ?? state.score.home,
+      away: effectivePostGame?.totals?.away?.runs ?? state.score.away,
+    }),
+    [effectivePostGame, state.score.home, state.score.away],
+  );
   const summaryTime = useMemo(() => {
     if (!activeMatch?.startTime) return '일시 미정';
     const date = new Date(activeMatch.startTime);
@@ -423,7 +439,7 @@ export default function ScoreboardPanel({
             textAlign: 'center',
           }}
         >
-          <ScoreCell label={state.teamNames.away || awayTeam?.name || 'AWAY'} value={state.score.away} />
+          <ScoreCell label={state.teamNames.away || awayTeam?.name || 'AWAY'} value={displayScore.away} />
           <div
             style={{
               display: 'grid',
@@ -464,7 +480,7 @@ export default function ScoreboardPanel({
               color="#f97316"
             />
           </div>
-          <ScoreCell label={state.teamNames.home || homeTeam?.name || 'HOME'} value={state.score.home} />
+          <ScoreCell label={state.teamNames.home || homeTeam?.name || 'HOME'} value={displayScore.home} />
         </div>
       </div>
 

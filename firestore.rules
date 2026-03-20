@@ -24,6 +24,8 @@ service cloud.firestore {
         'lineups',
         'benches',
         'postGame',
+        'manualEntryDraft',
+        'scoreInputMode',
         'status',
         'lineupPublic',
         'liveVideoUrl',
@@ -262,6 +264,35 @@ service cloud.firestore {
     match /roles/{userId} {
       allow read: if isAdmin() || (request.auth != null && request.auth.uid == userId);
       allow write: if isAdmin() || canSelfSyncPlayerOrStaffRole(userId);
+    }
+
+    // UGC 신고함 (운영자 검토 대상)
+    match /contentReports/{reportId} {
+      allow create: if request.auth != null
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.action in ['report', 'block']
+        && request.resource.data.reasonType is string
+        && request.resource.data.targetUid is string
+        && request.resource.data.targetLabel is string
+        && request.resource.data.contentDomain is string
+        && request.resource.data.contentId is string
+        && request.resource.data.contentPreview is string
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt is int;
+      allow read: if isAdmin() || (
+        request.auth != null
+        && request.auth.uid == resource.data.reporterUid
+      );
+      allow update, delete: if isAdmin();
+    }
+
+    // 사용자별 차단 목록
+    match /userModeration/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      match /blockedUsers/{blockedUserId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
     }
 
     // 팀 정보 및 팀원

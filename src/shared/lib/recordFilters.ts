@@ -1,6 +1,9 @@
 import type {
+  BatterRankingSort,
+  PitcherRankingSort,
   RecordFilterParams,
   RecordGroup,
+  RecordFilterOptions,
   RecordPlayoffDivision,
   RecordScope,
 } from '../api/backendClient';
@@ -49,6 +52,30 @@ export const PLAYOFF_DIVISION_OPTIONS: Array<{
   { value: 'BEOGEUM', label: '버금' },
 ];
 
+export const DEFAULT_BATTER_SORT_OPTIONS: Array<{ value: BatterRankingSort; label: string }> = [
+  { value: 'battingAverage', label: 'AVG' },
+  { value: 'ops', label: 'OPS' },
+  { value: 'onBasePct', label: 'OBP' },
+  { value: 'sluggingPct', label: 'SLG' },
+  { value: 'hits', label: 'H' },
+  { value: 'homeRuns', label: 'HR' },
+  { value: 'rbi', label: 'RBI' },
+  { value: 'gamesPlayed', label: 'G' },
+  { value: 'plateAppearance', label: 'PA' },
+  { value: 'stolenBases', label: 'SB' },
+];
+
+export const DEFAULT_PITCHER_SORT_OPTIONS: Array<{ value: PitcherRankingSort; label: string }> = [
+  { value: 'era', label: 'ERA' },
+  { value: 'whip', label: 'WHIP' },
+  { value: 'strikeouts', label: 'K' },
+  { value: 'wins', label: 'W' },
+  { value: 'saves', label: 'SV' },
+  { value: 'inningsPitched', label: 'IP' },
+  { value: 'walksAllowed', label: 'BB' },
+  { value: 'gamesPlayed', label: 'G' },
+];
+
 const PART_CODE_TO_GROUP: Record<string, Exclude<RecordGroup, 'ALL'>> = {
   '1': 'A',
   '2': 'B',
@@ -70,13 +97,13 @@ const PART_CODE_TO_GROUP: Record<string, Exclude<RecordGroup, 'ALL'>> = {
 
 export function normalizeSeasonType(
   value: string | null | undefined,
-): RecordPlayoffDivision | 'LEAGUE' | null {
+): RecordPlayoffDivision | 'LEAGUE' | 'PLAYOFF' | null {
   if (!value) return null;
   const raw = value.trim().toUpperCase();
   if (!raw) return null;
   if (raw.includes('EUTTEUM') || raw.includes('으뜸')) return 'EUTTEUM';
   if (raw.includes('BEOGEUM') || raw.includes('버금')) return 'BEOGEUM';
-  if (raw.includes('PLAYOFF') || raw.includes('포스트')) return null;
+  if (raw.includes('PLAYOFF') || raw.includes('포스트')) return 'PLAYOFF';
   return 'LEAGUE';
 }
 
@@ -123,11 +150,15 @@ export function matchesRecordFilters(
 
   if (filters.scope === 'LEAGUE') {
     if (rowScope === 'PLAYOFF') return false;
-    if (rowSeasonType === 'EUTTEUM' || rowSeasonType === 'BEOGEUM') return false;
+    if (rowSeasonType === 'PLAYOFF' || rowSeasonType === 'EUTTEUM' || rowSeasonType === 'BEOGEUM') return false;
   }
 
   if (filters.scope === 'PLAYOFF') {
-    const isPlayoff = rowScope === 'PLAYOFF' || rowSeasonType === 'EUTTEUM' || rowSeasonType === 'BEOGEUM';
+    const isPlayoff =
+      rowScope === 'PLAYOFF' ||
+      rowSeasonType === 'PLAYOFF' ||
+      rowSeasonType === 'EUTTEUM' ||
+      rowSeasonType === 'BEOGEUM';
     if (!isPlayoff) return false;
   }
 
@@ -144,7 +175,12 @@ export function hasPlayoffMetadata(
   if (!row) return false;
   const rowSeasonType = normalizeSeasonType(row.seasonType);
   const rowScope = normalizeScope(row.scope);
-  return rowSeasonType === 'EUTTEUM' || rowSeasonType === 'BEOGEUM' || rowScope === 'PLAYOFF';
+  return (
+    rowSeasonType === 'PLAYOFF' ||
+    rowSeasonType === 'EUTTEUM' ||
+    rowSeasonType === 'BEOGEUM' ||
+    rowScope === 'PLAYOFF'
+  );
 }
 
 export function supportsPlayoffFiltering(
@@ -174,4 +210,71 @@ export function groupLabelFromRecord(
 ): string {
   const group = resolveGroupFromRecord(partCode, teamName);
   return group ? `${group}조` : '-';
+}
+
+export function buildScopeOptions(
+  options: RecordFilterOptions | null | undefined,
+  allowPlayoff: boolean,
+): Array<{ value: RecordScope; label: string }> {
+  const allowed = new Set((options?.scopes ?? []).map((item) => item.toUpperCase()));
+  const includeLeague = allowed.size === 0 || allowed.has('LEAGUE');
+  const includePlayoff = allowPlayoff && (allowed.size === 0 || allowed.has('PLAYOFF'));
+
+  const result: Array<{ value: RecordScope; label: string }> = [{ value: 'ALL', label: '전체' }];
+  if (includeLeague) result.push({ value: 'LEAGUE', label: '리그' });
+  if (includePlayoff) result.push({ value: 'PLAYOFF', label: '플레이오프' });
+  return result;
+}
+
+export function buildGroupOptions(
+  options: RecordFilterOptions | null | undefined,
+): Array<{ value: RecordGroup; label: string }> {
+  const groups = options?.groups ?? [];
+  if (groups.length === 0) return RECORD_GROUP_OPTIONS;
+  return [
+    { value: 'ALL', label: '전체 조' },
+    ...groups
+      .map((item) => item.group.trim().toUpperCase())
+      .filter((group): group is Exclude<RecordGroup, 'ALL'> =>
+        group === 'A' ||
+        group === 'B' ||
+        group === 'C' ||
+        group === 'D' ||
+        group === 'E' ||
+        group === 'F' ||
+        group === 'G' ||
+        group === 'H',
+      )
+      .map((group) => ({ value: group, label: `${group}조` })),
+  ];
+}
+
+export function buildPlayoffDivisionOptions(
+  options: RecordFilterOptions | null | undefined,
+): Array<{ value: RecordPlayoffDivision; label: string }> {
+  const allowed = new Set((options?.playoffDivisions ?? []).map((item) => item.toUpperCase()));
+  const includeEutteum = allowed.size === 0 || allowed.has('EUTTEUM');
+  const includeBeogeum = allowed.size === 0 || allowed.has('BEOGEUM');
+  const result: Array<{ value: RecordPlayoffDivision; label: string }> = [{ value: 'ALL', label: '전체' }];
+  if (includeEutteum) result.push({ value: 'EUTTEUM', label: '으뜸' });
+  if (includeBeogeum) result.push({ value: 'BEOGEUM', label: '버금' });
+  return result;
+}
+
+export function buildBatterSortOptions(
+  options: RecordFilterOptions | null | undefined,
+): Array<{ value: BatterRankingSort; label: string }> {
+  const allowed = new Set(options?.batterSortOptions ?? []);
+  if (allowed.size === 0) return DEFAULT_BATTER_SORT_OPTIONS;
+  const filtered = DEFAULT_BATTER_SORT_OPTIONS.filter((item) => allowed.has(item.value));
+  return filtered.length > 0 ? filtered : DEFAULT_BATTER_SORT_OPTIONS;
+}
+
+export function buildPitcherSortOptions(
+  options: RecordFilterOptions | null | undefined,
+): Array<{ value: PitcherRankingSort; label: string }> {
+  const allowed = new Set(options?.pitcherSortOptions ?? []);
+  if (allowed.size === 0) return DEFAULT_PITCHER_SORT_OPTIONS;
+  const filtered = DEFAULT_PITCHER_SORT_OPTIONS.filter((item) => allowed.has(item.value));
+  return filtered.length > 0 ? filtered : DEFAULT_PITCHER_SORT_OPTIONS;
 }
