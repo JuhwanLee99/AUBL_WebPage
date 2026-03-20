@@ -259,8 +259,10 @@ export default function RulePage() {
           lineHeight: 1.7,
         }}
       >
-        <p style={{ margin: 0 }}>
-          <strong style={{ color: '#cbd5e1' }}>부칙</strong> — {appendixText}
+        <p style={{ margin: 0, whiteSpace: 'pre-line' }}>
+          <strong style={{ color: '#cbd5e1' }}>부칙</strong>
+          {'\n'}
+          {appendixText}
         </p>
       </section>
     </div>
