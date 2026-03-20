@@ -485,6 +485,14 @@ class _MoreScreenState extends State<MoreScreen> {
                 )),
               ),
               _MenuTile(
+                icon: Icons.report_problem_outlined,
+                label: '신고/차단 관리',
+                onTap: () => _push(const AppWebViewScreen(
+                  path: WebRouteContracts.adminModeration,
+                  title: '신고/차단 관리',
+                )),
+              ),
+              _MenuTile(
                 icon: Icons.edit_calendar,
                 label: '일정 관리',
                 onTap: () => _push(const AppWebViewScreen(
