@@ -8,7 +8,7 @@
     "emulator": "firebase emulators:start --only firestore",
     "emulator:save": "firebase emulators:export ./firestore-local",
     "emulator:import": "firebase emulators:start --only firestore --import ./firestore-local",
-    "build": "vite build",
+    "build": "vite build && node scripts/generate-og-pages.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "check:ci": "npm run lint && npm run build"
