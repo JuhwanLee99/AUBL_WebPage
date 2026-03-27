@@ -3557,7 +3557,8 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   const scheduleActions = useScheduleActions({
     dispatch,
     getState,
-    isAdmin: canRecordGame,
+    canRecordGame,
+    canControlCurrentPointer: isAdmin,
     markMatchesReady,
     markSkipMatchesWrite,
     markSkipFirestoreWrite,

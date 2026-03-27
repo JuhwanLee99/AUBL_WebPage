@@ -15,6 +15,7 @@ export function applyLineupVisibility(
   isAdmin: boolean,
 ): SharedGameState {
   if (!match) return data;
+  const emptyRoster = { home: [] as DemoState['lineups']['home'], away: [] as DemoState['lineups']['away'] };
   const lineupVisible =
     Boolean(match.lineupPublic) ||
     data.gameStarted === true ||
@@ -24,9 +25,26 @@ export function applyLineupVisibility(
   if (!isAdmin && !lineupVisible) {
     return {
       ...data,
-      lineups: { home: [], away: [] },
-      benches: { home: [], away: [] },
+      lineups: emptyRoster,
+      benches: emptyRoster,
     };
+  }
+
+  if (isAdmin) {
+    const dataLineups = data.lineups ?? emptyRoster;
+    const dataIsDemo = isDemoLineups(dataLineups);
+    const matchLineups = match.lineups ?? emptyRoster;
+    const matchHasPlayers =
+      hasActualPlayers(matchLineups.home) || hasActualPlayers(matchLineups.away);
+
+    // 일정에 라인업이 없는 예정 경기에서 초기 demo 라인업이 다시 노출되는 것을 막는다.
+    if (!lineupVisible && !matchHasPlayers && dataIsDemo) {
+      return {
+        ...data,
+        lineups: emptyRoster,
+        benches: match.benches ? cloneBenches(match.benches) : emptyRoster,
+      };
+    }
   }
 
   if (isAdmin && match.lineups) {

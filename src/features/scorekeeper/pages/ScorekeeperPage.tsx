@@ -2319,13 +2319,17 @@ export default function ScorekeeperPage() {
 
   const hittingSide: Side = state.half === 'top' ? 'away' : 'home';
   const defenseSide: Side = hittingSide === 'home' ? 'away' : 'home';
-  const offenseLineupEntries = state.lineups[hittingSide].map((slot, idx) => ({ slot, idx }));
+  const lineupBySide: { home: PlayerSlot[]; away: PlayerSlot[] } = {
+    home: Array.isArray(state.lineups?.home) ? state.lineups.home : [],
+    away: Array.isArray(state.lineups?.away) ? state.lineups.away : [],
+  };
+  const offenseLineup = lineupBySide[hittingSide];
+  const offenseLineupEntries = offenseLineup.map((slot, idx) => ({ slot, idx }));
   const practicePitcherIndex = isPracticeMode
     ? (() => {
-        const lineup = state.lineups[hittingSide];
-        if (!lineup.length) return -1;
-        const lastIndex = lineup.length - 1;
-        return lineup[lastIndex].pos.toUpperCase() === 'P' ? lastIndex : -1;
+        if (!offenseLineup.length) return -1;
+        const lastIndex = offenseLineup.length - 1;
+        return offenseLineup[lastIndex].pos.toUpperCase() === 'P' ? lastIndex : -1;
       })()
     : -1;
   // 타석에 들어갈 수 있는 선수만 필터링 (오타니룰 고려)
@@ -2338,10 +2342,10 @@ export default function ScorekeeperPage() {
     
     // 2. 그 외(10번 등)는 기존 로직 (투수가 아니거나 canPitcherBat 만족 시)
     if (entry.slot.pos.toUpperCase() !== 'P') return true;
-    return canPitcherBat(entry.slot, state.lineups[hittingSide]);
+    return canPitcherBat(entry.slot, offenseLineup);
   });
   const activeOffenseEntries = offenseBattingEntries.length ? offenseBattingEntries : offenseLineupEntries;
-  const defenseLineup = state.lineups[defenseSide];
+  const defenseLineup = lineupBySide[defenseSide];
   const activeLineupLength = activeOffenseEntries.length || 1;
   const currentBatterEntry = activeOffenseEntries[state.batterIndex[hittingSide] % activeLineupLength] ?? null;
 
@@ -2445,8 +2449,8 @@ export default function ScorekeeperPage() {
   const controlsDisabled = isManualInputMode || isGameOver || !isGameStarted || !hasActiveMatch || lockedByOther || state.scorerPaused;
   const scoreAdjustDisabled = isManualInputMode || !hasActiveMatch || lockedByOther || state.scorerPaused;
   const isExporting = Boolean(pendingExportId);
-  const canUndo = state.history.length > 0;
-  const canRedo = state.futureHistory.length > 0;
+  const canUndo = Array.isArray(state.history) && state.history.length > 0;
+  const canRedo = Array.isArray(state.futureHistory) && state.futureHistory.length > 0;
   const playerStats = useMemo(() => buildPlayerStats(recordPayload, { practiceMode: isPracticeMode }), [recordPayload, isPracticeMode]);
   const boxScore = useMemo(() => {
     const { lineScore: liveLine, hits: liveHits, errors: liveErrors } = recordPayload.liveStats;

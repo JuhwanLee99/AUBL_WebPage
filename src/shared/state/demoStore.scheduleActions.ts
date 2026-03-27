@@ -56,7 +56,8 @@ type Dispatch = (action: ScheduleAction) => void;
 export function useScheduleActions(params: {
   dispatch: Dispatch;
   getState: () => DemoState;
-  isAdmin: boolean;
+  canRecordGame: boolean;
+  canControlCurrentPointer: boolean;
   markMatchesReady: () => void;
   markSkipMatchesWrite: () => void;
   markSkipFirestoreWrite: () => void;
@@ -70,7 +71,8 @@ export function useScheduleActions(params: {
   const {
     dispatch,
     getState,
-    isAdmin,
+    canRecordGame,
+    canControlCurrentPointer,
     markMatchesReady,
     markSkipMatchesWrite,
     markSkipFirestoreWrite,
@@ -183,7 +185,9 @@ export function useScheduleActions(params: {
     ) => {
       markMatchesReady();
       dispatch({ type: 'saveMatchLineups', matchId, lineups, benches });
-      void pushMatchUpdate(matchId, { lineups: cloneLineups(lineups), benches: cloneBenches(benches) }).catch(() => {});
+      void Promise.resolve(
+        pushMatchUpdate(matchId, { lineups: cloneLineups(lineups), benches: cloneBenches(benches) }),
+      ).catch(() => {});
       const state = getState();
       const match = state.matches.find((entry) => entry.id === matchId);
       const isActiveMatch = state.activeMatchId === matchId;
@@ -201,10 +205,10 @@ export function useScheduleActions(params: {
       }
     },
     selectMatch: (matchId: string | null) => {
-      const followCurrent = isAdmin;
+      const followCurrent = canControlCurrentPointer;
       markSkipFirestoreWrite();
       dispatch({ type: 'selectMatch', matchId, followCurrent });
-      if (isAdmin) updateCurrentMatchPointer(matchId);
+      if (canControlCurrentPointer) updateCurrentMatchPointer(matchId);
       if (!matchId) return;
       const matchIdLocal = matchId;
       void (async () => {
@@ -216,7 +220,7 @@ export function useScheduleActions(params: {
             const current = getState();
             const mergedOwner = mergeOwnerLineups(data, matchIdLocal, current);
             const active = current.matches.find((match) => match.id === matchIdLocal);
-            const sanitized = applyLineupVisibility(mergedOwner, active, isAdmin);
+            const sanitized = applyLineupVisibility(mergedOwner, active, canRecordGame);
             const { feed: _feed, events: _events, ...core } = sanitized as SharedGameState & {
               feed?: unknown;
               events?: unknown;
@@ -290,7 +294,7 @@ export function useScheduleActions(params: {
           ...(docSnap.data() as Partial<MatchSchedule>),
         }));
         const normalized = normalizeMatches(incoming);
-        const projected = isAdmin ? normalized : normalized.map(projectSpectatorMatch);
+        const projected = canRecordGame ? normalized : normalized.map(projectSpectatorMatch);
         markSkipMatchesWrite();
         markMatchesReady();
         const current = getState();
@@ -361,7 +365,8 @@ export function useScheduleActions(params: {
   }), [
     dispatch,
     getState,
-    isAdmin,
+    canRecordGame,
+    canControlCurrentPointer,
     markMatchesReady,
     markSkipMatchesWrite,
     markSkipFirestoreWrite,

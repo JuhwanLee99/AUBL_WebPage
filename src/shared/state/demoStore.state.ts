@@ -28,6 +28,9 @@ export function normalizeState(base: DemoState, incoming: DemoState): DemoState 
       : false;
     if (activeLineups && activeHasPlayers) {
       rawLineups = activeLineups;
+    } else if (isDemo) {
+      // 활성 경기 라인업이 비어 있으면 demo 초기 라인업을 유지하지 않는다.
+      rawLineups = { home: [], away: [] };
     }
   }
   const safeLineups = hasActualPlayers(rawLineups.home) || hasActualPlayers(rawLineups.away)
@@ -56,6 +59,7 @@ export function normalizeState(base: DemoState, incoming: DemoState): DemoState 
         };
       })
     : [];
+  const futureHistory = Array.isArray(merged.futureHistory) ? merged.futureHistory : [];
   const gameStarted = typeof incoming.gameStarted === 'boolean' ? incoming.gameStarted : feed.length > 0;
   const gameLimitMinutes =
     typeof merged.gameLimitMinutes === 'number' ? merged.gameLimitMinutes : merged.gameLimitMinutes === null ? null : null;
@@ -73,6 +77,7 @@ export function normalizeState(base: DemoState, incoming: DemoState): DemoState 
     matches,
     lineScore,
     history,
+    futureHistory,
     lineups: safeLineups,
     gameOver: Boolean(merged.gameOver),
     endedAt: typeof merged.endedAt === 'string' ? merged.endedAt : null,
