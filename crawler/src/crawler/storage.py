@@ -1065,7 +1065,8 @@ def _extract_batting_stats(
     entries.extend(_extract_team_batting_entries(home_payload, "home"))
     entries.extend(_extract_team_batting_entries(away_payload, "away"))
     entries.extend(_extract_generic_batting_entries(payload))
-    return entries or None
+    deduped = _dedupe_batting_entries(entries)
+    return deduped or None
 
 
 def _extract_team_batting_entries(
@@ -1115,7 +1116,8 @@ def _extract_pitching_stats(
     entries.extend(_extract_team_pitching_entries(home_payload, "home"))
     entries.extend(_extract_team_pitching_entries(away_payload, "away"))
     entries.extend(_extract_generic_pitching_entries(payload))
-    return entries or None
+    deduped = _dedupe_pitching_entries(entries)
+    return deduped or None
 
 
 def _extract_team_pitching_entries(
@@ -1293,6 +1295,52 @@ def _is_final_status(status: str) -> bool:
     return status.lower() in FINAL_STATUSES
 
 
+def _dedupe_batting_entries(entries: list[BattingEntry]) -> list[BattingEntry]:
+    deduped: list[BattingEntry] = []
+    seen: set[tuple[Any, ...]] = set()
+    for entry in entries:
+        player_name = _strip_jersey_number(entry.player.name) if entry.player and entry.player.name else None
+        key = (
+            entry.team_side,
+            player_name,
+            entry.player.position if entry.player else None,
+            entry.at_bats,
+            entry.runs,
+            entry.hits,
+            entry.rbi,
+            entry.walks,
+            entry.strikeouts,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(entry)
+    return deduped
+
+
+def _dedupe_pitching_entries(entries: list[PitchingEntry]) -> list[PitchingEntry]:
+    deduped: list[PitchingEntry] = []
+    seen: set[tuple[Any, ...]] = set()
+    for entry in entries:
+        player_name = _strip_jersey_number(entry.player.name) if entry.player and entry.player.name else None
+        key = (
+            entry.team_side,
+            player_name,
+            entry.player.position if entry.player else None,
+            entry.innings_pitched,
+            entry.hits_allowed,
+            entry.runs_allowed,
+            entry.earned_runs,
+            entry.walks,
+            entry.strikeouts,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(entry)
+    return deduped
+
+
 def validate_match_integrity(match_data: MatchPayload) -> list[str]:
     errors: list[str] = []
     if (
@@ -1351,7 +1399,7 @@ def _strip_jersey_number(name: str) -> str:
     """Strip jersey number suffix from player names, e.g. '김민혁(52)' → '김민혁', '김동혁 (91)' → '김동혁'."""
     if not name:
         return ""
-    return re.sub(r"\s*[\(\(]\d+[\)\)]\s*$", "", name).strip()
+    return re.sub(r"\s*[\(\（]\s*(?:\d{1,3})?\s*[\)\）]\s*$", "", name).strip()
 
 
 def _parse_innings_str(value: Any) -> Decimal | None:

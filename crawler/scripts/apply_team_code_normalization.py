@@ -62,10 +62,10 @@ TEAM_RULES: dict[str, TeamRule] = {
     "항공대 야구부": TeamRule("23593", "한국항공대 Astros", "MERGE", "alias variant"),
     "타키온즈": TeamRule("23969", "강남대학교 타키온즈", "MERGE", "alias variant"),
     # Keep historically distinct teams separated (do not merge to another club).
-    "건국대 글로컬 Panthers": TeamRule("28867", "건국대 글로컬 Panthers", "NEW_CODE", "distinct team"),
-    "서울과학기술대 HEROES": TeamRule("23987", "서울과학기술대 HEROES", "NEW_CODE", "distinct team"),
-    "KNSU 루나틱스": TeamRule("11853", "KNSU 루나틱스", "NEW_CODE", "distinct team"),
-    "KNSU한국체대 야구동아리": TeamRule("11853", "KNSU 루나틱스", "MERGE", "alias of KNSU 루나틱스"),
+    "건국대 글로컬 Panthers": TeamRule("90008", "건국대 글로컬 Panthers", "NEW_CODE", "distinct team"),
+    "서울과학기술대 HEROES": TeamRule("90010", "서울과학기술대 HEROES", "NEW_CODE", "distinct team"),
+    "KNSU 루나틱스": TeamRule("90009", "KNSU 루나틱스", "NEW_CODE", "distinct team"),
+    "KNSU한국체대 야구동아리": TeamRule("90009", "KNSU 루나틱스", "MERGE", "alias of KNSU 루나틱스"),
     # New codes where no reliable existing code exists.
     "TEAM MAZOR": TeamRule("90004", "TEAM MAZOR", "NEW_CODE", "canonical for MAZOR variants"),
     "2024 AUBL 올스타전(ROOKIE-MAZOR)": TeamRule("90004", "TEAM MAZOR", "MERGE", "merged into MAZOR canonical"),
@@ -145,6 +145,22 @@ def _write_mapping_csv(path: Path) -> None:
         for source in sorted(TEAM_RULES):
             rule = TEAM_RULES[source]
             writer.writerow([source, rule.target_name, rule.target_code, rule.action, rule.note])
+
+
+def _validate_team_rules() -> None:
+    """Fail fast when multiple canonical team names share one target_code."""
+    code_to_names: dict[str, set[str]] = {}
+    for rule in TEAM_RULES.values():
+        code_to_names.setdefault(rule.target_code, set()).add(rule.target_name)
+
+    conflicts = {code: names for code, names in code_to_names.items() if len(names) > 1}
+    if not conflicts:
+        return
+
+    details = ", ".join(
+        f"{code}: {sorted(names)}" for code, names in sorted(conflicts.items(), key=lambda item: item[0])
+    )
+    raise ValueError(f"TEAM_RULES target_code collision detected ({details})")
 
 
 def _normalize_for_match(value: str) -> str:
@@ -472,6 +488,7 @@ def main() -> None:
     if not mapping_csv.is_absolute():
         mapping_csv = (Path.cwd() / mapping_csv).resolve()
 
+    _validate_team_rules()
     stats = normalize_sql(input_path, output_path)
     _write_mapping_csv(mapping_csv)
 

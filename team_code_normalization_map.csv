@@ -1,0 +1,24 @@
+source_team_name,target_team_name,target_team_code,action,note
+2024 AUBL 올스타전 TEAM WILSON,TEAM WILSON,90005,MERGE,merged into WILSON canonical
+2024 AUBL 올스타전(ROOKIE-MAZOR),TEAM MAZOR,90004,MERGE,merged into MAZOR canonical
+2024 AUBL 올스타전(ROOKIE-WILSON),TEAM WILSON,90005,MERGE,merged into WILSON canonical
+2024AUBL 올스타전 TEAM MAZOR,TEAM MAZOR,90004,MERGE,merged into MAZOR canonical
+2025 AUBL 올스타 Team ENOUGH,2025 AUBL 올스타 Team ENOUGH,90006,NEW_CODE,distinct all-star side
+2025 AUBL 올스타전 Team AXEL,2025 AUBL 올스타전 Team AXEL,90007,NEW_CODE,distinct all-star side
+KNSU 루나틱스,KNSU 루나틱스,11853,NEW_CODE,distinct team
+KNSU한국체대 야구동아리,KNSU 루나틱스,11853,MERGE,alias of KNSU 루나틱스
+TEAM MAZOR,TEAM MAZOR,90004,NEW_CODE,canonical for MAZOR variants
+TEAM WILSON,TEAM WILSON,90005,NEW_CODE,canonical for WILSON variants
+건국대 글로컬 Panthers,건국대 글로컬 Panthers,28867,NEW_CODE,distinct team
+건국대(서울) 불소야구부,건국대(서울) 불소야구,11866,MERGE,name variant
+건국대서울 불소야구부,건국대(서울) 불소야구,11866,MERGE,name variant
+단국대Pandas,단국대 PANDAS,21584,MERGE,spacing/case variant
+서울과학기술대 HEROES,서울과학기술대 HEROES,23987,NEW_CODE,distinct team
+서울시립대학교Falcons,서울시립대학교FALCONS,11709,MERGE,case variant
+중앙대학교(서울) 랑데뷰,중앙대학교 랑데뷰,24016,MERGE,name variant
+타키온즈,강남대학교 타키온즈,23969,MERGE,alias variant
+한국산업기술대학교 WINNERS,한국공학대학교 WINNERS,6205,MERGE,school rename variant
+한성대 TURTLES,한성대학교 TURTLES,24010,MERGE,abbreviation variant
+한성대학교 Power turtles,한성대학교 TURTLES,24010,MERGE,name variant
+한양대ERICA H.I.B.A,한양대ERICA HIBA,24012,MERGE,punctuation variant
+항공대 야구부,한국항공대 Astros,23593,MERGE,alias variant

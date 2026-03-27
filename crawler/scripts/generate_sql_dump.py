@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 try:
     from apply_team_code_normalization import (  # type: ignore[import]
         PLAYOFF_TEAM_ALIASES,
+        TEAM_RULES,
         _normalize_for_match as _playoff_normalize,
         _extract_playoff_tier_and_round,
     )
@@ -38,6 +39,7 @@ except Exception:
         return re.sub(r"[^0-9a-z가-힣]", "", text)
 
     PLAYOFF_TEAM_ALIASES: dict[str, str] = {}  # type: ignore[assignment]
+    TEAM_RULES: dict[str, object] = {}  # type: ignore[assignment]
 
     def _extract_playoff_tier_and_round(source_text: str):  # type: ignore[misc]
         return None
@@ -156,15 +158,15 @@ def _get_game_playoff_tier_and_round(
 
 
 def _strip_jersey(name: str) -> str:
-    """'김민혁(52)' → '김민혁', '김동혁 (91)' → '김동혁'"""
-    return re.sub(r"\s*[\(\(]\d+[\)\)]\s*$", "", name).strip()
+    """'김민혁(52)' → '김민혁', '김동혁 (91)' → '김동혁'."""
+    return re.sub(r"\s*[\(\（]\s*(?:\d{1,3})?\s*[\)\）]\s*$", "", name).strip()
 
 
 def _extract_jersey(name: str | None) -> int | None:
     """Extract trailing jersey number from player name."""
     if not isinstance(name, str):
         return None
-    match = re.search(r"\(\s*(\d{1,3})\s*\)\s*$", name.strip())
+    match = re.search(r"[\(\（]\s*(\d{1,3})\s*[\)\）]\s*$", name.strip())
     if not match:
         return None
     try:
@@ -206,6 +208,31 @@ def _normalize_team_name(name: str | None) -> str:
         return ""
     compact = re.sub(r"\s+", "", name).lower()
     return re.sub(r"[^0-9a-z가-힣]", "", compact)
+
+
+def _canonical_team_name(name: str | None) -> str | None:
+    if not isinstance(name, str):
+        return None
+    raw = name.strip()
+    if not raw:
+        return None
+    rule = TEAM_RULES.get(raw)
+    if rule is not None:
+        target_name = getattr(rule, "target_name", None)
+        if isinstance(target_name, str) and target_name.strip():
+            return target_name.strip()
+    return raw
+
+
+def _team_name_candidates(name: str | None) -> tuple[str, ...]:
+    raw = name.strip() if isinstance(name, str) else ""
+    canonical = _canonical_team_name(name)
+    candidates: list[str] = []
+    if raw:
+        candidates.append(raw)
+    if canonical and canonical not in candidates:
+        candidates.append(canonical)
+    return tuple(candidates)
 
 
 def _ctx_code(value) -> str | None:
@@ -354,6 +381,12 @@ def main():
             normalized_name = _normalize_team_name(name)
             if normalized_name:
                 team_idx_by_norm_name[normalized_name] = idx
+            canonical_name = _canonical_team_name(name)
+            if canonical_name and canonical_name != name:
+                team_idx_by_name[canonical_name] = idx
+                canonical_normalized = _normalize_team_name(canonical_name)
+                if canonical_normalized:
+                    team_idx_by_norm_name[canonical_normalized] = idx
 
     out.write("-- Teams\n")
     for i, (idx, name) in enumerate(sorted(teams.items(), key=lambda x: x[0])):
@@ -363,6 +396,12 @@ def main():
         normalized_name = _normalize_team_name(name)
         if normalized_name:
             team_name_norm_map[normalized_name] = var
+        canonical_name = _canonical_team_name(name)
+        if canonical_name and canonical_name != name:
+            team_name_map[canonical_name] = var
+            canonical_normalized = _normalize_team_name(canonical_name)
+            if canonical_normalized:
+                team_name_norm_map[canonical_normalized] = var
         out.write(
             f"INSERT INTO TEAM (team_name, team_code) "
             f"SELECT {_esc(name)}, {_esc(str(idx))} FROM DUAL "
@@ -375,13 +414,15 @@ def main():
         var = team_id_map.get(team_idx)
         if var:
             return var
-        if isinstance(team_name, str):
-            var = team_name_map.get(team_name)
+        for candidate in _team_name_candidates(team_name):
+            var = team_name_map.get(candidate)
             if var:
                 return var
-            normalized = _normalize_team_name(team_name)
+            normalized = _normalize_team_name(candidate)
             if normalized:
-                return team_name_norm_map.get(normalized)
+                resolved = team_name_norm_map.get(normalized)
+                if resolved:
+                    return resolved
         return None
 
     def _resolve_team_idx(team_idx, team_name) -> int | None:
@@ -389,24 +430,36 @@ def main():
             return team_idx
         if isinstance(team_idx, str) and team_idx.strip().isdigit():
             return int(team_idx.strip())
-        if isinstance(team_name, str):
-            direct = team_idx_by_name.get(team_name)
+        for candidate in _team_name_candidates(team_name):
+            direct = team_idx_by_name.get(candidate)
             if direct is not None:
                 return direct
-            normalized = _normalize_team_name(team_name)
+            normalized = _normalize_team_name(candidate)
             if normalized:
-                return team_idx_by_norm_name.get(normalized)
+                resolved = team_idx_by_norm_name.get(normalized)
+                if resolved is not None:
+                    return resolved
         return None
 
     def _player_user_id(player_name: str, team_idx=None, team_name=None) -> int:
         resolved_team_idx = _resolve_team_idx(team_idx, team_name)
+        canonical_team = _canonical_team_name(team_name)
         if resolved_team_idx is not None:
             team_token = f"T{resolved_team_idx}"
-        elif isinstance(team_name, str) and team_name.strip():
-            team_token = f"N{_normalize_team_name(team_name)}"
+        elif canonical_team:
+            team_token = f"N{_normalize_team_name(canonical_team)}"
         else:
             team_token = "GLOBAL"
         return _synthetic_user_id(team_token, player_name)
+
+    def _team_name_condition_sql(alias: str, team_name: str | None) -> str | None:
+        candidates = _team_name_candidates(team_name)
+        if not candidates:
+            return None
+        if len(candidates) == 1:
+            return f"{alias}.team_name = {_esc(candidates[0])}"
+        clauses = [f"{alias}.team_name = {_esc(candidate)}" for candidate in candidates]
+        return "(" + " OR ".join(clauses) + ")"
 
     # 3. PLAYER — collect unique players, strip jersey numbers
     players_file = data_dir / "players.jsonl"
@@ -474,27 +527,29 @@ def main():
     )
 
     def _accumulate_team_context(team_name: str | None, league_code: str | None, part_code: str | None) -> None:
-        if not isinstance(team_name, str) or not team_name.strip():
-            return
-        key = _normalize_team_name(team_name)
-        if not key:
-            return
-        if league_code:
-            team_context_counter[key]["league"][league_code] += 1
-        if part_code:
-            team_context_counter[key]["part"][part_code] += 1
+        for candidate in _team_name_candidates(team_name):
+            key = _normalize_team_name(candidate)
+            if not key:
+                continue
+            if league_code:
+                team_context_counter[key]["league"][league_code] += 1
+            if part_code:
+                team_context_counter[key]["part"][part_code] += 1
 
     def _resolve_team_context(team_name: str | None) -> tuple[str | None, str | None]:
-        if not isinstance(team_name, str) or not team_name.strip():
-            return None, None
-        key = _normalize_team_name(team_name)
-        bucket = team_context_counter.get(key)
-        if not bucket:
-            return None, None
-        league_counter = bucket["league"]
-        part_counter = bucket["part"]
-        league_code = league_counter.most_common(1)[0][0] if league_counter else None
-        part_code = part_counter.most_common(1)[0][0] if part_counter else None
+        merged_league: Counter[str] = Counter()
+        merged_part: Counter[str] = Counter()
+        for candidate in _team_name_candidates(team_name):
+            key = _normalize_team_name(candidate)
+            if not key:
+                continue
+            bucket = team_context_counter.get(key)
+            if not bucket:
+                continue
+            merged_league.update(bucket["league"])
+            merged_part.update(bucket["part"])
+        league_code = merged_league.most_common(1)[0][0] if merged_league else None
+        part_code = merged_part.most_common(1)[0][0] if merged_part else None
         return league_code, part_code
 
     # 5. BATTER_STATS from league records
@@ -519,7 +574,11 @@ def main():
                 continue
             player_user_id = _player_user_id(name, team_idx=None, team_name=team_name)
             team_var = _resolve_team_var(None, team_name)
-            team_condition = f"tp.team_id = {team_var}" if team_var else f"t.team_name = {_esc(team_name)}"
+            team_condition = (
+                f"tp.team_id = {team_var}"
+                if team_var
+                else (_team_name_condition_sql("t", team_name) or "1=0")
+            )
             league_code = _ctx_code(rec.get("league_code") or rec.get("group_code"))
             part_code = _ctx_code(rec.get("part_code"))
             qualified_section = _qualified_section(rec.get("section"))
@@ -595,7 +654,11 @@ def main():
                 continue
             player_user_id = _player_user_id(name, team_idx=None, team_name=team_name)
             team_var = _resolve_team_var(None, team_name)
-            team_condition = f"tp.team_id = {team_var}" if team_var else f"t.team_name = {_esc(team_name)}"
+            team_condition = (
+                f"tp.team_id = {team_var}"
+                if team_var
+                else (_team_name_condition_sql("t", team_name) or "1=0")
+            )
             league_code = _ctx_code(rec.get("league_code") or rec.get("group_code"))
             part_code = _ctx_code(rec.get("part_code"))
             qualified_section = _qualified_section(rec.get("section"))
@@ -675,10 +738,13 @@ def main():
             name = match.get(key)
             if not isinstance(name, str) or not name.strip():
                 continue
-            normalized_name = _normalize_team_name(name)
-            if name in team_name_map:
+            if any(candidate in team_name_map for candidate in _team_name_candidates(name)):
                 continue
-            if normalized_name and normalized_name in team_name_norm_map:
+            if any(
+                _normalize_team_name(candidate) in team_name_norm_map
+                for candidate in _team_name_candidates(name)
+                if _normalize_team_name(candidate)
+            ):
                 continue
             if name in seen_extra:
                 continue
@@ -723,14 +789,29 @@ def main():
     for gidx, match in sorted(matches.items()):
         home_idx = match.get("home_team_idx")
         away_idx = match.get("away_team_idx")
-        home_name = match.get("home_team_name")
-        away_name = match.get("away_team_name")
-        home_var = _resolve_team_var(home_idx, home_name)
-        away_var = _resolve_team_var(away_idx, away_name)
+        raw_home_name = match.get("home_team_name")
+        raw_away_name = match.get("away_team_name")
+        home_canonical = _canonical_team_name(raw_home_name) if isinstance(raw_home_name, str) else raw_home_name
+        away_canonical = _canonical_team_name(raw_away_name) if isinstance(raw_away_name, str) else raw_away_name
+        # Resolve TEAM variables against raw names first.
+        # Some match-only aliases (e.g., all-star labels) are created as extra teams
+        # and may not be keyed under canonical names yet.
+        home_var = _resolve_team_var(home_idx, raw_home_name)
+        away_var = _resolve_team_var(away_idx, raw_away_name)
+        if home_var is None and isinstance(home_canonical, str):
+            home_var = _resolve_team_var(None, home_canonical)
+        if away_var is None and isinstance(away_canonical, str):
+            away_var = _resolve_team_var(None, away_canonical)
+        home_name = home_canonical if isinstance(home_canonical, str) and home_canonical else raw_home_name
+        away_name = away_canonical if isinstance(away_canonical, str) and away_canonical else raw_away_name
         # Some source payloads have incorrect away team_idx. Fall back to name map.
-        if home_var and away_var and home_var == away_var and home_name != away_name:
-            resolved_home = _resolve_team_var(None, home_name)
-            resolved_away = _resolve_team_var(None, away_name)
+        if home_var and away_var and home_var == away_var and raw_home_name != raw_away_name:
+            resolved_home = _resolve_team_var(None, raw_home_name)
+            resolved_away = _resolve_team_var(None, raw_away_name)
+            if resolved_home is None and isinstance(home_canonical, str):
+                resolved_home = _resolve_team_var(None, home_canonical)
+            if resolved_away is None and isinstance(away_canonical, str):
+                resolved_away = _resolve_team_var(None, away_canonical)
             if resolved_home:
                 home_var = resolved_home
             if resolved_away:
