@@ -1,0 +1,469 @@
+/* ScoreboardTextPage 반응형 레이아웃 스타일 */
+
+.scoreboard-text-page {
+  display: grid;
+  gap: clamp(12px, 1.6vw, 18px);
+  min-height: 100vh;
+  overflow-x: hidden;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* 메인 레이아웃: 전광판 영역 + 문자중계 영역 */
+.main-content-grid {
+  display: grid;
+  grid-template-columns: minmax(800px, 2fr) minmax(500px, 1.2fr);
+  gap: clamp(16px, 2vw, 24px);
+  align-items: stretch;
+}
+
+.scoreboard-section {
+  display: grid;
+  align-items: start;
+  gap: 0px;
+  min-height: fit-content;
+  height: auto;
+}
+
+.live-feed-section {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: #0b0f1a;
+  color: #e2e8f0;
+  min-height: min(90vh, 925px);
+  height: auto;
+  overflow: visible;
+}
+
+.live-feed-section.game-over {
+  grid-template-rows: auto 1fr;
+}
+
+/* 통계 테이블 영역 */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 0 2px;
+}
+
+.csv-preview {
+  margin: 4px 2px 12px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: #0b0f1a;
+  display: grid;
+  gap: 12px;
+}
+
+.csv-preview__header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.csv-preview__titles {
+  display: grid;
+  gap: 4px;
+}
+
+.csv-preview__title {
+  font-size: 16px;
+  font-weight: 900;
+  color: #e2e8f0;
+}
+
+.csv-preview__subtitle {
+  font-size: 12px;
+  font-weight: 800;
+  color: #94a3b8;
+}
+
+.csv-preview__tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.csv-preview__tab {
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+  font-weight: 800;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.csv-preview__tab.is-active {
+  border-color: rgba(59, 130, 246, 0.6);
+  background: rgba(59, 130, 246, 0.2);
+  color: #bfdbfe;
+}
+
+.csv-preview__tab:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.csv-preview__table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.csv-preview__table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  color: #e2e8f0;
+}
+
+.csv-preview__table th,
+.csv-preview__table td {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 6px 8px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.csv-preview__table th {
+  background: rgba(30, 41, 59, 0.6);
+  font-weight: 900;
+}
+
+.csv-preview__table tbody tr:nth-child(even) td {
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.removed-players-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 0 2px 12px;
+}
+
+/* 태블릿 레이아웃 (1400px 이하) */
+@media (max-width: 1400px) {
+  .main-content-grid {
+    grid-template-columns: minmax(min(700px, 100%), 1fr);
+    gap: 16px;
+  }
+
+  .scoreboard-section {
+    gap: 12px;
+  }
+
+  .live-feed-section {
+    min-height: min(60vh, 600px);
+  }
+}
+
+/* 태블릿 세로 모드 (900px 이하) */
+@media (max-width: 900px) {
+  .main-content-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .removed-players-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+/* 모바일 레이아웃 (600px 이하) */
+@media (max-width: 600px) {
+  .scoreboard-text-page {
+    gap: 12px;
+  }
+
+  .main-content-grid {
+    gap: 12px;
+  }
+
+  .live-feed-section {
+    padding: 12px;
+    min-height: min(50vh, 400px);
+  }
+
+  .stats-grid,
+  .removed-players-grid {
+    padding: 0;
+  }
+}
+
+/* 작은 모바일 (480px 이하) */
+@media (max-width: 480px) {
+  .scoreboard-text-page {
+    gap: 8px;
+    overflow-x: hidden;
+    /* 부모(.app-main)의 오른쪽 패딩을 잠식하여 스코어보드를 오른쪽으로 이동 */
+    margin-right: -8px;
+    width: calc(100% + 8px);
+    max-width: none;
+  }
+
+  .main-content-grid {
+    gap: 8px;
+    max-width: 100vw;
+  }
+
+  .live-feed-section {
+    padding: 10px;
+    gap: 10px;
+  }
+}
+
+/* 모바일 레이아웃 클래스 */
+.mobile-layout {
+  overflow: visible !important;
+  height: auto !important;
+  min-height: 500px !important;
+  max-height: none !important;
+}
+
+.mobile-layout > div:first-child {
+  overflow: visible !important;
+  height: auto !important;
+  min-height: 500px !important;
+  max-height: none !important;
+  aspect-ratio: auto !important;
+  grid-template-rows: auto auto auto !important;
+}
+
+/* 모바일에서 전광판 컨테이너 조정 */
+@media (max-width: 900px) {
+  /* 그리드 레이아웃을 stretch에서 start로 변경하여 높이 제한 해제 */
+  .main-content-grid {
+    align-items: start;
+    grid-auto-rows: auto;
+  }
+
+  /* 전광판 컨테이너가 충분한 높이를 확보하도록 함 */
+  .scoreboard-section {
+    min-width: 0;
+    width: 100%;
+    min-height: 0;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  /* 전광판(ScoreboardPanel)의 모든 제약 제거 */
+  .scoreboard-section > div:first-child {
+    overflow: visible !important;
+    overflow-y: visible !important;
+    min-height: 500px !important;
+    height: auto !important;
+    max-height: none !important;
+    aspect-ratio: auto !important;
+    display: grid !important;
+    grid-template-rows: auto auto auto !important;
+  }
+
+  /* 전광판 내부의 중간 영역(박스스코어+BSO/베이스)을 세로 배치로 변경 */
+  .scoreboard-section > div:first-child > div:nth-child(2) {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    padding: clamp(10px, 2vw, 14px) !important;
+  }
+
+  /* 박스스코어와 BSO/베이스를 세로로 배치 */
+  .scoreboard-section > div:first-child > div:nth-child(2) > div {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto auto !important;
+    gap: 16px !important;
+  }
+
+  /* BSO/베이스를 두 번째 행으로 이동 + 충분한 여백 확보 */
+  .scoreboard-section > div:first-child > div:nth-child(2) > div > div:first-child {
+    order: 2 !important;
+    padding: 10px 0 !important;
+    justify-content: center !important;
+  }
+
+  /* 박스스코어를 첫 번째 행으로 + 스크롤 허용 */
+  .scoreboard-section > div:first-child > div:nth-child(2) > div > div:last-child {
+    order: 1 !important;
+    overflow-x: auto !important;
+    min-width: 0 !important;
+  }
+
+  /* BSO 카운트를 가로로 나열 (모바일 공간 활용) */
+  .scoreboard-section > div:first-child > div:nth-child(2) > div > div:first-child > div:first-child {
+    display: flex !important;
+    gap: 16px !important;
+    justify-content: center !important;
+    flex-wrap: wrap !important;
+  }
+
+  /* 전광판 내부 모든 컨텐츠 높이 제한 제거 */
+  .scoreboard-section > div:first-child > * {
+    max-height: none !important;
+  }
+
+  /* NowPlayingCard 영역도 높이 자동 조정 */
+  .scoreboard-section > div:last-child {
+    height: auto !important;
+  }
+}
+
+/* 매우 작은 화면에서 모바일 최적화 */
+@media (max-width: 480px) {
+  .main-content-grid {
+    max-width: 100vw;
+    overflow: hidden;
+  }
+
+  .scoreboard-section {
+    max-width: 100vw;
+    overflow: hidden;
+  }
+
+  /* 전광판 내부 패딩 축소 → 콘텐츠 영역 확대 */
+  .scoreboard-section > div:first-child {
+    padding: 10px 8px !important;
+  }
+}
+
+/* 문자중계 영역 반응형 개선 */
+@media (max-width: 768px) {
+  .live-feed-section {
+    font-size: 14px;
+  }
+}
+
+/* 통계 테이블 반응형 개선 */
+@media (max-width: 600px) {
+  .stats-grid > div,
+  .removed-players-grid > div {
+    min-width: 0;
+    overflow-x: auto;
+  }
+
+  /* 작은 모바일에서도 전광판 제약 제거 */
+  .scoreboard-section > div:first-child {
+    grid-template-rows: auto auto auto !important;
+  }
+}
+
+/* ── 모바일 프리뷰 모드: 미디어 쿼리 대신 attribute selector로 동일 규칙 적용 ── */
+
+/* 오른쪽 이동 + 패딩 축소 (=@media max-width:480px) */
+:root[data-preview-mode='mobile'] .scoreboard-text-page {
+  gap: 8px;
+  margin-right: -8px;
+  width: calc(100% + 8px);
+  max-width: none;
+}
+
+/* 1-column 레이아웃 (=@media max-width:1400px + 900px) */
+:root[data-preview-mode='mobile'] .main-content-grid {
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-items: start;
+  grid-auto-rows: auto;
+}
+
+:root[data-preview-mode='mobile'] .stats-grid {
+  grid-template-columns: 1fr;
+}
+
+:root[data-preview-mode='mobile'] .removed-players-grid {
+  grid-template-columns: 1fr;
+}
+
+:root[data-preview-mode='mobile'] .live-feed-section {
+  padding: 10px;
+  gap: 10px;
+  min-height: min(50vh, 400px);
+  font-size: 14px;
+}
+
+/* 전광판 컨테이너 (=@media max-width:900px) */
+:root[data-preview-mode='mobile'] .scoreboard-section {
+  min-width: 0;
+  width: 100%;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+:root[data-preview-mode='mobile'] .scoreboard-section > div:first-child {
+  overflow: visible !important;
+  overflow-y: visible !important;
+  min-height: 500px !important;
+  height: auto !important;
+  max-height: none !important;
+  aspect-ratio: auto !important;
+  display: grid !important;
+  grid-template-rows: auto auto auto !important;
+  padding: 10px 8px !important;
+}
+
+/* 중간 영역 세로 배치 */
+:root[data-preview-mode='mobile'] .scoreboard-section > div:first-child > div:nth-child(2) {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  padding: clamp(10px, 2vw, 14px) !important;
+}
+
+:root[data-preview-mode='mobile'] .scoreboard-section > div:first-child > div:nth-child(2) > div {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  grid-template-rows: auto auto !important;
+  gap: 16px !important;
+}
+
+/* BSO → 두 번째 행 */
+:root[data-preview-mode='mobile'] .scoreboard-section > div:first-child > div:nth-child(2) > div > div:first-child {
+  order: 2 !important;
+  padding: 10px 0 !important;
+  justify-content: center !important;
+}
+
+/* BoxScore → 첫 번째 행 + 스크롤 */
+:root[data-preview-mode='mobile'] .scoreboard-section > div:first-child > div:nth-child(2) > div > div:last-child {
+  order: 1 !important;
+  overflow-x: auto !important;
+  min-width: 0 !important;
+}
+
+/* BSO 가로 나열 */
+:root[data-preview-mode='mobile'] .scoreboard-section > div:first-child > div:nth-child(2) > div > div:first-child > div:first-child {
+  display: flex !important;
+  gap: 16px !important;
+  justify-content: center !important;
+  flex-wrap: wrap !important;
+}
+
+/* 높이 제한 해제 */
+:root[data-preview-mode='mobile'] .scoreboard-section > div:first-child > * {
+  max-height: none !important;
+}
+
+:root[data-preview-mode='mobile'] .scoreboard-section > div:last-child {
+  height: auto !important;
+}

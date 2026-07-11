@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "aubl-backup"
+  },
+  "targets": {
+    "aubl-backup": {
+      "hosting": {
+        "aubl": [
+          "aubl-backup"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

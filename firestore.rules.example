@@ -1,0 +1,66 @@
+rules_version = '2';
+
+service cloud.firestore {
+  function isAdmin() {
+    return request.auth != null
+      && (request.auth.token.admin == true
+        || request.auth.token.email in ['example@ecam.com']); // 여기에 관리자 계정 이메일 추가
+  }
+
+  match /databases/{database}/documents {
+    // App-wide metadata (currently just the active match pointer)
+    match /app/current {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Public schedule
+    match /matches/{matchId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Live match state (scoreboard / 문자중계 데이터)
+    match /matchStates/{matchId} {
+      allow read: if true;
+      allow write: if isAdmin();
+
+      // 최근 feed/events 서브컬렉션
+      match /feed/{entryId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+      match /events/{entryId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+    }
+
+    // Landing/intro editable content
+    match /settings/content {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Live ticker content (real-time)
+    match /settings/liveInfo {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Static content + version metadata
+    match /settings/staticContent {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /settings/contentMeta {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Deny anything else by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
