@@ -8,7 +8,7 @@ const _kSections = [
   ]),
   _Section('제2조 (정의)', [
     '"서비스"란 AUBL이 운영하는 모바일 앱(iOS/Android) 및 웹사이트를 통해 제공하는 경기 일정·결과 조회, 실시간 문자중계, 기록 열람, 커뮤니티, 푸시 알림 등 일체의 서비스를 말합니다.',
-    '"회원"이란 본 약관에 동의하고 이메일·비밀번호 또는 Google 계정을 통해 가입한 이용자를 말합니다.',
+    '"회원"이란 본 약관에 동의하고 이메일·비밀번호 또는 Google/Apple 계정을 통해 가입한 이용자를 말합니다.',
     '"비회원"이란 회원 가입 없이 서비스의 일부를 이용하는 자를 말합니다.',
   ]),
   _Section('제3조 (약관의 효력 및 변경)', [
@@ -17,12 +17,13 @@ const _kSections = [
     '변경된 약관에 동의하지 않는 경우 회원 탈퇴를 할 수 있으며, 고지 후 7일 이내 탈퇴하지 않은 경우 동의한 것으로 간주합니다.',
   ]),
   _Section('제4조 (회원 가입 및 탈퇴)', [
-    '회원 가입은 이메일·비밀번호 등록 또는 Google 계정을 통한 소셜 로그인으로 이루어지며, 가입 시 본 약관 및 개인정보 처리방침에 동의한 것으로 간주합니다.',
-    '회원은 언제든지 앱 내 "더보기 → 계정 관리"에서 탈퇴를 요청할 수 있으며, 탈퇴 시 개인정보는 즉시 파기됩니다.',
+    '회원 가입은 이메일·비밀번호 등록 또는 Google/Apple 계정을 통한 소셜 로그인으로 이루어지며, 가입 시 본 약관 및 개인정보 처리방침에 동의한 것으로 간주합니다.',
+    '회원은 언제든지 앱 내 "더보기 → 계정 → 회원 탈퇴"에서 탈퇴를 요청할 수 있으며, 웹 계정 삭제 안내 페이지(https://aubl.club/account-deletion)에서도 삭제 절차를 확인할 수 있습니다. 탈퇴 시 개인정보는 즉시 파기됩니다.',
     '탈퇴 후에도 커뮤니티에 작성한 게시글은 삭제되지 않을 수 있으며, 삭제를 원하는 경우 탈퇴 전에 직접 삭제하거나 별도 요청해야 합니다.',
   ]),
   _Section('제5조 (서비스의 제공 및 변경)', [
     'AUBL은 다음 서비스를 제공합니다: 경기 일정·결과 조회, 실시간 문자중계, 선수 기록 열람, 커뮤니티(공지·갤러리), 팀 관리, 푸시 알림.',
+    '종료 경기 및 과거 시즌 기록 데이터는 AUBL 백엔드 API(api.aubl.club)와 운영 MariaDB를 통해 제공될 수 있으며, API 전송 구간에 Cloudflare 인프라가 사용될 수 있습니다.',
     '서비스의 내용은 운영상·기술상 필요에 따라 변경될 수 있으며, 주요 변경 시 사전 공지합니다.',
     '서비스는 무료로 제공되며, 향후 유료 서비스 도입 시 별도 고지 후 동의를 받습니다.',
   ]),
@@ -38,11 +39,16 @@ const _kSections = [
   _Section('제8조 (게시물의 관리)', [
     '회원이 작성한 게시물의 저작권은 해당 회원에게 귀속됩니다.',
     'AUBL은 다음에 해당하는 게시물을 사전 통지 없이 삭제하거나 비공개 처리할 수 있습니다: 관련 법령 위반, 타인의 권리 침해, 공공질서·미풍양속 위반, 서비스 운영 정책 위반.',
+    'AUBL은 사용자 생성 콘텐츠(게시글·댓글)에 대해 신고 기능을 제공하며, 이용자는 부적절하거나 정책 위반 가능성이 있는 콘텐츠를 신고할 수 있습니다.',
+    '이용자는 악성 사용자를 차단할 수 있으며, 차단 즉시 차단 대상의 게시글·댓글은 차단한 이용자의 피드 및 상세 화면에서 숨김 처리됩니다.',
+    '신고 또는 차단이 수행되면 관련 정보는 운영자 신고 큐에 자동 접수되어 운영 검토 대상으로 처리됩니다.',
+    'AUBL은 접수된 신고를 원칙적으로 24시간 이내 검토하며, 위반이 확인될 경우 게시물 삭제/비공개, 계정 이용 제한, 회원 자격 박탈 등 필요한 조치를 할 수 있습니다.',
     '경기 기록·통계 데이터는 AUBL에 귀속되며, 서비스 운영 목적으로 활용됩니다.',
   ]),
   _Section('제9조 (책임의 제한)', [
     'AUBL은 비영리 대학생 단체로서 서비스를 "있는 그대로(AS-IS)" 제공하며, 서비스의 완전성·정확성·신뢰성을 보증하지 않습니다.',
     '천재지변, 시스템 장애 등 불가항력으로 인한 서비스 중단에 대해 책임을 지지 않습니다.',
+    'Cloudflare, 클라우드 사업자, 통신사, 외부 인프라 장애로 인한 지연·중단은 AUBL의 귀책 사유가 없는 한 책임이 제한될 수 있습니다.',
     '회원 간 또는 회원과 제3자 간의 분쟁에 대해 AUBL은 개입할 의무가 없습니다.',
   ]),
   _Section('제10조 (준거법 및 분쟁 해결)', [
@@ -51,7 +57,7 @@ const _kSections = [
     '서비스 관련 문의: aublcau@gmail.com',
   ]),
   _Section('부칙', [
-    '본 약관은 2026년 2월 21일부터 시행합니다.',
+    '본 약관은 2026년 3월 5일부터 시행합니다.',
   ]),
 ];
 
@@ -75,17 +81,20 @@ class TermsScreen extends StatelessWidget {
                 colors: [Color(0xFF0a1a3f), Color(0xFF0f2f8f)],
               ),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppTheme.slate500.withValues(alpha: 0.25)),
+              border:
+                  Border.all(color: AppTheme.slate500.withValues(alpha: 0.25)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: AppTheme.blue400.withValues(alpha: 0.16),
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: AppTheme.blue400.withValues(alpha: 0.35)),
+                    border: Border.all(
+                        color: AppTheme.blue400.withValues(alpha: 0.35)),
                   ),
                   child: const Text(
                     'TERMS OF SERVICE',
@@ -128,7 +137,8 @@ class TermsScreen extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppTheme.slate800.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppTheme.slate700.withValues(alpha: 0.5)),
+                border:
+                    Border.all(color: AppTheme.slate700.withValues(alpha: 0.5)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -149,7 +159,8 @@ class TermsScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text('  \u2022  ',
-                              style: TextStyle(color: AppTheme.slate500, fontSize: 13)),
+                              style: TextStyle(
+                                  color: AppTheme.slate500, fontSize: 13)),
                           Expanded(
                             child: Text(
                               item,

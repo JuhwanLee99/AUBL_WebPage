@@ -48,6 +48,9 @@ class Settings:
     schedule_endpoint: str
     boxscore_endpoint: str
     schedule_page_path: str
+    schedule_result_page_path: str
+    schedule_playoff_page_path: str
+    schedule_page_limit: int
     boxscore_page_path: str
     league_page_path: str
     schedule_all_page_path: str
@@ -88,6 +91,13 @@ def load_settings() -> Settings:
         schedule_endpoint=os.getenv("SCHEDULE_LIST_ENDPOINT", "/schedule/list"),
         boxscore_endpoint=os.getenv("BOXSCORE_ENDPOINT", "/game/boxscore"),
         schedule_page_path=os.getenv("SCHEDULE_PAGE_PATH", "/league/schedule/all"),
+        schedule_result_page_path=os.getenv(
+            "SCHEDULE_RESULT_PAGE_PATH", "/league/schedule/content/result"
+        ),
+        schedule_playoff_page_path=os.getenv(
+            "SCHEDULE_PLAYOFF_PAGE_PATH", "/league/schedule/content/playoff"
+        ),
+        schedule_page_limit=max(1, int(os.getenv("SCHEDULE_PAGE_LIMIT", "200"))),
         boxscore_page_path=os.getenv("BOXSCORE_PAGE_PATH", "/league/schedule/content/boxscore"),
         league_page_path=os.getenv("LEAGUE_PAGE_PATH", "/league/"),
         schedule_all_page_path=os.getenv("SCHEDULE_ALL_PAGE_PATH", "/league/schedule/all"),

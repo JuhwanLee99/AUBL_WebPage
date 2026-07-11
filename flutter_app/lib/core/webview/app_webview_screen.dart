@@ -1,15 +1,25 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
 
+import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../config/app_config.dart';
+import '../contracts/flutter_bridge_contract.dart';
+import '../contracts/web_contracts.dart';
+import '../services/auth_session_service.dart';
 import '../services/auth_bridge_service.dart';
 import '../theme/app_theme.dart';
-import 'flutter_bridge_message.dart';
+import 'auth_sync/webview_auth_sync_controller.dart';
+import 'auth_sync/webview_auth_sync_state.dart';
+import 'navigation/webview_navigation_guard.dart';
 
 /// 범용 WebView 래퍼.
 /// 스코어보드, 관리자 페이지 등 WebView가 필요한 화면에서 공통 사용.
@@ -21,7 +31,7 @@ class AppWebViewScreen extends StatefulWidget {
     this.minimalHeader = false,
   });
 
-  /// 웹 앱 경로 (e.g. '/scorekeeper', '/admin')
+  /// 웹 앱 경로 (계약 상수는 [WebRouteContracts] 참조)
   final String path;
 
   /// AppBar 타이틀
@@ -36,79 +46,35 @@ class AppWebViewScreen extends StatefulWidget {
 
 class _AppWebViewScreenState extends State<AppWebViewScreen> {
   final AuthBridgeService _authBridgeService = AuthBridgeService();
-  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: const ['email']);
   late final WebViewController _controller;
   StreamSubscription<User?>? _authSub;
-  String? _lastInjectedUid;
-  static const String _webTokenProbeScript = '''
-(async () => {
-  try {
-    const getter = window.__flutterGetIdToken;
-    const bridge = window.FlutterBridge;
-    if (!getter || !bridge) return;
-    const token = await getter();
-    if (token) {
-      bridge.postMessage(JSON.stringify({ type: 'TOKEN_REFRESH', idToken: token }));
-    }
-  } catch (_) {}
-})();
-''';
+  final WebViewAuthSyncState _authSyncState = WebViewAuthSyncState();
 
   bool _loading = true;
   bool _authenticating = false;
   bool _googleSigningIn = false;
+  bool _appleSigningIn = false;
+  bool _injecting = false;
+  bool _loggedOut = false;
   String? _error;
   bool _loginBypassInFlight = false;
   String? _pendingLoginRedirect;
   bool _retriedErrFailed = false;
 
-  bool _shouldIgnoreWebError(WebResourceError error) {
-    final desc = error.description.toLowerCase();
-    if (desc.contains('err_failed') || desc.contains('err_aborted')) {
-      // WebView에서 내부 리다이렉트/중단 시 자주 발생하는 오류라 배너를 띄우지 않음
-      return true;
-    }
-    return false;
-  }
+  bool get _isIosAppleNativeEnabled =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
   void _applySystemUiChrome() {
-    unawaited(SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.manual,
-      overlays: SystemUiOverlay.values,
-    ));
+    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     SystemChrome.setSystemUIOverlayStyle(AppTheme.systemUiStyle);
   }
 
-  bool _isGoogleOAuthRequest(Uri uri) {
-    final host = uri.host.toLowerCase();
-    if (host.contains('accounts.google.com') ||
-        host.contains('oauth2.googleapis.com')) {
-      return true;
-    }
-    final providerId = uri.queryParameters['providerId'];
-    if (providerId == 'google.com' &&
-        uri.path.contains('/__/auth/handler')) {
-      return true;
-    }
-    return false;
-  }
-
-  Uri get _pageUri => AppConfig.webUri(widget.path, queryParameters: const {
-        'embedded': 'flutter',
-        'nativeGoogle': '1',
-      });
+  Uri get _pageUri => AppConfig.webUri(
+        widget.path,
+        queryParameters: WebQueryContracts.embeddedParams(),
+      );
 
   String get _pageUrl => _pageUri.toString();
-
-  Uri _loginFallbackUri({String? nextPath}) {
-    final query = <String, String>{
-      'embedded': 'flutter',
-      'nativeGoogle': '1',
-    };
-    final next = nextPath ?? widget.path;
-    if (next.startsWith('/')) query['next'] = next;
-    return AppConfig.webUri('/login', queryParameters: query);
-  }
 
   @override
   void initState() {
@@ -119,7 +85,7 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
       ..setBackgroundColor(AppTheme.slate900)
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..addJavaScriptChannel(
-        'FlutterBridge',
+        FlutterBridgeContracts.channelName,
         onMessageReceived: (msg) => _onBridgeMessage(msg.message),
       )
       ..setNavigationDelegate(
@@ -128,7 +94,10 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
           onPageStarted: (_) {
             _applySystemUiChrome();
             if (!mounted) return;
-            setState(() => _loading = true);
+            setState(() {
+              _loading = true;
+              _injecting = false;
+            });
           },
           onPageFinished: (_) {
             _applySystemUiChrome();
@@ -140,22 +109,26 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
               final redirect = _pendingLoginRedirect!;
               _pendingLoginRedirect = null;
               _loginBypassInFlight = true;
-              unawaited(_injectAuthIfNeeded(redirectUrl: redirect).whenComplete(() {
+              unawaited(
+                  _injectAuthIfNeeded(redirectUrl: redirect).whenComplete(() {
                 _loginBypassInFlight = false;
               }));
             }
           },
           onWebResourceError: (error) {
-            final desc = error.description.toLowerCase();
-            if (desc.contains('err_failed') && !_retriedErrFailed) {
+            if (WebViewNavigationGuard.shouldRetryFailedNavigation(
+              error,
+              hasRetried: _retriedErrFailed,
+            )) {
               _retriedErrFailed = true;
               unawaited(_controller.reload());
               return;
             }
-            if (_shouldIgnoreWebError(error)) return;
+            if (WebViewNavigationGuard.shouldIgnoreWebError(error)) return;
             if (!mounted) return;
             setState(() {
               _loading = false;
+              _injecting = false;
               _error = '웹 로딩 실패: ${error.description}';
             });
           },
@@ -165,13 +138,19 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
 
     final current = FirebaseAuth.instance.currentUser;
     if (current != null) {
-      _lastInjectedUid = current.uid;
+      WebViewAuthSyncController.seedFromCurrentUser(current, _authSyncState);
       unawaited(_injectAuthIfNeeded());
     }
+
+    // auth state 직접 구독: 재로그인 시 _loggedOut 초기화 포함
     _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
-      if (user == null) return;
-      if (_lastInjectedUid == user.uid) return;
-      _lastInjectedUid = user.uid;
+      if (user == null) {
+        _authSyncState.clearObservedUid();
+        return;
+      }
+      if (_loggedOut && mounted) setState(() => _loggedOut = false);
+      if (_authSyncState.shouldSkipObservedUid(user.uid)) return;
+      _authSyncState.markObservedUid(user.uid);
       unawaited(_injectAuthIfNeeded());
     });
   }
@@ -187,114 +166,84 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
     final uri = Uri.tryParse(request.url);
     if (uri == null) return NavigationDecision.navigate;
 
-    // Google OAuth → native sign-in
-    if (_isGoogleOAuthRequest(uri)) {
+    if (WebViewNavigationGuard.isGoogleOAuthRequest(uri)) {
       if (!_googleSigningIn) {
         unawaited(_signInWithNativeGoogle());
       }
       return NavigationDecision.prevent;
     }
+    if (WebViewNavigationGuard.isAppleOAuthRequest(uri)) {
+      if (!_isIosAppleNativeEnabled) return NavigationDecision.navigate;
+      if (!_appleSigningIn) {
+        unawaited(_signInWithNativeApple());
+      }
+      return NavigationDecision.prevent;
+    }
 
-    // Login redirect → add embedded params or bypass if already logged in.
-    final webHost = Uri.parse(AppConfig.webBaseUrl).host;
-    final isSameHost = uri.host.isEmpty || uri.host == webHost;
-    if (isSameHost && uri.path == '/login') {
-      final alreadyEmbedded = uri.queryParameters['embedded'] == 'flutter';
-      final nativeGoogleEnabled = uri.queryParameters['nativeGoogle'] == '1';
-      if (!alreadyEmbedded || !nativeGoogleEnabled) {
-        _controller.loadRequest(
-          _loginFallbackUri(nextPath: uri.queryParameters['next']),
-        );
-        return NavigationDecision.prevent;
-      }
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        final next = uri.queryParameters['next'] ?? widget.path;
-        _pendingLoginRedirect = AppConfig.webUri(
-          next,
-          queryParameters: const {
-            'embedded': 'flutter',
-            'nativeGoogle': '1',
-          },
-        ).toString();
-      }
+    final loginResolution = WebViewNavigationGuard.resolveLoginNavigation(
+      uri: uri,
+      webHost: Uri.parse(AppConfig.webBaseUrl).host,
+      defaultNextPath: widget.path,
+      hasCurrentUser: FirebaseAuth.instance.currentUser != null,
+    );
+    if (loginResolution.fallbackUri != null) {
+      _controller.loadRequest(loginResolution.fallbackUri!);
+      return NavigationDecision.prevent;
+    }
+    if (loginResolution.pendingRedirectUrl != null) {
+      _pendingLoginRedirect = loginResolution.pendingRedirectUrl;
     }
 
     return NavigationDecision.navigate;
   }
 
   Future<void> _onBridgeMessage(String raw) async {
-    final payload = FlutterBridgeMessage.fromRaw(raw);
-    switch (payload.type) {
-      case BridgeMessageType.loginSuccess:
-      case BridgeMessageType.tokenRefresh:
-        final idToken = payload.idToken;
-        if (idToken != null && idToken.isNotEmpty) {
-          await _signInWithCustomToken(idToken);
-        }
-        return;
-      case BridgeMessageType.logout:
-        try {
-          await GoogleSignIn().signOut();
-        } catch (_) {}
-        await FirebaseAuth.instance.signOut();
-        return;
-      case BridgeMessageType.requestNativeGoogle:
-        await _signInWithNativeGoogle();
-        return;
-      case BridgeMessageType.unknown:
-        return;
-    }
+    await WebViewAuthSyncController.handleBridgeMessage(
+      rawMessage: raw,
+      onWebToken: _signInWithCustomToken,
+      onLogout: () async {
+        if (mounted) setState(() => _loggedOut = true);
+        _authSyncState.reset();
+        await AuthSessionService.signOutFast(clearWebViewCookies: false);
+      },
+      onRequestNativeGoogle: _signInWithNativeGoogle,
+    );
   }
 
   /// Flutter 로그인 상태를 WebView에 주입
   Future<void> _injectAuthIfNeeded({String? redirectUrl}) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (_loggedOut) return;
+    final shouldShowInjecting = redirectUrl != null;
+    if (shouldShowInjecting && mounted) {
+      setState(() => _injecting = true);
+    }
     try {
-      final idToken = await user.getIdToken(true);
-      if (idToken == null || idToken.isEmpty) return;
-      final customToken =
-          await _authBridgeService.exchangeWebIdToken(idToken);
-      final escaped = customToken.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
-      final escapedRedirect =
-          redirectUrl?.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
-      await _controller.runJavaScript('''
-(function() {
-  const token = '$escaped';
-  const redirect = ${escapedRedirect == null ? 'null' : "'$escapedRedirect'"};
-  const inject = () => {
-    if (window.__flutterAuthInject) {
-      const result = window.__flutterAuthInject(token);
-      if (redirect) {
-        Promise.resolve(result)
-          .then(() => window.location.replace(redirect))
-          .catch(() => {});
-      }
-      return true;
-    }
-    return false;
-  };
-  if (inject()) return;
-  let tries = 0;
-  const timer = setInterval(() => {
-    tries += 1;
-    if (inject() || tries >= 20) {
-      clearInterval(timer);
-    }
-  }, 300);
-})();
-''');
+      await WebViewAuthSyncController.injectAuthIfNeeded(
+        auth: FirebaseAuth.instance,
+        authBridgeService: _authBridgeService,
+        controller: _controller,
+        syncState: _authSyncState,
+        redirectUrl: redirectUrl,
+      );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = '인증 주입 실패: $e');
+      setState(() {
+        _injecting = false;
+        _error = '인증 주입 실패: $e';
+      });
+    } finally {
+      if (shouldShowInjecting && mounted) {
+        setState(() => _injecting = false);
+      }
     }
   }
 
   Future<void> _requestWebIdTokenIfNeeded() async {
-    if (FirebaseAuth.instance.currentUser != null) return;
     try {
-      await _controller.runJavaScript(_webTokenProbeScript);
+      await WebViewAuthSyncController.requestWebIdTokenIfNeeded(
+        auth: FirebaseAuth.instance,
+        controller: _controller,
+      );
     } catch (_) {
       // 토큰 조회 실패 시 무시
     }
@@ -304,13 +253,17 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
     if (_authenticating) return;
     if (!mounted) return;
     setState(() {
+      _loggedOut = false;
       _authenticating = true;
       _error = null;
     });
     try {
-      final customToken =
-          await _authBridgeService.exchangeWebIdToken(webIdToken);
-      await FirebaseAuth.instance.signInWithCustomToken(customToken);
+      await WebViewAuthSyncController.signInWithWebToken(
+        webIdToken: webIdToken,
+        auth: FirebaseAuth.instance,
+        authBridgeService: _authBridgeService,
+        syncState: _authSyncState,
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = '로그인 동기화 실패: $e');
@@ -326,28 +279,130 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
       return;
     }
     setState(() {
+      _loggedOut = false;
       _googleSigningIn = true;
       _error = null;
     });
     try {
-      final account = await _googleSignIn.signIn();
-      if (account == null) return;
-      final authData = await account.authentication;
+      final account = await GoogleSignIn.instance.authenticate();
+      final authData = account.authentication;
       final idToken = authData.idToken;
       if (idToken == null || idToken.isEmpty) {
-        throw Exception('Google idToken이 없습니다.');
+        throw Exception('Google idToken을 가져오지 못했습니다.');
       }
       final credential = GoogleAuthProvider.credential(
         idToken: idToken,
-        accessToken: authData.accessToken,
       );
       await FirebaseAuth.instance.signInWithCredential(credential);
-      unawaited(_injectAuthIfNeeded(redirectUrl: _pageUrl));
+      await _injectAuthIfNeeded(redirectUrl: _pageUrl);
+    } on GoogleSignInException catch (e) {
+      debugPrint(
+          'Google native auth failed: code=${e.code}, msg=${e.description}');
+      if (e.code == GoogleSignInExceptionCode.canceled) return;
+      if (!mounted) return;
+      setState(() => _error = 'Google 로그인 실패: $e');
     } catch (e) {
+      debugPrint('Google native auth failed: $e');
       if (!mounted) return;
       setState(() => _error = 'Google 로그인 실패: $e');
     } finally {
       if (mounted) setState(() => _googleSigningIn = false);
+    }
+  }
+
+  String _generateNonce([int length = 32]) {
+    const charset =
+        '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
+    final random = Random.secure();
+    return List.generate(
+      length,
+      (_) => charset[random.nextInt(charset.length)],
+    ).join();
+  }
+
+  String _sha256ofString(String input) {
+    final bytes = utf8.encode(input);
+    return sha256.convert(bytes).toString();
+  }
+
+  Map<String, dynamic> _decodeJwtClaims(String jwt) {
+    final parts = jwt.split('.');
+    if (parts.length < 2) return const <String, dynamic>{};
+    try {
+      final payload =
+          utf8.decode(base64Url.decode(base64Url.normalize(parts[1])));
+      final decoded = jsonDecode(payload);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) {
+        return decoded.map(
+          (key, value) => MapEntry(key.toString(), value),
+        );
+      }
+    } catch (_) {}
+    return const <String, dynamic>{};
+  }
+
+  Future<void> _signInWithNativeApple() async {
+    if (_appleSigningIn || _authenticating) return;
+    if (!_isIosAppleNativeEnabled) return;
+    if (FirebaseAuth.instance.currentUser != null) {
+      unawaited(_injectAuthIfNeeded(redirectUrl: _pageUrl));
+      return;
+    }
+    setState(() {
+      _loggedOut = false;
+      _appleSigningIn = true;
+      _error = null;
+    });
+    Map<String, dynamic> claims = const <String, dynamic>{};
+    String? expectedNonce;
+
+    try {
+      final rawNonce = _generateNonce();
+      final nonce = _sha256ofString(rawNonce);
+      expectedNonce = nonce;
+      final credential = await SignInWithApple.getAppleIDCredential(
+        scopes: const [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        nonce: nonce,
+      );
+      final identityToken = credential.identityToken;
+      if (identityToken == null || identityToken.isEmpty) {
+        throw Exception('Apple identity token이 없습니다.');
+      }
+      claims = _decodeJwtClaims(identityToken);
+      final tokenNonce = claims['nonce']?.toString();
+      if (tokenNonce != null && tokenNonce.isNotEmpty && tokenNonce != nonce) {
+        throw Exception('Apple nonce 검증 실패');
+      }
+      final oauthCredential = AppleAuthProvider.credentialWithIDToken(
+        identityToken,
+        rawNonce,
+        AppleFullPersonName(
+          givenName: credential.givenName,
+          familyName: credential.familyName,
+        ),
+      );
+      await FirebaseAuth.instance.signInWithCredential(oauthCredential);
+      unawaited(_injectAuthIfNeeded(redirectUrl: _pageUrl));
+    } on SignInWithAppleAuthorizationException catch (e) {
+      if (e.code == AuthorizationErrorCode.canceled) return;
+      if (!mounted) return;
+      setState(() => _error = 'Apple 로그인 실패: $e');
+    } on FirebaseAuthException catch (e) {
+      debugPrint(
+        'Apple native auth failed: code=${e.code}, msg=${e.message}, '
+        'aud=${claims['aud']}, iss=${claims['iss']}, tokenNonce=${claims['nonce']}, expectedNonce=$expectedNonce',
+      );
+      if (!mounted) return;
+      setState(() => _error = 'Apple 로그인 실패: $e');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'Apple 로그인 실패: $e');
+    } finally {
+      if (mounted) setState(() => _appleSigningIn = false);
     }
   }
 
@@ -358,8 +413,17 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
       body: Stack(
         children: [
           WebViewWidget(controller: _controller),
-          if (_loading || _authenticating || _googleSigningIn)
+          if (_loading ||
+              _authenticating ||
+              _googleSigningIn ||
+              _appleSigningIn)
             const Center(child: CircularProgressIndicator()),
+          // 주입 중 WebView 랜딩페이지 가리기 (불투명 오버레이)
+          if (_injecting)
+            Container(
+              color: AppTheme.slate900,
+              child: const Center(child: CircularProgressIndicator()),
+            ),
           if (widget.minimalHeader)
             SafeArea(
               child: Align(
@@ -395,8 +459,8 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
                     ),
                     GestureDetector(
                       onTap: () => setState(() => _error = null),
-                      child:
-                          const Icon(Icons.close, color: Colors.white, size: 18),
+                      child: const Icon(Icons.close,
+                          color: Colors.white, size: 18),
                     ),
                   ],
                 ),

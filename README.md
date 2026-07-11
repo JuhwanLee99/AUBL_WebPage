@@ -3,6 +3,11 @@
 대한민국 대학교 아마추어 야구 리그인 AUBL을 소개하고, 경기 데이터를 기반으로 승부를 예측하는 웹 플랫폼입니다.
 더불어 **실시간 경기 기록(Scorekeeping) 및 중계용 오버레이 시스템**을 포함한 통합 야구 운영 기능을 제공합니다.
 
+## 📚 사용 설명서
+
+* 웹 버전: [`docs/web-user-manual.md`](docs/web-user-manual.md)
+* 앱 버전: [`docs/app-user-manual.md`](docs/app-user-manual.md)
+
 ## 📊 승부 예측 모델
 
 본 프로젝트는 사회인 야구의 Low Data 특성을 고려하여 다음 모델들을 혼합하여 사용합니다.
@@ -83,6 +88,10 @@ npm install
 VITE_FIREBASE_API_KEY=your_api_key
 VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
 ...
+VITE_BACKEND_API_URL=https://api.aubl.club
+VITE_BACKEND_PROXY_TARGET=https://api.aubl.club
+# 기본 false: dev 프록시가 Origin/Referer를 제거하여 CORS 403 방지
+VITE_BACKEND_PROXY_SPOOF_ORIGIN=false
 ```
 
 ### 3. 실행 (Development)
@@ -114,7 +123,7 @@ npm run dev
 | **순위** | Elo 기반 파워랭킹, 승률·전적 비교 |
 | **커뮤니티** | 전체 공지(긴급/경기/징계/일반), 댓글 |
 | **알림** | FCM 푸시 알림, 경기·공지·팀별 구독 설정 |
-| **인증** | 네이티브 Google 로그인 + WebView 토큰 브리지 동기화 |
+| **인증** | 네이티브 Google/Apple(iOS) 로그인 + WebView 토큰 브리지 동기화 |
 | **관리자** | 기록원(Scorekeeper), 스코어보드, 일정 관리, 어드민 패널 (WebView) |
 
 ### 기술 스택
@@ -134,12 +143,21 @@ flutter run --dart-define-from-file=env/dev.json
 
 자세한 아키텍처, 디렉토리 구조, 설정 방법은 [`flutter_app/README.md`](flutter_app/README.md)를 참고하세요.
 
+출시 준비 문서:
+* [`docs/release/mobile-release-checklist.md`](docs/release/mobile-release-checklist.md)
+* [`docs/release/mobile-store-metadata.md`](docs/release/mobile-store-metadata.md)
+* [`docs/release/mobile-data-disclosure-mapping.md`](docs/release/mobile-data-disclosure-mapping.md)
+
 ---
 
 ## 🧭 크롤러(Gameone) 세팅 및 실행
 
-크롤러는 `crawler/` 디렉토리의 독립 패키지로 관리됩니다. 현재 구현은 **DB 저장소(MySQL) 필수**이며,
-`DATABASE_URL`(또는 `CRAWLER_DATABASE_URL`)이 없으면 실행되지 않습니다.
+크롤러는 `crawler/` 디렉토리의 독립 패키지로 관리됩니다.
+
+운영 원칙:
+* 실시간 경기 데이터는 Firebase를 사용합니다.
+* 경기 종료 후 시즌 집계/백필은 크롤러 결과(JSONL/SQL)를 백엔드 DB에 적재합니다.
+* 박스스코어는 원본 수집값(점수/타격/투구)을 유지하고, 기권/몰수 결과는 `reported_winner`로 별도 표현합니다.
 
 ### 1) 파이썬 가상환경 및 의존성 설치
 
@@ -165,6 +183,9 @@ CRAWLER_WEB_BASE_URL=
 SCHEDULE_LIST_ENDPOINT=/schedule/list
 BOXSCORE_ENDPOINT=/game/boxscore
 SCHEDULE_PAGE_PATH=/league/schedule/all
+SCHEDULE_RESULT_PAGE_PATH=/league/schedule/content/result
+SCHEDULE_PLAYOFF_PAGE_PATH=/league/schedule/content/playoff
+SCHEDULE_PAGE_LIMIT=200
 BOXSCORE_PAGE_PATH=/game/boxscore
 HTML_JSON_SCRIPT_ID=
 LIG_IDX=972
@@ -173,6 +194,9 @@ GROUP_CODES= # 필요 시 쉼표로 구분된 group_code 입력
 
 `CRAWLER_DATA_SOURCE`는 `api` 또는 `web`을 지정할 수 있습니다. `web` 모드에서는
 `CRAWLER_WEB_BASE_URL`(없으면 `CRAWLER_BASE_URL` fallback)에서 HTML을 받아 JSON을 파싱합니다.
+일정은 `SCHEDULE_RESULT_PAGE_PATH`(정규시즌)와 `SCHEDULE_PLAYOFF_PAGE_PATH`(플레이오프)를
+페이지네이션 끝까지 자동 순회해 `game_idx`를 수집합니다.
+이때 `group_code`, `part_code`, `page`를 HTML에서 자동 탐색해 조별/라운드별 경기까지 수집합니다.
 JSON이 없는 리그 타자/투수 랭킹 페이지는 HTML 테이블을 직접 파싱해 레코드를 구성합니다.
 
 `config/.env`를 다른 위치에서 읽으려면 `CRAWLER_ENV_FILE`을 설정하세요:
@@ -236,7 +260,87 @@ python -m crawler.cli --from-year 2024 --to-year 2024 --data-source web
 python -m crawler.cli --from-year 2024 --to-year 2024 --group-code A --group-code B
 ```
 
-### 5) CSV로 임시 확인하기 (DB에서 추출)
+### 5) 2015~2025 전체 수집 + 검증 + SQL 생성
+
+전체 시즌을 JSONL로 수집:
+
+```bash
+cd crawler
+PYTHONPATH=src python -m crawler.cli \
+  --from-year 2015 --to-year 2025 \
+  --data-source web \
+  --output-json /tmp/aubl_2015_2025_out
+```
+
+수집 커버리지 검증:
+
+```bash
+PYTHONPATH=src python scripts/verify_collection.py --input-dir /tmp/aubl_2015_2025_out
+```
+
+시즌별 SQL 및 통합 SQL 생성:
+
+```bash
+mkdir -p output/2015_2025
+for y in $(seq 2015 2025); do
+  PYTHONPATH=src python scripts/generate_sql_dump.py /tmp/aubl_2015_2025_out --year $y > output/2015_2025/import_${y}.sql
+done
+
+: > output/2015_2025/import_2015_2025.sql
+for y in $(seq 2015 2025); do
+  cat output/2015_2025/import_${y}.sql >> output/2015_2025/import_2015_2025.sql
+  printf '\n\n' >> output/2015_2025/import_2015_2025.sql
+done
+```
+
+생성 파일:
+* `crawler/output/2015_2025/import_2015.sql` ~ `crawler/output/2015_2025/import_2025.sql`
+* `crawler/output/2015_2025/import_2015_2025.sql`
+* `crawler/output/2015_2025/validation_report_2015_2025.json` (선택 생성 리포트)
+
+팀명 유사/분리 케이스 검출 및 코드 정규화:
+
+```bash
+cd crawler
+python scripts/find_team_split_candidates.py \
+  output/2015_2025/import_2015_2025.sql \
+  --output-csv output/2015_2025/team_split_candidates.csv
+
+python scripts/apply_team_code_normalization.py \
+  output/2015_2025/import_2015_2025.sql \
+  output/2015_2025/import_2015_2025_team_normalized.sql \
+  --mapping-csv output/2015_2025/team_code_normalization_map.csv
+```
+
+연도별 정규화 SQL 생성:
+
+```bash
+cd crawler
+for y in $(seq 2015 2025); do
+  python scripts/apply_team_code_normalization.py \
+    output/2015_2025/import_${y}.sql \
+    output/2015_2025/import_${y}_team_normalized.sql \
+    --mapping-csv output/2015_2025/team_code_normalization_map.csv
+done
+```
+
+정규화 산출물:
+* `crawler/output/2015_2025/import_2015_2025_team_normalized.sql` (권장 적재본)
+* `crawler/output/2015_2025/import_2015_team_normalized.sql` ~ `crawler/output/2015_2025/import_2025_team_normalized.sql`
+* `crawler/output/2015_2025/team_code_normalization_map.csv`
+* `crawler/output/2015_2025/team_normalization_yearly_report.csv`
+
+정규화 규칙 요약:
+* 유사 팀명은 가능한 기존 `team_code`로 통합합니다.
+* 코드 후보가 없는 팀은 신규 코드(`90001`~`90007`)를 부여합니다.
+* 정규화 결과 SQL 기준으로 `TEAM.team_code = NULL` 팀이 남지 않도록 관리합니다.
+
+참고:
+* `GAME.home_score/away_score`에는 원본 박스스코어 점수가 들어갑니다.
+* 기권/몰수 승패 해석은 `matches.jsonl`의 `reported_winner`를 기준으로 처리합니다.
+* `generate_sql_dump.py`는 `team_side(home/away)`를 우선 사용해 팀 매핑 오류를 줄이도록 보강되었습니다.
+
+### 6) CSV로 임시 확인하기 (DB에서 추출)
 
 기본 저장소는 DB이지만 `--output-json` 또는 `--output-csv`로 로컬 파일 출력도 가능합니다. DB에서
 빠르게 확인하려면 MySQL에서 CSV로 내보낼 수 있습니다(권한이 필요할 수 있음).

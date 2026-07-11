@@ -1,7 +1,7 @@
 name: aubl_flutter_app
 description: AUBL hybrid mobile app (Flutter + WebView)
 publish_to: "none"
-version: 1.0.0+1
+version: 1.0.6+15
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -14,17 +14,21 @@ dependencies:
   firebase_auth: ^5.5.0
   firebase_messaging: ^15.1.0
   cloud_firestore: ^5.6.0
-  webview_flutter: ^4.8.0
+  webview_flutter: ^4.9.0
   webview_flutter_android: ^3.16.9
-  webview_flutter_wkwebview: ^3.14.0
-  google_sign_in: ^6.2.2
+  webview_flutter_wkwebview: ^3.23.7
+  google_sign_in: ^7.0.0
+  sign_in_with_apple: ^7.0.1
   http: ^1.2.2
+  crypto: ^3.0.6
   intl: ^0.20.2
   cached_network_image: ^3.4.1
+  flutter_cache_manager: ^3.4.1
   url_launcher: ^6.3.2
   timeago: ^3.7.1
   shared_preferences: ^2.3.0
-  flutter_local_notifications: ^17.1.2
+  flutter_local_notifications: ^20.1.0
+  flutter_quill: ^11.5.0
 
 dev_dependencies:
   flutter_test:

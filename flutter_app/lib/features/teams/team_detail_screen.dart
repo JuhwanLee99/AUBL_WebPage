@@ -1,19 +1,23 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/contracts/web_contracts.dart';
 import '../../core/data/team_groups.dart';
 import '../../core/models/match.dart' as m;
 import '../../core/models/team.dart';
 import '../../core/models/team_member.dart';
 import '../../core/models/team_notice.dart';
-import '../../core/services/firestore_service.dart';
+import '../../core/services/team_image_cache_manager.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/match_time.dart';
 import '../../core/webview/app_webview_screen.dart';
+import '../../core/widgets/editor/delta_utils.dart';
+import '../../core/widgets/editor/rich_text_editor.dart';
 import '../../core/widgets/match_status_badge.dart';
 import '../../core/widgets/section_header.dart';
 import 'team_notice_detail_screen.dart';
+import 'team_detail_view_model.dart';
 import 'widgets/member_card.dart';
 import 'widgets/notice_card.dart';
 
@@ -32,14 +36,19 @@ class TeamDetailScreen extends StatefulWidget {
 }
 
 class _TeamDetailScreenState extends State<TeamDetailScreen> {
-  final _fs = FirestoreService();
-  final TextEditingController _noticeSearchController =
-      TextEditingController();
+  static const List<String> _noticeCategories = ['일반', '훈련', '경기', '긴급'];
+
+  final _viewModel = TeamDetailViewModel();
+  final TextEditingController _noticeSearchController = TextEditingController();
   Team? _team;
   bool _loading = true;
   bool _isCoach = false;
+  bool _noticeBusy = false;
   List<m.Match> _matches = [];
   String _noticeSearchQuery = '';
+  String _noticeFilter = 'ALL';
+  String? _noticeStatus;
+  String? _noticeError;
 
   @override
   void initState() {
@@ -56,7 +65,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
   }
 
   Future<void> _loadTeam() async {
-    final team = await _fs.getTeam(widget.teamId);
+    final team = await _viewModel.loadTeam(widget.teamId);
     if (mounted) {
       setState(() {
         _team = team;
@@ -66,34 +75,14 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
   }
 
   Future<void> _loadMatches() async {
-    final matches = await _fs.getMatchesByTeam(widget.teamName);
+    final matches = await _viewModel.loadMatches(widget.teamName);
     if (mounted) setState(() => _matches = matches);
   }
 
   Future<void> _checkCoachRole() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
-    // 관리자 체크
-    try {
-      final token =
-          await FirebaseAuth.instance.currentUser!.getIdTokenResult(true);
-      if (token.claims?['admin'] == true) {
-        if (mounted) setState(() => _isCoach = true);
-        return;
-      }
-    } catch (_) {}
-
-    // 코치 역할 체크
-    final roleDoc =
-        await FirebaseFirestore.instance.collection('roles').doc(uid).get();
+    final isCoach = await _viewModel.checkCoachRole(widget.teamId);
     if (!mounted) return;
-    if (roleDoc.exists) {
-      final data = roleDoc.data();
-      if (data?['role'] == 'coach' && data?['teamId'] == widget.teamId) {
-        setState(() => _isCoach = true);
-      }
-    }
+    setState(() => _isCoach = isCoach);
   }
 
   String get _groupLabel {
@@ -101,10 +90,91 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     return g != null ? '$g조' : '';
   }
 
+  Color _noticeCategoryColor(String category) {
+    return switch (category) {
+      '긴급' => AppTheme.red500,
+      '경기' => AppTheme.blue500,
+      '훈련' => AppTheme.green500,
+      _ => AppTheme.slate500,
+    };
+  }
+
+  void _applyNoticeActionResult(TeamDetailActionResult result) {
+    setState(() {
+      _noticeStatus = result.statusMessage;
+      _noticeError = result.errorMessage;
+    });
+  }
+
+  Future<void> _toggleNoticePinned(TeamNotice notice) async {
+    if (!_isCoach || _noticeBusy) return;
+    setState(() {
+      _noticeBusy = true;
+      _noticeStatus = null;
+      _noticeError = null;
+    });
+    try {
+      final result = await _viewModel.toggleNoticePinned(
+        teamId: widget.teamId,
+        notice: notice,
+      );
+      if (!mounted) return;
+      _applyNoticeActionResult(result);
+    } finally {
+      if (mounted) {
+        setState(() => _noticeBusy = false);
+      }
+    }
+  }
+
+  Future<void> _deleteNotice(TeamNotice notice) async {
+    if (!_isCoach || _noticeBusy) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.slate800,
+        title: const Text('공지 삭제'),
+        content: const Text(
+          '이 공지를 삭제하시겠습니까?',
+          style: TextStyle(color: AppTheme.slate300),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.red500),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() {
+      _noticeBusy = true;
+      _noticeStatus = null;
+      _noticeError = null;
+    });
+    try {
+      final result = await _viewModel.deleteNotice(
+        teamId: widget.teamId,
+        notice: notice,
+      );
+      if (!mounted) return;
+      _applyNoticeActionResult(result);
+    } finally {
+      if (mounted) {
+        setState(() => _noticeBusy = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final upcoming =
-        _matches.where((m) => m.isScheduled || m.isLive).toList();
+    final upcoming = _matches.where((m) => m.isScheduled || m.isLive).toList();
     final completed = _matches.where((m) => m.isCompleted).toList();
     final wins = completed
         .where((m) =>
@@ -200,6 +270,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
               padding: const EdgeInsets.only(bottom: 12),
               child: CachedNetworkImage(
                 imageUrl: _team!.emblemUrl!,
+                cacheManager: TeamImageCacheManager.instance,
                 width: 80,
                 height: 80,
                 fit: BoxFit.contain,
@@ -236,8 +307,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
               const SizedBox(width: 12),
               Text(
                 '총 ${wins + losses + draws}경기',
-                style:
-                    const TextStyle(color: AppTheme.slate400, fontSize: 13),
+                style: const TextStyle(color: AppTheme.slate400, fontSize: 13),
               ),
             ],
           ),
@@ -270,15 +340,13 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
           if (_team!.shortIntro != null && _team!.shortIntro!.isNotEmpty)
             Text(
               _team!.shortIntro!,
-              style:
-                  const TextStyle(color: AppTheme.slate300, fontSize: 14),
+              style: const TextStyle(color: AppTheme.slate300, fontSize: 14),
             ),
           if (_team!.longIntro != null && _team!.longIntro!.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
               _team!.longIntro!,
-              style:
-                  const TextStyle(color: AppTheme.slate400, fontSize: 13),
+              style: const TextStyle(color: AppTheme.slate400, fontSize: 13),
             ),
           ],
         ],
@@ -288,8 +356,28 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
 
   Widget _buildNotices() {
     return StreamBuilder<List<TeamNotice>>(
-      stream: _fs.watchTeamNotices(widget.teamId),
+      stream: _viewModel.watchTeamNotices(widget.teamId),
       builder: (context, snap) {
+        if (snap.hasError) {
+          final err = snap.error;
+          if (err is FirebaseException && err.code == 'permission-denied') {
+            return const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                '팀 공지는 해당 팀 선수/감독만 열람할 수 있습니다.',
+                style: TextStyle(color: AppTheme.red500),
+              ),
+            );
+          }
+          return const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text(
+              '팀 공지를 불러오지 못했습니다.',
+              style: TextStyle(color: AppTheme.red500),
+            ),
+          );
+        }
+
         if (snap.connectionState == ConnectionState.waiting) {
           return const Padding(
             padding: EdgeInsets.all(16),
@@ -313,12 +401,17 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
             return b.createdAt.compareTo(a.createdAt);
           });
 
+        final categoryFiltered = _noticeFilter == 'ALL'
+            ? sorted
+            : sorted
+                .where((notice) => notice.category == _noticeFilter)
+                .toList();
         final query = _noticeSearchQuery.trim().toLowerCase();
         final visible = query.isEmpty
-            ? sorted.take(5).toList()
-            : sorted.where((notice) {
+            ? categoryFiltered
+            : categoryFiltered.where((notice) {
                 final title = notice.title.toLowerCase();
-                final content = notice.content.toLowerCase();
+                final content = deltaToPreviewText(notice.content).toLowerCase();
                 final author = (notice.createdByName ?? '').toLowerCase();
                 return title.contains(query) ||
                     content.contains(query) ||
@@ -327,6 +420,67 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
 
         return Column(
           children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    FilterChip(
+                      label: Text(
+                        '전체',
+                        style: TextStyle(
+                          color: _noticeFilter == 'ALL'
+                              ? AppTheme.orange500
+                              : AppTheme.slate400,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      ),
+                      selected: _noticeFilter == 'ALL',
+                      showCheckmark: false,
+                      selectedColor: AppTheme.orange500.withValues(alpha: 0.16),
+                      backgroundColor: AppTheme.slate800.withValues(alpha: 0.4),
+                      side: BorderSide(
+                        color: _noticeFilter == 'ALL'
+                            ? AppTheme.orange500
+                            : AppTheme.slate700.withValues(alpha: 0.8),
+                      ),
+                      onSelected: (_) => setState(() => _noticeFilter = 'ALL'),
+                    ),
+                    ..._noticeCategories.map((category) {
+                      final color = _noticeCategoryColor(category);
+                      final selected = _noticeFilter == category;
+                      return FilterChip(
+                        label: Text(
+                          category,
+                          style: TextStyle(
+                            color: selected ? color : AppTheme.slate400,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                        selected: selected,
+                        showCheckmark: false,
+                        selectedColor: color.withValues(alpha: 0.16),
+                        backgroundColor:
+                            AppTheme.slate800.withValues(alpha: 0.4),
+                        side: BorderSide(
+                          color: selected
+                              ? color
+                              : AppTheme.slate700.withValues(alpha: 0.8),
+                        ),
+                        onSelected: (_) => setState(() {
+                          _noticeFilter = category;
+                        }),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: TextField(
@@ -376,6 +530,58 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                 ),
               ),
             ),
+            if (_noticeStatus != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.green500.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppTheme.green500.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Text(
+                    _noticeStatus!,
+                    style: const TextStyle(
+                      color: Color(0xFFBBF7D0),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            if (_noticeError != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.red500.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppTheme.red500.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Text(
+                    _noticeError!,
+                    style: const TextStyle(
+                      color: Color(0xFFFECACA),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Align(
@@ -399,19 +605,78 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
               )
             else
               ...visible.map((n) {
-                return NoticeCard(
-                  notice: n,
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => TeamNoticeDetailScreen(
-                          teamId: widget.teamId,
-                          teamName: widget.teamName,
-                          notice: n,
+                return Column(
+                  children: [
+                    NoticeCard(
+                      notice: n,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => TeamNoticeDetailScreen(
+                              teamId: widget.teamId,
+                              teamName: widget.teamName,
+                              notice: n,
+                              canManage: _isCoach,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    if (_isCoach)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              OutlinedButton(
+                                onPressed: _noticeBusy
+                                    ? null
+                                    : () => _toggleNoticePinned(n),
+                                style: OutlinedButton.styleFrom(
+                                  side: BorderSide(
+                                    color: AppTheme.slate700
+                                        .withValues(alpha: 0.9),
+                                  ),
+                                  foregroundColor: AppTheme.slate200,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
+                                  textStyle: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                child: Text(n.pinned ? '고정 해제' : '공지 고정'),
+                              ),
+                              OutlinedButton(
+                                onPressed:
+                                    _noticeBusy ? null : () => _deleteNotice(n),
+                                style: OutlinedButton.styleFrom(
+                                  side: BorderSide(
+                                    color:
+                                        AppTheme.red500.withValues(alpha: 0.6),
+                                  ),
+                                  foregroundColor: const Color(0xFFFECACA),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
+                                  textStyle: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                child: const Text('공지 삭제'),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    );
-                  },
+                  ],
                 );
               }),
           ],
@@ -442,28 +707,29 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   fontSize: 14),
             )
           : Text(
-              match.startTime?.substring(0, 10) ?? '',
+              formatMatchStartTime(match.startTime, pattern: 'yyyy-MM-dd') ??
+                  '',
               style: const TextStyle(color: AppTheme.slate400, fontSize: 12),
             ),
       onTap: () {
         if (match.isLive) {
           Navigator.of(context).push(MaterialPageRoute<void>(
             builder: (_) => AppWebViewScreen(
-              path: '/scoreboard-text/${match.id}',
+              path: WebRouteContracts.scoreboardText(match.id),
               title: '문자중계',
             ),
           ));
         } else if (match.isCompleted) {
           Navigator.of(context).push(MaterialPageRoute<void>(
             builder: (_) => AppWebViewScreen(
-              path: '/scoreboard-text/${match.id}',
+              path: WebRouteContracts.scoreboardText(match.id),
               title: '경기 결과',
             ),
           ));
         } else {
           Navigator.of(context).push(MaterialPageRoute<void>(
             builder: (_) => AppWebViewScreen(
-              path: '/scoreboard-text/${match.id}',
+              path: WebRouteContracts.scoreboardText(match.id),
               title: '경기 정보',
             ),
           ));
@@ -474,7 +740,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
 
   Widget _buildRoster() {
     return StreamBuilder<List<TeamMember>>(
-      stream: _fs.watchTeamMembers(widget.teamId),
+      stream: _viewModel.watchTeamMembers(widget.teamId),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Padding(
@@ -499,22 +765,35 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
 
   void _showAddNoticeDialog() {
     final titleCtrl = TextEditingController();
-    final contentCtrl = TextEditingController();
+    String contentDelta = '';
     String category = '일반';
+    bool pinned = false;
+    bool saving = false;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
+        builder: (ctx, setDialogState) => Dialog(
           backgroundColor: AppTheme.slate800,
-          title: const Text('공지 작성'),
-          content: SingleChildScrollView(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const Text(
+                  '공지 작성',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: category,
-                  items: ['일반', '훈련', '경기', '긴급']
+                  items: _noticeCategories
                       .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                       .toList(),
                   onChanged: (v) {
@@ -529,40 +808,74 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   decoration: const InputDecoration(labelText: '제목'),
                 ),
                 const SizedBox(height: 12),
-                TextField(
-                  controller: contentCtrl,
-                  decoration: const InputDecoration(labelText: '내용'),
-                  maxLines: 4,
+                RichTextEditor(
+                  onChanged: (v) => contentDelta = v,
+                  placeholder: '내용을 입력하세요',
+                  minHeight: 160,
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  '이미지/동영상은 툴바 버튼으로 URL을 입력하여 삽입할 수 있습니다.',
+                  style: TextStyle(color: AppTheme.slate500, fontSize: 11),
+                ),
+                const SizedBox(height: 4),
+                CheckboxListTile(
+                  value: pinned,
+                  onChanged: (v) => setDialogState(() => pinned = v ?? false),
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('상단 고정 공지'),
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: saving ? null : () => Navigator.pop(ctx),
+                      child: const Text('취소'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        disabledBackgroundColor: AppTheme.slate700,
+                      ),
+                      onPressed: () async {
+                        if (saving) return;
+                        final title = titleCtrl.text.trim();
+                        if (title.isEmpty || isDeltaEmpty(contentDelta)) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('제목과 내용을 입력해주세요.')),
+                          );
+                          return;
+                        }
+                        setDialogState(() => saving = true);
+                        try {
+                          final result = await _viewModel.addNotice(
+                            teamId: widget.teamId,
+                            title: title,
+                            content: contentDelta,
+                            category: category,
+                            pinned: pinned,
+                          );
+                          if (mounted) {
+                            _applyNoticeActionResult(result);
+                          }
+                          if (result.errorMessage == null && ctx.mounted) {
+                            Navigator.pop(ctx);
+                          }
+                        } finally {
+                          if (ctx.mounted) {
+                            setDialogState(() => saving = false);
+                          }
+                        }
+                      },
+                      child: Text(saving ? '게시 중...' : '게시'),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('취소'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                if (titleCtrl.text.isEmpty) return;
-                final user = FirebaseAuth.instance.currentUser;
-                await _fs.addTeamNotice(
-                  widget.teamId,
-                  TeamNotice(
-                    id: '',
-                    title: titleCtrl.text,
-                    content: contentCtrl.text,
-                    createdAt: DateTime.now().millisecondsSinceEpoch,
-                    createdByUid: user?.uid,
-                    createdByName: user?.email?.split('@').first,
-                    category: category,
-                  ),
-                );
-                if (ctx.mounted) Navigator.pop(ctx);
-              },
-              child: const Text('게시'),
-            ),
-          ],
         ),
       ),
     );

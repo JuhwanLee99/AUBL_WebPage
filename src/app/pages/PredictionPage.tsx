@@ -84,7 +84,7 @@ export default function PredictionPage() {
         </p>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           <Link
-            to="/standings"
+            to="/records?tab=standings"
             style={{
               padding: '14px 18px',
               borderRadius: '12px',

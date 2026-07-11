@@ -1,11 +1,15 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:webview_flutter/webview_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../core/config/app_config.dart';
+import '../../core/services/account_deletion_service.dart';
+import '../../core/services/auth_session_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/services/firestore_service.dart';
+import '../../core/services/moderation_service.dart';
+import '../../core/services/notification_service.dart';
 import '../auth/login_webview_screen.dart';
 
 class AccountScreen extends StatefulWidget {
@@ -17,14 +21,20 @@ class AccountScreen extends StatefulWidget {
 
 class _AccountScreenState extends State<AccountScreen> {
   final _fs = FirestoreService();
+  final _moderationService = ModerationService();
+  final _accountDeletionService = AccountDeletionService();
   bool _loading = true;
+  bool _deleting = false;
   bool _isAdmin = false;
+  bool _isScorer = false;
   String _roleLabel = '일반';
   String _roleDetail = '사용자';
 
   Color _roleAccent() {
     if (_isAdmin) return AppTheme.blue500;
     switch (_roleLabel) {
+      case '기록원':
+        return AppTheme.orange500;
       case '감독':
         return const Color(0xFFF97316);
       case '스태프':
@@ -51,6 +61,7 @@ class _AccountScreenState extends State<AccountScreen> {
     try {
       final token = await user.getIdTokenResult(true);
       final admin = token.claims?['admin'] == true;
+      var scorer = false;
       String roleLabel = '일반';
       String roleDetail = '사용자';
 
@@ -63,7 +74,11 @@ class _AccountScreenState extends State<AccountScreen> {
             .doc(user.uid)
             .get();
         final data = roleDoc.data();
-        if (roleDoc.exists && data?['role'] == 'coach') {
+        if (roleDoc.exists && data?['role'] == 'scorer') {
+          scorer = true;
+          roleLabel = '기록원';
+          roleDetail = '기록/중계';
+        } else if (roleDoc.exists && data?['role'] == 'coach') {
           roleLabel = '감독';
           roleDetail = data?['teamName'] as String? ??
               data?['teamId'] as String? ??
@@ -91,6 +106,7 @@ class _AccountScreenState extends State<AccountScreen> {
       if (mounted) {
         setState(() {
           _isAdmin = admin;
+          _isScorer = scorer;
           _roleLabel = roleLabel;
           _roleDetail = roleDetail;
           _loading = false;
@@ -102,12 +118,153 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> _logout() async {
-    try {
-      await GoogleSignIn().signOut();
-    } catch (_) {}
-    await FirebaseAuth.instance.signOut();
-    await WebViewCookieManager().clearCookies();
+    await AuthSessionService.signOutFast();
     if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
+  }
+
+  Future<void> _openAccountDeletionUrl() async {
+    final uri = Uri.tryParse(AppConfig.accountDeletionUrl);
+    if (uri == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('계정 삭제 안내 URL이 올바르지 않습니다.')),
+        );
+      }
+      return;
+    }
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('브라우저를 열 수 없습니다.')),
+      );
+    }
+  }
+
+  Future<String?> _promptPassword() async {
+    final controller = TextEditingController();
+    try {
+      return await showDialog<String>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('비밀번호 재확인'),
+            content: TextField(
+              controller: controller,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: '현재 비밀번호',
+                hintText: '계정 삭제를 위해 필요합니다.',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('취소'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final value = controller.text.trim();
+                  if (value.isEmpty) return;
+                  Navigator.of(context).pop(value);
+                },
+                child: const Text('확인'),
+              ),
+            ],
+          );
+        },
+      );
+    } finally {
+      controller.dispose();
+    }
+  }
+
+  String _formatDeletionError(Object error) {
+    if (error is AccountDeletionException) return error.message;
+    if (error is FirebaseAuthException) {
+      switch (error.code) {
+        case 'requires-recent-login':
+          return '보안을 위해 최근 로그인 재인증이 필요합니다.';
+        case 'wrong-password':
+        case 'invalid-credential':
+          return '재인증에 실패했습니다. 입력 정보를 다시 확인해 주세요.';
+        case 'user-mismatch':
+          return '재인증한 계정이 현재 계정과 일치하지 않습니다.';
+        case 'network-request-failed':
+          return '네트워크 오류로 계정 삭제에 실패했습니다.';
+        default:
+          return '계정 삭제에 실패했습니다. (${error.code})';
+      }
+    }
+    if (error is FirebaseException) {
+      if (error.code == 'permission-denied') {
+        return '사용자 데이터 삭제 권한이 없습니다. 운영팀에 문의해 주세요.';
+      }
+      return '데이터 삭제 중 오류가 발생했습니다. (${error.code})';
+    }
+    return '계정 삭제 중 알 수 없는 오류가 발생했습니다.';
+  }
+
+  Future<void> _deleteAccount() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || _deleting) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('회원 탈퇴'),
+          content: const Text(
+            '탈퇴 시 계정 정보가 삭제되며 복구할 수 없습니다.\n'
+            '커뮤니티에 작성한 게시물은 정책에 따라 남아 있을 수 있습니다.\n\n'
+            '계속 진행하시겠습니까?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('취소'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.red500,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('탈퇴 진행'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) return;
+
+    String? password;
+    if (_accountDeletionService.resolveCurrentProvider(user) ==
+        AccountDeletionProvider.password) {
+      password = await _promptPassword();
+      if (password == null || password.isEmpty) return;
+    }
+
+    if (!mounted) return;
+    setState(() => _deleting = true);
+    try {
+      await NotificationService.instance.updateUserInquiryTopic(null);
+      await _accountDeletionService.deleteCurrentUser(
+        currentPassword: password,
+      );
+      await AuthSessionService.signOutFast();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('회원 탈퇴가 완료되었습니다.')),
+      );
+      Navigator.of(context).popUntil((r) => r.isFirst);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_formatDeletionError(e))),
+      );
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
   }
 
   @override
@@ -184,8 +341,15 @@ class _AccountScreenState extends State<AccountScreen> {
                                       AppTheme.blue500,
                                       Color(0xFF8B5CF6),
                                     ])
-                                  : null,
-                              color: _isAdmin ? null : _roleAccent().withValues(alpha: 0.2),
+                                  : _isScorer
+                                      ? const LinearGradient(colors: [
+                                          AppTheme.orange500,
+                                          AppTheme.amber400,
+                                        ])
+                                      : null,
+                              color: (_isAdmin || _isScorer)
+                                  ? null
+                                  : _roleAccent().withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
                                   color: _roleAccent().withValues(alpha: 0.5)),
@@ -221,6 +385,8 @@ class _AccountScreenState extends State<AccountScreen> {
                                 .substring(0, 16) ??
                             '-'),
 
+                    const SizedBox(height: 20),
+                    _buildBlockedUsersSection(user),
                     const SizedBox(height: 24),
                     SizedBox(
                       width: double.infinity,
@@ -235,8 +401,170 @@ class _AccountScreenState extends State<AccountScreen> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _openAccountDeletionUrl,
+                        icon: const Icon(Icons.open_in_new,
+                            color: AppTheme.slate300),
+                        label: const Text('웹에서 계정 삭제 안내 열기',
+                            style: TextStyle(color: AppTheme.slate300)),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: AppTheme.slate600),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _deleting ? null : _deleteAccount,
+                        icon: _deleting
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.person_remove),
+                        label: Text(_deleting ? '탈퇴 처리 중...' : '회원 탈퇴'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.red500,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      '회원 탈퇴 시 인증 계정과 기본 프로필 데이터가 삭제됩니다.\n'
+                      '커뮤니티 게시물은 운영 정책에 따라 일부 유지될 수 있습니다.',
+                      style: TextStyle(
+                        color: AppTheme.slate500,
+                        fontSize: 12,
+                        height: 1.5,
+                      ),
+                    ),
                   ],
                 ),
+    );
+  }
+
+  Widget _buildBlockedUsersSection(User user) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.slate800.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.slate700),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '차단한 사용자',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            '차단하면 해당 사용자의 게시글과 댓글이 커뮤니티에서 즉시 숨겨집니다.',
+            style: TextStyle(
+              color: AppTheme.slate400,
+              fontSize: 12,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 10),
+          StreamBuilder<List<BlockedUserEntry>>(
+            stream: _moderationService.watchBlockedUsers(user.uid),
+            builder: (context, snapshot) {
+              final blockedUsers = snapshot.data ?? const <BlockedUserEntry>[];
+              if (blockedUsers.isEmpty) {
+                return const Text(
+                  '현재 차단한 사용자가 없습니다.',
+                  style: TextStyle(
+                    color: AppTheme.slate500,
+                    fontSize: 12,
+                  ),
+                );
+              }
+
+              return Column(
+                children: blockedUsers.map((entry) {
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.slate900.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.slate700),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                entry.label,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                entry.uid,
+                                style: const TextStyle(
+                                  color: AppTheme.slate500,
+                                  fontSize: 11,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () async {
+                            await _moderationService.unblockUser(
+                              blockerUid: user.uid,
+                              blockedUid: entry.uid,
+                            );
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('사용자 차단을 해제했습니다.'),
+                              ),
+                            );
+                          },
+                          child: const Text(
+                            '차단 해제',
+                            style: TextStyle(
+                              color: AppTheme.blue400,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -249,8 +577,7 @@ class _AccountScreenState extends State<AccountScreen> {
           SizedBox(
             width: 90,
             child: Text(label,
-                style: const TextStyle(
-                    color: AppTheme.slate500, fontSize: 13)),
+                style: const TextStyle(color: AppTheme.slate500, fontSize: 13)),
           ),
           Expanded(
             child: Text(value,

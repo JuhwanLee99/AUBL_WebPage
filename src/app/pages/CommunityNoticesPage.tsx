@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { firestore } from '../../shared/firebase/client';
 import { useAdmin } from '../../shared/auth/useAdmin';
+import { deltaToPreviewText } from '../../shared/components/editor/quillUtils';
+import { useBlockedUserIds } from '../../shared/moderation/useBlockedUsers';
 import type { Notice, NoticeCategory } from '../../shared/types';
 
 // 필터 타입 정의
@@ -12,6 +14,7 @@ type FilterValue = NoticeCategory | 'ALL';
 const FILTERS: { label: string; value: FilterValue }[] = [
   { label: '전체', value: 'ALL' },
   { label: '긴급', value: '긴급' },
+  { label: '심판/기록원 모집', value: '심판/기록원 모집' },
   { label: '경기공지', value: '경기공지' },
   { label: '징계', value: '징계' },
   { label: '일반', value: '일반' },
@@ -22,6 +25,7 @@ export default function CommunityNoticesPage() {
   const [activeFilter, setActiveFilter] = useState<FilterValue>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const { isAdmin } = useAdmin();
+  const { blockedUserIds } = useBlockedUserIds();
   const navigate = useNavigate();
 
   // 1. 컴포넌트 로드 시 '전체' 공지사항을 한 번만 불러옵니다.
@@ -40,21 +44,27 @@ export default function CommunityNoticesPage() {
 
   // 2. 현재 선택된 필터에 따라 보여줄 목록을 계산합니다. (Client-side Filtering)
   const filteredNotices = useMemo(() => {
+    const visibleNotices = notices.filter((notice) => {
+      const ownerUid = notice.uid ?? notice.authorUid ?? '';
+      if (!ownerUid) return true;
+      return !blockedUserIds.has(ownerUid);
+    });
+
     const categoryFiltered =
       activeFilter === 'ALL'
-        ? notices
-        : notices.filter((notice) => notice.category === activeFilter);
+        ? visibleNotices
+        : visibleNotices.filter((notice) => notice.category === activeFilter);
 
     const q = searchQuery.trim().toLowerCase();
     if (!q) return categoryFiltered;
 
     return categoryFiltered.filter((notice) =>
-      `${notice.title} ${notice.content} ${notice.author}`.toLowerCase().includes(q),
+      `${notice.title} ${deltaToPreviewText(notice.content)} ${notice.author}`.toLowerCase().includes(q),
     );
-  }, [notices, activeFilter, searchQuery]);
+  }, [notices, activeFilter, searchQuery, blockedUserIds]);
 
   return (
-    <div style={{ color: '#f8fafc', maxWidth: '800px', margin: '0 auto', paddingBottom: '40px' }}>
+    <div style={{ color: '#f8fafc', maxWidth: '1100px', margin: '0 auto', paddingBottom: '40px' }}>
       
       {/* 상단 헤더 및 글쓰기 버튼 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
@@ -193,9 +203,9 @@ export default function CommunityNoticesPage() {
                   {notice.title}
                 </h3>
                 
-                <p style={{ 
-                  margin: 0, 
-                  color: '#cbd5e1', 
+                <p style={{
+                  margin: 0,
+                  color: '#cbd5e1',
                   lineHeight: 1.6,
                   display: '-webkit-box',
                   WebkitLineClamp: 2,
@@ -203,7 +213,7 @@ export default function CommunityNoticesPage() {
                   overflow: 'hidden',
                   textOverflow: 'ellipsis'
                 }}>
-                  {notice.content}
+                  {deltaToPreviewText(notice.content)}
                 </p>
               </div>
             </Link>
@@ -217,6 +227,7 @@ export default function CommunityNoticesPage() {
 function getCategoryColor(category: string) {
   switch(category) {
     case '긴급': return '#f87171';
+    case '심판/기록원 모집': return '#22c55e';
     case '징계': return '#fb923c';
     case '경기공지': return '#60a5fa';
     case 'ALL': return '#cbd5e1';

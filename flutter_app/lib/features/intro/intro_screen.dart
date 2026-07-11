@@ -12,6 +12,9 @@ class IntroScreen extends StatefulWidget {
 }
 
 class _IntroScreenState extends State<IntroScreen> {
+  static const double _sectionSpacing = 24;
+  static const double _cardRadius = 14;
+
   final _fs = FirestoreService();
   Map<String, dynamic>? _content;
   bool _loading = true;
@@ -44,97 +47,30 @@ class _IntroScreenState extends State<IntroScreen> {
   Widget _buildContent() {
     final intro = _content?['intro'] as Map<String, dynamic>? ?? {};
     final sections = intro['sections'] as List<dynamic>? ?? [];
+    final contentSections = <Widget>[
+      _buildChairmanMessage(),
+      _buildHistorySection(),
+      _buildOrganizationSection(),
+      _buildLeagueStructure(),
+      _buildPostseason(),
+      _buildParticipatingTeams(),
+    ];
+    if (sections.isNotEmpty) {
+      contentSections.add(_buildAdditionalSections(sections));
+    }
 
     return CustomScrollView(
       slivers: [
-        // ── 히어로 ──
         SliverToBoxAdapter(child: _buildHero(intro)),
-
-        // ── 본문 ──
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── 회장 인사말 ──
-                _buildChairmanMessage(),
-                const SizedBox(height: 24),
-
-                // ── 역사와 전통 ──
-                _buildHistorySection(),
-                const SizedBox(height: 24),
-
-                // ── 조직 구성 ──
-                _buildOrganizationSection(),
-                const SizedBox(height: 24),
-
-                // ── 리그 구조 & 규정 ──
-                _buildLeagueStructure(),
-                const SizedBox(height: 24),
-
-                // ── 포스트시즌 ──
-                _buildPostseason(),
-                const SizedBox(height: 24),
-
-                // ── 참가 팀 ──
-                _buildParticipatingTeams(),
-                const SizedBox(height: 24),
-
-                // ── Firestore 커스텀 섹션 (아코디언) ──
-                if (sections.isNotEmpty) ...[
-                  _sectionTitle('추가 정보', Icons.article, AppTheme.slate300),
-                  const SizedBox(height: 10),
-                  ...sections.map((section) {
-                    final sec = section as Map<String, dynamic>;
-                    final title = sec['title'] as String? ?? '';
-                    final body = sec['body'] as String? ?? '';
-                    final items = sec['items'] as List<dynamic>? ?? [];
-
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      decoration: BoxDecoration(
-                        color: AppTheme.slate800,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: ExpansionTile(
-                        title: Text(title,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w500)),
-                        childrenPadding:
-                            const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                        children: [
-                          if (body.isNotEmpty)
-                            Text(body,
-                                style: const TextStyle(
-                                    color: AppTheme.slate300, fontSize: 13)),
-                          ...items.map((item) {
-                            if (item is String) {
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text('• ',
-                                        style: TextStyle(
-                                            color: AppTheme.slate400)),
-                                    Expanded(
-                                      child: Text(item,
-                                          style: const TextStyle(
-                                              color: AppTheme.slate300,
-                                              fontSize: 13)),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }
-                            return const SizedBox.shrink();
-                          }),
-                        ],
-                      ),
-                    );
-                  }),
+                for (var i = 0; i < contentSections.length; i++) ...[
+                  if (i > 0) const SizedBox(height: _sectionSpacing),
+                  contentSections[i],
                 ],
               ],
             ),
@@ -144,8 +80,73 @@ class _IntroScreenState extends State<IntroScreen> {
     );
   }
 
+  Widget _buildAdditionalSections(List<dynamic> sections) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle('추가 정보', Icons.article, AppTheme.slate300),
+        const SizedBox(height: 10),
+        ...sections.map((section) {
+          final sec = section as Map<String, dynamic>;
+          final title = sec['title'] as String? ?? '';
+          final body = sec['body'] as String? ?? '';
+          final items = sec['items'] as List<dynamic>? ?? [];
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _buildSurfaceCard(
+              child: Theme(
+                data: Theme.of(context).copyWith(
+                  dividerColor: Colors.transparent,
+                  splashColor: Colors.transparent,
+                  highlightColor: Colors.transparent,
+                ),
+                child: ExpansionTile(
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 2),
+                  childrenPadding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
+                  title: Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                  children: [
+                    if (body.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          body,
+                          style: const TextStyle(
+                            color: AppTheme.slate300,
+                            fontSize: 13,
+                            height: 1.55,
+                          ),
+                        ),
+                      ),
+                    ...items.whereType<String>().map(
+                          (item) => Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: _buildBulletText(item),
+                          ),
+                        ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
   // ── 히어로 ──
   Widget _buildHero(Map<String, dynamic> intro) {
+    final heroAccent = _mutedAccent(AppTheme.blue400, 0.5);
+    final heroTagline = intro['tagline'] as String? ?? 'AUBL · LEAGUE INTRO';
+    final heroSubtitle = intro['heroSubtitle'] as String? ??
+        '46th AUBL · Hosted by Chung-Ang University (Seoul)';
     final heroTitle = intro['heroTitle'] as String? ??
         '순수 아마추어 대학 야구의 46년 — 2026년, 중앙대학교(서울)와 함께 새로운 도약을 준비합니다.';
     final heroDescription = intro['heroDescription'] as String? ??
@@ -156,7 +157,7 @@ class _IntroScreenState extends State<IntroScreen> {
     const heroMetrics = [
       ('2026 HOST', '중앙대학교(서울)', '제46회 AUBL 운영'),
       ('참가 규모', '약 40개 대학', 'A~H조 조별 예선 후 으뜸·버금'),
-      ('핵심 가치', '실시간 기록 · 중계 · 디지털화', '모바일 친화 기록/중계'),
+      ('핵심 가치', '실시간 기록 · 중계 · 디지털화', '모바일 친화 기록/중계로 정보 접근성 강화'),
     ];
 
     return Container(
@@ -167,7 +168,7 @@ class _IntroScreenState extends State<IntroScreen> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF0a1a3f), Color(0xFF0f2f8f), Color(0xFF0a1a3f)],
+          colors: [Color(0xFF0A142E), Color(0xFF122349), Color(0xFF0A142E)],
         ),
       ),
       child: Stack(
@@ -182,7 +183,7 @@ class _IntroScreenState extends State<IntroScreen> {
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    AppTheme.blue500.withValues(alpha: 0.14),
+                    AppTheme.blue500.withValues(alpha: 0.08),
                     Colors.transparent,
                   ],
                 ),
@@ -199,7 +200,7 @@ class _IntroScreenState extends State<IntroScreen> {
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    AppTheme.purple500.withValues(alpha: 0.10),
+                    AppTheme.purple500.withValues(alpha: 0.06),
                     Colors.transparent,
                   ],
                 ),
@@ -211,39 +212,57 @@ class _IntroScreenState extends State<IntroScreen> {
             children: [
               Row(
                 children: [
-                  GestureDetector(
+                  InkWell(
                     onTap: () => Navigator.of(context).pop(),
-                    child: const Icon(Icons.arrow_back, color: Colors.white),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Ink(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.18),
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.arrow_back,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 12),
-                  const Text('리그 소개',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600)),
+                  const Text(
+                    '리그 소개',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 16),
-              // 배지
+              const SizedBox(height: 18),
               Row(
                 children: [
-                  _heroBadge('AUBL · LEAGUE INTRO', AppTheme.blue400),
+                  _heroBadge(heroTagline, heroAccent),
                 ],
               ),
               const SizedBox(height: 6),
-              const Text(
-                '46th AUBL · Hosted by Chung-Ang University (Seoul)',
-                style: TextStyle(
-                    color: AppTheme.slate300,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600),
+              Text(
+                heroSubtitle,
+                style: const TextStyle(
+                  color: AppTheme.slate400,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const SizedBox(height: 14),
               Text(
                 heroTitle,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 20,
+                  fontSize: 21,
                   fontWeight: FontWeight.w800,
                   height: 1.3,
                 ),
@@ -252,47 +271,35 @@ class _IntroScreenState extends State<IntroScreen> {
               Text(
                 heroDescription,
                 style: const TextStyle(
-                    color: AppTheme.slate300, fontSize: 13, height: 1.6),
+                  color: AppTheme.slate300,
+                  fontSize: 13,
+                  height: 1.62,
+                ),
               ),
-              const SizedBox(height: 16),
-              // 히어로 메트릭
-              ...heroMetrics.map((m) {
-                final (label, value, note) = m;
-                return Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.04),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color: AppTheme.slate500.withValues(alpha: 0.25)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(label,
-                          style: const TextStyle(
-                              color: AppTheme.slate400,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.5)),
-                      const SizedBox(height: 4),
-                      Text(value,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800)),
-                      const SizedBox(height: 2),
-                      Text(note,
-                          style: const TextStyle(
-                              color: AppTheme.slate300,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                );
-              }),
+              const SizedBox(height: 18),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isWide = constraints.maxWidth > 540;
+                  final cardWidth = isWide
+                      ? (constraints.maxWidth - 10) / 2
+                      : constraints.maxWidth;
+                  return Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: heroMetrics.map((m) {
+                      final (label, value, note) = m;
+                      return SizedBox(
+                        width: cardWidth,
+                        child: _buildHeroMetricCard(
+                          label: label,
+                          value: value,
+                          note: note,
+                        ),
+                      );
+                    }).toList(),
+                  );
+                },
+              ),
             ],
           ),
         ],
@@ -302,28 +309,146 @@ class _IntroScreenState extends State<IntroScreen> {
 
   Widget _heroBadge(String text, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(999),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(text,
           style: TextStyle(
-              color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+            color: color,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.35,
+          )),
+    );
+  }
+
+  Widget _buildHeroMetricCard({
+    required String label,
+    required String value,
+    required String note,
+  }) {
+    return _buildSurfaceCard(
+      borderColor: AppTheme.slate600,
+      borderOpacity: 0.4,
+      backgroundColor: Colors.white.withValues(alpha: 0.02),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppTheme.slate500,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            note,
+            style: const TextStyle(
+              color: AppTheme.slate300,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _mutedAccent(Color color, [double blendWithSlate = 0.35]) {
+    return Color.lerp(color, AppTheme.slate300, blendWithSlate) ?? color;
+  }
+
+  Widget _buildSurfaceCard({
+    required Widget child,
+    Color? borderColor,
+    Color? backgroundColor,
+    double borderOpacity = 0.45,
+    EdgeInsetsGeometry padding = const EdgeInsets.all(14),
+    Gradient? gradient,
+  }) {
+    final resolvedBorderColor = borderColor ?? AppTheme.slate700;
+    final resolvedBackgroundColor = backgroundColor ?? AppTheme.slate800;
+
+    return Container(
+      width: double.infinity,
+      padding: padding,
+      decoration: BoxDecoration(
+        color: gradient == null ? resolvedBackgroundColor : null,
+        gradient: gradient,
+        borderRadius: BorderRadius.circular(_cardRadius),
+        border: Border.all(
+          color: resolvedBorderColor.withValues(alpha: borderOpacity),
+        ),
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildBulletText(String text,
+      {Color bulletColor = AppTheme.slate400}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('• ', style: TextStyle(color: bulletColor, fontSize: 13)),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: AppTheme.slate300,
+              fontSize: 13,
+              height: 1.5,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
   Widget _sectionTitle(String title, IconData icon, Color color) {
+    final accent = _mutedAccent(color, 0.45);
     return Row(
       children: [
-        Icon(icon, size: 16, color: color),
-        const SizedBox(width: 8),
+        Container(
+          width: 26,
+          height: 26,
+          decoration: BoxDecoration(
+            color: AppTheme.slate700.withValues(alpha: 0.65),
+            borderRadius: BorderRadius.circular(8),
+            border:
+                Border.all(color: AppTheme.slate500.withValues(alpha: 0.25)),
+          ),
+          child: Icon(icon, size: 15, color: AppTheme.slate300),
+        ),
+        const SizedBox(width: 10),
         Text(title,
             style: const TextStyle(
                 color: Colors.white,
                 fontSize: 16,
-                fontWeight: FontWeight.w600)),
+                fontWeight: FontWeight.w700)),
+        const SizedBox(width: 8),
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(
+            color: accent,
+            shape: BoxShape.circle,
+          ),
+        ),
       ],
     );
   }
@@ -335,18 +460,15 @@ class _IntroScreenState extends State<IntroScreen> {
       children: [
         _sectionTitle('회장단 인사말', Icons.record_voice_over, AppTheme.orange500),
         const SizedBox(height: 10),
-        Container(
+        _buildSurfaceCard(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                AppTheme.blue500.withValues(alpha: 0.08),
-                AppTheme.slate800,
-              ],
-            ),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-                color: AppTheme.blue500.withValues(alpha: 0.2)),
+          borderColor: AppTheme.slate600,
+          borderOpacity: 0.52,
+          gradient: LinearGradient(
+            colors: [
+              AppTheme.slate700.withValues(alpha: 0.24),
+              AppTheme.slate800,
+            ],
           ),
           child: const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -354,8 +476,8 @@ class _IntroScreenState extends State<IntroScreen> {
               Text(
                 '"변화와 혁신, 그리고 변하지 않는 열정으로"',
                 style: TextStyle(
-                    color: AppTheme.blue400,
-                    fontSize: 14,
+                    color: AppTheme.slate200,
+                    fontSize: 15,
                     fontWeight: FontWeight.w600,
                     fontStyle: FontStyle.italic),
               ),
@@ -369,7 +491,10 @@ class _IntroScreenState extends State<IntroScreen> {
                 '안전한 리그"를 목표로, 경기는 치열하게 그러나 끝나면 서로의 '
                 '어깨를 두드려주는 대학 야구의 낭만을 지켜가겠습니다.',
                 style: TextStyle(
-                    color: AppTheme.slate300, fontSize: 13, height: 1.6),
+                  color: AppTheme.slate300,
+                  fontSize: 13,
+                  height: 1.62,
+                ),
               ),
               SizedBox(height: 8),
               Text(
@@ -378,15 +503,20 @@ class _IntroScreenState extends State<IntroScreen> {
                 '강화하고, 모든 운영진이 여러분의 땀방울이 헛되지 않도록 최선을 '
                 '다하겠습니다. 부상 없는 즐거운 시즌이 되길 바랍니다.',
                 style: TextStyle(
-                    color: AppTheme.slate300, fontSize: 13, height: 1.6),
+                  color: AppTheme.slate300,
+                  fontSize: 13,
+                  height: 1.62,
+                ),
               ),
               SizedBox(height: 10),
               Align(
                 alignment: Alignment.centerRight,
                 child: Text('제46대 전국대학아마추어야구연합회장 정흥영',
                     style: TextStyle(
-                        color: AppTheme.slate500, fontSize: 12,
-                        fontWeight: FontWeight.w600)),
+                      color: AppTheme.slate500,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    )),
               ),
             ],
           ),
@@ -399,7 +529,7 @@ class _IntroScreenState extends State<IntroScreen> {
   Widget _buildHistorySection() {
     const milestones = [
       (
-        'Since 1981',
+        '1981',
         'Since 1981',
         '1981년 대학생들의 작은 교류전으로 출발해 45년을 이어온 '
             '국내 유일 순수 대학 아마추어 야구 리그.',
@@ -413,7 +543,7 @@ class _IntroScreenState extends State<IntroScreen> {
         AppTheme.purple500
       ),
       (
-        '2025→2026',
+        '2025-2026',
         '2025 → 2026',
         '2025년 아주대 주최 시즌을 지나 2026년에는 중앙대학교(서울)가 '
             '호스트를 맡아 8개 조 예선과 으뜸·버금 토너먼트로 리그를 운영합니다.',
@@ -428,49 +558,51 @@ class _IntroScreenState extends State<IntroScreen> {
         const SizedBox(height: 10),
         ...milestones.map((m) {
           final (year, title, desc, color) = m;
-          return Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppTheme.slate800,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: color.withValues(alpha: 0.2)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 56,
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(year,
-                      textAlign: TextAlign.center,
+          final accent = _mutedAccent(color, 0.3);
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _buildSurfaceCard(
+              borderColor: AppTheme.slate600,
+              borderOpacity: 0.55,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      year,
                       style: TextStyle(
-                          color: color,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700)),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 2),
-                      Text(desc,
-                          style: const TextStyle(
-                              color: AppTheme.slate400, fontSize: 12)),
-                    ],
+                        color: accent,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 9),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    desc,
+                    style: const TextStyle(
+                      color: AppTheme.slate400,
+                      fontSize: 12,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
         }),
@@ -493,36 +625,43 @@ class _IntroScreenState extends State<IntroScreen> {
         const SizedBox(height: 10),
         ...roles.map((r) {
           final (label, value, detail) = r;
-          return Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppTheme.slate800,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: AppTheme.slate700.withValues(alpha: 0.5)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _buildSurfaceCard(
+              borderColor: AppTheme.slate600,
+              borderOpacity: 0.55,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: _mutedAccent(AppTheme.green500, 0.35),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    value,
                     style: const TextStyle(
-                        color: AppTheme.green500,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.5)),
-                const SizedBox(height: 6),
-                Text(value,
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    detail,
                     style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700)),
-                const SizedBox(height: 4),
-                Text(detail,
-                    style: const TextStyle(
-                        color: AppTheme.slate400, fontSize: 12,
-                        height: 1.5)),
-              ],
+                      color: AppTheme.slate400,
+                      fontSize: 12,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
         }),
@@ -567,43 +706,32 @@ class _IntroScreenState extends State<IntroScreen> {
         const SizedBox(height: 10),
         ...cards.map((card) {
           final (title, points) = card;
-          return Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppTheme.slate800,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: AppTheme.slate700.withValues(alpha: 0.5)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _buildSurfaceCard(
+              borderColor: AppTheme.slate600,
+              borderOpacity: 0.55,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
                     style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700)),
-                const SizedBox(height: 8),
-                ...points.map((p) => Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('• ',
-                              style: TextStyle(
-                                  color: AppTheme.orange500, fontSize: 13)),
-                          Expanded(
-                            child: Text(p,
-                                style: const TextStyle(
-                                    color: AppTheme.slate300,
-                                    fontSize: 13,
-                                    height: 1.5)),
-                          ),
-                        ],
-                      ),
-                    )),
-              ],
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ...points.map((p) => Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: _buildBulletText(
+                          p,
+                          bulletColor: _mutedAccent(AppTheme.orange500, 0.28),
+                        ),
+                      )),
+                ],
+              ),
             ),
           );
         }),
@@ -615,7 +743,8 @@ class _IntroScreenState extends State<IntroScreen> {
   Widget _buildPostseason() {
     const blocks = [
       (
-        '으뜸 4강 (2026.01.25 예정)',
+        '으뜸 4강',
+        '2026.01.25 예정',
         [
           '세종대 Kings vs 경희대 국제 Lions',
           '연세대 Eagles vs 서울시립대 Falcons',
@@ -623,7 +752,8 @@ class _IntroScreenState extends State<IntroScreen> {
         AppTheme.amber400,
       ),
       (
-        '버금 4강 (2026.01.24 예정)',
+        '버금 4강',
+        '2026.01.24 예정',
         [
           '한국공학대 Winners vs 한국외대 글로벌 Union',
           '경희대 서울 Braves vs 인하대 Biryong',
@@ -639,40 +769,41 @@ class _IntroScreenState extends State<IntroScreen> {
             '2026 포스트시즌 스냅샷', Icons.military_tech, AppTheme.purple500),
         const SizedBox(height: 10),
         ...blocks.map((block) {
-          final (title, matchups, color) = block;
-          return Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.slate800,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                  color: color.withValues(alpha: 0.25)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
+          final (title, date, matchups, color) = block;
+          final accent = _mutedAccent(color, 0.28);
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _buildSurfaceCard(
+              padding: const EdgeInsets.all(16),
+              borderColor: AppTheme.slate600,
+              borderOpacity: 0.55,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
                     style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700)),
-                const SizedBox(height: 8),
-                ...matchups.map((m) => Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Row(
-                        children: [
-                          Text('• ',
-                              style: TextStyle(color: color, fontSize: 13)),
-                          Expanded(
-                            child: Text(m,
-                                style: const TextStyle(
-                                    color: AppTheme.slate300, fontSize: 13)),
-                          ),
-                        ],
-                      ),
-                    )),
-              ],
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    date,
+                    style: TextStyle(
+                      color: accent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ...matchups.map((m) => Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: _buildBulletText(m, bulletColor: accent),
+                      )),
+                ],
+              ),
             ),
           );
         }),
@@ -688,46 +819,52 @@ class _IntroScreenState extends State<IntroScreen> {
         _sectionTitle(
             '참가 팀 (${teamGroups.length}팀)', Icons.groups, AppTheme.blue400),
         const SizedBox(height: 10),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: teamGroups.map((entry) {
-            final color =
-                groupColors[entry.group] ?? AppTheme.blue400;
-            return Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppTheme.slate800,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                    color: color.withValues(alpha: 0.25)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
+        _buildSurfaceCard(
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: teamGroups.map((entry) {
+              final color = groupColors[entry.group] ?? AppTheme.blue400;
+              final accent = _mutedAccent(color, 0.25);
+              return Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.slate700.withValues(alpha: 0.28),
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(
+                      color: AppTheme.slate500.withValues(alpha: 0.24)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: accent,
+                        shape: BoxShape.circle,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(entry.name,
+                    const SizedBox(width: 6),
+                    Text(
+                      entry.name,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      '${entry.group}조',
                       style: const TextStyle(
-                          color: Colors.white, fontSize: 12)),
-                  const SizedBox(width: 4),
-                  Text('${entry.group}조',
-                      style: TextStyle(
-                          color: color,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600)),
-                ],
-              ),
-            );
-          }).toList(),
+                        color: AppTheme.slate400,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
         ),
       ],
     );

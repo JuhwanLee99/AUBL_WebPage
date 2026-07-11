@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../models/inquiry_post.dart';
 import '../models/match.dart';
 import '../models/match_state.dart';
 import '../models/notice.dart';
 import '../models/notice_comment.dart';
+import '../models/player_registration_post.dart';
 import '../models/team.dart';
 import '../models/team_member.dart';
 import '../models/team_notice.dart';
@@ -40,18 +42,12 @@ class FirestoreService {
         .where('startTime', isLessThan: '${dateStr}Z') // same-day range
         .get();
 
-    return snap.docs
-        .map(Match.fromFirestore)
-        .where((m) => !m.deleted)
-        .toList();
+    return snap.docs.map(Match.fromFirestore).where((m) => !m.deleted).toList();
   }
 
   Future<List<Match>> getAllMatches() async {
     final snap = await _db.collection('matches').orderBy('startTime').get();
-    return snap.docs
-        .map(Match.fromFirestore)
-        .where((m) => !m.deleted)
-        .toList();
+    return snap.docs.map(Match.fromFirestore).where((m) => !m.deleted).toList();
   }
 
   Future<List<Match>> getCompletedMatches() async {
@@ -60,10 +56,7 @@ class FirestoreService {
         .where('status', isEqualTo: 'completed')
         .orderBy('startTime', descending: true)
         .get();
-    return snap.docs
-        .map(Match.fromFirestore)
-        .where((m) => !m.deleted)
-        .toList();
+    return snap.docs.map(Match.fromFirestore).where((m) => !m.deleted).toList();
   }
 
   Future<List<Match>> getScheduledMatches() async {
@@ -72,10 +65,7 @@ class FirestoreService {
         .where('status', isEqualTo: 'scheduled')
         .orderBy('startTime')
         .get();
-    return snap.docs
-        .map(Match.fromFirestore)
-        .where((m) => !m.deleted)
-        .toList();
+    return snap.docs.map(Match.fromFirestore).where((m) => !m.deleted).toList();
   }
 
   Future<List<Match>> getMatchesByTeam(String teamName) async {
@@ -192,7 +182,10 @@ class FirestoreService {
   }
 
   Future<void> updateTeamInfo(String teamId, Map<String, dynamic> data) {
-    return _db.collection('teams').doc(teamId).set(data, SetOptions(merge: true));
+    return _db
+        .collection('teams')
+        .doc(teamId)
+        .set(data, SetOptions(merge: true));
   }
 
   // ────────────────────────────────────────────
@@ -278,6 +271,49 @@ class FirestoreService {
     return Notice.fromFirestore(doc);
   }
 
+  Future<void> addNotice({
+    required String title,
+    required String category,
+    required String content,
+    required String uid,
+    required String author,
+    bool isImportant = false,
+    bool allowComments = true,
+  }) {
+    return _db.collection('notices').add({
+      'title': title,
+      'category': category,
+      'content': content,
+      'uid': uid,
+      'author': author,
+      'createdAt': DateTime.now().millisecondsSinceEpoch,
+      'isImportant': isImportant,
+      'allowComments': allowComments,
+    });
+  }
+
+  Future<void> updateNotice({
+    required String noticeId,
+    required String title,
+    required String category,
+    required String content,
+    bool isImportant = false,
+    bool allowComments = true,
+  }) {
+    return _db.collection('notices').doc(noticeId).update({
+      'title': title,
+      'category': category,
+      'content': content,
+      'isImportant': isImportant,
+      'allowComments': allowComments,
+      'updatedAt': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  Future<void> deleteNotice(String noticeId) {
+    return _db.collection('notices').doc(noticeId).delete();
+  }
+
   Stream<List<NoticeComment>> watchNoticeComments(String noticeId) {
     return _db
         .collection('notices')
@@ -303,6 +339,99 @@ class FirestoreService {
         .collection('comments')
         .doc(commentId)
         .delete();
+  }
+
+  // ────────────────────────────────────────────
+  // Inquiries (건의/문의 게시판)
+  // ────────────────────────────────────────────
+
+  Future<List<InquiryPost>> getInquiries({int limit = 50}) async {
+    final snap = await _db
+        .collection('inquiries')
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .get();
+    return snap.docs.map(InquiryPost.fromFirestore).toList();
+  }
+
+  Future<InquiryPost?> getInquiry(String inquiryId) async {
+    final doc = await _db.collection('inquiries').doc(inquiryId).get();
+    if (!doc.exists) return null;
+    return InquiryPost.fromFirestore(doc);
+  }
+
+  Future<void> addInquiry(InquiryPost post) {
+    return _db.collection('inquiries').add(post.toFirestore());
+  }
+
+  Future<void> updateInquiry(String inquiryId, Map<String, dynamic> data) {
+    return _db.collection('inquiries').doc(inquiryId).update(data);
+  }
+
+  Future<void> deleteInquiry(String inquiryId) {
+    return _db.collection('inquiries').doc(inquiryId).delete();
+  }
+
+  Stream<List<InquiryComment>> watchInquiryComments(String inquiryId) {
+    return _db
+        .collection('inquiries')
+        .doc(inquiryId)
+        .collection('comments')
+        .orderBy('createdAt')
+        .snapshots()
+        .map((snap) => snap.docs.map(InquiryComment.fromFirestore).toList());
+  }
+
+  Future<void> addInquiryComment(String inquiryId, InquiryComment comment) {
+    return _db
+        .collection('inquiries')
+        .doc(inquiryId)
+        .collection('comments')
+        .add(comment.toFirestore());
+  }
+
+  Future<void> deleteInquiryComment(String inquiryId, String commentId) {
+    return _db
+        .collection('inquiries')
+        .doc(inquiryId)
+        .collection('comments')
+        .doc(commentId)
+        .delete();
+  }
+
+  // ────────────────────────────────────────────
+  // Player Registration Board
+  // ────────────────────────────────────────────
+
+  Future<List<PlayerRegistrationPost>> getPlayerRegistrationPosts(
+      {int limit = 50}) async {
+    final snap = await _db
+        .collection('playerRegistrationPosts')
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .get();
+    return snap.docs.map(PlayerRegistrationPost.fromFirestore).toList();
+  }
+
+  Future<PlayerRegistrationPost?> getPlayerRegistrationPost(
+      String postId) async {
+    final doc =
+        await _db.collection('playerRegistrationPosts').doc(postId).get();
+    if (!doc.exists) return null;
+    return PlayerRegistrationPost.fromFirestore(doc);
+  }
+
+  Future<void> addPlayerRegistrationPost(PlayerRegistrationPost post) {
+    return _db.collection('playerRegistrationPosts').add(post.toFirestore());
+  }
+
+  Future<void> updatePlayerRegistrationPost(
+      String postId, Map<String, dynamic> data) {
+    return _db.collection('playerRegistrationPosts').doc(postId).update(data);
+  }
+
+  Future<void> deletePlayerRegistrationPost(String postId) {
+    return _db.collection('playerRegistrationPosts').doc(postId).delete();
   }
 
   // ────────────────────────────────────────────
@@ -332,15 +461,25 @@ class FirestoreService {
     } catch (_) {}
 
     if (docs.isEmpty) {
+      // iOS에서 collectionGroup + documentId 동등 비교는 런타임 예외가 날 수 있어
+      // teams/*/members/{uid} 직접 조회로 fallback 한다.
       try {
-        final snap = await group
-            .where(FieldPath.documentId, isEqualTo: uid)
-            .limit(1)
-            .get();
-        docs = snap.docs;
+        final teams = await _db.collection('teams').get();
+        for (final team in teams.docs) {
+          final memberDoc =
+              await team.reference.collection('members').doc(uid).get();
+          if (!memberDoc.exists) continue;
+          final data = memberDoc.data();
+          if (data == null) continue;
+          return {
+            'teamId': team.id,
+            'role': data['role'] ?? 'player',
+          };
+        }
       } catch (_) {
-        return null;
+        // ignore
       }
+      return null;
     }
 
     if (docs.isEmpty) return null;

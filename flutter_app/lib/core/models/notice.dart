@@ -6,6 +6,7 @@ class Notice {
     required this.title,
     required this.category,
     required this.content,
+    this.uid = '',
     required this.author,
     required this.createdAt,
     this.isImportant = false,
@@ -16,6 +17,7 @@ class Notice {
   final String title;
   final String category; // 일반 | 징계 | 경기공지 | 긴급
   final String content;
+  final String uid;
   final String author;
   final int createdAt;
   final bool isImportant;
@@ -28,6 +30,7 @@ class Notice {
       title: d['title'] as String? ?? '',
       category: d['category'] as String? ?? '일반',
       content: d['content'] as String? ?? '',
+      uid: ((d['uid'] ?? d['authorUid']) as String?) ?? '',
       author: d['author'] as String? ?? '',
       createdAt: d['createdAt'] as int? ?? 0,
       isImportant: d['isImportant'] as bool? ?? false,
@@ -40,6 +43,7 @@ class Notice {
         title: d['title'] as String? ?? '',
         category: d['category'] as String? ?? '일반',
         content: d['content'] as String? ?? '',
+        uid: ((d['uid'] ?? d['authorUid']) as String?) ?? '',
         author: d['author'] as String? ?? '',
         createdAt: d['createdAt'] as int? ?? 0,
         isImportant: d['isImportant'] as bool? ?? false,
@@ -51,6 +55,7 @@ class Notice {
         'title': title,
         'category': category,
         'content': content,
+        'uid': uid,
         'author': author,
         'createdAt': createdAt,
         'isImportant': isImportant,

@@ -1,0 +1,5 @@
+# Copy to android/key.properties and fill values before release build.
+storePassword=YOUR_STORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=upload
+storeFile=../keystore/upload-keystore.jks

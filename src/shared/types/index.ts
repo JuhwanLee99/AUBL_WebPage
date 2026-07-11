@@ -60,13 +60,15 @@ export interface TeamSeasonRecord {
   players: PlayerSeasonStat[];
 }
 
-export type NoticeCategory = '일반' | '징계' | '경기공지' | '긴급';
+export type NoticeCategory = '일반' | '징계' | '경기공지' | '긴급' | '심판/기록원 모집';
 
 export interface Notice {
   id: string;
   title: string;
   category: NoticeCategory;
   content: string; // 간단한 텍스트 또는 HTML
+  uid?: string;
+  authorUid?: string;
   author: string;
   createdAt: number;
   isImportant?: boolean; // 긴급/중요 상단 고정용
@@ -114,6 +116,45 @@ export interface TeamNoticeComment {
   likeCount?: number;
 }
 
+export type InquiryPlatform = 'app' | 'web';
+export type InquiryCategory = '기능 개선' | '버그 신고' | '사용 문의' | '경기/기록 오류' | '기타';
+export type InquiryStatus = '미처리' | '처리 중' | '처리 완료';
+
+export interface InquiryPost {
+  id: string;
+  title: string;
+  content: string;
+  author: string;
+  uid: string;
+  platform: InquiryPlatform;
+  category: InquiryCategory;
+  isPrivate: boolean;
+  status: InquiryStatus;
+  createdAt: number;
+  updatedAt?: number;
+}
+
+export interface InquiryComment {
+  id: string;
+  content: string;
+  author: string;
+  uid: string;
+  createdAt: number;
+}
+
+export type PlayerRegistrationCategory = '선수 등록' | '유니폼 등록';
+
+export interface PlayerRegistrationPost {
+  id: string;
+  title: string;
+  content: string;
+  author: string;
+  uid: string;
+  category: PlayerRegistrationCategory;
+  createdAt: number;
+  updatedAt?: number;
+}
+
 export interface UserProfile {
   uid: string;
   email?: string | null;
@@ -122,4 +163,48 @@ export interface UserProfile {
   createdAt?: string | null;
   lastSignInAt?: string | null;
   updatedAt?: number | null;
+}
+
+export type ModerationAction = 'report' | 'block';
+
+export interface ModerationReportPayload {
+  action: ModerationAction;
+  reasonType: string;
+  reasonDetail: string;
+  targetUid: string;
+  targetLabel: string;
+  contentDomain: string;
+  contentId: string;
+  contentPreview: string;
+  parentContentId?: string;
+  contextId?: string;
+}
+
+export interface ModerationReport {
+  id: string;
+  action: ModerationAction;
+  reasonType: string;
+  reasonDetail?: string;
+  reporterUid: string;
+  reporterLabel?: string;
+  targetUid: string;
+  targetLabel: string;
+  contentDomain: string;
+  contentId: string;
+  contentPreview: string;
+  parentContentId?: string;
+  contextId?: string;
+  status: string;
+  createdAt: number;
+  reviewedAt?: number;
+  reviewedBy?: string;
+  reviewNote?: string;
+}
+
+export interface BlockedUserEntry {
+  uid: string;
+  label: string;
+  blockedAt: number;
+  lastReasonType?: string;
+  lastContentDomain?: string;
 }

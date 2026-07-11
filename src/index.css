@@ -1,3 +1,6 @@
+/* Quill rich text editor */
+@import 'quill/dist/quill.snow.css';
+
 /* Global base styles for the landing layout */
 * {
   box-sizing: border-box;
@@ -124,7 +127,7 @@ button:focus-visible {
 .landing-stack {
   display: flex;
   flex-direction: column;
-  gap: var(--section-gap);
+  gap: 32px;
 }
 
 .landing-hero {
@@ -279,6 +282,18 @@ button:focus-visible {
   transform: translate(-50%, 8px);
 }
 
+.team-hub-group-row {
+  grid-template-columns: 72px minmax(0, 1fr);
+}
+
+.team-hub-group-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.team-hub-group-card {
+  min-width: 0;
+}
+
 @media (max-width: 1024px) {
   :root {
     --page-padding: 32px 18px 64px;
@@ -306,6 +321,32 @@ button:focus-visible {
 
   .nav-scroll__rail {
     width: max-content;
+  }
+
+  .team-hub-group-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .team-hub-group-label {
+    padding-top: 0 !important;
+  }
+
+  .team-hub-group-track {
+    overflow-x: auto;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .team-hub-group-grid {
+    display: flex !important;
+    flex-wrap: nowrap;
+    width: max-content;
+  }
+
+  .team-hub-group-card {
+    flex: 0 0 clamp(220px, 68vw, 280px);
+    min-width: clamp(220px, 68vw, 280px);
   }
 }
 
@@ -335,6 +376,23 @@ button:focus-visible {
 
   .app-header__inner {
     align-items: flex-start;
+  }
+
+  .team-hub-group-track {
+    overflow-x: visible;
+    padding-bottom: 0;
+  }
+
+  .team-hub-group-grid {
+    display: grid !important;
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .team-hub-group-card {
+    flex: initial;
+    min-width: 0;
+    width: 100%;
   }
 }
 
@@ -471,6 +529,43 @@ button:focus-visible {
 
 .auth-google:hover {
   background: rgba(148, 163, 184, 0.2);
+  border-color: rgba(148, 163, 184, 0.5);
+}
+
+.auth-apple {
+  width: 100%;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  color: #e2e8f0;
+  font-weight: 800;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.auth-apple span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: #e2e8f0;
+}
+
+.auth-apple__icon svg {
+  width: 14px;
+  height: 14px;
+  fill: #0f172a;
+}
+
+.auth-apple:hover {
+  background: rgba(15, 23, 42, 0.95);
   border-color: rgba(148, 163, 184, 0.5);
 }
 

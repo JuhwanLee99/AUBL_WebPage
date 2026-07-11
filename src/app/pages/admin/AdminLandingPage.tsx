@@ -34,12 +34,11 @@ const serialize = {
 };
 
 export default function AdminLandingPage() {
-  const { content, updateContent } = useContent();
+  const { updateContent, content } = useContent();
   const landing = content.landing;
 
   const [status, setStatus] = useState<string | null>(null);
 
-  const [tickerDraft, setTickerDraft] = useState(content.tickerItems.join('\n'));
   const [heroEyebrow, setHeroEyebrow] = useState(landing.heroEyebrow);
   const [heroBadgeText, setHeroBadgeText] = useState(landing.heroBadgeText);
   const [heroTitle, setHeroTitle] = useState(landing.heroTitle);
@@ -51,7 +50,6 @@ export default function AdminLandingPage() {
 
   useEffect(() => {
     const syncDraft = () => {
-      setTickerDraft(content.tickerItems.join('\n'));
       setHeroEyebrow(landing.heroEyebrow);
       setHeroBadgeText(landing.heroBadgeText);
       setHeroTitle(landing.heroTitle);
@@ -62,17 +60,7 @@ export default function AdminLandingPage() {
       setSeasonHighlightsDraft(serialize.seasonHighlights(landing.seasonHighlights));
     };
     queueMicrotask(syncDraft);
-  }, [content.tickerItems, landing]);
-
-  const saveTicker = () => {
-    updateContent({
-      tickerItems: tickerDraft
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean),
-    });
-    setStatus('LIVE INFO를 저장했습니다.');
-  };
+  }, [landing]);
 
   const saveLanding = () => {
     const valueProps = valuePropsDraft
@@ -127,17 +115,6 @@ export default function AdminLandingPage() {
           {status}
         </div>
       )}
-
-      <section style={cardStyle}>
-        <h3 style={{ margin: '0 0 10px', color: '#e2e8f0' }}>LIVE INFO</h3>
-        <label style={labelStyle}>한 줄당 한 항목</label>
-        <textarea style={{ ...inputStyle, minHeight: '110px', fontFamily: 'inherit' }} value={tickerDraft} onChange={(e) => setTickerDraft(e.target.value)} />
-        <div style={{ marginTop: '10px' }}>
-          <button type="button" onClick={saveTicker} style={{ ...inputStyle, width: 'auto', cursor: 'pointer', fontWeight: 800 }}>
-            LIVE INFO 저장
-          </button>
-        </div>
-      </section>
 
       <section style={cardStyle}>
         <h3 style={{ margin: '0 0 10px', color: '#e2e8f0' }}>랜딩 정적 콘텐츠</h3>

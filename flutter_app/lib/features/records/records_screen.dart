@@ -1,182 +1,803 @@
 import 'package:flutter/material.dart';
 
+import '../../core/services/backend_api_service.dart';
 import '../../core/theme/app_theme.dart';
+import 'player_detail_screen.dart';
+import 'records_filter_state.dart';
+import 'records_view_model.dart';
 
-// ── Mock 타자 데이터 (웹과 동일) ──
-class _BatterStat {
-  const _BatterStat({
-    required this.name, required this.team, required this.year,
-    required this.avg, required this.obp, required this.slg,
-    required this.ops, required this.hr, required this.rbi,
-    required this.sb, required this.war,
-  });
-  final String name, team;
-  final int year, hr, rbi, sb;
-  final double avg, obp, slg, ops, war;
+part 'records_screen_sections.dart';
+
+enum RecordsHubTab {
+  overview('개요'),
+  standings('팀순위'),
+  pitchers('투수기록'),
+  batters('타자기록'),
+  power('파워랭킹'),
+  playerDetail('선수상세');
+
+  const RecordsHubTab(this.label);
+  final String label;
 }
-
-const _batterStats = [
-  _BatterStat(name:'서준호',team:'한양대 불새',year:2024,avg:.385,obp:.462,slg:.654,ops:1.116,hr:5,rbi:28,sb:12,war:4.2),
-  _BatterStat(name:'김하늘',team:'연세대 EAGLES',year:2024,avg:.367,obp:.441,slg:.600,ops:1.041,hr:4,rbi:22,sb:8,war:3.8),
-  _BatterStat(name:'전유진',team:'고려대 백구회',year:2024,avg:.350,obp:.420,slg:.550,ops:.970,hr:3,rbi:19,sb:15,war:3.5),
-  _BatterStat(name:'윤태훈',team:'중앙대 랑데뷰',year:2024,avg:.340,obp:.405,slg:.520,ops:.925,hr:2,rbi:17,sb:20,war:3.2),
-  _BatterStat(name:'박민수',team:'성균관대 킹고야구반',year:2024,avg:.332,obp:.398,slg:.500,ops:.898,hr:2,rbi:15,sb:6,war:2.9),
-  _BatterStat(name:'강건우',team:'서강대 알바트로스',year:2024,avg:.328,obp:.390,slg:.480,ops:.870,hr:1,rbi:14,sb:10,war:2.7),
-  _BatterStat(name:'박지온',team:'한국외대 야구부',year:2024,avg:.310,obp:.375,slg:.460,ops:.835,hr:1,rbi:12,sb:5,war:2.4),
-  _BatterStat(name:'정재원',team:'한양대 불새',year:2023,avg:.372,obp:.450,slg:.620,ops:1.070,hr:4,rbi:25,sb:10,war:4.0),
-  _BatterStat(name:'신지환',team:'연세대 EAGLES',year:2023,avg:.355,obp:.430,slg:.580,ops:1.010,hr:3,rbi:20,sb:14,war:3.6),
-  _BatterStat(name:'김세인',team:'고려대 백구회',year:2023,avg:.340,obp:.410,slg:.540,ops:.950,hr:2,rbi:18,sb:9,war:3.3),
-];
-
-// ── Mock 투수 데이터 ──
-class _PitcherStat {
-  const _PitcherStat({
-    required this.name, required this.team, required this.year,
-    required this.era, required this.ip, required this.whip,
-    required this.so, required this.bb, required this.sv,
-    required this.war,
-  });
-  final String name, team;
-  final int year, so, bb, sv;
-  final double era, ip, whip, war;
-  double get kbb => bb > 0 ? so / bb : 0;
-}
-
-const _pitcherStats = [
-  _PitcherStat(name:'임동현',team:'한양대 불새',year:2024,era:1.25,ip:50.1,whip:0.89,so:62,bb:12,sv:0,war:4.5),
-  _PitcherStat(name:'이도현',team:'연세대 EAGLES',year:2024,era:1.80,ip:45.0,whip:0.95,so:55,bb:14,sv:2,war:3.9),
-  _PitcherStat(name:'최민재',team:'고려대 백구회',year:2024,era:2.10,ip:42.2,whip:1.02,so:48,bb:10,sv:1,war:3.5),
-  _PitcherStat(name:'이수안',team:'성균관대 킹고야구반',year:2024,era:2.45,ip:40.0,whip:1.10,so:42,bb:15,sv:0,war:3.0),
-  _PitcherStat(name:'강현우',team:'중앙대 랑데뷰',year:2024,era:2.80,ip:38.1,whip:1.15,so:38,bb:12,sv:3,war:2.7),
-  _PitcherStat(name:'문하림',team:'한양대 불새',year:2023,era:1.50,ip:48.0,whip:0.92,so:58,bb:11,sv:1,war:4.2),
-  _PitcherStat(name:'임동현',team:'한양대 불새',year:2023,era:1.90,ip:42.2,whip:0.98,so:50,bb:13,sv:0,war:3.7),
-  _PitcherStat(name:'마준호',team:'연세대 EAGLES',year:2023,era:2.20,ip:40.1,whip:1.05,so:45,bb:14,sv:2,war:3.3),
-  _PitcherStat(name:'한지훈',team:'고려대 백구회',year:2023,era:2.60,ip:38.0,whip:1.12,so:40,bb:16,sv:0,war:2.8),
-];
 
 class RecordsScreen extends StatefulWidget {
-  const RecordsScreen({super.key});
+  const RecordsScreen({
+    super.key,
+    this.initialTab = RecordsHubTab.overview,
+    this.apiService,
+  });
+
+  final RecordsHubTab initialTab;
+  final BackendApiService? apiService;
 
   @override
-  State<RecordsScreen> createState() => _RecordsScreenState();
+  RecordsScreenState createState() => RecordsScreenState();
 }
 
-class _RecordsScreenState extends State<RecordsScreen>
+class RecordsScreenState extends State<RecordsScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabCtrl;
-  int _selectedYear = 2024;
-  String _searchQuery = '';
+  late final BackendApiService _api;
+  late final RecordsViewModel _viewModel;
+  late final bool _ownsApi;
+
+  List<SeasonSummary> _seasons = [];
+  int? _seasonId;
+
+  RecordsFilterState _filters = const RecordsFilterState();
+
+  bool _initializing = true;
+  bool _loading = false;
+  bool _powerLoading = false;
+  String? _error;
+  String? _warning;
+  String? _powerError;
+  bool _playoffFilterEnabled = false;
+  RecordFilterOptions? _recordFilterOptions;
+
+  RecordsOverview? _overview;
+  List<TeamRecordStanding> _teamStandings = [];
+  List<BatterRanking> _batters = [];
+  List<PitcherRanking> _pitchers = [];
+  List<BatterRanking> _topInBatters = [];
+  List<PitcherRanking> _topInPitchers = [];
+  List<PlayoffSummaryRow> _playoffRows = [];
+  List<PowerRankingApiRow> _powerRows = [];
 
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 2, vsync: this);
+    _api = widget.apiService ?? BackendApiService();
+    _viewModel = RecordsViewModel(dataSource: BackendRecordsDataSource(_api));
+    _ownsApi = widget.apiService == null;
+    _tabCtrl = TabController(
+      length: RecordsHubTab.values.length,
+      vsync: this,
+      initialIndex: widget.initialTab.index,
+    )..addListener(_onTabChanged);
+
+    _loadInitial();
   }
 
   @override
   void dispose() {
+    _tabCtrl.removeListener(_onTabChanged);
     _tabCtrl.dispose();
+    if (_ownsApi) {
+      _api.dispose();
+    }
     super.dispose();
+  }
+
+  void switchToTabIndex(int index) {
+    if (index < 0 || index >= RecordsHubTab.values.length) return;
+    _tabCtrl.animateTo(index);
+  }
+
+  void _onTabChanged() {
+    if (_tabCtrl.indexIsChanging) return;
+    if (_tabCtrl.index == RecordsHubTab.power.index &&
+        _powerRows.isEmpty &&
+        !_powerLoading) {
+      _loadPowerRankings();
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _setState(VoidCallback fn) {
+    if (!mounted) return;
+    setState(fn);
+  }
+
+  List<RecordScope> get _scopeOptions {
+    final scopes =
+        _recordFilterOptions?.scopes.toSet().toList() ?? <RecordScope>[];
+    final normalized = scopes.isEmpty
+        ? [RecordScope.all, RecordScope.league, RecordScope.playoff]
+        : scopes;
+    final output = <RecordScope>[RecordScope.all];
+    if (normalized.contains(RecordScope.league)) {
+      output.add(RecordScope.league);
+    }
+    if (_playoffFilterEnabled && normalized.contains(RecordScope.playoff)) {
+      output.add(RecordScope.playoff);
+    }
+    return output;
+  }
+
+  List<RecordGroup> get _groupOptions {
+    final groups = _recordFilterOptions?.groups
+            .map((item) => item.group)
+            .toSet()
+            .toList() ??
+        <RecordGroup>[];
+    if (groups.isEmpty) {
+      return const [
+        RecordGroup.all,
+        RecordGroup.a,
+        RecordGroup.b,
+        RecordGroup.c,
+        RecordGroup.d,
+        RecordGroup.e,
+        RecordGroup.f,
+        RecordGroup.g,
+        RecordGroup.h,
+      ];
+    }
+    final sorted = [...groups]..sort((a, b) => a.wire.compareTo(b.wire));
+    return [RecordGroup.all, ...sorted];
+  }
+
+  List<RecordPlayoffDivision> get _playoffDivisionOptions {
+    final divisions = _recordFilterOptions?.playoffDivisions.toSet().toList() ??
+        <RecordPlayoffDivision>[];
+    if (divisions.isEmpty) {
+      return const [
+        RecordPlayoffDivision.all,
+        RecordPlayoffDivision.eutteum,
+        RecordPlayoffDivision.beogeum,
+      ];
+    }
+    final sorted = [...divisions]..sort((a, b) => a.wire.compareTo(b.wire));
+    return [RecordPlayoffDivision.all, ...sorted];
+  }
+
+  List<RecordRegulation> get _regulationOptions {
+    final regulations = _recordFilterOptions?.regulations.toSet().toList() ??
+        <RecordRegulation>[];
+    if (regulations.isEmpty) {
+      return const [RecordRegulation.inRule, RecordRegulation.out];
+    }
+    final sorted = [...regulations]..sort((a, b) => a.wire.compareTo(b.wire));
+    return sorted;
+  }
+
+  List<_SortItem<BatterRankingSort>> get _batterSortItems {
+    final items = _recordFilterOptions?.batterSortOptions ?? const [];
+    final normalized = items.isEmpty
+        ? const [
+            BatterRankingSort.battingAverage,
+            BatterRankingSort.ops,
+            BatterRankingSort.onBasePct,
+            BatterRankingSort.sluggingPct,
+            BatterRankingSort.hits,
+            BatterRankingSort.homeRuns,
+            BatterRankingSort.rbi,
+            BatterRankingSort.gamesPlayed,
+            BatterRankingSort.plateAppearance,
+            BatterRankingSort.stolenBases,
+          ]
+        : items;
+    return normalized
+        .map((item) => _SortItem<BatterRankingSort>(
+            value: item, label: _batterSortLabel(item)))
+        .toList();
+  }
+
+  List<_SortItem<PitcherRankingSort>> get _pitcherSortItems {
+    final items = _recordFilterOptions?.pitcherSortOptions ?? const [];
+    final normalized = items.isEmpty
+        ? const [
+            PitcherRankingSort.era,
+            PitcherRankingSort.whip,
+            PitcherRankingSort.strikeouts,
+            PitcherRankingSort.wins,
+            PitcherRankingSort.saves,
+            PitcherRankingSort.inningsPitched,
+            PitcherRankingSort.walksAllowed,
+            PitcherRankingSort.gamesPlayed,
+          ]
+        : items;
+    return normalized
+        .map((item) => _SortItem<PitcherRankingSort>(
+            value: item, label: _pitcherSortLabel(item)))
+        .toList();
+  }
+
+  String _scopeText(RecordScope value) {
+    switch (value) {
+      case RecordScope.all:
+        return '전체';
+      case RecordScope.league:
+        return '리그';
+      case RecordScope.playoff:
+        return '플레이오프';
+    }
+  }
+
+  String _groupText(RecordGroup value) {
+    if (value == RecordGroup.all) return '전체조';
+    return '${value.wire}조';
+  }
+
+  String _playoffDivisionText(RecordPlayoffDivision value) {
+    switch (value) {
+      case RecordPlayoffDivision.all:
+        return '전체';
+      case RecordPlayoffDivision.eutteum:
+        return '으뜸';
+      case RecordPlayoffDivision.beogeum:
+        return '버금';
+    }
+  }
+
+  String _batterSortLabel(BatterRankingSort value) {
+    switch (value) {
+      case BatterRankingSort.battingAverage:
+        return 'AVG';
+      case BatterRankingSort.hits:
+        return 'H';
+      case BatterRankingSort.homeRuns:
+        return 'HR';
+      case BatterRankingSort.rbi:
+        return 'RBI';
+      case BatterRankingSort.onBasePct:
+        return 'OBP';
+      case BatterRankingSort.sluggingPct:
+        return 'SLG';
+      case BatterRankingSort.ops:
+        return 'OPS';
+      case BatterRankingSort.gamesPlayed:
+        return 'G';
+      case BatterRankingSort.plateAppearance:
+        return 'PA';
+      case BatterRankingSort.stolenBases:
+        return 'SB';
+    }
+  }
+
+  String _pitcherSortLabel(PitcherRankingSort value) {
+    switch (value) {
+      case PitcherRankingSort.era:
+        return 'ERA';
+      case PitcherRankingSort.whip:
+        return 'WHIP';
+      case PitcherRankingSort.strikeouts:
+        return 'K';
+      case PitcherRankingSort.wins:
+        return 'W';
+      case PitcherRankingSort.saves:
+        return 'SV';
+      case PitcherRankingSort.inningsPitched:
+        return 'IP';
+      case PitcherRankingSort.walksAllowed:
+        return 'BB';
+      case PitcherRankingSort.gamesPlayed:
+        return 'G';
+    }
+  }
+
+  RecordsFilterState _normalizeFiltersForOptions(
+    RecordsFilterState current,
+    RecordFilterOptions? options,
+  ) {
+    var next = current;
+
+    final optionScopes = options?.scopes.toSet().toList() ?? <RecordScope>[];
+    final allowedScopes = optionScopes.isEmpty
+        ? [RecordScope.all, RecordScope.league, RecordScope.playoff]
+        : [
+            RecordScope.all,
+            if (optionScopes.contains(RecordScope.league)) RecordScope.league,
+            if (optionScopes.contains(RecordScope.playoff) &&
+                _playoffFilterEnabled)
+              RecordScope.playoff,
+          ];
+    if (!allowedScopes.contains(next.scope)) {
+      next = next.copyWith(scope: allowedScopes.first);
+    }
+
+    final optionGroups =
+        options?.groups.map((item) => item.group).toSet().toList() ??
+            <RecordGroup>[];
+    final allowedGroups = optionGroups.isEmpty
+        ? const [
+            RecordGroup.all,
+            RecordGroup.a,
+            RecordGroup.b,
+            RecordGroup.c,
+            RecordGroup.d,
+            RecordGroup.e,
+            RecordGroup.f,
+            RecordGroup.g,
+            RecordGroup.h,
+          ]
+        : [RecordGroup.all, ...optionGroups];
+    if (!allowedGroups.contains(next.group)) {
+      next = next.copyWith(group: RecordGroup.all);
+    }
+
+    final optionDivisions =
+        options?.playoffDivisions.toSet().toList() ?? <RecordPlayoffDivision>[];
+    final allowedDivisions = optionDivisions.isEmpty
+        ? const [
+            RecordPlayoffDivision.all,
+            RecordPlayoffDivision.eutteum,
+            RecordPlayoffDivision.beogeum
+          ]
+        : [RecordPlayoffDivision.all, ...optionDivisions];
+    if (!allowedDivisions.contains(next.playoffDivision)) {
+      next = next.copyWith(playoffDivision: RecordPlayoffDivision.all);
+    }
+    if (next.scope != RecordScope.playoff &&
+        next.playoffDivision != RecordPlayoffDivision.all) {
+      next = next.copyWith(playoffDivision: RecordPlayoffDivision.all);
+    }
+
+    final allowedRegulations = options?.regulations.toSet().toList() ??
+        const [RecordRegulation.inRule, RecordRegulation.out];
+    if (!allowedRegulations.contains(next.regulation)) {
+      final fallback = options?.defaultRegulation ??
+          (allowedRegulations.isEmpty
+              ? RecordRegulation.inRule
+              : allowedRegulations.first);
+      next = next.copyWith(regulation: fallback);
+    }
+
+    final allowedBatterSorts = (options?.batterSortOptions ??
+            const [
+              BatterRankingSort.battingAverage,
+              BatterRankingSort.ops,
+              BatterRankingSort.onBasePct,
+              BatterRankingSort.sluggingPct,
+              BatterRankingSort.hits,
+              BatterRankingSort.homeRuns,
+              BatterRankingSort.rbi,
+              BatterRankingSort.gamesPlayed,
+              BatterRankingSort.plateAppearance,
+              BatterRankingSort.stolenBases,
+            ])
+        .toSet();
+    if (!allowedBatterSorts.contains(next.topBatterSort)) {
+      next = next.copyWith(topBatterSort: allowedBatterSorts.first);
+    }
+
+    final allowedPitcherSorts = (options?.pitcherSortOptions ??
+            const [
+              PitcherRankingSort.era,
+              PitcherRankingSort.whip,
+              PitcherRankingSort.strikeouts,
+              PitcherRankingSort.wins,
+              PitcherRankingSort.saves,
+              PitcherRankingSort.inningsPitched,
+              PitcherRankingSort.walksAllowed,
+              PitcherRankingSort.gamesPlayed,
+            ])
+        .toSet();
+    if (!allowedPitcherSorts.contains(next.topPitcherSort)) {
+      next = next.copyWith(topPitcherSort: allowedPitcherSorts.first);
+    }
+
+    return next;
+  }
+
+  Future<void> _loadInitial() async {
+    setState(() {
+      _initializing = true;
+      _error = null;
+    });
+
+    try {
+      final seasons = await _viewModel.loadSeasons();
+      if (!mounted) return;
+      if (seasons.isEmpty) {
+        setState(() {
+          _seasons = [];
+          _error = '등록된 시즌이 없습니다.';
+          _initializing = false;
+        });
+        return;
+      }
+
+      final selectedSeasonId = seasons.first.id;
+      final selectedSeason = seasons.first;
+      setState(() {
+        _seasons = seasons;
+        _seasonId = selectedSeasonId;
+        _filters = _filters.copyWith(rankingYear: selectedSeason.year + 1);
+        _initializing = false;
+      });
+
+      await _loadFilterOptions(selectedSeasonId);
+      await _reloadRecords();
+    } catch (err) {
+      if (!mounted) return;
+      setState(() {
+        _error = err.toString();
+        _initializing = false;
+      });
+    }
+  }
+
+  Future<void> _loadFilterOptions(int seasonId) async {
+    try {
+      final options = await _api.getRecordFilterOptions(seasonId);
+      if (!mounted) return;
+      final nextFilters = _normalizeFiltersForOptions(_filters, options);
+      setState(() {
+        _recordFilterOptions = options;
+        _filters = nextFilters;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _recordFilterOptions = null;
+      });
+    }
+  }
+
+  Future<void> _changeSeason(int seasonId, SeasonSummary fallbackSeason) async {
+    if (seasonId == _seasonId) return;
+    final nextSeason = _seasons.firstWhere(
+      (e) => e.id == seasonId,
+      orElse: () => fallbackSeason,
+    );
+    setState(() {
+      _seasonId = seasonId;
+      _recordFilterOptions = null;
+      _filters = _filters.copyWith(
+        rankingYear: _filters.rankingYear ?? (nextSeason.year + 1),
+      );
+    });
+    await _loadFilterOptions(seasonId);
+    await _reloadRecords();
+  }
+
+  Future<void> _reloadRecords() async {
+    final seasonId = _seasonId;
+    if (seasonId == null) return;
+
+    setState(() {
+      _loading = true;
+      _error = null;
+      _warning = null;
+    });
+
+    final result = await _viewModel.reloadRecords(
+      RecordsReloadRequest(
+        seasonId: seasonId,
+        scope: _filters.scope,
+        group: _filters.group,
+        playoffDivision: _filters.playoffDivision,
+        regulation: _filters.regulation,
+        searchQuery: _filters.searchQuery,
+        topBatterSort: _filters.topBatterSort,
+        topPitcherSort: _filters.topPitcherSort,
+      ),
+    );
+    if (!mounted) return;
+
+    if (result.hasError) {
+      setState(() {
+        _loading = false;
+        _error = result.errorMessage;
+      });
+      return;
+    }
+
+    setState(() {
+      _overview = result.overview;
+      _teamStandings = result.teamStandings;
+      _batters = result.batters;
+      _pitchers = result.pitchers;
+      _topInBatters = result.topInBatters;
+      _topInPitchers = result.topInPitchers;
+      _playoffRows = result.playoffRows;
+      _playoffFilterEnabled = result.playoffFilterEnabled;
+      _warning = result.warningMessage;
+      _loading = false;
+    });
+
+    if (!result.playoffFilterEnabled && _filters.scope == RecordScope.playoff) {
+      setState(() {
+        _filters = _filters.copyWith(
+          scope: RecordScope.all,
+          playoffDivision: RecordPlayoffDivision.all,
+        );
+      });
+      await _reloadRecords();
+      return;
+    }
+
+    if (_tabCtrl.index == RecordsHubTab.power.index) {
+      await _loadPowerRankings();
+    }
+  }
+
+  Future<void> _loadPowerRankings() async {
+    final rankingYear = _filters.rankingYear;
+    if (rankingYear == null || rankingYear <= 0) return;
+
+    setState(() {
+      _powerLoading = true;
+      _powerError = null;
+    });
+
+    try {
+      final rows = await _viewModel.loadPowerRankings(
+        rankingYear: rankingYear,
+        limit: _filters.powerLimit,
+      );
+      if (!mounted) return;
+      setState(() {
+        _powerRows = rows;
+        _powerLoading = false;
+      });
+    } catch (err) {
+      if (!mounted) return;
+      setState(() {
+        _powerRows = [];
+        _powerError = err.toString();
+        _powerLoading = false;
+      });
+    }
+  }
+
+  void _openPlayerDetail({int? playerId}) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PlayerDetailScreen(
+          initialPlayerId: playerId,
+          initialSeasonId: _seasonId,
+          apiService: _api,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // 리그 요약 통계 계산
-    final batters = _batterStats.where((s) => s.year == _selectedYear).toList();
-    final pitchers = _pitcherStats.where((s) => s.year == _selectedYear).toList();
-    final avgOps = batters.isEmpty
-        ? 0.0
-        : batters.fold<double>(0, (s, b) => s + b.ops) / batters.length;
-    final avgEra = pitchers.isEmpty
-        ? 0.0
-        : pitchers.fold<double>(0, (s, p) => s + p.era) / pitchers.length;
-    final totalSb = batters.fold<int>(0, (s, b) => s + b.sb);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('기록'),
-        actions: [
-          DropdownButton<int>(
-            value: _selectedYear,
-            dropdownColor: AppTheme.slate700,
-            underline: const SizedBox.shrink(),
-            style: const TextStyle(color: Colors.white, fontSize: 14),
-            items: [2024, 2023]
-                .map((y) => DropdownMenuItem(value: y, child: Text('$y')))
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(kTextTabBarHeight),
+          child: TabBar(
+            controller: _tabCtrl,
+            isScrollable: false,
+            labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+            tabs: RecordsHubTab.values
+                .map((tab) => Tab(text: tab.label))
                 .toList(),
-            onChanged: (v) {
-              if (v != null) setState(() => _selectedYear = v);
-            },
           ),
-          const SizedBox(width: 8),
-        ],
-        bottom: TabBar(
-          controller: _tabCtrl,
-          tabs: const [Tab(text: '타자'), Tab(text: '투수')],
         ),
       ),
-      body: Column(
+      body: _initializing
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                if (_tabCtrl.index != RecordsHubTab.playerDetail.index)
+                  _buildFilterBar(),
+                if (_loading) const LinearProgressIndicator(minHeight: 1),
+                if (_error != null)
+                  _Banner(
+                    icon: Icons.error_outline,
+                    color: AppTheme.red500,
+                    text: _error!,
+                  ),
+                if (_warning != null)
+                  _Banner(
+                    icon: Icons.warning_amber_rounded,
+                    color: AppTheme.orange500,
+                    text: _warning!,
+                  ),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabCtrl,
+                    children: [
+                      _buildOverviewTab(),
+                      _buildStandingsTab(),
+                      _buildPitchersTab(),
+                      _buildBattersTab(),
+                      _buildPowerTab(),
+                      PlayerDetailScreen(
+                        key: ValueKey<int?>(_seasonId),
+                        initialSeasonId: _seasonId,
+                        apiService: _api,
+                        embedded: true,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+class _Banner extends StatelessWidget {
+  const _Banner({
+    required this.icon,
+    required this.color,
+    required this.text,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.45)),
+      ),
+      child: Row(
         children: [
-          // ── 검색 + 리그 요약 ──
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-            child: TextField(
-              decoration: const InputDecoration(
-                hintText: '선수명 또는 팀명 검색...',
-                prefixIcon: Icon(Icons.search),
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              ),
-              onChanged: (v) => setState(() => _searchQuery = v),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-            child: Row(
-              children: [
-                _metricChip('AVG ERA', avgEra.toStringAsFixed(2),
-                    AppTheme.orange500),
-                const SizedBox(width: 8),
-                _metricChip('AVG OPS', avgOps.toStringAsFixed(3),
-                    AppTheme.blue400),
-                const SizedBox(width: 8),
-                _metricChip('SB', '$totalSb', AppTheme.green500),
-              ],
-            ),
-          ),
-          // ── 테이블 ──
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: 8),
           Expanded(
-            child: TabBarView(
-              controller: _tabCtrl,
-              children: [
-                _BatterTable(year: _selectedYear, search: _searchQuery),
-                _PitcherTable(year: _selectedYear, search: _searchQuery),
-              ],
+            child: Text(
+              text,
+              style: TextStyle(color: color, fontSize: 12),
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _metricChip(String label, String value, Color color) {
+class _FilterDropdown<T> extends StatelessWidget {
+  const _FilterDropdown({
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+    this.enabled = true,
+    this.width = 150,
+  });
+
+  final String label;
+  final T? value;
+  final List<DropdownMenuItem<T>> items;
+  final ValueChanged<T?> onChanged;
+  final bool enabled;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      child: DropdownButtonFormField<T>(
+        key: ValueKey<Object?>(value),
+        isExpanded: true,
+        initialValue: value,
+        decoration: InputDecoration(
+          isDense: true,
+          labelText: label,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        items: items,
+        onChanged: enabled ? onChanged : null,
+      ),
+    );
+  }
+}
+
+class _RegulationFilter extends StatelessWidget {
+  const _RegulationFilter({
+    required this.value,
+    required this.available,
+    required this.onChanged,
+  });
+
+  final RecordRegulation value;
+  final List<RecordRegulation> available;
+  final ValueChanged<RecordRegulation> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final options = available.isEmpty
+        ? const [RecordRegulation.inRule, RecordRegulation.out]
+        : available;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppTheme.slate700),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        children: options
+            .map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: _regButton(
+                  label: item == RecordRegulation.out ? 'OUT' : 'IN',
+                  active: value == item,
+                  onTap: () => onChanged(item),
+                ),
+              ),
+            )
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _regButton(
+      {required String label,
+      required bool active,
+      required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          color: active
+              ? AppTheme.blue500.withValues(alpha: 0.22)
+              : Colors.transparent,
+          border:
+              Border.all(color: active ? AppTheme.blue400 : AppTheme.slate700),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: active ? AppTheme.blue400 : AppTheme.slate300,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  const _MetricCard({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 168,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.slate700),
+        color: AppTheme.slate800.withValues(alpha: 0.35),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label,
-              style: TextStyle(
-                  color: color, fontSize: 10, fontWeight: FontWeight.w700)),
-          const SizedBox(width: 6),
+              style: const TextStyle(
+                  color: AppTheme.slate400,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
           Text(value,
               style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 13,
+                  fontSize: 20,
                   fontWeight: FontWeight.w800)),
         ],
       ),
@@ -184,193 +805,216 @@ class _RecordsScreenState extends State<RecordsScreen>
   }
 }
 
-class _BatterTable extends StatelessWidget {
-  const _BatterTable({required this.year, this.search = ''});
-  final int year;
-  final String search;
+class _Card extends StatelessWidget {
+  const _Card({required this.title, required this.child, this.hint});
+
+  final String title;
+  final Widget child;
+  final String? hint;
 
   @override
   Widget build(BuildContext context) {
-    final q = search.toLowerCase();
-    final stats = _batterStats
-        .where((s) =>
-            s.year == year &&
-            (q.isEmpty ||
-                s.name.toLowerCase().contains(q) ||
-                s.team.toLowerCase().contains(q)))
-        .toList()
-      ..sort((a, b) {
-        final c = b.ops.compareTo(a.ops);
-        return c != 0 ? c : b.war.compareTo(a.war);
-      });
-
-    if (stats.isEmpty) {
-      return const Center(
-        child: Text('해당 시즌 데이터가 없습니다.',
-            style: TextStyle(color: AppTheme.slate500)),
-      );
-    }
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: SingleChildScrollView(
-        child: DataTable(
-          headingRowColor: WidgetStateProperty.all(AppTheme.slate800),
-          columnSpacing: 14,
-          dataRowMinHeight: 36,
-          dataRowMaxHeight: 40,
-          columns: const [
-            DataColumn(label: Text('#', style: _headerStyle)),
-            DataColumn(label: Text('이름', style: _headerStyle)),
-            DataColumn(label: Text('팀', style: _headerStyle)),
-            DataColumn(label: Text('AVG', style: _headerStyle), numeric: true),
-            DataColumn(label: Text('OBP', style: _headerStyle), numeric: true),
-            DataColumn(label: Text('SLG', style: _headerStyle), numeric: true),
-            DataColumn(label: Text('OPS', style: _headerStyle), numeric: true),
-            DataColumn(label: Text('HR', style: _headerStyle), numeric: true),
-            DataColumn(label: Text('RBI', style: _headerStyle), numeric: true),
-            DataColumn(label: Text('SB', style: _headerStyle), numeric: true),
-            DataColumn(label: Text('WAR', style: _headerStyle), numeric: true),
-          ],
-          rows: List.generate(stats.length, (i) {
-            final s = stats[i];
-            final isTop3 = i < 3;
-            final rowColor = isTop3
-                ? AppTheme.blue500.withValues(alpha: 0.08)
-                : Colors.transparent;
-
-            return DataRow(
-              color: WidgetStateProperty.all(rowColor),
-              cells: [
-                DataCell(Text('${i + 1}', style: _cellStyle)),
-                DataCell(Text(s.name,
-                    style: _cellStyle.copyWith(fontWeight: FontWeight.w500))),
-                DataCell(Text(s.team,
-                    style: _cellStyle.copyWith(
-                        fontSize: 11, color: AppTheme.slate400))),
-                DataCell(Text(s.avg.toStringAsFixed(3),
-                    style: _numStyle)),
-                DataCell(Text(s.obp.toStringAsFixed(3),
-                    style: _numStyle)),
-                DataCell(Text(s.slg.toStringAsFixed(3),
-                    style: _numStyle)),
-                DataCell(Text(s.ops.toStringAsFixed(3),
-                    style: _numStyle.copyWith(color: AppTheme.orange500))),
-                DataCell(Text('${s.hr}', style: _numStyle)),
-                DataCell(Text('${s.rbi}', style: _numStyle)),
-                DataCell(Text('${s.sb}',
-                    style: _numStyle.copyWith(
-                        color: s.sb >= 15
-                            ? AppTheme.green500
-                            : null))),
-                DataCell(Text(s.war.toStringAsFixed(1),
-                    style: _numStyle.copyWith(color: AppTheme.yellow500))),
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.slate700.withValues(alpha: 0.7)),
+        color: AppTheme.slate800.withValues(alpha: 0.35),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700),
+              ),
+              if (hint != null) ...[
+                const Spacer(),
+                Text(
+                  hint!,
+                  style:
+                      const TextStyle(color: AppTheme.slate500, fontSize: 10),
+                ),
               ],
-            );
-          }),
+            ],
+          ),
+          const SizedBox(height: 10),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _TopFivePanel<T> extends StatelessWidget {
+  const _TopFivePanel({
+    required this.title,
+    required this.accent,
+    required this.rows,
+    required this.emptyText,
+    required this.sortWidget,
+    required this.itemBuilder,
+  });
+
+  final String title;
+  final Color accent;
+  final List<T> rows;
+  final String emptyText;
+  final Widget sortWidget;
+  final Widget Function(T row) itemBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Card(
+      title: title,
+      child: Column(
+        children: [
+          Align(alignment: Alignment.centerRight, child: sortWidget),
+          const SizedBox(height: 8),
+          if (rows.isEmpty)
+            _EmptyState(text: emptyText)
+          else
+            ...rows.map(itemBuilder),
+        ],
+      ),
+    );
+  }
+}
+
+class _TopPlayerTile extends StatelessWidget {
+  const _TopPlayerTile({
+    required this.rank,
+    required this.name,
+    required this.team,
+    required this.value,
+    required this.onTap,
+  });
+
+  final int rank;
+  final String name;
+  final String team;
+  final String value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 28,
+              child: Text('$rank',
+                  style: const TextStyle(
+                      color: AppTheme.slate300, fontWeight: FontWeight.w700)),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name,
+                      style: const TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w700)),
+                  Text(team,
+                      style: const TextStyle(
+                          color: AppTheme.slate500, fontSize: 12)),
+                ],
+              ),
+            ),
+            Text(value,
+                style: const TextStyle(
+                    color: AppTheme.slate200,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700)),
+          ],
         ),
       ),
     );
   }
 }
 
-class _PitcherTable extends StatelessWidget {
-  const _PitcherTable({required this.year, this.search = ''});
-  final int year;
-  final String search;
+class _SortItem<T> {
+  const _SortItem({required this.value, required this.label});
+
+  final T value;
+  final String label;
+}
+
+class _SortDropdown<T> extends StatelessWidget {
+  const _SortDropdown({
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  final T value;
+  final List<_SortItem<T>> items;
+  final ValueChanged<T> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    final q = search.toLowerCase();
-    final stats = _pitcherStats
-        .where((s) =>
-            s.year == year &&
-            (q.isEmpty ||
-                s.name.toLowerCase().contains(q) ||
-                s.team.toLowerCase().contains(q)))
-        .toList()
-      ..sort((a, b) {
-        final c = a.era.compareTo(b.era);
-        return c != 0 ? c : b.war.compareTo(a.war);
-      });
+    return SizedBox(
+      width: 120,
+      child: DropdownButtonFormField<T>(
+        key: ValueKey<Object?>(value),
+        isExpanded: true,
+        initialValue: value,
+        decoration: InputDecoration(
+          isDense: true,
+          labelText: '기준',
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        items: items
+            .map((item) => DropdownMenuItem<T>(
+                value: item.value,
+                child: Text(item.label, style: const TextStyle(fontSize: 12))))
+            .toList(),
+        onChanged: (next) {
+          if (next == null) return;
+          onChanged(next);
+        },
+      ),
+    );
+  }
+}
 
-    if (stats.isEmpty) {
-      return const Center(
-        child: Text('해당 시즌 데이터가 없습니다.',
-            style: TextStyle(color: AppTheme.slate500)),
-      );
-    }
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({required this.text});
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: SingleChildScrollView(
-        child: DataTable(
-          headingRowColor: WidgetStateProperty.all(AppTheme.slate800),
-          columnSpacing: 14,
-          dataRowMinHeight: 36,
-          dataRowMaxHeight: 40,
-          columns: const [
-            DataColumn(label: Text('#', style: _headerStyle)),
-            DataColumn(label: Text('이름', style: _headerStyle)),
-            DataColumn(label: Text('팀', style: _headerStyle)),
-            DataColumn(label: Text('ERA', style: _headerStyle), numeric: true),
-            DataColumn(label: Text('IP', style: _headerStyle), numeric: true),
-            DataColumn(label: Text('WHIP', style: _headerStyle), numeric: true),
-            DataColumn(label: Text('K', style: _headerStyle), numeric: true),
-            DataColumn(label: Text('BB', style: _headerStyle), numeric: true),
-            DataColumn(label: Text('K/BB', style: _headerStyle), numeric: true),
-            DataColumn(label: Text('SV', style: _headerStyle), numeric: true),
-            DataColumn(label: Text('WAR', style: _headerStyle), numeric: true),
-          ],
-          rows: List.generate(stats.length, (i) {
-            final s = stats[i];
-            final isTop3 = i < 3;
-            final rowColor = isTop3
-                ? AppTheme.blue500.withValues(alpha: 0.08)
-                : Colors.transparent;
+  final String text;
 
-            return DataRow(
-              color: WidgetStateProperty.all(rowColor),
-              cells: [
-                DataCell(Text('${i + 1}', style: _cellStyle)),
-                DataCell(Text(s.name,
-                    style: _cellStyle.copyWith(fontWeight: FontWeight.w500))),
-                DataCell(Text(s.team,
-                    style: _cellStyle.copyWith(
-                        fontSize: 11, color: AppTheme.slate400))),
-                DataCell(Text(s.era.toStringAsFixed(2),
-                    style: _numStyle)),
-                DataCell(Text(s.ip.toStringAsFixed(1),
-                    style: _numStyle)),
-                DataCell(Text(s.whip.toStringAsFixed(2),
-                    style: _numStyle)),
-                DataCell(Text('${s.so}', style: _numStyle)),
-                DataCell(Text('${s.bb}', style: _numStyle)),
-                DataCell(Text(s.kbb.toStringAsFixed(2),
-                    style: _numStyle.copyWith(
-                        color: s.kbb >= 4
-                            ? AppTheme.green500
-                            : AppTheme.yellow500))),
-                DataCell(Text('${s.sv}', style: _numStyle)),
-                DataCell(Text(s.war.toStringAsFixed(1),
-                    style: _numStyle.copyWith(color: AppTheme.orange500))),
-              ],
-            );
-          }),
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(18),
+      child: Center(
+        child: Text(
+          text,
+          style: const TextStyle(color: AppTheme.slate500, fontSize: 13),
         ),
       ),
     );
   }
 }
 
-const _headerStyle = TextStyle(
-  color: AppTheme.slate300,
-  fontSize: 12,
-  fontWeight: FontWeight.w600,
-);
-
+const _thStyle = TextStyle(
+    color: AppTheme.slate300, fontSize: 12, fontWeight: FontWeight.w700);
 const _cellStyle = TextStyle(color: Colors.white, fontSize: 12);
+const _linkCellStyle = TextStyle(
+    color: AppTheme.blue400, fontSize: 12, fontWeight: FontWeight.w700);
+final _numStyle =
+    _cellStyle.copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
 
-final _numStyle = _cellStyle.copyWith(
-  fontFeatures: const [FontFeature.tabularFigures()],
-);
+extension _IterableFirstOrNull<T> on Iterable<T> {
+  T? get firstOrNull => isEmpty ? null : first;
+}

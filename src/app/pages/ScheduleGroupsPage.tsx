@@ -63,7 +63,7 @@ export default function ScheduleGroupsPage() {
   const { content } = useContent();
   const { state, actions } = useDemoStore();
   const navigate = useNavigate();
-  const { isAdmin } = useAdmin();
+  const { canUseScorekeeper } = useAdmin();
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('ALL');
   const matches = state.matches;
@@ -79,7 +79,7 @@ export default function ScheduleGroupsPage() {
   const showBlockedTooltip = useCallback((el: HTMLElement | null) => {
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    setTooltip({ text: '관리자 로그인이 필요합니다', x: rect.left + rect.width / 2, y: rect.bottom });
+    setTooltip({ text: '관리자 또는 기록원 권한이 필요합니다', x: rect.left + rect.width / 2, y: rect.bottom });
   }, []);
 
   const alive = useMemo(() => matches.filter((m) => !m.deleted), [matches]);
@@ -350,7 +350,7 @@ export default function ScheduleGroupsPage() {
                         <button
                           type="button"
                           onClick={(e) => {
-                            if (!isAdmin) {
+                            if (!canUseScorekeeper) {
                               showBlockedTooltip(e.currentTarget);
                               return;
                             }
@@ -358,11 +358,11 @@ export default function ScheduleGroupsPage() {
                             navigate(`/scorekeeper/${match.id}`);
                           }}
                           onMouseEnter={(e) => {
-                            if (!isAdmin) showBlockedTooltip(e.currentTarget);
+                            if (!canUseScorekeeper) showBlockedTooltip(e.currentTarget);
                           }}
                           onMouseLeave={() => setTooltip(null)}
                           onFocus={(e) => {
-                            if (!isAdmin) showBlockedTooltip(e.currentTarget);
+                            if (!canUseScorekeeper) showBlockedTooltip(e.currentTarget);
                           }}
                           onBlur={() => setTooltip(null)}
                           style={{
@@ -370,9 +370,9 @@ export default function ScheduleGroupsPage() {
                             borderRadius: '10px',
                             border: '1px solid rgba(148,163,184,0.35)',
                             background: 'rgba(255,255,255,0.04)',
-                            color: isAdmin ? '#cbd5e1' : 'rgba(203,213,225,0.6)',
+                            color: canUseScorekeeper ? '#cbd5e1' : 'rgba(203,213,225,0.6)',
                             fontWeight: 800,
-                            cursor: isAdmin ? 'pointer' : 'not-allowed',
+                            cursor: canUseScorekeeper ? 'pointer' : 'not-allowed',
                           }}
                         >
                           기록 관리

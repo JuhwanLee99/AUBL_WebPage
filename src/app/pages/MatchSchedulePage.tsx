@@ -6,13 +6,14 @@ import type {
   MatchSchedule,
   MatchStatus,
   MatchRecordMode,
+  MatchScoreInputMode,
   PostGameRecord,
   PostGameBatterLine,
   PostGamePitcherLine,
 } from '../../shared/state/demoStore';
 import type { LeagueDivision } from '../../shared/types';
-import { TEAMS } from '../../shared/lib/mockData';
 import { useAdmin } from '../../shared/auth/useAdmin';
+import { useContent } from '../../shared/state/contentProvider';
 
 const emptyForm = {
   homeTeamName: '',
@@ -21,7 +22,8 @@ const emptyForm = {
   venue: '',
   status: 'scheduled' as MatchStatus,
   recordMode: 'official' as MatchRecordMode,
-  division: 'auto' as 'auto' | LeagueDivision,
+  scoreInputMode: 'live' as MatchScoreInputMode,
+  division: 'LEAGUE' as LeagueDivision,
   homeScore: '',
   awayScore: '',
   homeLineup: '',
@@ -173,19 +175,17 @@ const normalizePlayerSlot = (player: PlayerSlot): PlayerSlot => ({
   bats: player.bats || 'R',
 });
 
-const divisionStyles: Record<LeagueDivision, { label: string; color: string }> = {
-  EUTTEUM: { label: '으뜸', color: '#4f46e5' },
-  BEOGEUM: { label: '버금', color: '#10b981' },
+type MatchDivisionCategory = 'LEAGUE' | 'PLAYOFF';
+
+const divisionStyles: Record<MatchDivisionCategory, { label: string; color: string }> = {
+  LEAGUE: { label: '리그', color: '#0ea5e9' },
+  PLAYOFF: { label: '플레이오프', color: '#f97316' },
 };
 
-const deriveDivision = (match: MatchSchedule): LeagueDivision | undefined => {
-  if (match.division === 'EUTTEUM' || match.division === 'BEOGEUM') return match.division;
-  const homeDiv = TEAMS.find((t) => t.id === match.homeTeamId)?.division;
-  const awayDiv = TEAMS.find((t) => t.id === match.awayTeamId)?.division;
-  if (homeDiv && awayDiv && homeDiv === awayDiv) return homeDiv;
-  if (homeDiv && !awayDiv) return homeDiv;
-  if (awayDiv && !homeDiv) return awayDiv;
-  return undefined;
+const deriveDivision = (match: MatchSchedule): MatchDivisionCategory => {
+  const raw = (match.division || '').toUpperCase();
+  if (raw === 'PLAYOFF' || raw === 'EUTTEUM' || raw === 'BEOGEUM') return 'PLAYOFF';
+  return 'LEAGUE';
 };
 
 function extractDateParts(value: string) {
@@ -236,7 +236,8 @@ const getSafeTime = (value: string) => {
 export default function MatchSchedulePage() {
   const { state, actions } = useDemoStore();
   const navigate = useNavigate();
-  const { isAdmin } = useAdmin();
+  const { isAdmin, canUseScorekeeper } = useAdmin();
+  const { content } = useContent();
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -334,6 +335,16 @@ export default function MatchSchedulePage() {
     });
   };
 
+  const showScorekeeperBlockedTooltip = (el: HTMLElement | null) => {
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setTooltip({
+      text: '관리자 또는 기록원 권한이 필요합니다',
+      x: rect.left + rect.width / 2,
+      y: rect.bottom,
+    });
+  };
+
   const calendarWeeks = useMemo(() => {
     const firstDay = new Date(calendarMonth.year, calendarMonth.month, 1);
     const firstWeekday = firstDay.getDay(); // 0=일요일
@@ -373,6 +384,16 @@ export default function MatchSchedulePage() {
   );
 
   const weekdayLabels = ['일', '월', '화', '수', '목', '금', '토'];
+  const officialTeamOptions = useMemo(() => {
+    const fromContent = content.teams.entries
+      .map((entry) => entry.name.trim())
+      .filter(Boolean);
+    const fromMatches = state.matches
+      .flatMap((match) => [match.homeTeamName, match.awayTeamName])
+      .map((name) => name.trim())
+      .filter(Boolean);
+    return Array.from(new Set([...fromContent, ...fromMatches])).sort((a, b) => a.localeCompare(b, 'ko-KR'));
+  }, [content.teams.entries, state.matches]);
 
   const isToday = (day: number | null) => {
     if (!day) return false;
@@ -383,9 +404,17 @@ export default function MatchSchedulePage() {
   const handleFormSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canEdit) return;
+    if (form.recordMode === 'official' && (!form.homeTeamName.trim() || !form.awayTeamName.trim())) {
+      if (typeof window !== 'undefined') window.alert('공식 경기는 홈/원정 팀을 모두 선택해주세요.');
+      return;
+    }
+    if (form.recordMode === 'official' && form.homeTeamName.trim() === form.awayTeamName.trim()) {
+      if (typeof window !== 'undefined') window.alert('홈/원정 팀은 서로 다르게 선택해주세요.');
+      return;
+    }
     const homeLineup = form.homeLineup.trim();
     const awayLineup = form.awayLineup.trim();
-    const selectedDivision = form.division === 'auto' ? undefined : (form.division as LeagueDivision);
+    const selectedDivision = form.division;
     const lineupsFromText =
       homeLineup || awayLineup ? { home: parseLineup(homeLineup), away: parseLineup(awayLineup) } : undefined;
     const trimmedLineups = form.status === 'scheduled'
@@ -416,6 +445,7 @@ export default function MatchSchedulePage() {
       venue: form.venue || '미정',
       status: form.status,
       recordMode: form.recordMode,
+      scoreInputMode: form.scoreInputMode,
       division: selectedDivision,
       homeScore: form.status === 'completed' ? Number(form.homeScore || 0) : null,
       awayScore: form.status === 'completed' ? Number(form.awayScore || 0) : null,
@@ -486,8 +516,8 @@ export default function MatchSchedulePage() {
       navigate(`${path}/${match.id}`);
     };
     const goToScorekeeper = (buttonEl: HTMLButtonElement | null) => {
-      if (!isAdmin) {
-        showBlockedTooltip(buttonEl);
+      if (!canUseScorekeeper) {
+        showScorekeeperBlockedTooltip(buttonEl);
         return;
       }
       setTooltip(null);
@@ -495,6 +525,7 @@ export default function MatchSchedulePage() {
     };
     const division = deriveDivision(match);
     const mode = match.recordMode ?? 'official';
+    const scoreInputMode = match.scoreInputMode ?? 'live';
     const quickActionStyle: CSSProperties = {
       display: 'inline-flex',
       alignItems: 'center',
@@ -561,6 +592,20 @@ export default function MatchSchedulePage() {
                   연습경기
                 </span>
               )}
+              {scoreInputMode === 'manual' && (
+                <span
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '999px',
+                    background: 'rgba(56,189,248,0.16)',
+                    color: '#67e8f9',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                  }}
+                >
+                  수기 입력
+                </span>
+              )}
             </div>
             <div style={{ color: '#94a3b8', marginTop: '4px', fontSize: '13px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
               <span>
@@ -612,17 +657,17 @@ export default function MatchSchedulePage() {
                 type="button"
                 onClick={(e) => goToScorekeeper(e.currentTarget)}
                 onMouseEnter={(e) => {
-                  if (!isAdmin) showBlockedTooltip(e.currentTarget);
+                  if (!canUseScorekeeper) showScorekeeperBlockedTooltip(e.currentTarget);
                 }}
                 onMouseLeave={() => setTooltip(null)}
                 onFocus={(e) => {
-                  if (!isAdmin) showBlockedTooltip(e.currentTarget);
+                  if (!canUseScorekeeper) showScorekeeperBlockedTooltip(e.currentTarget);
                 }}
                 onBlur={() => setTooltip(null)}
                 style={{
                   ...quickActionStyle,
-                  cursor: isAdmin ? 'pointer' : 'not-allowed',
-                  color: isAdmin ? quickActionStyle.color : 'rgba(203,213,225,0.6)',
+                  cursor: canUseScorekeeper ? 'pointer' : 'not-allowed',
+                  color: canUseScorekeeper ? quickActionStyle.color : 'rgba(203,213,225,0.6)',
                 }}
                 title="기록원"
               >
@@ -657,6 +702,30 @@ export default function MatchSchedulePage() {
             >
               라인업 편집
             </button>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() =>
+                  actions.updateMatch(match.id, {
+                    scoreInputMode: scoreInputMode === 'manual' ? 'live' : 'manual',
+                  })
+                }
+                style={{
+                  ...secondaryButtonStyle,
+                  border:
+                    scoreInputMode === 'manual'
+                      ? '1px solid rgba(56,189,248,0.65)'
+                      : '1px solid rgba(148,163,184,0.3)',
+                  color: scoreInputMode === 'manual' ? '#67e8f9' : '#cbd5e1',
+                  background:
+                    scoreInputMode === 'manual'
+                      ? 'rgba(56,189,248,0.14)'
+                      : 'rgba(148,163,184,0.08)',
+                }}
+              >
+                {scoreInputMode === 'manual' ? '실시간 입력으로 변경' : '실시간 기록 안함'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -889,7 +958,7 @@ export default function MatchSchedulePage() {
       >
         {[
           { path: '/schedule/results', label: '경기 결과', desc: '종료 경기 모아보기' },
-          { path: '/schedule/groups', label: '조별 일정', desc: '구분(으뜸/버금)별 캘린더' },
+          { path: '/schedule/groups', label: '조별 일정', desc: '리그/플레이오프 구분 캘린더' },
           { path: '/schedule/practice', label: '연습경기', desc: '연습경기 전용 목록' },
           { path: '/schedule/manage', label: '일정 관리', desc: '데모용 더미 등록 & 상태 변경' },
         ].map((item) => (
@@ -931,21 +1000,57 @@ export default function MatchSchedulePage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 300px 1fr 150px', gap: '12px' }}>
             <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
               원정 팀
-              <input
-                value={form.awayTeamName}
-                onChange={(event) => setForm((prev) => ({ ...prev, awayTeamName: event.target.value }))}
-                placeholder="원정 팀 이름"
-                style={inputStyle}
-              />
+              {form.recordMode === 'official' ? (
+                <select
+                  value={form.awayTeamName}
+                  onChange={(event) => setForm((prev) => ({ ...prev, awayTeamName: event.target.value }))}
+                  style={inputStyle}
+                >
+                  <option value="">원정 팀 선택</option>
+                  {form.awayTeamName && !officialTeamOptions.includes(form.awayTeamName) ? (
+                    <option value={form.awayTeamName}>{form.awayTeamName}</option>
+                  ) : null}
+                  {officialTeamOptions.map((teamName) => (
+                    <option key={`away-${teamName}`} value={teamName} disabled={teamName === form.homeTeamName}>
+                      {teamName}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  value={form.awayTeamName}
+                  onChange={(event) => setForm((prev) => ({ ...prev, awayTeamName: event.target.value }))}
+                  placeholder="원정 팀 이름"
+                  style={inputStyle}
+                />
+              )}
             </label>
             <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
               홈 팀
-              <input
-                value={form.homeTeamName}
-                onChange={(event) => setForm((prev) => ({ ...prev, homeTeamName: event.target.value }))}
-                placeholder="홈 팀 이름"
-                style={inputStyle}
-              />
+              {form.recordMode === 'official' ? (
+                <select
+                  value={form.homeTeamName}
+                  onChange={(event) => setForm((prev) => ({ ...prev, homeTeamName: event.target.value }))}
+                  style={inputStyle}
+                >
+                  <option value="">홈 팀 선택</option>
+                  {form.homeTeamName && !officialTeamOptions.includes(form.homeTeamName) ? (
+                    <option value={form.homeTeamName}>{form.homeTeamName}</option>
+                  ) : null}
+                  {officialTeamOptions.map((teamName) => (
+                    <option key={`home-${teamName}`} value={teamName} disabled={teamName === form.awayTeamName}>
+                      {teamName}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  value={form.homeTeamName}
+                  onChange={(event) => setForm((prev) => ({ ...prev, homeTeamName: event.target.value }))}
+                  placeholder="홈 팀 이름"
+                  style={inputStyle}
+                />
+              )}
             </label>
             <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
               경기 일시
@@ -1005,12 +1110,11 @@ export default function MatchSchedulePage() {
               구분
               <select
                 value={form.division}
-                onChange={(event) => setForm((prev) => ({ ...prev, division: event.target.value as 'auto' | LeagueDivision }))}
+                onChange={(event) => setForm((prev) => ({ ...prev, division: event.target.value as LeagueDivision }))}
                 style={inputStyle}
               >
-                <option value="auto">자동(팀 소속 또는 미정)</option>
-                <option value="EUTTEUM">으뜸 경기</option>
-                <option value="BEOGEUM">버금 경기</option>
+                <option value="LEAGUE">리그 경기</option>
+                <option value="PLAYOFF">플레이오프 경기</option>
               </select>
             </label>
           </div>
@@ -1038,6 +1142,17 @@ export default function MatchSchedulePage() {
               >
                 <option value="official">AUBL 공식경기</option>
                 <option value="practice">연습경기 (공식기록 미반영)</option>
+              </select>
+            </label>
+            <label style={{ display: 'grid', gap: '6px', color: '#cbd5e1' }}>
+              기록 입력 방식
+              <select
+                value={form.scoreInputMode}
+                onChange={(event) => setForm((prev) => ({ ...prev, scoreInputMode: event.target.value as MatchScoreInputMode }))}
+                style={inputStyle}
+              >
+                <option value="live">실시간 기록</option>
+                <option value="manual">실시간 기록 안함 (수기 표 입력)</option>
               </select>
             </label>
             {form.status === 'completed' && (

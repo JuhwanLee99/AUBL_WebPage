@@ -348,6 +348,12 @@ def _pitching_entry(name: str, stats: list[str]) -> dict[str, Any]:
     hits_allowed = _parse_int(_safe_index(stats, 4))
     runs_allowed = _parse_int(_safe_index(stats, 13))
     earned_runs = _parse_int(_safe_index(stats, 14))
+    pitch_count = _parse_int(_safe_index(stats, 15))
+    runs_allowed, earned_runs = _normalize_pitching_runs(
+        runs_allowed,
+        earned_runs,
+        pitch_count,
+    )
     walks = _parse_int(_safe_index(stats, 8))
     strikeouts = _parse_int(_safe_index(stats, 10))
     return {
@@ -359,6 +365,30 @@ def _pitching_entry(name: str, stats: list[str]) -> dict[str, Any]:
         "walks": walks,
         "strikeouts": strikeouts,
     }
+
+
+def _normalize_pitching_runs(
+    runs_allowed: int | None,
+    earned_runs: int | None,
+    pitch_count: int | None,
+) -> tuple[int | None, int | None]:
+    """Fix rare HTML row shifts where pitch count is placed in the runs column.
+
+    Some Gameone pages expose values like `runs=135, earned=4, pitch_count=4`.
+    In those cases, `runs` is effectively pitch count, and runs/earned-runs are
+    shifted by one column. Keep the default mapping unless this pattern is clear.
+    """
+    if runs_allowed is None:
+        return runs_allowed, earned_runs
+    if (
+        runs_allowed >= 40
+        and earned_runs is not None
+        and pitch_count is not None
+        and 0 <= earned_runs <= 30
+        and 0 <= pitch_count <= 30
+    ):
+        return earned_runs, pitch_count
+    return runs_allowed, earned_runs
 
 
 def _safe_index(items: list[str], index: int) -> str:

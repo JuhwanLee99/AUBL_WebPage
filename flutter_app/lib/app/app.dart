@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/theme/app_theme.dart';
-import '../features/onboarding/onboarding_screen.dart';
+import '../features/feature_entries.dart';
 import 'main_shell.dart';
+import 'maintenance_guard.dart';
 
 class AublApp extends StatelessWidget {
   const AublApp({super.key, required this.prefs});
@@ -17,6 +19,7 @@ class AublApp extends StatelessWidget {
       title: 'AUBL',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
+      localizationsDelegates: const [FlutterQuillLocalizations.delegate],
       builder: (context, child) {
         return AnnotatedRegion<SystemUiOverlayStyle>(
           value: AppTheme.systemUiStyle,
@@ -59,6 +62,6 @@ class _AppGateState extends State<AppGate> {
     if (!_onboardingSeen) {
       return OnboardingScreen(onComplete: _onOnboardingComplete);
     }
-    return const MainShell();
+    return const MaintenanceGuard(child: MainShell());
   }
 }

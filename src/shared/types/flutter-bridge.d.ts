@@ -5,6 +5,8 @@ declare global {
     FlutterBridge?: {
       postMessage: (message: string) => void;
     };
+    __flutterAuthInject?: (customToken: string) => Promise<void>;
+    __flutterGetIdToken?: () => Promise<string | null>;
     webkit?: {
       messageHandlers?: {
         FlutterBridge?: {

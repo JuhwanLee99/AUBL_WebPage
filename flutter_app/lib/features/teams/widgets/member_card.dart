@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/models/team_member.dart';
+import '../../../core/services/team_image_cache_manager.dart';
 import '../../../core/theme/app_theme.dart';
 
 class MemberCard extends StatelessWidget {
@@ -20,10 +21,13 @@ class MemberCard extends StatelessWidget {
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: AppTheme.slate700,
-        backgroundImage: member.profileImageUrl != null &&
-                member.profileImageUrl!.isNotEmpty
-            ? CachedNetworkImageProvider(member.profileImageUrl!)
-            : null,
+        backgroundImage:
+            member.profileImageUrl != null && member.profileImageUrl!.isNotEmpty
+                ? CachedNetworkImageProvider(
+                    member.profileImageUrl!,
+                    cacheManager: TeamImageCacheManager.instance,
+                  )
+                : null,
         child: member.profileImageUrl == null || member.profileImageUrl!.isEmpty
             ? Text(
                 member.name.isNotEmpty ? member.name[0] : '?',
@@ -54,20 +58,17 @@ class MemberCard extends StatelessWidget {
             const Text(' · ',
                 style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
             Text(member.position!,
-                style:
-                    const TextStyle(color: AppTheme.slate400, fontSize: 12)),
+                style: const TextStyle(color: AppTheme.slate400, fontSize: 12)),
           ],
           if (member.bats != null) ...[
             const Text(' · ',
                 style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
             Text('타:${member.bats}',
-                style:
-                    const TextStyle(color: AppTheme.slate500, fontSize: 11)),
+                style: const TextStyle(color: AppTheme.slate500, fontSize: 11)),
           ],
           if (member.throws_ != null) ...[
             Text(' 투:${member.throws_}',
-                style:
-                    const TextStyle(color: AppTheme.slate500, fontSize: 11)),
+                style: const TextStyle(color: AppTheme.slate500, fontSize: 11)),
           ],
         ],
       ),

@@ -28,12 +28,9 @@ class AppTheme {
 
   // ── System UI chrome ──
   static const SystemUiOverlayStyle systemUiStyle = SystemUiOverlayStyle(
-    statusBarColor: slate900,
     statusBarIconBrightness: Brightness.light,
     statusBarBrightness: Brightness.dark,
-    systemNavigationBarColor: slate900,
     systemNavigationBarIconBrightness: Brightness.light,
-    systemNavigationBarDividerColor: slate900,
   );
 
   static ThemeData get dark {
@@ -105,14 +102,19 @@ class AppTheme {
           borderSide: const BorderSide(color: blue500, width: 1.5),
         ),
         hintStyle: const TextStyle(color: slate500),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
       textTheme: const TextTheme(
-        headlineLarge: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        headlineMedium: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        headlineSmall: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        headlineLarge:
+            TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        headlineMedium:
+            TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        headlineSmall:
+            TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         titleLarge: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-        titleMedium: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+        titleMedium:
+            TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
         titleSmall: TextStyle(color: slate300, fontWeight: FontWeight.w500),
         bodyLarge: TextStyle(color: Colors.white),
         bodyMedium: TextStyle(color: slate300),

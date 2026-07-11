@@ -1,5 +1,7 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/services/team_image_cache_manager.dart';
 import '../../../core/theme/app_theme.dart';
 
 class TeamCard extends StatelessWidget {
@@ -36,11 +38,12 @@ class TeamCard extends StatelessWidget {
                 child: Opacity(
                   opacity: 0.32,
                   child: Center(
-                    child: Image.network(
-                      emblemUrl!,
+                    child: CachedNetworkImage(
+                      imageUrl: emblemUrl!,
+                      cacheManager: TeamImageCacheManager.instance,
                       fit: BoxFit.contain,
                       alignment: Alignment.center,
-                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                      errorWidget: (_, __, ___) => const SizedBox.shrink(),
                     ),
                   ),
                 ),

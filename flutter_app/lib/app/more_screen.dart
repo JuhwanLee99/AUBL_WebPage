@@ -1,19 +1,16 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 
+import '../core/contracts/web_contracts.dart';
+import '../core/services/auth_session_service.dart';
+import '../core/services/notification_service.dart';
 import '../core/theme/app_theme.dart';
 import '../core/webview/app_webview_screen.dart';
-import '../features/account/account_screen.dart';
+import '../features/feature_entries.dart';
 import 'shell_controller.dart';
-import '../features/auth/login_webview_screen.dart';
-import '../features/intro/intro_screen.dart';
-import '../features/intro/rules_screen.dart';
-import '../features/legal/privacy_screen.dart';
-import '../features/legal/terms_screen.dart';
-import '../features/standings/standings_screen.dart';
-import '../core/services/notification_service.dart';
 
 class MoreScreen extends StatefulWidget {
   const MoreScreen({super.key});
@@ -23,7 +20,10 @@ class MoreScreen extends StatefulWidget {
 }
 
 class _MoreScreenState extends State<MoreScreen> {
+  StreamSubscription<User?>? _authSub;
+  int _roleRequestId = 0;
   bool _isAdmin = false;
+  bool _isScorer = false;
   bool _checking = true;
   bool _loggedIn = false;
   bool _loadingNotif = true;
@@ -31,50 +31,90 @@ class _MoreScreenState extends State<MoreScreen> {
   bool _allNotificationsOn = true;
   bool _communityNoticeOn = true;
   bool _teamNoticeOn = true;
+  bool _inquiryNotifOn = true;
 
   @override
   void initState() {
     super.initState();
-    _checkAuth();
+    _bindAuthState();
     _loadNotificationPrefs();
   }
 
-  Future<void> _checkAuth() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      if (mounted) {
-        setState(() {
-          _loggedIn = false;
-          _checking = false;
-        });
+  void _bindAuthState() {
+    _applyAuthState(FirebaseAuth.instance.currentUser);
+    _authSub = FirebaseAuth.instance.authStateChanges().listen(_applyAuthState);
+  }
+
+  void _applyAuthState(User? user) {
+    if (!mounted) return;
+    setState(() {
+      _loggedIn = user != null;
+      _checking = false;
+      if (user == null) {
+        _isAdmin = false;
+        _isScorer = false;
       }
+    });
+
+    if (user == null) {
+      unawaited(NotificationService.instance.updateUserInquiryTopic(null));
       return;
     }
-    _loggedIn = true;
+
+    unawaited(NotificationService.instance.updateUserInquiryTopic(user.uid));
+    unawaited(_refreshRoleFlags(user));
+  }
+
+  Future<void> _refreshRoleFlags(User user) async {
+    final requestId = ++_roleRequestId;
     try {
-      final token = await user.getIdTokenResult(true);
-      if (!mounted) return;
+      final token = await user.getIdTokenResult();
+      var isAdmin = token.claims?['admin'] == true;
+      var isScorer = false;
+      if (!isAdmin) {
+        final roleDoc = await FirebaseFirestore.instance
+            .collection('roles')
+            .doc(user.uid)
+            .get();
+        final data = roleDoc.data();
+        isScorer = roleDoc.exists && data?['role'] == 'scorer';
+      }
+      if (!mounted || requestId != _roleRequestId) return;
       setState(() {
-        _isAdmin = token.claims?['admin'] == true;
-        _checking = false;
+        _isAdmin = isAdmin;
+        _isScorer = isScorer;
       });
     } catch (_) {
-      if (mounted) setState(() => _checking = false);
+      if (!mounted || requestId != _roleRequestId) return;
+      setState(() {
+        _isAdmin = false;
+        _isScorer = false;
+      });
     }
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadNotificationPrefs() async {
     final pref = await NotificationService.instance.getMatchPreference();
     final allEnabled =
         await NotificationService.instance.getAllNotificationsEnabled();
-    final community = await NotificationService.instance.getCommunityNoticeEnabled();
-    final teamNotice = await NotificationService.instance.getTeamNoticeEnabled();
+    final community =
+        await NotificationService.instance.getCommunityNoticeEnabled();
+    final teamNotice =
+        await NotificationService.instance.getTeamNoticeEnabled();
+    final inquiry = await NotificationService.instance.getInquiryNotifEnabled();
     if (!mounted) return;
     setState(() {
       _matchPref = pref;
       _allNotificationsOn = allEnabled;
       _communityNoticeOn = community;
       _teamNoticeOn = teamNotice;
+      _inquiryNotifOn = inquiry;
       _loadingNotif = false;
     });
   }
@@ -90,7 +130,8 @@ class _MoreScreenState extends State<MoreScreen> {
   String _noticePrefLabel() {
     final community = _communityNoticeOn ? '커뮤니티' : '커뮤니티 off';
     final team = _teamNoticeOn ? '홈팀' : '홈팀 off';
-    return '$community · $team';
+    final inquiry = _inquiryNotifOn ? '건의/문의' : '건의/문의 off';
+    return '$community · $team · $inquiry';
   }
 
   String _notificationSummary() {
@@ -101,6 +142,7 @@ class _MoreScreenState extends State<MoreScreen> {
   void _openNotificationSettings() {
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: AppTheme.slate900,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -108,110 +150,151 @@ class _MoreScreenState extends State<MoreScreen> {
       builder: (context) {
         var temp = _matchPref;
         var tempAll = _allNotificationsOn;
+        var tempInquiry = _inquiryNotifOn;
         return StatefulBuilder(
           builder: (context, setSheetState) {
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    '경기 알림 설정',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+            final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+            return SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 24 + bottomInset),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '알림 설정',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    '전체 알림을 끄면 긴급 공지를 포함해 모든 알림이 중단됩니다.',
-                    style: TextStyle(color: AppTheme.slate400, fontSize: 12),
-                  ),
-                  const SizedBox(height: 12),
-                  SwitchListTile(
-                    value: tempAll,
-                    onChanged: (value) async {
-                      setSheetState(() => tempAll = value);
-                      await NotificationService.instance
-                          .setAllNotificationsEnabled(value);
-                      if (mounted) {
-                        setState(() => _allNotificationsOn = value);
-                      }
-                    },
-                    activeThumbColor: AppTheme.blue400,
-                    title: const Text('전체 알림',
-                        style: TextStyle(color: Colors.white)),
-                    subtitle: const Text('긴급 공지 포함 전체 알림 (ON/OFF)',
-                        style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
-                  ),
-                  SwitchListTile(
-                    value: _communityNoticeOn,
-                    onChanged: !tempAll
-                        ? null
-                        : (value) async {
-                            await NotificationService.instance
-                                .setCommunityNoticeEnabled(value);
-                            if (mounted) {
-                              setState(() => _communityNoticeOn = value);
-                            }
-                          },
+                    const SizedBox(height: 8),
+                    const Text(
+                      '전체 알림을 끄면 긴급 공지를 포함해 모든 알림이 중단됩니다.',
+                      style: TextStyle(color: AppTheme.slate400, fontSize: 12),
+                    ),
+                    const SizedBox(height: 12),
+                    SwitchListTile(
+                      value: tempAll,
+                      onChanged: (value) async {
+                        setSheetState(() => tempAll = value);
+                        await NotificationService.instance
+                            .setAllNotificationsEnabled(value);
+                        if (mounted) {
+                          setState(() => _allNotificationsOn = value);
+                        }
+                      },
+                      activeThumbColor: AppTheme.blue400,
+                      title: const Text('전체 알림',
+                          style: TextStyle(color: Colors.white)),
+                      subtitle: const Text('긴급 공지 포함 전체 알림 (ON/OFF)',
+                          style: TextStyle(
+                              color: AppTheme.slate500, fontSize: 12)),
+                    ),
+                    SwitchListTile(
+                      value: _communityNoticeOn,
+                      onChanged: !tempAll
+                          ? null
+                          : (value) async {
+                              await NotificationService.instance
+                                  .setCommunityNoticeEnabled(value);
+                              if (mounted) {
+                                setState(() => _communityNoticeOn = value);
+                              }
+                            },
                       activeThumbColor: AppTheme.blue400,
                       title: const Text('커뮤니티 공지',
                           style: TextStyle(color: Colors.white)),
                       subtitle: const Text('긴급 제외 공지 알림 (ON/OFF)',
-                          style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
-                  ),
-                  SwitchListTile(
-                    value: _teamNoticeOn,
-                    onChanged: !tempAll
-                        ? null
-                        : (value) async {
-                            await NotificationService.instance
-                                .setTeamNoticeEnabled(value);
-                            if (mounted) {
-                              setState(() => _teamNoticeOn = value);
-                            }
-                          },
-                    activeThumbColor: AppTheme.blue400,
-                    title: const Text('홈팀 공지',
-                        style: TextStyle(color: Colors.white)),
-                    subtitle: const Text('소속 팀 공지 알림',
-                        style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
-                  ),
-                  const SizedBox(height: 8),
-                  IgnorePointer(
-                    ignoring: !tempAll,
-                    child: Opacity(
-                      opacity: tempAll ? 1 : 0.55,
-                      child: RadioGroup<MatchNotifyPreference>(
-                        groupValue: temp,
-                        onChanged: (value) {
-                          if (value == null || !tempAll) return;
-                          setSheetState(() => temp = value);
-                          NotificationService.instance.setMatchPreference(value);
-                          if (mounted) {
-                            setState(() => _matchPref = value);
-                          }
-                        },
-                        child: Column(
-                          children: [
-                            for (final pref in MatchNotifyPreference.values)
-                              RadioListTile<MatchNotifyPreference>(
-                                value: pref,
-                                activeColor: AppTheme.blue400,
-                                title: Text(
-                                  _matchPrefLabel(pref),
-                                  style: const TextStyle(color: Colors.white),
-                                ),
-                              ),
-                          ],
+                          style: TextStyle(
+                              color: AppTheme.slate500, fontSize: 12)),
+                    ),
+                    SwitchListTile(
+                      value: _teamNoticeOn,
+                      onChanged: !tempAll
+                          ? null
+                          : (value) async {
+                              await NotificationService.instance
+                                  .setTeamNoticeEnabled(value);
+                              if (mounted) {
+                                setState(() => _teamNoticeOn = value);
+                              }
+                            },
+                      activeThumbColor: AppTheme.blue400,
+                      title: const Text('홈팀 공지',
+                          style: TextStyle(color: Colors.white)),
+                      subtitle: const Text('소속 팀 공지 알림',
+                          style: TextStyle(
+                              color: AppTheme.slate500, fontSize: 12)),
+                    ),
+                    SwitchListTile(
+                      value: tempInquiry,
+                      onChanged: !tempAll
+                          ? null
+                          : (value) async {
+                              setSheetState(() => tempInquiry = value);
+                              await NotificationService.instance
+                                  .setInquiryNotifEnabled(value);
+                              if (mounted) {
+                                setState(() => _inquiryNotifOn = value);
+                              }
+                            },
+                      activeThumbColor: AppTheme.blue400,
+                      title: const Text('건의/문의 알림',
+                          style: TextStyle(color: Colors.white)),
+                      subtitle: const Text('내 글의 처리 상태 변경 및 새 댓글 알림',
+                          style: TextStyle(
+                              color: AppTheme.slate500, fontSize: 12)),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                      child: Text(
+                        '경기 알림 설정',
+                        style: TextStyle(
+                          color: AppTheme.slate400,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
                         ),
                       ),
                     ),
-                  ),
-                ],
+                    const Divider(height: 1, color: AppTheme.slate700),
+                    const SizedBox(height: 4),
+                    IgnorePointer(
+                      ignoring: !tempAll,
+                      child: Opacity(
+                        opacity: tempAll ? 1 : 0.55,
+                        child: RadioGroup<MatchNotifyPreference>(
+                          groupValue: temp,
+                          onChanged: (value) {
+                            if (value == null || !tempAll) return;
+                            setSheetState(() => temp = value);
+                            NotificationService.instance
+                                .setMatchPreference(value);
+                            if (mounted) {
+                              setState(() => _matchPref = value);
+                            }
+                          },
+                          child: Column(
+                            children: [
+                              for (final pref in MatchNotifyPreference.values)
+                                RadioListTile<MatchNotifyPreference>(
+                                  value: pref,
+                                  activeColor: AppTheme.blue400,
+                                  title: Text(
+                                    _matchPrefLabel(pref),
+                                    style: const TextStyle(color: Colors.white),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           },
@@ -230,21 +313,21 @@ class _MoreScreenState extends State<MoreScreen> {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const LoginWebViewScreen()),
     );
-    // 로그인 후 돌아오면 상태 갱신
-    if (mounted) _checkAuth();
   }
 
   Future<void> _logout() async {
-    try {
-      await GoogleSignIn().signOut();
-    } catch (_) {}
-    await FirebaseAuth.instance.signOut();
-    await WebViewCookieManager().clearCookies();
     if (mounted) {
       setState(() {
         _loggedIn = false;
         _isAdmin = false;
+        _isScorer = false;
+        _checking = false;
       });
+    }
+    try {
+      await AuthSessionService.signOutFast();
+    } catch (_) {
+      _applyAuthState(FirebaseAuth.instance.currentUser);
     }
   }
 
@@ -283,8 +366,7 @@ class _MoreScreenState extends State<MoreScreen> {
             ),
             const SizedBox(width: 8),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(8),
@@ -315,7 +397,15 @@ class _MoreScreenState extends State<MoreScreen> {
           _MenuTile(
             icon: Icons.emoji_events,
             label: '순위',
-            onTap: () => _push(const StandingsScreen()),
+            onTap: () {
+              final shell = ShellController.of(context);
+              if (shell != null) {
+                shell.switchTab(3,
+                    recordsTabIndex: RecordsHubTab.standings.index);
+                return;
+              }
+              _push(const RecordsScreen(initialTab: RecordsHubTab.standings));
+            },
           ),
           _MenuTile(
             icon: Icons.person,
@@ -327,9 +417,7 @@ class _MoreScreenState extends State<MoreScreen> {
           _MenuTile(
             icon: Icons.notifications_active,
             label: '알림 설정',
-            value: _loadingNotif
-                ? '확인 중...'
-                : _notificationSummary(),
+            value: _loadingNotif ? '확인 중...' : _notificationSummary(),
             onTap: _openNotificationSettings,
           ),
           const Divider(height: 32),
@@ -351,50 +439,77 @@ class _MoreScreenState extends State<MoreScreen> {
           //   onTap: () => _push(const PredictionScreen()),
           // ),
 
-          if (!_checking && _loggedIn && _isAdmin) ...[
+          if (!_checking && _loggedIn && (_isAdmin || _isScorer)) ...[
             const Divider(height: 32),
-            const _SectionTitle('관리자'),
+            _SectionTitle(_isAdmin ? '관리자' : '기록원'),
             _MenuTile(
               icon: Icons.fact_check,
               label: '기록원',
               onTap: () {
                 final shell = ShellController.of(context);
                 if (shell != null) {
-                  shell.openEmbeddedWebView('/scorekeeper', '기록원', fullscreen: true);
+                  shell.openEmbeddedWebView(
+                      WebRouteContracts.scorekeeper, '기록원',
+                      fullscreen: true);
                 } else {
                   _push(const AppWebViewScreen(
-                    path: '/scorekeeper',
+                    path: WebRouteContracts.scorekeeper,
                     title: '기록원',
                   ));
                 }
               },
             ),
             _MenuTile(
-              icon: Icons.scoreboard,
-              label: '스코어보드',
+              icon: Icons.edit_note,
+              label: '경기 기록 수정',
               onTap: () => _push(const AppWebViewScreen(
-                path: '/scoreboard',
-                title: '스코어보드',
+                path: WebRouteContracts.adminGames,
+                title: '경기 기록 수정',
               )),
             ),
-            _MenuTile(
-              icon: Icons.admin_panel_settings,
-              label: '관리자 패널',
-              onTap: () => _push(const AppWebViewScreen(
-                path: '/admin',
-                title: '관리자',
-              )),
-            ),
-            _MenuTile(
-              icon: Icons.edit_calendar,
-              label: '일정 관리',
-              onTap: () => _push(const AppWebViewScreen(
-                path: '/schedule/manage',
-                title: '일정 관리',
-              )),
-            ),
+            if (_isAdmin) ...[
+              _MenuTile(
+                icon: Icons.scoreboard,
+                label: '스코어보드',
+                onTap: () => _push(const AppWebViewScreen(
+                  path: WebRouteContracts.scoreboard,
+                  title: '스코어보드',
+                )),
+              ),
+              _MenuTile(
+                icon: Icons.admin_panel_settings,
+                label: '관리자 패널',
+                onTap: () => _push(const AppWebViewScreen(
+                  path: WebRouteContracts.admin,
+                  title: '관리자',
+                )),
+              ),
+              _MenuTile(
+                icon: Icons.report_problem_outlined,
+                label: '신고/차단 관리',
+                onTap: () => _push(const AppWebViewScreen(
+                  path: WebRouteContracts.adminModeration,
+                  title: '신고/차단 관리',
+                )),
+              ),
+              _MenuTile(
+                icon: Icons.edit_calendar,
+                label: '일정 관리',
+                onTap: () => _push(const AppWebViewScreen(
+                  path: WebRouteContracts.scheduleManage,
+                  title: '일정 관리',
+                )),
+              ),
+            ],
           ],
 
+          const Divider(height: 32),
+          const _SectionTitle('도움말'),
+          _MenuTile(
+            icon: Icons.help_outline,
+            label: '사용 설명서',
+            onTap: () => _push(const UserManualScreen()),
+          ),
           const Divider(height: 32),
           const _SectionTitle('앱 정보'),
           _MenuTile(

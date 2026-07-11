@@ -8,6 +8,40 @@ import { configs as tseslintConfigs } from 'typescript-eslint'
 const reactHooksRecommended = reactHooks.configs?.recommended ?? { rules: {} }
 const reactRefreshVite = reactRefresh.configs?.vite ?? { rules: {} }
 
+const appImportPatterns = [
+  '@app',
+  '@app/*',
+  'src/app',
+  'src/app/*',
+  '../app',
+  '../app/*',
+  '../../app',
+  '../../app/*',
+  '../../../app',
+  '../../../app/*',
+  '../../../../app',
+  '../../../../app/*',
+  '../../../../../app',
+  '../../../../../app/*',
+]
+
+const featuresImportPatterns = [
+  '@features',
+  '@features/*',
+  'src/features',
+  'src/features/*',
+  '../features',
+  '../features/*',
+  '../../features',
+  '../../features/*',
+  '../../../features',
+  '../../../features/*',
+  '../../../../features',
+  '../../../../features/*',
+  '../../../../../features',
+  '../../../../../features/*',
+]
+
 export default [
   {
     ignores: [
@@ -38,6 +72,38 @@ export default [
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+    },
+  },
+  {
+    files: ['src/shared/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: appImportPatterns,
+              message: 'shared 레이어는 app 레이어를 참조할 수 없습니다.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/core/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: featuresImportPatterns,
+              message: 'core 레이어는 features 레이어를 참조할 수 없습니다.',
+            },
+          ],
+        },
       ],
     },
   },

@@ -3,11 +3,11 @@ import 'dart:math' as math;
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/data/team_groups.dart';
+import '../../core/contracts/web_contracts.dart';
 import '../../core/models/match.dart';
 import '../../core/models/match_state.dart';
 import '../../core/models/team_notice.dart';
@@ -15,6 +15,7 @@ import '../../core/services/cache_service.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/match_time.dart';
 import '../../app/shell_controller.dart';
 import '../../core/webview/app_webview_screen.dart';
 import '../../core/widgets/background_logo.dart';
@@ -31,6 +32,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  static const String _uniquePlayUrl =
+      'https://unique-play.com/league/57?item=%5Bobject%20Object%5D';
   final _fs = FirestoreService();
   final PageController _noticeController =
       PageController(viewportFraction: 0.92);
@@ -108,8 +111,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     for (final m in all) {
       if (m.isCompleted) completed.add(m);
-      if (m.startTime != null) {
-        final dateStr = m.startTime!.substring(0, 10);
+      final dateStr = matchStartDateKey(m.startTime);
+      if (dateStr != null) {
         if (dateStr == todayStr && m.status == 'scheduled') {
           today.add(m);
         } else if (dateStr == tomorrowStr && m.status == 'scheduled') {
@@ -118,8 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
 
-    completed.sort(
-        (a, b) => (b.startTime ?? '').compareTo(a.startTime ?? ''));
+    completed.sort((a, b) => (b.startTime ?? '').compareTo(a.startTime ?? ''));
 
     if (mounted) {
       setState(() {
@@ -215,131 +217,136 @@ class _HomeScreenState extends State<HomeScreen> {
           RefreshIndicator(
             onRefresh: _onRefresh,
             child: CustomScrollView(
-          slivers: [
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: _StickyHeroDelegate(
-                statusBarHeight: MediaQuery.of(context).padding.top,
-                onIntroTap: () {
-                  Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (_) => const IntroScreen(),
-                  ));
-                },
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ── 홈팀 공지 (라이브 경기 위) ──
-                    if (_userTeamId != null) ...[
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildSectionTitle(
-                              '$_userTeamName 공지',
-                              Icons.campaign,
-                              AppTheme.blue400,
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => TeamDetailScreen(
-                                    teamId: _userTeamId!,
-                                    teamName: _userTeamName ?? _userTeamId!,
+              slivers: [
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _StickyHeroDelegate(
+                    statusBarHeight: MediaQuery.of(context).padding.top,
+                    onIntroTap: () {
+                      Navigator.of(context).push(MaterialPageRoute<void>(
+                        builder: (_) => const IntroScreen(),
+                      ));
+                    },
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // ── 홈팀 공지 (라이브 경기 위) ──
+                        if (_userTeamId != null) ...[
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildSectionTitle(
+                                  '$_userTeamName 공지',
+                                  Icons.campaign,
+                                  AppTheme.blue400,
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => TeamDetailScreen(
+                                        teamId: _userTeamId!,
+                                        teamName: _userTeamName ?? _userTeamId!,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                        color: AppTheme.blue400
+                                            .withValues(alpha: 0.4)),
+                                    borderRadius: BorderRadius.circular(8),
+                                    color:
+                                        AppTheme.blue400.withValues(alpha: 0.1),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.groups,
+                                          size: 13, color: AppTheme.blue400),
+                                      SizedBox(width: 4),
+                                      Text('팀 페이지',
+                                          style: TextStyle(
+                                              color: AppTheme.blue400,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600)),
+                                    ],
                                   ),
                                 ),
-                              );
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                    color: AppTheme.blue400.withValues(alpha: 0.4)),
-                                borderRadius: BorderRadius.circular(8),
-                                color: AppTheme.blue400.withValues(alpha: 0.1),
                               ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.groups, size: 13, color: AppTheme.blue400),
-                                  SizedBox(width: 4),
-                                  Text('팀 페이지',
-                                      style: TextStyle(
-                                          color: AppTheme.blue400,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600)),
-                                ],
-                              ),
-                            ),
+                            ],
                           ),
+                          const SizedBox(height: 8),
+                          _buildTeamNotices(),
+                          const SizedBox(height: 24),
                         ],
-                      ),
-                      const SizedBox(height: 8),
-                      _buildTeamNotices(),
-                      const SizedBox(height: 24),
-                    ],
 
-                    // ── 라이브 경기 ──
-                    _buildSectionTitle(
-                        '라이브 경기', Icons.circle, AppTheme.red500),
-                    const SizedBox(height: 8),
-                    _buildLiveMatches(),
-                    const SizedBox(height: 24),
+                        // ── 라이브 경기 ──
+                        _buildSectionTitle(
+                            '라이브 경기', Icons.circle, AppTheme.red500),
+                        const SizedBox(height: 8),
+                        _buildLiveMatches(),
+                        const SizedBox(height: 24),
 
-                    // ── 오늘 일정 ──
-                    _buildSectionTitle(
-                        '오늘 일정', Icons.calendar_today, AppTheme.slate300),
-                    const SizedBox(height: 8),
-                    _buildHorizontalSchedule(
-                        _todayMatches, '오늘 예정된 경기가 없습니다.'),
-                    const SizedBox(height: 24),
+                        // ── 오늘 일정 ──
+                        _buildSectionTitle(
+                            '오늘 일정', Icons.calendar_today, AppTheme.slate300),
+                        const SizedBox(height: 8),
+                        _buildHorizontalSchedule(
+                            _todayMatches, '오늘 예정된 경기가 없습니다.'),
+                        const SizedBox(height: 24),
 
-                    // ── 내일 일정 ──
-                    _buildSectionTitle(
-                        '내일 일정', Icons.event, AppTheme.slate300),
-                    const SizedBox(height: 8),
-                    _buildHorizontalSchedule(
-                        _tomorrowMatches, '내일 예정된 경기가 없습니다.'),
-                    const SizedBox(height: 24),
+                        // ── 내일 일정 ──
+                        _buildSectionTitle(
+                            '내일 일정', Icons.event, AppTheme.slate300),
+                        const SizedBox(height: 8),
+                        _buildHorizontalSchedule(
+                            _tomorrowMatches, '내일 예정된 경기가 없습니다.'),
+                        const SizedBox(height: 24),
 
-                    // ── 최근 경기 결과 ──
-                    _buildSectionTitle(
-                        '최근 경기 결과', Icons.scoreboard, AppTheme.slate300),
-                    const SizedBox(height: 8),
-                    _buildRecentResults(),
-                    const SizedBox(height: 24),
+                        // ── 최근 경기 결과 ──
+                        _buildSectionTitle(
+                            '최근 경기 결과', Icons.scoreboard, AppTheme.slate300),
+                        const SizedBox(height: 8),
+                        _buildRecentResults(),
+                        const SizedBox(height: 24),
 
-                    // ── KEY VALUES ──
-                    _buildKeyValues(),
-                    const SizedBox(height: 16),
+                        // ── KEY VALUES ──
+                        _buildKeyValues(),
+                        const SizedBox(height: 16),
 
-                    // ── 시즌 요약 ──
-                    _buildSectionTitle(
-                        '2026 시즌', Icons.sports_baseball, AppTheme.slate300),
-                    const SizedBox(height: 8),
-                    _buildSeasonSnapshot(),
-                    const SizedBox(height: 24),
+                        // ── 시즌 요약 ──
+                        _buildSectionTitle('2026 시즌', Icons.sports_baseball,
+                            AppTheme.slate300),
+                        const SizedBox(height: 8),
+                        _buildSeasonSnapshot(),
+                        const SizedBox(height: 24),
 
-                    // ── 바로가기 ──
-                    _buildSeasonHighlights(),
-                    const SizedBox(height: 24),
+                        // ── 바로가기 ──
+                        _buildSeasonHighlights(),
+                        const SizedBox(height: 24),
 
-                    // ── 소셜 CTA ──
-                    _buildSocialCta(),
-                    const SizedBox(height: 16),
-                  ],
+                        // ── 소셜 CTA ──
+                        _buildUniquePlayCta(),
+                        const SizedBox(height: 12),
+                        _buildSocialCta(),
+                        const SizedBox(height: 16),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
         ],
       ),
     );
@@ -414,13 +421,8 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       children: List.generate(_completedMatches.length, (idx) {
         final m = _completedMatches[idx];
-        String dateLabel = '';
-        if (m.startTime != null) {
-          try {
-            final dt = DateTime.parse(m.startTime!);
-            dateLabel = DateFormat('M/d (E)', 'ko').format(dt);
-          } catch (_) {}
-        }
+        final dateLabel =
+            formatMatchStartTime(m.startTime, pattern: 'M/d (E)') ?? '';
 
         return Container(
           width: double.infinity,
@@ -429,8 +431,7 @@ class _HomeScreenState extends State<HomeScreen> {
           decoration: BoxDecoration(
             color: AppTheme.slate800.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-                color: AppTheme.slate700.withValues(alpha: 0.5)),
+            border: Border.all(color: AppTheme.slate700.withValues(alpha: 0.5)),
           ),
           child: Row(
             children: [
@@ -515,13 +516,11 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             children: [
               if (n.pinned) ...[
-                const Icon(Icons.push_pin,
-                    size: 13, color: AppTheme.amber400),
+                const Icon(Icons.push_pin, size: 13, color: AppTheme.amber400),
                 const SizedBox(width: 4),
               ],
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                 decoration: BoxDecoration(
                   color: AppTheme.blue500.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(4),
@@ -600,8 +599,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 width: active ? 10 : 6,
                 height: 6,
                 decoration: BoxDecoration(
-                  color:
-                      active ? AppTheme.blue400 : AppTheme.slate600,
+                  color: active ? AppTheme.blue400 : AppTheme.slate600,
                   borderRadius: BorderRadius.circular(999),
                 ),
               );
@@ -711,8 +709,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitle(
-            '바로가기', Icons.bolt, AppTheme.slate300),
+        _buildSectionTitle('바로가기', Icons.bolt, AppTheme.slate300),
         const SizedBox(height: 10),
         Row(
           children: highlights.map((h) {
@@ -768,6 +765,65 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ── Unique Play CTA ──
+  Widget _buildUniquePlayCta() {
+    return GestureDetector(
+      onTap: _openUniquePlay,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0x992563EB), Color(0x991D4ED8), Color(0x9910B981)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Padding(
+          padding: EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(Icons.sports_baseball, color: Colors.white, size: 24),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('유니크 플레이',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600)),
+                    SizedBox(height: 2),
+                    Text('리그 페이지 바로가기',
+                        style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  ],
+                ),
+              ),
+              Icon(Icons.open_in_new, color: Colors.white70, size: 18),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openUniquePlay() async {
+    final webUri = Uri.parse(_uniquePlayUrl);
+    try {
+      final openedApp = await launchUrl(
+        webUri,
+        mode: LaunchMode.externalNonBrowserApplication,
+      );
+      if (openedApp) return;
+    } catch (_) {
+      // fall through to browser fallback
+    }
+
+    if (await canLaunchUrl(webUri)) {
+      await launchUrl(webUri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   // ── 소셜 CTA ──
   Widget _buildSocialCta() {
     return GestureDetector(
@@ -803,8 +859,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             fontWeight: FontWeight.w600)),
                     SizedBox(height: 2),
                     Text('@aubl_1981 · 소식과 하이라이트',
-                        style: TextStyle(
-                            color: Colors.white70, fontSize: 12)),
+                        style: TextStyle(color: Colors.white70, fontSize: 12)),
                   ],
                 ),
               ),
@@ -837,8 +892,7 @@ class _StatCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppTheme.slate800.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-              color: AppTheme.slate700.withValues(alpha: 0.5)),
+          border: Border.all(color: AppTheme.slate700.withValues(alpha: 0.5)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -857,8 +911,7 @@ class _StatCard extends StatelessWidget {
                     fontWeight: FontWeight.w800)),
             const SizedBox(height: 2),
             Text(description,
-                style: const TextStyle(
-                    color: AppTheme.slate500, fontSize: 11)),
+                style: const TextStyle(color: AppTheme.slate500, fontSize: 11)),
           ],
         ),
       ),
@@ -956,11 +1009,11 @@ class _LiveMatchCard extends StatelessWidget {
             final shell = ShellController.of(context);
             if (shell != null) {
               shell.openEmbeddedWebView(
-                  '/scoreboard-text/${match.id}', '문자중계');
+                  WebRouteContracts.scoreboardText(match.id), '문자중계');
             } else {
               Navigator.of(context).push(MaterialPageRoute<void>(
                 builder: (_) => AppWebViewScreen(
-                  path: '/scoreboard-text/${match.id}',
+                  path: WebRouteContracts.scoreboardText(match.id),
                   title: '문자중계',
                 ),
               ));
@@ -973,8 +1026,7 @@ class _LiveMatchCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppTheme.slate800.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: AppTheme.red500.withValues(alpha: 0.3)),
+              border: Border.all(color: AppTheme.red500.withValues(alpha: 0.3)),
             ),
             child: Column(
               children: [
@@ -1072,8 +1124,7 @@ class _LiveMatchCard extends StatelessWidget {
                           const SizedBox(width: 4),
                           Text('투수 ${ms.currentPitcher}',
                               style: const TextStyle(
-                                  color: AppTheme.slate300,
-                                  fontSize: 11)),
+                                  color: AppTheme.slate300, fontSize: 11)),
                         ],
                         if (ms.currentPitcher != null &&
                             ms.currentBatter != null)
@@ -1084,8 +1135,7 @@ class _LiveMatchCard extends StatelessWidget {
                           const SizedBox(width: 4),
                           Text('타석 ${ms.currentBatter}',
                               style: const TextStyle(
-                                  color: AppTheme.slate300,
-                                  fontSize: 11)),
+                                  color: AppTheme.slate300, fontSize: 11)),
                         ],
                       ],
                     ),
@@ -1100,8 +1150,7 @@ class _LiveMatchCard extends StatelessWidget {
                       Text(_formatDateTime(match.startTime!),
                           style: const TextStyle(
                               color: AppTheme.slate500, fontSize: 11)),
-                      if (match.venue != null)
-                        const SizedBox(width: 8),
+                      if (match.venue != null) const SizedBox(width: 8),
                     ],
                     if (match.venue != null)
                       Text(match.venue!,
@@ -1118,7 +1167,7 @@ class _LiveMatchCard extends StatelessWidget {
                       onTap: () {
                         Navigator.of(context).push(MaterialPageRoute<void>(
                           builder: (_) => AppWebViewScreen(
-                            path: '/live-overlay/${match.id}',
+                            path: WebRouteContracts.liveOverlay(match.id),
                             title: '라이브 오버레이',
                             minimalHeader: true,
                           ),
@@ -1181,12 +1230,8 @@ class _LiveMatchCard extends StatelessWidget {
   }
 
   String _formatDateTime(String startTime) {
-    try {
-      final dt = DateTime.parse(startTime);
-      return DateFormat('M/d (E) HH:mm', 'ko').format(dt);
-    } catch (_) {
-      return startTime;
-    }
+    return formatMatchStartTime(startTime, pattern: 'M/d (E) HH:mm') ??
+        startTime;
   }
 
   Widget _bsoRow(String label, int value, int max, Color color) {
@@ -1268,17 +1313,11 @@ class _SchedulePreviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    String dateLabel = '';
-    String timeLabel = '';
-    if (match.startTime != null) {
-      try {
-        final dt = DateTime.parse(match.startTime!);
-        dateLabel = DateFormat('M/d (E)', 'ko').format(dt);
-        timeLabel = DateFormat('HH:mm').format(dt);
-      } catch (_) {
-        dateLabel = match.startTime!;
-      }
-    }
+    final dateLabel =
+        formatMatchStartTime(match.startTime, pattern: 'M/d (E)') ??
+            (match.startTime ?? '');
+    final timeLabel =
+        formatMatchStartTime(match.startTime, pattern: 'HH:mm') ?? '';
 
     return Container(
       width: 200,
@@ -1286,8 +1325,7 @@ class _SchedulePreviewCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppTheme.slate800.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-            color: AppTheme.slate700.withValues(alpha: 0.5)),
+        border: Border.all(color: AppTheme.slate700.withValues(alpha: 0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1302,8 +1340,8 @@ class _SchedulePreviewCard extends StatelessWidget {
                       fontWeight: FontWeight.w500)),
               const Spacer(),
               Text(timeLabel,
-                  style: const TextStyle(
-                      color: AppTheme.slate400, fontSize: 12)),
+                  style:
+                      const TextStyle(color: AppTheme.slate400, fontSize: 12)),
             ],
           ),
           const SizedBox(height: 10),
@@ -1333,8 +1371,7 @@ class _SchedulePreviewCard extends StatelessWidget {
           ),
           if (match.venue != null)
             Text(match.venue!,
-                style:
-                    const TextStyle(color: AppTheme.slate500, fontSize: 11),
+                style: const TextStyle(color: AppTheme.slate500, fontSize: 11),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis),
         ],
@@ -1359,8 +1396,7 @@ class _PlaceholderCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppTheme.slate800.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-            color: AppTheme.slate700.withValues(alpha: 0.5)),
+        border: Border.all(color: AppTheme.slate700.withValues(alpha: 0.5)),
       ),
       child: Text(
         text,
@@ -1393,8 +1429,7 @@ class _StickyHeroDelegate extends SliverPersistentHeaderDelegate {
       statusBarHeight + _topPad + _badgeArea + _pinnedRow + _bottomPad;
 
   @override
-  double get minExtent =>
-      statusBarHeight + _topPad + _pinnedRow + _bottomPad;
+  double get minExtent => statusBarHeight + _topPad + _pinnedRow + _bottomPad;
 
   @override
   bool shouldRebuild(covariant _StickyHeroDelegate old) =>
@@ -1444,8 +1479,7 @@ class _StickyHeroDelegate extends SliverPersistentHeaderDelegate {
                             horizontal: 10, vertical: 3),
                         decoration: BoxDecoration(
                           border: Border.all(
-                              color: AppTheme.slate500
-                                  .withValues(alpha: 0.4)),
+                              color: AppTheme.slate500.withValues(alpha: 0.4)),
                           borderRadius: BorderRadius.circular(20),
                           color: Colors.white.withValues(alpha: 0.06),
                         ),
@@ -1501,8 +1535,7 @@ class _StickyHeroDelegate extends SliverPersistentHeaderDelegate {
                           horizontal: 12, vertical: 7),
                       decoration: BoxDecoration(
                         border: Border.all(
-                            color: AppTheme.slate500
-                                .withValues(alpha: 0.4)),
+                            color: AppTheme.slate500.withValues(alpha: 0.4)),
                         borderRadius: BorderRadius.circular(8),
                         color: Colors.white.withValues(alpha: 0.06),
                       ),

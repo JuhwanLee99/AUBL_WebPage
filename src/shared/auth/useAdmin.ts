@@ -9,18 +9,19 @@ const FORCE_ADMIN = import.meta.env.DEV && false;
 export function useAdmin() {
   const { user } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isScorer, setIsScorer] = useState(false);
   const [loading, setLoading] = useState(true);
   const [roleLabel, setRoleLabel] = useState('일반');
   const [roleDetail, setRoleDetail] = useState('사용자');
 
   useEffect(() => {
     let cancelled = false;
-    // user가 변경될 때 loading을 즉시 true로 리셋하여
-    // RequireAdmin이 권한 확인 완료 전에 access-denied로 리다이렉트하지 않도록 방지
-    setLoading(true);
+    // user 변경 직후 로딩 상태를 다음 tick에 반영한다.
+    const loadingTimer = setTimeout(() => setLoading(true), 0);
     const run = async () => {
       if (FORCE_ADMIN) {
         setIsAdmin(true);
+        setIsScorer(false);
         setLoading(false);
         setRoleLabel('관리자');
         setRoleDetail('정식 승인');
@@ -28,6 +29,7 @@ export function useAdmin() {
       }
       if (!user) {
         setIsAdmin(false);
+        setIsScorer(false);
         setLoading(false);
         setRoleLabel('일반');
         setRoleDetail('사용자');
@@ -43,6 +45,7 @@ export function useAdmin() {
       }
       if (cancelled) return;
       setIsAdmin(admin);
+      setIsScorer(false);
       if (admin) {
         setRoleLabel('관리자');
         setRoleDetail('정식 승인');
@@ -55,9 +58,17 @@ export function useAdmin() {
         if (cancelled) return;
         if (roleDoc.exists()) {
           const data = roleDoc.data();
+          if (data?.role === 'scorer') {
+            setRoleLabel('기록원');
+            setRoleDetail('기록/중계');
+            setIsScorer(true);
+            setLoading(false);
+            return;
+          }
           if (data?.role === 'coach') {
             setRoleLabel('감독');
             setRoleDetail(data?.teamName ?? data?.teamId ?? '감독');
+            setIsScorer(false);
             setLoading(false);
             return;
           }
@@ -89,6 +100,7 @@ export function useAdmin() {
                 ? '스태프'
                 : '선수';
           setRoleLabel(label);
+          setIsScorer(false);
           if (teamId) {
             try {
               const teamDoc = await getDoc(doc(firestore, 'teams', teamId));
@@ -111,17 +123,25 @@ export function useAdmin() {
       if (!cancelled) {
         setRoleLabel('일반');
         setRoleDetail('사용자');
+        setIsScorer(false);
         setLoading(false);
       }
     };
     void run();
     return () => {
       cancelled = true;
+      clearTimeout(loadingTimer);
     };
   }, [user]);
 
+  const canUseScorekeeper = isAdmin || isScorer;
+  const canEditGameRecords = isAdmin || isScorer;
+
   return { 
     isAdmin, 
+    isScorer,
+    canUseScorekeeper,
+    canEditGameRecords,
     loading, 
     roleLabel,
     roleDetail 

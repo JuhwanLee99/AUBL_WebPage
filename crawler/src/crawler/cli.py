@@ -124,12 +124,6 @@ def run_sync() -> None:
             roster_entries = fetch_roster(roster_client, sync_settings, year)
             storage.store_roster(roster_entries, year)
             storage.set_team_registry(build_team_registry(roster_entries))
-            batting_payload, pitching_payload = fetch_league_records(
-                roster_client,
-                sync_settings,
-                year,
-            )
-            storage.store_league_records(year, batting_payload, pitching_payload)
             if data_source == "web":
                 web_pages = fetch_web_pages(client, sync_settings, year)
                 for page in web_pages:
@@ -143,7 +137,31 @@ def run_sync() -> None:
             schedule_games = fetch_schedule_games(client, sync_settings, year, data_source)
             _validate_no_duplicate_games(schedule_games)
 
-            for group_code in group_codes or (None,):
+            discovered_group_codes = tuple(
+                sorted({game.group_code for game in schedule_games if game.group_code is not None})
+            )
+            record_group_codes: tuple[str, ...]
+            if group_codes:
+                record_group_codes = tuple(group_codes)
+            else:
+                record_group_codes = discovered_group_codes
+            batting_payload, pitching_payload = fetch_league_records(
+                roster_client,
+                sync_settings,
+                year,
+                record_group_codes,
+            )
+            storage.store_league_records(year, batting_payload, pitching_payload)
+
+            target_group_codes: tuple[str | None, ...]
+            if group_codes:
+                target_group_codes = tuple(group_codes)
+            elif discovered_group_codes:
+                target_group_codes = discovered_group_codes
+            else:
+                target_group_codes = (None,)
+
+            for group_code in target_group_codes:
                 group_games = [game for game in schedule_games if game.group_code == group_code]
                 existing = storage.get_existing_game_idx(year, group_code)
                 to_fetch = [game for game in group_games if game.game_idx not in existing]
@@ -162,9 +180,39 @@ def run_sync() -> None:
                     )
                 )
 
+                failed_games: list[int] = []
                 for game in to_fetch:
-                    payload = fetch_boxscore(client, sync_settings, game.game_idx, data_source)
-                    storage.store_boxscore(game, year, payload)
+                    try:
+                        payload = fetch_boxscore(client, sync_settings, game.game_idx, data_source)
+                        storage.store_boxscore(game, year, payload)
+                    except Exception as exc:  # noqa: BLE001
+                        failed_games.append(game.game_idx)
+                        logger.error(
+                            json.dumps(
+                                {
+                                    "event": "boxscore_store_failed",
+                                    "year": year,
+                                    "group_code": group_code,
+                                    "game_idx": game.game_idx,
+                                    "error": str(exc),
+                                },
+                                sort_keys=True,
+                            )
+                        )
+
+                if failed_games:
+                    logger.warning(
+                        json.dumps(
+                            {
+                                "event": "group_sync_completed_with_failures",
+                                "year": year,
+                                "group_code": group_code,
+                                "failed_games": failed_games,
+                                "failed_count": len(failed_games),
+                            },
+                            sort_keys=True,
+                        )
+                    )
 
                 max_game_idx = max((game.game_idx for game in group_games), default=None)
                 storage.update_crawl_state(year, group_code, max_game_idx)

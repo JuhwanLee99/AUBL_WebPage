@@ -3,11 +3,8 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../features/community/community_screen.dart';
-import '../features/home/home_screen.dart';
-import '../features/records/records_screen.dart';
-import '../features/schedule/schedule_screen.dart';
-import '../features/teams/team_hub_screen.dart';
+import '../core/services/notification_service.dart';
+import '../features/feature_entries.dart';
 import 'embedded_webview_panel.dart';
 import 'more_screen.dart';
 import 'shell_controller.dart';
@@ -23,21 +20,17 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   int _currentIndex = 0;
   bool _loggedIn = false;
   late final StreamSubscription<User?> _authSub;
+  StreamSubscription<String>? _notifNavSub;
   final _refreshNotifier = ValueNotifier<int>(0);
+  final GlobalKey<RecordsScreenState> _recordsKey =
+      GlobalKey<RecordsScreenState>();
+  final GlobalKey<CommunityScreenState> _communityKey =
+      GlobalKey<CommunityScreenState>();
 
   // 임베디드 웹뷰 오버레이 상태
   String? _overlayPath;
   String? _overlayTitle;
   bool _overlayFullscreen = false;
-
-  final _screens = const [
-    HomeScreen(),
-    TeamHubScreen(),
-    ScheduleScreen(),
-    RecordsScreen(),
-    CommunityScreen(),
-    MoreScreen(),
-  ];
 
   @override
   void initState() {
@@ -47,6 +40,16 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (mounted) setState(() => _loggedIn = user != null);
     });
+
+    // 알림 탭 네비게이션 스트림 구독
+    _notifNavSub =
+        NotificationService.instance.navigationStream.listen(_handleNotifNav);
+
+    // 앱 종료 후 알림으로 시작된 경우 처리
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final pending = NotificationService.instance.consumePendingNav();
+      if (pending != null) _handleNotifNav(pending);
+    });
   }
 
   @override
@@ -54,6 +57,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _refreshNotifier.dispose();
     _authSub.cancel();
+    _notifNavSub?.cancel();
     super.dispose();
   }
 
@@ -64,7 +68,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
-  void _openEmbeddedWebView(String path, String title, {bool fullscreen = false}) {
+  void _openEmbeddedWebView(String path, String title,
+      {bool fullscreen = false}) {
     setState(() {
       _overlayPath = path;
       _overlayTitle = title;
@@ -80,6 +85,35 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     });
   }
 
+  /// 알림 탭 시 nav_type에 따라 적절한 탭/화면으로 이동.
+  void _handleNotifNav(String navType) {
+    if (!mounted) return;
+    // 오버레이가 열려 있으면 닫기
+    if (_overlayPath != null) _closeEmbeddedWebView();
+
+    switch (navType) {
+      case 'community_urgent':
+        setState(() => _currentIndex = 4);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _communityKey.currentState?.switchToCategory('긴급');
+        });
+      case 'community_notice':
+        setState(() => _currentIndex = 4);
+      case 'team_notice':
+        setState(() => _currentIndex = 1);
+      case 'match':
+        setState(() => _currentIndex = 2);
+      case 'inquiry':
+        setState(() => _currentIndex = 4);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          Navigator.of(context).push<void>(
+            MaterialPageRoute(builder: (_) => const InquiryBoardScreen()),
+          );
+        });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasOverlay = _overlayPath != null;
@@ -88,8 +122,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       openEmbeddedWebView: _openEmbeddedWebView,
       closeEmbeddedWebView: _closeEmbeddedWebView,
       refreshNotifier: _refreshNotifier,
-      switchTab: (i) {
+      switchTab: (i, {recordsTabIndex}) {
         if (hasOverlay) _closeEmbeddedWebView();
+        if (recordsTabIndex != null) {
+          _recordsKey.currentState?.switchToTabIndex(recordsTabIndex);
+        }
         setState(() => _currentIndex = i);
       },
       child: PopScope(
@@ -110,7 +147,14 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 offstage: hasOverlay,
                 child: IndexedStack(
                   index: _currentIndex,
-                  children: _screens,
+                  children: [
+                    const HomeScreen(),
+                    const TeamHubScreen(),
+                    const ScheduleScreen(),
+                    RecordsScreen(key: _recordsKey),
+                    CommunityScreen(key: _communityKey),
+                    const MoreScreen(),
+                  ],
                 ),
               ),
               if (hasOverlay)
@@ -123,34 +167,37 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                 ),
             ],
           ),
-          bottomNavigationBar: (hasOverlay && _overlayFullscreen) ? null : BottomNavigationBar(
-            currentIndex: _currentIndex,
-            onTap: (i) {
-              if (hasOverlay) _closeEmbeddedWebView();
-              setState(() => _currentIndex = i);
-            },
-            items: [
-              const BottomNavigationBarItem(icon: Icon(Icons.home), label: '홈'),
-              const BottomNavigationBarItem(icon: Icon(Icons.groups), label: '팀'),
-              const BottomNavigationBarItem(
-                  icon: Icon(Icons.calendar_month), label: '일정'),
-              const BottomNavigationBarItem(
-                  icon: Icon(Icons.leaderboard), label: '기록'),
-              const BottomNavigationBarItem(
-                  icon: Icon(Icons.forum), label: '커뮤니티'),
-              BottomNavigationBarItem(
-                icon: _loggedIn
-                    ? const Icon(Icons.menu)
-                    : const Badge(
-                        label: Text('로그인',
-                            style: TextStyle(fontSize: 9)),
-                        backgroundColor: Color(0xFF3B82F6),
-                        child: Icon(Icons.menu),
-                      ),
-                label: '더보기',
-              ),
-            ],
-          ),
+          bottomNavigationBar: (hasOverlay && _overlayFullscreen)
+              ? null
+              : BottomNavigationBar(
+                  currentIndex: _currentIndex,
+                  onTap: (i) {
+                    if (hasOverlay) _closeEmbeddedWebView();
+                    setState(() => _currentIndex = i);
+                  },
+                  items: [
+                    const BottomNavigationBarItem(
+                        icon: Icon(Icons.home), label: '홈'),
+                    const BottomNavigationBarItem(
+                        icon: Icon(Icons.groups), label: '팀'),
+                    const BottomNavigationBarItem(
+                        icon: Icon(Icons.calendar_month), label: '일정'),
+                    const BottomNavigationBarItem(
+                        icon: Icon(Icons.leaderboard), label: '기록'),
+                    const BottomNavigationBarItem(
+                        icon: Icon(Icons.forum), label: '커뮤니티'),
+                    BottomNavigationBarItem(
+                      icon: _loggedIn
+                          ? const Icon(Icons.menu)
+                          : const Badge(
+                              label: Text('로그인', style: TextStyle(fontSize: 9)),
+                              backgroundColor: Color(0xFF3B82F6),
+                              child: Icon(Icons.menu),
+                            ),
+                      label: '더보기',
+                    ),
+                  ],
+                ),
         ),
       ),
     );

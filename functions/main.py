@@ -1,13 +1,131 @@
 import json
+import logging
+import os
+import re
+import urllib.request
 
 from firebase_admin import auth as admin_auth
+from firebase_admin import firestore as admin_firestore
 from firebase_admin import messaging
 from firebase_admin import initialize_app
 from firebase_functions import firestore_fn, https_fn
 from firebase_functions.options import set_global_options
 
+logger = logging.getLogger(__name__)
+
+BACKEND_API_URL = os.environ.get("BACKEND_API_URL", "https://api.aubl.club")
+_COMPLETED_STATUSES = {"completed", "final", "ended", "종료"}
+
 set_global_options(max_instances=10)
 initialize_app()
+
+
+def _normalize_whitespace(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _delta_ops_to_text(ops: list[object]) -> str:
+    chunks: list[str] = []
+    for op in ops:
+        if not isinstance(op, dict):
+            continue
+        insert = op.get("insert")
+        if isinstance(insert, str):
+            value = insert.strip()
+            if value:
+                chunks.append(value)
+            continue
+        if isinstance(insert, dict):
+            if "image" in insert:
+                chunks.append("[이미지]")
+            if "video" in insert:
+                chunks.append("[동영상]")
+    return _normalize_whitespace(" ".join(chunks))
+
+
+def _extract_insert_fragments(raw: str) -> str:
+    fragments: list[str] = []
+    normalized = raw.replace(r"\"", '"')
+
+    quoted = re.finditer(r'"insert"\s*:\s*"((?:\\.|[^"\\])*)"', normalized, flags=re.DOTALL)
+    for match in quoted:
+        value = match.group(1)
+        if not value:
+            continue
+        try:
+            unescaped = json.loads(f'"{value}"')
+            if isinstance(unescaped, str):
+                cleaned = _normalize_whitespace(unescaped)
+                if cleaned:
+                    fragments.append(cleaned)
+        except Exception:  # noqa: BLE001
+            cleaned = _normalize_whitespace(value)
+            if cleaned:
+                fragments.append(cleaned)
+
+    # 비정형 payload 대응 (예: {"ops":[f"insert":... 처럼 깨진 형태)
+    permissive = re.finditer(
+        r"""(?:^|[^A-Za-z0-9_])(?:[fFrRbBuU])?["']?insert["']?\s*:\s*(?:(["'])([\s\S]*?)\1|([^,\}\]]+))""",
+        normalized,
+        flags=re.DOTALL,
+    )
+    for match in permissive:
+        raw_value = (match.group(2) or match.group(3) or "").strip()
+        if not raw_value:
+            continue
+        cleaned = _normalize_whitespace(raw_value.strip("[]"))
+        if cleaned:
+            fragments.append(cleaned)
+
+    if re.search(r'"image"\s*:', normalized):
+        fragments.append("[이미지]")
+    if re.search(r'"video"\s*:', normalized):
+        fragments.append("[동영상]")
+
+    return _normalize_whitespace(" ".join(fragments))
+
+
+def _extract_notice_preview(content: str) -> str:
+    raw = (content or "").strip()
+    if not raw:
+        return ""
+
+    try:
+        decoded = json.loads(raw)
+        if isinstance(decoded, dict) and isinstance(decoded.get("ops"), list):
+            return _delta_ops_to_text(decoded["ops"])
+        if isinstance(decoded, list):
+            return _delta_ops_to_text(decoded)
+        if isinstance(decoded, str):
+            nested = json.loads(decoded)
+            if isinstance(nested, dict) and isinstance(nested.get("ops"), list):
+                return _delta_ops_to_text(nested["ops"])
+            if isinstance(nested, list):
+                return _delta_ops_to_text(nested)
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Delta 형식 문자열이 아니면 plain text 처리
+    if '"ops"' not in raw and '"insert"' not in raw and r"\"ops\"" not in raw and r"\"insert\"" not in raw:
+        return _normalize_whitespace(raw)
+
+    return _extract_insert_fragments(raw)
+
+
+def _build_notice_body(title: str, content: str, max_len: int = 120) -> str:
+    title_text = (title or "새 공지").strip() or "새 공지"
+    preview = _extract_notice_preview(content)
+    if not preview:
+        return title_text
+
+    combined = f"{title_text}: {preview}"
+    if len(combined) <= max_len:
+        return combined
+
+    available = max_len - len(title_text) - 5  # ': ' + '...'
+    if available <= 0:
+        return f"{title_text[:max_len - 3]}..."
+    return f"{title_text}: {preview[:available]}..."
 
 
 def _cors_headers() -> dict[str, str]:
@@ -33,6 +151,12 @@ def _send_topic_notification(topic: str, title: str, body: str, data: dict[str, 
         topic=topic,
         notification=messaging.Notification(title=title, body=body),
         data=data or {},
+        apns=messaging.APNSConfig(
+            payload=messaging.APNSPayload(
+                aps=messaging.Aps(sound="default"),
+            ),
+        ),
+        android=messaging.AndroidConfig(priority="high"),
     )
     messaging.send(message)
 
@@ -72,14 +196,14 @@ def notify_team_notice(event: firestore_fn.Event[firestore_fn.DocumentSnapshot])
     notice_id = event.params.get("noticeId")
     if not team_id:
         return
-    title = (data.get("title") or "새 팀 공지").strip()
-    content = (data.get("content") or "공지 내용이 등록되었습니다.").strip()
-    body = content if len(content) <= 120 else f"{content[:117]}..."
+    notice_title = (data.get("title") or "새 공지").strip()
+    content = (data.get("content") or "").strip()
+    body = _build_notice_body(notice_title, content)
     _send_topic_notification(
         f"team_{team_id}_notices",
-        title,
+        "팀 공지",
         body,
-        {"teamId": str(team_id), "noticeId": str(notice_id or "")},
+        {"teamId": str(team_id), "noticeId": str(notice_id or ""), "nav_type": "team_notice"},
     )
 
 
@@ -105,7 +229,7 @@ def notify_match_live(event: firestore_fn.Event[firestore_fn.Change[firestore_fn
         "matches_all",
         "경기 시작",
         matchup,
-        {"matchId": str(match_id or ""), "teamId": "all"},
+        {"matchId": str(match_id or ""), "teamId": "all", "nav_type": "match"},
     )
     for team_id in [home_id, away_id]:
         if not team_id:
@@ -114,28 +238,108 @@ def notify_match_live(event: firestore_fn.Event[firestore_fn.Change[firestore_fn
             f"team_{team_id}_matches",
             "경기 시작",
             matchup,
-            {"matchId": str(match_id or ""), "teamId": str(team_id)},
+            {"matchId": str(match_id or ""), "teamId": str(team_id), "nav_type": "match"},
         )
 
 
 @firestore_fn.on_document_created(document="notices/{noticeId}", region="asia-northeast3")
 def notify_community_urgent(event: firestore_fn.Event[firestore_fn.DocumentSnapshot]) -> None:
     data = event.data.to_dict() if event.data else {}
-    title = (data.get("title") or "긴급 공지").strip()
-    content = (data.get("content") or "긴급 공지가 등록되었습니다.").strip()
-    body = content if len(content) <= 120 else f"{content[:117]}..."
+    notice_title = (data.get("title") or "새 공지").strip()
+    content = (data.get("content") or "").strip()
     notice_id = event.params.get("noticeId")
-    if data.get("category") == "긴급":
+    category = (data.get("category") or "일반").strip()
+
+    body = _build_notice_body(notice_title, content)
+    if category == "긴급":
         _send_topic_notification(
             "community_urgent",
-            title,
+            "긴급 공지",
             body,
-            {"noticeId": str(notice_id or ""), "category": "긴급"},
+            {"noticeId": str(notice_id or ""), "category": "긴급", "nav_type": "community_urgent"},
         )
         return
+    notif_title = f"{category} 공지" if category not in ("일반", "") else "커뮤니티 공지"
     _send_topic_notification(
         "community_notices",
-        title,
+        notif_title,
         body,
-        {"noticeId": str(notice_id or ""), "category": str(data.get("category") or "")},
+        {"noticeId": str(notice_id or ""), "category": category, "nav_type": "community_notice"},
+    )
+
+
+@firestore_fn.on_document_updated(document="matches/{matchId}", region="asia-northeast3")
+def import_completed_match(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]]) -> None:
+    """When a match status changes to completed, import its data to MariaDB via backend API."""
+    before = event.data.before.to_dict() if event.data and event.data.before else {}
+    after = event.data.after.to_dict() if event.data and event.data.after else {}
+    if not after:
+        return
+    old_status = (before.get("status") or "").lower()
+    new_status = (after.get("status") or "").lower()
+    if old_status == new_status:
+        return
+    if new_status not in _COMPLETED_STATUSES:
+        return
+    match_id = event.params.get("matchId")
+    if not match_id:
+        return
+    url = f"{BACKEND_API_URL}/api/import/firestore/matches/{match_id}"
+    try:
+        req = urllib.request.Request(url, method="POST", data=b"")
+        req.add_header("Content-Type", "application/json")
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            logger.info("import_completed_match: %s -> %s (HTTP %s)", match_id, new_status, resp.status)
+    except Exception:
+        logger.exception("import_completed_match failed for %s", match_id)
+
+
+@firestore_fn.on_document_updated(document="inquiries/{inquiryId}", region="asia-northeast3")
+def notify_inquiry_status(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]]) -> None:
+    """Notify the inquiry author when processing status changes."""
+    before = event.data.before.to_dict() if event.data and event.data.before else {}
+    after = event.data.after.to_dict() if event.data and event.data.after else {}
+    if not after:
+        return
+    if before.get("status") == after.get("status"):
+        return
+    uid = after.get("uid")
+    if not uid:
+        return
+    inquiry_id = event.params.get("inquiryId")
+    title = (after.get("title") or "건의/문의").strip()
+    new_status = after.get("status") or "미처리"
+    _send_topic_notification(
+        f"inquiry_{uid}",
+        "처리 상태 변경",
+        f'"{title}" 글이 {new_status} 상태로 변경되었습니다.',
+        {"inquiryId": str(inquiry_id or ""), "type": "status", "nav_type": "inquiry"},
+    )
+
+
+@firestore_fn.on_document_created(document="inquiries/{inquiryId}/comments/{commentId}", region="asia-northeast3")
+def notify_inquiry_comment(event: firestore_fn.Event[firestore_fn.DocumentSnapshot]) -> None:
+    """Notify the inquiry author when a new comment is posted."""
+    comment_data = event.data.to_dict() if event.data else {}
+    inquiry_id = event.params.get("inquiryId")
+    if not inquiry_id:
+        return
+    db = admin_firestore.client()
+    inquiry_snap = db.collection("inquiries").document(inquiry_id).get()
+    if not inquiry_snap.exists:
+        return
+    inquiry_data = inquiry_snap.to_dict() or {}
+    uid = inquiry_data.get("uid")
+    if not uid:
+        return
+    commenter_uid = comment_data.get("uid")
+    if commenter_uid == uid:
+        return
+    inquiry_title = (inquiry_data.get("title") or "건의/문의").strip()
+    author = (comment_data.get("author") or "누군가").strip()
+    _send_topic_notification(
+        f"inquiry_{uid}",
+        "새 댓글",
+        f'"{inquiry_title}"에 {author}님이 댓글을 남겼습니다.',
+        {"inquiryId": str(inquiry_id), "type": "comment", "nav_type": "inquiry"},
     )

@@ -16,7 +16,7 @@ const MOBILE_NOTICE_SNOOZE_MS = 1000 * 60 * 60 * 24; // 모바일 팝업 24시�
 export default function Layout() {
   const location = useLocation();
   const { user, logout, initializing } = useAuth();
-  const { isAdmin, roleLabel, roleDetail } = useAdmin();
+  const { isAdmin, canUseScorekeeper, canEditGameRecords, roleLabel, roleDetail } = useAdmin();
   const { state } = useDemoStore();
   const isLiveOverlay = location.pathname.startsWith('/live-overlay');
   const isScoreboardText = location.pathname.startsWith('/scoreboard-text');
@@ -25,6 +25,7 @@ export default function Layout() {
   if (isEmbeddedParam) embeddedRef.current = true;
   const isEmbedded = embeddedRef.current;
   const hideChrome = isLiveOverlay || isEmbedded;
+  const isDrawPage = location.pathname === '/draw';
   const isLanding = location.pathname === '/';
   const scoreboardTextPath = state.activeMatchId ? `/scoreboard-text/${state.activeMatchId}` : '/scoreboard-text';
   const liveOverlayPath = state.activeMatchId ? `/live-overlay/${state.activeMatchId}` : '/live-overlay';
@@ -258,25 +259,20 @@ export default function Layout() {
         path: '/records',
         label: '기록',
         children: [
-          { path: '/records/pitchers', label: '투수 기록' },
-          { path: '/records/batters', label: '타자 기록' },
+          { path: '/records?tab=overview', label: '개요' },
+          { path: '/records?tab=standings', label: '팀 순위' },
+          { path: '/records?tab=pitchers', label: '투수 기록' },
+          { path: '/records?tab=batters', label: '타자 기록' },
+          { path: '/records/player', label: '선수 상세' },
+          { path: '/records?tab=power', label: '파워랭킹' },
         ],
       },
       { path: '/community', label: '커뮤니티' },
-      {
-        path: '/standings',
-        label: '순위',
-        children: [{ path: '/standings/power-ranking', label: '파워랭킹' }],
-      },
       { path: '/prediction', label: '승부예측' },
-      // 기록원: 항상 보이지만 비관리자는 클릭 시 안내 버블만 노출
-      { path: scorekeeperPath, label: '기록원', requiresAdmin: true, showWhenBlocked: true },
-      // 사용설명서: 외부 링크
-      {
-        path: 'https://docs.google.com/document/d/e/2PACX-1vRYQNkS6wuqoYWokWN_rnPpmZuWLHcNyn_j5K5Vhw3g8voduO20VMJYFH_3FTjW9Whgk7nxywV8ps_9/pub',
-        label: '사용설명서',
-        isExternal: true,
-      },
+      // 기록원: 항상 보이지만 비권한 사용자는 클릭 시 안내 버블만 노출
+      { path: scorekeeperPath, label: '기록원', requiresScorekeeper: true, showWhenBlocked: true },
+      // 사용설명서: 네이티브 페이지
+      { path: '/manual', label: '사용설명서' },
     ],
     [scorekeeperPath],
   );
@@ -289,12 +285,17 @@ export default function Layout() {
         if (item.requiresAdmin && !isAdmin) {
           return item.showWhenBlocked === true;
         }
+        if (item.requiresScorekeeper && !canUseScorekeeper) {
+          return item.showWhenBlocked === true;
+        }
         return true;
       }),
-    [navItems, isAdmin],
+    [navItems, isAdmin, canUseScorekeeper],
   );
 
   const activeParentPath = useMemo(() => {
+    const normalizePath = (path: string) => path.split('?')[0];
+
     if (hoveredMenu) {
       const hoveredHasChildren = filteredNavItems.some((item) => item.path === hoveredMenu && item.children);
       if (hoveredHasChildren) return hoveredMenu;
@@ -304,8 +305,15 @@ export default function Layout() {
       // External link check
       if ((item as { isExternal?: boolean }).isExternal) return false;
 
-      if (item.children?.some((child) => location.pathname === child.path || location.pathname.startsWith(child.path))) return true;
-      if (item.children && location.pathname === item.path) return true; // 부모 경로 자체를 방문했을 때도 유지
+      if (
+        item.children?.some((child) => {
+          const childPath = normalizePath(child.path);
+          return location.pathname === childPath || location.pathname.startsWith(childPath);
+        })
+      ) {
+        return true;
+      }
+      if (item.children && location.pathname === normalizePath(item.path)) return true; // 부모 경로 자체를 방문했을 때도 유지
       return false;
     });
 
@@ -343,7 +351,7 @@ export default function Layout() {
   return (
     <ContentProvider>
       <div className="app-shell">
-      {!hideChrome && (
+      {!hideChrome && !isDrawPage && (
         <header className="app-header">
           <div
             className="app-header__inner"
@@ -420,14 +428,18 @@ export default function Layout() {
                   {filteredNavItems.map((item) => {
                     const isActive = location.pathname === item.path || activeParentPath === item.path;
                     const isHovering = hoveredMenu === item.path;
-                    const blocked = item.requiresAdmin && !isAdmin;
+                    const blockedByAdmin = item.requiresAdmin && !isAdmin;
+                    const blockedByScorekeeper = item.requiresScorekeeper && !canUseScorekeeper;
+                    const blocked = blockedByAdmin || blockedByScorekeeper;
                     const isExternal = (item as { isExternal?: boolean }).isExternal;
 
                     const handleBlockedHover = (el: HTMLAnchorElement | null) => {
                       if (!blocked || !el) return;
                       const rect = el.getBoundingClientRect();
                       setTooltip({
-                        text: '관리자 로그인이 필요합니다',
+                        text: blockedByScorekeeper
+                          ? '관리자 또는 기록원 권한이 필요합니다'
+                          : '관리자 로그인이 필요합니다',
                         x: rect.left + rect.width / 2,
                         y: rect.bottom,
                       });
@@ -643,6 +655,27 @@ export default function Layout() {
                           {roleLabel}
                         </span>
                       </Link>
+                    ) : canEditGameRecords ? (
+                      <Link to="/admin/games" style={{ textDecoration: 'none' }}>
+                        <span
+                          className="badge-hoverable"
+                          style={{
+                            padding: '6px 10px',
+                            borderRadius: '10px',
+                            background: 'rgba(249,115,22,0.18)',
+                            color: '#fdba74',
+                            fontWeight: 800,
+                            fontSize: '12px',
+                            border: '1px solid rgba(249,115,22,0.45)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.02em',
+                            display: 'inline-block',
+                          }}
+                          title={`권한: ${roleLabel} (${roleDetail}) · 클릭하면 경기 기록 수정으로 이동`}
+                        >
+                          {roleLabel}
+                        </span>
+                      </Link>
                     ) : roleLabel === '선수' ? (
                       <span className="player-badge-wrap">
                         <span className="player-badge" title={`권한: ${roleLabel} (${roleDetail})`}>
@@ -762,7 +795,18 @@ export default function Layout() {
                 }}
               >
                 {activeChildren.map((child) => {
-                  const isActiveChild = location.pathname === child.path;
+                  const [childPath, childQuery = ''] = child.path.split('?');
+                  const isPathMatch = location.pathname === childPath;
+                  const isQueryMatch = (() => {
+                    if (!childQuery) return true;
+                    const expected = new URLSearchParams(childQuery);
+                    const current = new URLSearchParams(location.search);
+                    for (const [key, value] of expected.entries()) {
+                      if (current.get(key) !== value) return false;
+                    }
+                    return true;
+                  })();
+                  const isActiveChild = isPathMatch && isQueryMatch;
                   const isHoveringChild = hoveredMenu === child.path;
                   return (
                     <Link

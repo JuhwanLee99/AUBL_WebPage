@@ -4,7 +4,7 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { firestore } from '../../shared/firebase/client';
 import { useDemoStore } from '../../shared/state/demoStore';
 import type { MatchSchedule } from '../../shared/state/demoStore';
-import IndependentScoreboardPanel from '../../scoreboard/components/IndependentScoreboardPanel';
+import IndependentScoreboardPanel from '../../features/scoreboard/components/IndependentScoreboardPanel';
 
 function safeMatchTime(value: unknown): number {
   if (typeof value !== 'string') return 0;
