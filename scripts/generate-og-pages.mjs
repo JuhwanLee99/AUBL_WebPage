@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const DIST_DIR = path.resolve('dist');
-const BASE_URL = 'https://aubl.club';
+const BASE_URL = (process.env.OG_BASE_URL || 'https://aubl.club').replace(/\/$/, '');
 const DEFAULT_IMAGE = `${BASE_URL}/assets/aubl_clean.png`;
 
 const ROUTES = [
@@ -11,6 +11,14 @@ const ROUTES = [
   { route: '/rules', title: '회칙 | AUBL', description: '전국대학아마추어야구연합회 회칙을 확인하세요.' },
   { route: '/intro/teams', title: '참가팀 · 조편성 | AUBL', description: 'AUBL 참가팀과 조편성 정보를 확인하세요.' },
   { route: '/teams', title: '팀 허브 | AUBL', description: 'AUBL 팀별 페이지, 공지, 로스터, 기록 정보를 확인하세요.' },
+  {
+    route: '/allstar',
+    title: '2026 AUBL 올스타전 팬 투표 | AUBL',
+    description: '2026 AUBL 올스타와 루키 후보를 확인하고 포지션별 팬 투표에 참여하세요.',
+    image: `${BASE_URL}/assets/allstar-og.png`,
+    imageWidth: '1733',
+    imageHeight: '907',
+  },
   { route: '/standings', title: '순위 | AUBL', description: 'AUBL 리그 순위와 팀 성적 정보를 확인하세요.' },
   { route: '/standings/power-ranking', title: '파워랭킹 | AUBL', description: 'AUBL 파워랭킹을 확인하세요.' },
   { route: '/schedule', title: '경기 일정 | AUBL', description: 'AUBL 경기 일정과 진행 상태를 확인하세요.' },
@@ -44,6 +52,10 @@ function replaceLinkCanonical(html, value) {
   return html.replace(/(<link\s+rel="canonical"\s+href=")([^"]*)(" ?\/?>)/i, `$1${value}$3`);
 }
 
+function replaceTitle(html, value) {
+  return html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${value}</title>`);
+}
+
 function normalizeRoute(route) {
   if (route === '/') return '/';
   return route.endsWith('/') ? route.slice(0, -1) : route;
@@ -54,18 +66,21 @@ function routeUrl(route) {
   return normalized === '/' ? `${BASE_URL}/` : `${BASE_URL}${normalized}`;
 }
 
-function applyRouteMeta(template, { route, title, description }) {
+function applyRouteMeta(template, { route, title, description, image = DEFAULT_IMAGE, imageWidth = '957', imageHeight = '895' }) {
   let html = template;
   const url = routeUrl(route);
+  html = replaceTitle(html, title);
   html = replaceLinkCanonical(html, url);
   html = replaceMeta(html, 'name', 'description', description);
   html = replaceMeta(html, 'property', 'og:title', title);
   html = replaceMeta(html, 'property', 'og:description', description);
   html = replaceMeta(html, 'property', 'og:url', url);
-  html = replaceMeta(html, 'property', 'og:image', DEFAULT_IMAGE);
+  html = replaceMeta(html, 'property', 'og:image', image);
+  html = replaceMeta(html, 'property', 'og:image:width', imageWidth);
+  html = replaceMeta(html, 'property', 'og:image:height', imageHeight);
   html = replaceMeta(html, 'name', 'twitter:title', title);
   html = replaceMeta(html, 'name', 'twitter:description', description);
-  html = replaceMeta(html, 'name', 'twitter:image', DEFAULT_IMAGE);
+  html = replaceMeta(html, 'name', 'twitter:image', image);
   return html;
 }
 

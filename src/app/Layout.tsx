@@ -255,6 +255,7 @@ export default function Layout() {
           { path: '/schedule/manage', label: '일정 관리', requiresAdmin: true },
         ],
       },
+      { path: '/allstar', label: '올스타전' },
       {
         path: '/records',
         label: '기록',

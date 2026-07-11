@@ -54,7 +54,7 @@ type AuthContextValue = {
   error: string | null;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   registerWithEmail: (email: string, password: string) => Promise<void>;
-  loginWithGoogle: () => Promise<{ isNewUser: boolean }>;
+  loginWithGoogle: (options?: { useRedirect?: boolean }) => Promise<{ isNewUser: boolean }>;
   loginWithApple: (options?: { useRedirect?: boolean }) => Promise<{ isNewUser: boolean }>;
   logout: () => Promise<void>;
   deleteAccount: (currentPassword?: string) => Promise<void>;
@@ -178,7 +178,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     [],
   );
 
-  const loginWithGoogle = useCallback(async () => {
+  const loginWithGoogle = useCallback(async (options?: { useRedirect?: boolean }) => {
     if (IS_TEST_MODE) {
       console.log('[TEST] 구글 로그인 시도');
       return { isNewUser: false };
@@ -186,6 +186,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setError(null);
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
+    if (options?.useRedirect) {
+      await signInWithRedirect(auth, provider);
+      return { isNewUser: false };
+    }
     const result = await signInWithPopup(auth, provider);
     return { isNewUser: getAdditionalUserInfo(result)?.isNewUser ?? false };
   }, []);

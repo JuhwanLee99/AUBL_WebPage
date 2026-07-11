@@ -10,11 +10,19 @@ from firebase_admin import messaging
 from firebase_admin import initialize_app
 from firebase_functions import firestore_fn, https_fn
 from firebase_functions.options import set_global_options
+from firebase_functions.params import SecretParam
+
+from allstar_voting import CUSTOM_GOOGLE_SUBJECT_CLAIM
+from allstar_voting import get_ballot_status as get_allstar_ballot_status_impl
+from allstar_voting import get_event_config as get_allstar_vote_event_impl
+from allstar_voting import google_subject_from_token
+from allstar_voting import submit_ballot as submit_allstar_ballot_impl
 
 logger = logging.getLogger(__name__)
 
 BACKEND_API_URL = os.environ.get("BACKEND_API_URL", "https://api.aubl.club")
 _COMPLETED_STATUSES = {"completed", "final", "ended", "종료"}
+ALLSTAR_VOTER_KEY_SECRET = SecretParam("ALLSTAR_VOTER_KEY_SECRET")
 
 set_global_options(max_instances=10)
 initialize_app()
@@ -161,6 +169,24 @@ def _send_topic_notification(topic: str, title: str, body: str, data: dict[str, 
     messaging.send(message)
 
 
+@https_fn.on_call(region="asia-northeast3")
+def get_allstar_vote_event(req: https_fn.CallableRequest[object]) -> dict[str, object]:
+    """Return only the published event/candidate configuration; never results."""
+    return get_allstar_vote_event_impl(req.data)
+
+
+@https_fn.on_call(region="asia-northeast3", secrets=[ALLSTAR_VOTER_KEY_SECRET])
+def get_allstar_ballot_status(req: https_fn.CallableRequest[object]) -> dict[str, object]:
+    """Return whether the authenticated account may vote in the current period."""
+    return get_allstar_ballot_status_impl(req, ALLSTAR_VOTER_KEY_SECRET.value)
+
+
+@https_fn.on_call(region="asia-northeast3", secrets=[ALLSTAR_VOTER_KEY_SECRET])
+def submit_allstar_ballot(req: https_fn.CallableRequest[object]) -> dict[str, object]:
+    """Validate and atomically create one immutable ballot for the policy period."""
+    return submit_allstar_ballot_impl(req, ALLSTAR_VOTER_KEY_SECRET.value)
+
+
 @https_fn.on_request(region="asia-northeast3")
 def exchange_web_id_token(req: https_fn.Request) -> https_fn.Response:
     if req.method == "OPTIONS":
@@ -177,7 +203,20 @@ def exchange_web_id_token(req: https_fn.Request) -> https_fn.Response:
 
     try:
         decoded = admin_auth.verify_id_token(id_token)
-        custom_token = admin_auth.create_custom_token(decoded["uid"]).decode("utf-8")
+        google_subject = google_subject_from_token(decoded)
+        if google_subject is None:
+            inherited_subject = decoded.get(CUSTOM_GOOGLE_SUBJECT_CLAIM)
+            if isinstance(inherited_subject, str) and inherited_subject:
+                google_subject = inherited_subject
+        developer_claims = (
+            {CUSTOM_GOOGLE_SUBJECT_CLAIM: google_subject}
+            if google_subject is not None
+            else None
+        )
+        custom_token = admin_auth.create_custom_token(
+            decoded["uid"],
+            developer_claims=developer_claims,
+        ).decode("utf-8")
         return _json_response({"customToken": custom_token})
     except Exception as exc:  # noqa: BLE001
         return _json_response(

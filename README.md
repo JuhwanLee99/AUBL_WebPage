@@ -7,6 +7,7 @@
 
 * 웹 버전: [`docs/web-user-manual.md`](docs/web-user-manual.md)
 * 앱 버전: [`docs/app-user-manual.md`](docs/app-user-manual.md)
+* 올스타·루키 투표 운영: [`functions/ALLSTAR_VOTING.md`](functions/ALLSTAR_VOTING.md)
 
 ## 📊 승부 예측 모델
 
@@ -35,6 +36,13 @@
 
    * Firebase Authentication을 통한 관리자/기록원 권한 관리
    * 리그 일정 및 경기 데이터 관리자 페이지
+
+4. **⭐ 올스타·루키 팬 투표**
+
+   * 모바일 우선 `/allstar` 전용 페이지, 메인 홍보 배너와 상단 메뉴·공유 링크 제공
+   * 올스타/루키, 1팀/2팀, 포지션별 후보 전환과 Google 계정 기반 중복 투표 방지
+   * 계정당 1회 또는 1일 1회 정책, 서버 검증, 불변 투표 원문과 감사용 가명 키 지원
+   * 순위표와 야구장 TOP 2 결과 UI 포함. 실제 공개 집계 API는 투표 오픈 전 별도 연결 필요
 
 ## 🧑‍✈️ 감독 권한 (Coach Role)
 

@@ -129,6 +129,15 @@ const normalizeCreatedAt = (value: unknown): number => {
 
 const UNIQUE_PLAY_URL = 'https://unique-play.com/league/57?item=%5Bobject%20Object%5D';
 
+// 올스타전 홍보 배너는 이 설정만 수정하면 문구 교체 또는 숨김 처리가 가능합니다.
+const ALLSTAR_PROMO = {
+  enabled: true,
+  eyebrow: '2026 AUBL ALL-STAR',
+  title: '올스타전 후보 선정 · 팬 투표',
+  description: '올스타와 루키 후보 명단 및 투표 일정을 준비하고 있습니다. 전용 페이지에서 진행 상황을 확인해 주세요.',
+  ctaLabel: '올스타전 페이지 보기',
+} as const;
+
 const formatNoticeDate = (value: number) => {
   if (!value) return '-';
   return new Intl.DateTimeFormat('ko-KR', {
@@ -517,6 +526,89 @@ export default function LandingPage() {
 
   return (
     <div className="landing-stack">
+      {/* All-Star promotional banner */}
+      {ALLSTAR_PROMO.enabled && (
+        <section
+          aria-labelledby="allstar-promo-title"
+          style={{
+            position: 'relative',
+            overflow: 'hidden',
+            borderRadius: 'var(--surface-radius-lg)',
+            padding: 'clamp(18px, 4vw, 28px)',
+            border: '1px solid rgba(251, 146, 60, 0.5)',
+            background:
+              'radial-gradient(circle at 8% 20%, rgba(251,146,60,0.28), transparent 34%), radial-gradient(circle at 92% 0%, rgba(168,85,247,0.28), transparent 38%), linear-gradient(120deg, #24143b 0%, #172554 55%, #431407 130%)',
+            boxShadow: '0 20px 50px rgba(30, 41, 59, 0.42)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '18px',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: '1 1 300px', minWidth: 0 }}>
+            <span
+              aria-hidden="true"
+              style={{
+                width: 'clamp(46px, 12vw, 62px)',
+                height: 'clamp(46px, 12vw, 62px)',
+                borderRadius: '18px',
+                display: 'grid',
+                placeItems: 'center',
+                flexShrink: 0,
+                background: 'linear-gradient(145deg, #fb923c, #f97316)',
+                color: '#fff7ed',
+                fontSize: 'clamp(24px, 6vw, 32px)',
+                boxShadow: '0 12px 28px rgba(249,115,22,0.34)',
+              }}
+            >
+              ★
+            </span>
+            <div style={{ display: 'grid', gap: '5px', minWidth: 0 }}>
+              <span
+                style={{
+                  color: '#fdba74',
+                  fontSize: 'clamp(11px, 2.8vw, 13px)',
+                  fontWeight: 900,
+                  letterSpacing: '0.1em',
+                }}
+              >
+                {ALLSTAR_PROMO.eyebrow}
+              </span>
+              <h2
+                id="allstar-promo-title"
+                style={{ margin: 0, color: '#fff7ed', fontSize: 'clamp(20px, 5vw, 30px)', lineHeight: 1.2, fontWeight: 900 }}
+              >
+                {ALLSTAR_PROMO.title}
+              </h2>
+              <p style={{ margin: 0, color: '#e2e8f0', fontSize: 'clamp(13px, 3.4vw, 15px)', lineHeight: 1.55 }}>
+                {ALLSTAR_PROMO.description}
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/allstar"
+            aria-label={`${ALLSTAR_PROMO.title} 페이지로 이동`}
+            style={{
+              minHeight: '46px',
+              padding: '12px 18px',
+              borderRadius: '14px',
+              background: 'linear-gradient(120deg, #fb923c, #f97316)',
+              color: '#1c0a00',
+              fontSize: 'clamp(13px, 3.5vw, 15px)',
+              fontWeight: 900,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flex: '0 1 auto',
+              boxShadow: '0 12px 28px rgba(249,115,22,0.32)',
+            }}
+          >
+            {ALLSTAR_PROMO.ctaLabel} →
+          </Link>
+        </section>
+      )}
+
       {/* Hero Section */}
       <section
         ref={heroRef}
