@@ -774,6 +774,11 @@ export default function AllStarVotingPage() {
             resultCounts={null}
             preview={Boolean(ballotSource && !ballotSource.published)}
             updatedAt={null}
+            selectedTeam={team}
+            onTeamChange={(nextTeam) => {
+              setTeam(nextTeam);
+              setPositionFilter('ALL');
+            }}
           />
         ) : !showBallot ? (
           eventLoading ? <CandidateUnavailable loading /> : division === 'ROOKIE' ? <RookiePreparation /> : <CandidateUnavailable loading={false} />

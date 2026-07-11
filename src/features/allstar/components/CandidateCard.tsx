@@ -19,6 +19,9 @@ export function CandidateCard({
   onToggle,
 }: CandidateCardProps) {
   const isDisabled = interactionLocked || (selectionBlocked && !selected);
+  const secondaryLabel = [candidate.school, candidate.group ? `${candidate.group}조` : null]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <button
@@ -32,26 +35,27 @@ export function CandidateCard({
     >
       <span className="allstar-candidate__topline">
         <span className="allstar-candidate__number" aria-hidden="true">
-          {String(displayNumber).padStart(2, '0')}
+          #{String(displayNumber).padStart(2, '0')}
+        </span>
+        <span className="allstar-candidate__position">
+          {POSITION_LABELS[candidate.position as AllStarPosition] ?? candidate.position}
         </span>
         <span className="allstar-candidate__draft">{candidate.draft ? 'DRAFT' : 'NOMINEE'}</span>
       </span>
 
       <span className="allstar-candidate__body">
-        <span className="allstar-candidate__position">
-          {POSITION_LABELS[candidate.position as AllStarPosition] ?? candidate.position}
-        </span>
         <strong>{candidate.name}</strong>
-        <span className="allstar-candidate__school">{candidate.school}</span>
+        <span className="allstar-candidate__school">{secondaryLabel}</span>
       </span>
 
       <span className="allstar-candidate__footer">
-        <span>{candidate.group ? `${candidate.group}조` : candidate.number ? `NO. ${candidate.number}` : 'AUBL'}</span>
         <span className="allstar-candidate__select-label">
           <span className="allstar-candidate__check" aria-hidden="true">
             {selected ? '✓' : '+'}
           </span>
-          {selected ? '선택됨' : isDisabled ? '선택 완료' : '선택'}
+          <span className="allstar-candidate__select-text">
+            {selected ? '선택됨' : isDisabled ? '선택 완료' : '선택'}
+          </span>
         </span>
       </span>
     </button>
