@@ -7,6 +7,7 @@ import type {
   SubmitBallotInput,
   VoteEvent,
   VotePolicy,
+  VoteResults,
   VotingStatus,
 } from '../types';
 
@@ -22,6 +23,7 @@ type SubmitBallotResult = {
 export type AllStarVoteService = {
   isAvailable: boolean;
   getVoteEvent: (input: GetBallotStatusInput) => Promise<VoteEvent>;
+  getVoteResults: (input: GetBallotStatusInput) => Promise<VoteResults>;
   getBallotStatus: (input: GetBallotStatusInput) => Promise<BallotStatus>;
   submitBallot: (input: SubmitBallotInput) => Promise<SubmitBallotResult>;
 };
@@ -40,6 +42,8 @@ type VoteEventResponse = {
   allowedAuthProviders: string[];
   opensAt?: string | null;
   closesAt?: string | null;
+  gameStartsAt?: string | null;
+  venue?: string | null;
   candidateSet?: PublishedCandidateSet | null;
 };
 
@@ -53,6 +57,15 @@ type BallotStatusResponse = {
   canVote: boolean;
   submittedAt?: string | null;
   nextEligibleAt?: string | null;
+};
+
+type VoteResultsResponse = {
+  available: boolean;
+  candidateVersion: string;
+  candidateSetHash?: string | null;
+  totalBallots: number;
+  counts: Record<string, number>;
+  updatedAt?: string | null;
 };
 
 type SubmitBallotResponse = {
@@ -77,6 +90,11 @@ const getVoteEventCallable = httpsCallable<CallableRequest, VoteEventResponse>(
 const getBallotStatusCallable = httpsCallable<CallableRequest, BallotStatusResponse>(
   functions,
   'get_allstar_ballot_status',
+);
+
+const getVoteResultsCallable = httpsCallable<CallableRequest, VoteResultsResponse>(
+  functions,
+  'get_allstar_vote_results',
 );
 
 const submitBallotCallable = httpsCallable<
@@ -108,7 +126,24 @@ export const allStarVoteService: AllStarVoteService = {
       allowedAuthProviders: payload.allowedAuthProviders,
       opensAt: payload.opensAt ?? null,
       closesAt: payload.closesAt ?? null,
+      gameStartsAt: payload.gameStartsAt ?? null,
+      venue: payload.venue ?? null,
       candidateSet: payload.candidateSet ?? null,
+    };
+  },
+  async getVoteResults(input) {
+    const response = await getVoteResultsCallable({
+      eventId: input.eventId,
+      division: toBackendDivision(input.division),
+    });
+    const payload = response.data;
+    return {
+      available: payload.available,
+      candidateVersion: payload.candidateVersion,
+      candidateSetHash: payload.candidateSetHash ?? null,
+      totalBallots: payload.totalBallots,
+      counts: payload.counts,
+      updatedAt: payload.updatedAt ?? null,
     };
   },
   async getBallotStatus(input) {

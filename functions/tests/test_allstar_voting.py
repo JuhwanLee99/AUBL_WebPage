@@ -11,6 +11,7 @@ from allstar_voting import _derive_ballot_id
 from allstar_voting import _ledger_blocks_vote
 from allstar_voting import _period_for
 from allstar_voting import _public_candidate_set
+from allstar_voting import _public_result_summary
 from allstar_voting import _stable_voter_subject
 from allstar_voting import _validate_auth_provider
 from allstar_voting import _validate_selections
@@ -198,6 +199,55 @@ class CandidateValidationTests(unittest.TestCase):
         }
         changed = _public_candidate_set(raw, "allstar", "v1")
         self.assertNotEqual(original, changed["contentHash"])
+
+    def test_public_result_summary_is_version_and_hash_bound(self) -> None:
+        result = _public_result_summary(
+            {
+                "published": True,
+                "candidateVersion": "v1",
+                "candidateSetHash": self.candidate_set["contentHash"],
+                "totalBallots": 12,
+                "counts": {"p1": 7, "p2": 5, "c1": 12},
+                "updatedAt": datetime(2026, 7, 11, 15, 0, tzinfo=timezone.utc),
+            },
+            self.candidate_set,
+            "v1",
+        )
+        self.assertTrue(result["available"])
+        self.assertEqual(result["totalBallots"], 12)
+        self.assertEqual(result["counts"], {"p1": 7, "p2": 5, "c1": 12})
+
+    def test_public_result_summary_rejects_unknown_candidate(self) -> None:
+        with self.assertRaises(https_fn.HttpsError) as raised:
+            _public_result_summary(
+                {
+                    "published": True,
+                    "candidateVersion": "v1",
+                    "candidateSetHash": self.candidate_set["contentHash"],
+                    "totalBallots": 12,
+                    "counts": {"unknown": 1},
+                    "updatedAt": datetime(2026, 7, 11, 15, 0, tzinfo=timezone.utc),
+                },
+                self.candidate_set,
+                "v1",
+            )
+        self.assertEqual(raised.exception.details["reason"], "CONFIG_INVALID")
+
+    def test_public_result_summary_rejects_count_above_ballots(self) -> None:
+        with self.assertRaises(https_fn.HttpsError) as raised:
+            _public_result_summary(
+                {
+                    "published": True,
+                    "candidateVersion": "v1",
+                    "candidateSetHash": self.candidate_set["contentHash"],
+                    "totalBallots": 2,
+                    "counts": {"p1": 3},
+                    "updatedAt": datetime(2026, 7, 11, 15, 0, tzinfo=timezone.utc),
+                },
+                self.candidate_set,
+                "v1",
+            )
+        self.assertEqual(raised.exception.details["reason"], "CONFIG_INVALID")
 
 
 class AuthProviderTests(unittest.TestCase):

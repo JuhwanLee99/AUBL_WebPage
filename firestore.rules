@@ -351,6 +351,11 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // 공개 callable이 반환할 후보별 합계 원본. 일반 클라이언트 직접 읽기는 금지한다.
+      match /publicResults/{divisionId} {
+        allow read, write: if isAdmin();
+      }
+
       match /{document=**} {
         allow read, write: if false;
       }

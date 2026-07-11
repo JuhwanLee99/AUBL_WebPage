@@ -43,12 +43,23 @@ export type AllStarEventConfig = {
   maxSelectionsByPosition: Record<AllStarPosition, number>;
   opensAt: string | null;
   closesAt: string | null;
+  gameStartsAt: string | null;
+  venue: string | null;
 };
 
 export type BallotStatus = {
   eligibility: BallotEligibility;
   votedAt: string | null;
   nextEligibleAt: string | null;
+};
+
+export type VoteResults = {
+  available: boolean;
+  candidateVersion: string;
+  candidateSetHash: string | null;
+  totalBallots: number;
+  counts: Record<string, number>;
+  updatedAt: string | null;
 };
 
 export type PublishedCandidate = {
@@ -91,6 +102,8 @@ export type VoteEvent = {
   allowedAuthProviders: string[];
   opensAt: string | null;
   closesAt: string | null;
+  gameStartsAt: string | null;
+  venue: string | null;
   candidateSet: PublishedCandidateSet | null;
 };
 

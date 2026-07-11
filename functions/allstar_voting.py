@@ -25,6 +25,7 @@ EVENTS_COLLECTION = "allstarVotingEvents"
 BALLOTS_SUBCOLLECTION = "ballots"
 CANDIDATE_SETS_SUBCOLLECTION = "candidateSets"
 ELIGIBILITY_SUBCOLLECTION = "voterEligibility"
+PUBLIC_RESULTS_SUBCOLLECTION = "publicResults"
 CUSTOM_GOOGLE_SUBJECT_CLAIM = "aublGoogleSubject"
 
 POLICY_ONCE_PER_EVENT = "ONCE_PER_EVENT"
@@ -568,6 +569,60 @@ def _iso(value: object) -> str | None:
     return value.isoformat() if isinstance(value, datetime) else None
 
 
+def _public_result_summary(
+    raw: Mapping[str, Any],
+    public_set: Mapping[str, Any],
+    expected_version: str,
+) -> dict[str, Any]:
+    if raw.get("published") is not True:
+        _misconfigured("Vote result summary is not published.")
+    if raw.get("candidateVersion") != expected_version:
+        _misconfigured("Vote result candidate version does not match the active division.")
+    if raw.get("candidateSetHash") != public_set.get("contentHash"):
+        _misconfigured("Vote result candidate hash does not match the active candidate set.")
+
+    total_ballots = raw.get("totalBallots")
+    if (
+        isinstance(total_ballots, bool)
+        or not isinstance(total_ballots, int)
+        or total_ballots < 0
+        or total_ballots > 10_000_000
+    ):
+        _misconfigured("Vote result totalBallots is invalid.")
+
+    candidates = _require_mapping(public_set.get("candidates"), "candidates", config=True)
+    raw_counts = _require_mapping(raw.get("counts"), "counts", config=True)
+    if len(raw_counts) > len(candidates):
+        _misconfigured("Vote result contains too many candidate counts.")
+
+    counts = {candidate_id: 0 for candidate_id in candidates}
+    for raw_candidate_id, raw_count in raw_counts.items():
+        candidate_id = _require_value_key(raw_candidate_id, "resultCandidateId", config=True)
+        if candidate_id not in candidates:
+            _misconfigured("Vote result references an unknown candidate.", candidateId=candidate_id)
+        if (
+            isinstance(raw_count, bool)
+            or not isinstance(raw_count, int)
+            or raw_count < 0
+            or raw_count > total_ballots
+        ):
+            _misconfigured("Vote result count is invalid.", candidateId=candidate_id)
+        counts[candidate_id] = raw_count
+
+    updated_at = _as_datetime(raw.get("updatedAt"), "results.updatedAt")
+    if updated_at is None:
+        _misconfigured("Vote result updatedAt is required.")
+
+    return {
+        "available": True,
+        "candidateVersion": expected_version,
+        "candidateSetHash": public_set["contentHash"],
+        "totalBallots": total_ballots,
+        "counts": counts,
+        "updatedAt": updated_at.isoformat(),
+    }
+
+
 def get_event_config(data: object) -> dict[str, Any]:
     event_id, division_id = _request_ids(data)
     db = admin_firestore.client()
@@ -587,6 +642,17 @@ def get_event_config(data: object) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
     state = _effective_state(event, division, now)
     published = division.get("published") is True
+    game_starts_at = _as_datetime(
+        division.get("gameStartsAt", event.get("gameStartsAt")),
+        "gameStartsAt",
+    )
+    venue = division.get("venue", event.get("venue"))
+    if venue is not None and (
+        not isinstance(venue, str)
+        or not venue.strip()
+        or len(venue.strip()) > 160
+    ):
+        _misconfigured("Voting event venue is invalid.")
 
     public_set: dict[str, Any] | None = None
     if published:
@@ -610,7 +676,64 @@ def get_event_config(data: object) -> dict[str, Any]:
         "allowedAuthProviders": _allowed_auth_providers(event, division),
         "opensAt": _iso(division.get("opensAt", event.get("opensAt"))),
         "closesAt": _iso(division.get("closesAt", event.get("closesAt"))),
+        "gameStartsAt": _iso(game_starts_at),
+        "venue": venue.strip() if isinstance(venue, str) else None,
         "candidateSet": public_set,
+    }
+
+
+def get_vote_results(data: object) -> dict[str, Any]:
+    event_id, division_id = _request_ids(data)
+    db = admin_firestore.client()
+    event_ref = db.collection(EVENTS_COLLECTION).document(event_id)
+    event_snapshot = event_ref.get()
+    if not event_snapshot.exists:
+        _error(
+            https_fn.FunctionsErrorCode.NOT_FOUND,
+            "Voting event was not found.",
+            "EVENT_NOT_FOUND",
+        )
+    event = event_snapshot.to_dict() or {}
+    division = _event_division(event, division_id)
+    candidate_set_id, candidate_version = _candidate_set_identity(division)
+    unavailable = {
+        "eventId": event_id,
+        "division": division_id,
+        "available": False,
+        "candidateVersion": candidate_version,
+        "candidateSetHash": None,
+        "totalBallots": 0,
+        "counts": {},
+        "updatedAt": None,
+    }
+
+    if division.get("published") is not True or division.get("resultsPublished") is not True:
+        return unavailable
+
+    candidate_snapshot = (
+        event_ref.collection(CANDIDATE_SETS_SUBCOLLECTION).document(candidate_set_id).get()
+    )
+    if not candidate_snapshot.exists:
+        _misconfigured("Published candidate set was not found.")
+    public_set = _public_candidate_set(
+        candidate_snapshot.to_dict() or {},
+        division_id,
+        candidate_version,
+    )
+
+    result_snapshot = (
+        event_ref.collection(PUBLIC_RESULTS_SUBCOLLECTION).document(division_id).get()
+    )
+    if not result_snapshot.exists:
+        return unavailable
+    raw_result = result_snapshot.to_dict() or {}
+    if raw_result.get("published") is not True:
+        return unavailable
+
+    return {
+        "eventId": event_id,
+        "division": division_id,
+        **_public_result_summary(raw_result, public_set, candidate_version),
     }
 
 

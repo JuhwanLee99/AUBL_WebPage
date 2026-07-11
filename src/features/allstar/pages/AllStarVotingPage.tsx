@@ -16,6 +16,7 @@ import type {
   BallotStatus,
   VoteEvent,
   VotePolicy,
+  VoteResults,
   VotingCandidate,
   VotingContest,
   VotingStatus,
@@ -240,6 +241,7 @@ export default function AllStarVotingPage() {
   const [division, setDivision] = useState<AllStarDivision>(readDivisionFromUrl);
   const [pageView, setPageView] = useState<AllStarPageView>(readPageViewFromUrl);
   const [voteEvent, setVoteEvent] = useState<VoteEvent | null>(null);
+  const [voteResults, setVoteResults] = useState<VoteResults | null>(null);
   const [eventLoading, setEventLoading] = useState(false);
   const [eventError, setEventError] = useState<string | null>(null);
   const [team, setTeam] = useState<AllStarTeam>('TEAM_1');
@@ -340,6 +342,39 @@ export default function AllStarVotingPage() {
     if (voteEvent?.candidateSet) return buildPublishedBallotSource(voteEvent);
     return useDraftPreview ? DRAFT_BALLOT_SOURCE : null;
   }, [useDraftPreview, voteEvent]);
+  useEffect(() => {
+    let cancelled = false;
+    let refreshTimer: number | null = null;
+    const canLoadResults =
+      division === 'ALL_STAR' && serviceAvailable && Boolean(voteEvent?.published);
+
+    if (!canLoadResults) {
+      setVoteResults(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const loadResults = () => {
+      void allStarVoteService
+        .getVoteResults({ eventId: EVENT_CONFIG.eventId, division })
+        .then((result) => {
+          if (!cancelled) setVoteResults(result);
+        })
+        .catch(() => {
+          if (!cancelled) setVoteResults(null);
+        });
+    };
+
+    loadResults();
+    refreshTimer = window.setInterval(loadResults, 60_000);
+
+    return () => {
+      cancelled = true;
+      if (refreshTimer !== null) window.clearInterval(refreshTimer);
+    };
+  }, [division, serviceAvailable, voteEvent?.candidateVersion, voteEvent?.published]);
+
 
   const selectionStorageKey = ballotSource
     ? getSelectionStorageKey(division, ballotSource.version)
@@ -362,6 +397,11 @@ export default function AllStarVotingPage() {
           ? getEventStatusCopy(runtimeStatus, eventLoading)
           : { label: '후보 검토 중', description: '올스타 후보 명단과 투표 일정을 준비하고 있습니다.' }
       : getEventStatusCopy(runtimeStatus, eventLoading);
+  const previewResults = Boolean(ballotSource && !ballotSource.published);
+  const publishedResultCounts =
+    voteResults?.available && voteResults.candidateVersion === ballotSource?.version
+      ? voteResults.counts
+      : null;
 
   const candidateById = useMemo(
     () => new Map((ballotSource?.candidates ?? []).map((candidate) => [candidate.id, candidate])),
@@ -771,9 +811,9 @@ export default function AllStarVotingPage() {
           <VoteResultsPanel
             candidates={ballotSource?.candidates ?? []}
             contests={ballotSource?.contests ?? []}
-            resultCounts={null}
-            preview={Boolean(ballotSource && !ballotSource.published)}
-            updatedAt={null}
+            resultCounts={publishedResultCounts}
+            preview={previewResults}
+            updatedAt={voteResults?.updatedAt ?? null}
             selectedTeam={team}
             onTeamChange={(nextTeam) => {
               setTeam(nextTeam);

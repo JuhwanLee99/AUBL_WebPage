@@ -15,6 +15,7 @@ from firebase_functions.params import SecretParam
 from allstar_voting import CUSTOM_GOOGLE_SUBJECT_CLAIM
 from allstar_voting import get_ballot_status as get_allstar_ballot_status_impl
 from allstar_voting import get_event_config as get_allstar_vote_event_impl
+from allstar_voting import get_vote_results as get_allstar_vote_results_impl
 from allstar_voting import google_subject_from_token
 from allstar_voting import submit_ballot as submit_allstar_ballot_impl
 
@@ -173,6 +174,12 @@ def _send_topic_notification(topic: str, title: str, body: str, data: dict[str, 
 def get_allstar_vote_event(req: https_fn.CallableRequest[object]) -> dict[str, object]:
     """Return only the published event/candidate configuration; never results."""
     return get_allstar_vote_event_impl(req.data)
+
+
+@https_fn.on_call(region="asia-northeast3")
+def get_allstar_vote_results(req: https_fn.CallableRequest[object]) -> dict[str, object]:
+    """Return only an explicitly published, candidate-version-bound aggregate."""
+    return get_allstar_vote_results_impl(req.data)
 
 
 @https_fn.on_call(region="asia-northeast3", secrets=[ALLSTAR_VOTER_KEY_SECRET])
