@@ -50,4 +50,6 @@ export const ALL_STAR_EVENT_CONFIG: AllStarEventConfig = {
   },
   opensAt: null,
   closesAt: null,
+  gameStartsAt: null,
+  venue: null,
 };

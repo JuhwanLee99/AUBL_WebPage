@@ -117,26 +117,6 @@ const formatDateTime = (value: string | null) => {
 const getPolicyLabel = (policy: VotePolicy) =>
   policy === 'ONCE_PER_DAY' ? 'Google 계정당 하루 1회' : 'Google 계정당 1회';
 
-const getEventStatusCopy = (status: VotingStatus, loading: boolean) => {
-  if (loading) return { label: '투표 정보 확인 중', description: '공개된 후보와 투표 규칙을 불러오고 있습니다.' };
-  if (status === 'OPEN') {
-    return { label: '투표 진행 중', description: '모든 필수 항목의 선택을 마친 뒤 투표를 제출해 주세요.' };
-  }
-  if (status === 'SCHEDULED') {
-    return { label: '투표 오픈 예정', description: '후보를 미리 확인하고 투표 시작을 기다려 주세요.' };
-  }
-  if (status === 'CLOSED') {
-    return { label: '투표 종료', description: '참여해 주셔서 감사합니다. 최종 로스터 발표를 기다려 주세요.' };
-  }
-  if (status === 'DISABLED') {
-    return { label: '투표 준비 중', description: '투표 정보를 준비하고 있습니다. 잠시 후 다시 확인해 주세요.' };
-  }
-  return {
-    label: '후보 검토 중',
-    description: '현재 명단은 UI 검수용 초안이며 선택 내용은 서버로 전송되지 않습니다.',
-  };
-};
-
 const DRAFT_BALLOT_SOURCE: BallotSource = {
   version: EVENT_CONFIG.candidateVersion,
   published: false,
@@ -232,6 +212,69 @@ function CandidateUnavailable({ loading }: { loading: boolean }) {
       <p className="allstar-eyebrow">AUBL ALL-STAR VOTE</p>
       <h2>{loading ? '투표 정보를 불러오고 있어요' : '공개 후보를 준비하고 있어요'}</h2>
       <p>{loading ? '잠시만 기다려 주세요.' : '후보가 공개되면 이 페이지에서 바로 확인하고 투표할 수 있습니다.'}</p>
+    </section>
+  );
+}
+
+type AllStarInfoHeroProps = {
+  title: string;
+  opensAt: string | null;
+  closesAt: string | null;
+  gameStartsAt: string | null;
+  venue: string | null;
+};
+
+const formatVotingPeriod = (opensAt: string | null, closesAt: string | null) => {
+  const opens = formatDateTime(opensAt);
+  const closes = formatDateTime(closesAt);
+  if (opens && closes) return `${opens} – ${closes}`;
+  if (opens) return `${opens}부터`;
+  if (closes) return `${closes}까지`;
+  return '투표 일정 확정 후 공개';
+};
+
+function AllStarInfoHero({
+  title,
+  opensAt,
+  closesAt,
+  gameStartsAt,
+  venue,
+}: AllStarInfoHeroProps) {
+  const details = [
+    {
+      key: 'vote',
+      label: '투표 기간',
+      value: formatVotingPeriod(opensAt, closesAt),
+    },
+    {
+      key: 'game',
+      label: '올스타전 일시',
+      value: formatDateTime(gameStartsAt) ?? '경기 일정 확정 후 공개',
+    },
+    {
+      key: 'venue',
+      label: '올스타전 장소',
+      value: venue?.trim() || '경기 장소 확정 후 공개',
+    },
+  ];
+
+  return (
+    <section className="allstar-info-hero" aria-labelledby="allstar-page-title">
+      <header className="allstar-info-hero__header">
+        <div>
+          <p>{title}</p>
+          <h1 id="allstar-page-title">올스타전 안내</h1>
+        </div>
+      </header>
+
+      <div className="allstar-info-hero__details">
+        {details.map((detail) => (
+          <article className={`is-${detail.key}`} key={detail.key}>
+            <small>{detail.label}</small>
+            <strong>{detail.value}</strong>
+          </article>
+        ))}
+      </div>
     </section>
   );
 }
@@ -342,6 +385,7 @@ export default function AllStarVotingPage() {
     if (voteEvent?.candidateSet) return buildPublishedBallotSource(voteEvent);
     return useDraftPreview ? DRAFT_BALLOT_SOURCE : null;
   }, [useDraftPreview, voteEvent]);
+
   useEffect(() => {
     let cancelled = false;
     let refreshTimer: number | null = null;
@@ -375,7 +419,6 @@ export default function AllStarVotingPage() {
     };
   }, [division, serviceAvailable, voteEvent?.candidateVersion, voteEvent?.published]);
 
-
   const selectionStorageKey = ballotSource
     ? getSelectionStorageKey(division, ballotSource.version)
     : null;
@@ -389,14 +432,6 @@ export default function AllStarVotingPage() {
 
   const runtimeStatus: VotingStatus = serviceAvailable ? voteEvent?.state ?? 'DISABLED' : EVENT_CONFIG.status;
   const runtimePolicy = voteEvent?.policy ?? EVENT_CONFIG.votePolicy;
-  const eventStatusCopy =
-    runtimeStatus === 'DRAFT'
-      ? division === 'ROOKIE'
-        ? { label: '후보 검토 중', description: '루키 선발 기준과 후보 명단을 준비하고 있습니다.' }
-        : ballotSource
-          ? getEventStatusCopy(runtimeStatus, eventLoading)
-          : { label: '후보 검토 중', description: '올스타 후보 명단과 투표 일정을 준비하고 있습니다.' }
-      : getEventStatusCopy(runtimeStatus, eventLoading);
   const previewResults = Boolean(ballotSource && !ballotSource.published);
   const publishedResultCounts =
     voteResults?.available && voteResults.candidateVersion === ballotSource?.version
@@ -715,10 +750,6 @@ export default function AllStarVotingPage() {
     return submitting ? '제출 중…' : '선택한 후보로 투표하기';
   })();
 
-  const maxSelectionValues = Array.from(new Set((ballotSource?.contests ?? []).map((contest) => contest.maxSelections)));
-  const selectionRuleLabel =
-    maxSelectionValues.length === 1 ? `항목별 최대 ${maxSelectionValues[0]}명` : '항목별 선택 인원 확인';
-
   const showBallot = Boolean(ballotSource);
 
   return (
@@ -755,24 +786,15 @@ export default function AllStarVotingPage() {
           </button>
         </div>
 
-        <section className="allstar-hero" aria-labelledby="allstar-page-title">
-          <div className="allstar-hero__copy">
-            <div className={`allstar-status allstar-status--${runtimeStatus.toLowerCase()}`}>
-              <span aria-hidden="true" /> {eventStatusCopy.label}
-            </div>
-            <p className="allstar-eyebrow">{voteEvent?.title ?? EVENT_CONFIG.seasonLabel} · {division === 'ROOKIE' ? 'ROOKIE' : 'ALL-STAR'}</p>
-            <h1 id="allstar-page-title">
-              {division === 'ROOKIE' ? <>새로운 얼굴을<br />직접 선택하세요.</> : <>우리의 올스타를<br />직접 선택하세요.</>}
-            </h1>
-            <p>{eventStatusCopy.description}</p>
-            <div className="allstar-hero__rules" aria-label="투표 핵심 안내">
-              <span>{getPolicyLabel(runtimePolicy)}</span>
-              <span>{selectionRuleLabel}</span>
-              <span>올스타 · 루키 별도 투표</span>
-            </div>
-          </div>
-          <div className="allstar-hero__ball" aria-hidden="true"><span>26</span></div>
-        </section>
+        {division === 'ALL_STAR' ? (
+          <AllStarInfoHero
+            title={voteEvent?.title ?? EVENT_CONFIG.seasonLabel}
+            opensAt={voteEvent?.opensAt ?? EVENT_CONFIG.opensAt}
+            closesAt={voteEvent?.closesAt ?? EVENT_CONFIG.closesAt}
+            gameStartsAt={voteEvent?.gameStartsAt ?? EVENT_CONFIG.gameStartsAt}
+            venue={voteEvent?.venue ?? EVENT_CONFIG.venue}
+          />
+        ) : null}
 
         {division === 'ALL_STAR' ? (
           <div className="allstar-page-view" role="tablist" aria-label="올스타 페이지 보기">

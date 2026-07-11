@@ -1,6 +1,6 @@
 # AUBL 올스타/루키 투표 시스템
 
-투표는 Firestore 클라이언트 쓰기가 아니라 `asia-northeast3`의 callable Cloud Functions를 통해서만 접수한다. 일반 사용자의 Firestore 직접 접근은 Security Rules에서 차단된다. 후보 설정은 `admin` 계정이 관리하고, 투표 원문은 `admin: true`와 `allstarVoteAuditor: true` custom claim을 모두 가진 감사 계정만 클라이언트에서 읽을 수 있다. 공개 결과 API는 제공하지 않는다.
+투표는 Firestore 클라이언트 쓰기가 아니라 `asia-northeast3`의 callable Cloud Functions를 통해서만 접수한다. 일반 사용자의 Firestore 직접 접근은 Security Rules에서 차단된다. 후보 설정은 `admin` 계정이 관리하고, 투표 원문은 `admin: true`와 `allstarVoteAuditor: true` custom claim을 모두 가진 감사 계정만 클라이언트에서 읽을 수 있다. 공개 결과 callable은 운영자가 이중 승인한 후보별 합계만 반환한다.
 
 ## 현재 구현 범위
 
@@ -13,15 +13,30 @@
 | 인증·중복 방지 | 구현 완료 | Google 계정, 이벤트당 1회 또는 현지 날짜당 1회 |
 | 제출 백엔드 | 구현 완료·기본 비활성 | Functions, Firestore Rules, Secret과 이벤트 설정 배포 필요 |
 | 결과 화면 | UI 구현 완료 | 순위표와 그라운드 TOP 2. 검수 빌드는 예시 득표만 표시 |
-| 실시간 결과 | 미연결 | 안전한 집계 API와 공개 기준을 확정한 뒤 `resultCounts` 연결 필요 |
+| 실시간 결과 | 읽기 경로 구현 | 승인된 합계 문서 조회·60초 갱신 완료. 합계 생성 작업은 미구현 |
 | 루키 후보 | 명단 확정 전 | 올스타와 별도 후보 세트·투표로 운영 |
 
 운영 빌드의 기본값은 안전한 준비 상태다. `VITE_ALLSTAR_VOTING_API_ENABLED=false`이면 callable을 호출하지 않으며, `VITE_ALLSTAR_SHOW_DRAFT_CANDIDATES=false`이면 초안 후보도 노출하지 않는다.
 
+## 후보 명단 확정 전 병행 작업
+
+- [x] 후보 카드를 92px 높이의 압축형 레이아웃으로 변경
+- [x] hero를 투표 기간·올스타전 일시·장소 안내 영역으로 구성
+- [x] 경기 일시와 장소를 Firestore 이벤트 설정에서 공개하도록 연결
+- [x] 결과 화면과 hero가 같은 TOP 2 순위 계산을 사용하도록 통합
+- [x] 실제 집계 미연결 상태와 검수용 예시 득표를 시각적으로 구분
+- [x] 후보 버전·hash에 묶인 공개 합계 callable과 60초 갱신 연결
+- [ ] 공개 집계 지연 시간, 동률, 무효표, 최소 공개 표본 정책 확정
+- [ ] 집계 전용 callable 또는 서버 집계 문서 구현과 부하 검증
+- [ ] 최종 후보 세트 생성·검증·게시 및 루키 후보 구조 확정
+- [ ] App Check, 운영 모니터링, 실제 Google 로그인·제출 리허설
+
+완료 표시된 항목은 후보 실명과 무관하게 진행했다. 나머지 항목은 운영 회의에서 공개·집계 정책이나 최종 후보 버전이 정해진 뒤 진행한다.
+
 ## 사용자 사용 방법
 
 1. 메인 페이지 홍보 배너나 상단 메뉴에서 `올스타전`을 선택한다. 직접 공유 주소 `/allstar`로 진입해도 같은 전용 페이지가 열린다.
-2. 최상단에서 `올스타`와 `루키`를 전환한다. URL의 `division=allstar` 또는 `division=rookie`가 현재 부문을 보존한다.
+2. 안내 영역에서 투표 기간, 올스타전 일시와 장소를 확인하고 최상단에서 `올스타`와 `루키`를 전환한다. URL의 `division=allstar` 또는 `division=rookie`가 현재 부문을 보존한다.
 3. 올스타 후보 화면에서 1팀 또는 2팀과 포지션을 선택하고 각 포지션에서 한 명을 선택한다. 1팀 선택을 마치면 페이지 하단 팀 전환 영역이 2팀 진행을 안내한다.
 4. 선택 내용은 제출 전까지 현재 브라우저 탭의 `sessionStorage`에만 임시 보관된다. 후보 버전이 바뀌면 이전 임시 선택은 자동 폐기된다.
 5. 이용약관과 개인정보 처리방침에 동의한 뒤 Google 계정으로 로그인한다. 모바일에서는 redirect, 일반 데스크톱에서는 popup 로그인을 사용한다.
@@ -30,7 +45,7 @@
 
 Google 로그인이 인앱 브라우저에서 차단되면 Chrome 또는 Safari로 링크를 다시 연다. Firebase Authentication의 승인된 도메인에 현재 운영 또는 검토 채널 도메인이 없으면 redirect 로그인도 완료되지 않는다.
 
-결과 화면에서 `예시 데이터 · 실제 득표 아님`이 보이는 빌드는 검수 전용이다. 실제 운영에서는 예시 득표를 노출하지 않으며, 집계 API가 연결되기 전에는 준비 상태만 표시한다.
+결과 화면에서 `예시 데이터 · 실제 득표 아님`이 보이는 빌드는 검수 전용이다. 실제 운영에서는 예시 득표를 노출하지 않으며, 승인된 합계 문서가 생성·공개되기 전에는 준비 상태만 표시한다.
 
 ## Callable 계약
 
@@ -40,6 +55,10 @@ Google 로그인이 인앱 브라우저에서 차단되면 Chrome 또는 Safari�
 - `get_allstar_ballot_status({ eventId, division })`
   - Firebase Auth 로그인이 필요하다.
   - 현재 정책 기간의 `submitted`, `canVote`, `submittedAt`, `nextEligibleAt`과 후보 준비 상태만 반환하고 선택 내용은 반환하지 않는다.
+- `get_allstar_vote_results({ eventId, division })`
+  - 로그인 없이 호출할 수 있지만 부문의 `resultsPublished`와 합계 문서의 `published`가 모두 `true`일 때만 합계를 반환한다.
+  - 활성 후보 버전·hash와 일치하는 후보별 득표수, 총 ballot 수, 갱신 시각만 반환한다.
+  - voter key, period key, 원본 선택 묶음은 반환하지 않는다.
 - `submit_allstar_ballot({ eventId, division, candidateVersion, selections })`
   - Firebase Auth 로그인이 필요하다.
   - `selections`는 모든 contest를 정확히 한 번씩 포함하는 `{ [contestId]: candidateId[] }` 객체다.
@@ -62,6 +81,8 @@ Google 로그인이 인앱 브라우저에서 차단되면 Chrome 또는 Safari�
   "allowedAuthProviders": ["google.com"],
   "opensAt": "Firestore Timestamp (선택)",
   "closesAt": "Firestore Timestamp (선택)",
+  "gameStartsAt": "Firestore Timestamp (선택)",
+  "venue": "장소 확정 후 입력",
   "divisions": {
     "allstar": {
       "label": "올스타",
@@ -69,7 +90,8 @@ Google 로그인이 인앱 브라우저에서 차단되면 Chrome 또는 Safari�
       "published": false,
       "status": "DRAFT",
       "candidateSetId": "allstar-v1",
-      "candidateVersion": "allstar-v1"
+      "candidateVersion": "allstar-v1",
+      "resultsPublished": false
     },
     "rookie": {
       "label": "루키",
@@ -77,13 +99,14 @@ Google 로그인이 인앱 브라우저에서 차단되면 Chrome 또는 Safari�
       "published": false,
       "status": "DRAFT",
       "candidateSetId": "rookie-v1",
-      "candidateVersion": "rookie-v1"
+      "candidateVersion": "rookie-v1",
+      "resultsPublished": false
     }
   }
 }
 ```
 
-기본 예시는 이벤트와 각 디비전이 모두 비활성화되어 있다. 실제 오픈 때 이벤트와 대상 디비전의 `enabled`, `published`를 `true`, `status`를 `OPEN`으로 바꾼다. `opensAt`과 `closesAt`은 문자열이 아니라 Firestore Timestamp로 입력한다.
+기본 예시는 이벤트와 각 디비전이 모두 비활성화되어 있다. 실제 오픈 때 이벤트와 대상 디비전의 `enabled`, `published`를 `true`, `status`를 `OPEN`으로 바꾼다. `opensAt`, `closesAt`, `gameStartsAt`은 문자열이 아니라 Firestore Timestamp로 입력한다. `venue`는 160자 이하의 공개 장소명으로 입력하며, 값이 없으면 페이지에 확정 후 공개로 표시된다.
 
 후보 세트 문서: `allstarVotingEvents/{eventId}/candidateSets/{candidateSetId}`
 
@@ -125,6 +148,23 @@ Google 로그인이 인앱 브라우저에서 차단되면 Chrome 또는 Safari�
 정책 전환과 동시 요청을 막기 위한 최소 상태는 `allstarVotingEvents/{eventId}/voterEligibility/{hmacEligibilityId}`에 저장된다. 이 문서도 provider subject를 HMAC 처리한 ID만 사용하며 일반 관리자에게도 클라이언트 쓰기를 허용하지 않는다. Firestore 트랜잭션이 eligibility와 ballot을 함께 갱신하므로 동시 요청 중 한 건만 성공한다.
 
 HMAC ID는 익명값이 아니라 가명값이다. Secret과 provider subject 목록을 함께 가진 운영자는 재계산할 수 있으므로 Secret 접근을 최소화하고, 이벤트 이의제기 기간이 끝나면 ballots와 voterEligibility의 보존·삭제 일정을 운영 정책으로 정한다.
+
+공개 합계 문서: `allstarVotingEvents/{eventId}/publicResults/{division}`
+
+```json
+{
+  "published": false,
+  "candidateVersion": "allstar-v1",
+  "candidateSetHash": "활성 후보 세트의 contentHash",
+  "totalBallots": 0,
+  "counts": {
+    "team_1-p-1": 0
+  },
+  "updatedAt": "Firestore Timestamp"
+}
+```
+
+일반 클라이언트는 이 문서를 직접 읽을 수 없다. `get_allstar_vote_results`는 부문의 `resultsPublished: true`, 합계 문서의 `published: true`, 후보 버전·hash 일치, 0 이상의 정수 득표와 `득표수 <= totalBallots`를 모두 확인한 뒤 공개 필드만 반환한다. 둘 중 하나라도 비활성이면 `available: false`를 반환하므로 운영자가 공개를 명시적으로 두 번 승인해야 한다.
 
 ## 1회/1일 정책 전환
 
@@ -192,6 +232,7 @@ OG_BASE_URL=https://aubl.club npm run build
 3. 후보 검토가 끝나면 후보 세트의 `published`를 `true`로 바꾼다. 이후에는 이 문서를 수정하지 않고 변경이 필요할 때 새 `candidateSetId`와 `candidateVersion`을 만든다.
 4. 이벤트와 부문은 계속 `enabled: false`, `published: false`, `status: DRAFT`로 유지한 채 callable 응답과 UI를 검증한다.
 5. 공개 직전에 부문의 `candidateSetId`와 `candidateVersion`을 확정하고 `published: true`로 바꾼다.
+6. 이벤트의 `gameStartsAt`, `venue`를 확정하고 운영 URL의 안내 영역에서 표기와 시간대를 확인한다.
 
 후보 확정 전의 원본 시트, 회의 자료, Unique Play 기록 JSON은 공개 저장소나 Hosting 산출물에 포함하지 않는다. 웹에 필요한 확정 필드만 후보 세트로 옮긴다.
 
@@ -207,12 +248,12 @@ OG_BASE_URL=https://aubl.club npm run build
 
 ### 5. 결과 데이터
 
-현재 callable은 원본 투표와 공개 결과를 반환하지 않는다. 결과 UI에 실제 득표를 연결하려면 다음 조건을 만족하는 별도 집계 계층을 먼저 구현한다.
+현재 결과 callable과 UI 갱신 경로는 준비되어 있지만 합계 문서를 만드는 집계 작업은 아직 구현하지 않았다. 다음 조건을 만족하는 별도 집계 계층을 구현한다.
 
 - 일반 클라이언트가 `ballots`를 직접 읽지 않도록 한다.
 - 후보별 합계와 갱신 시각만 공개하고 voter key, period key, 원본 선택 묶음은 반환하지 않는다.
 - 동률 처리, 무효표·후보 변경 처리, 공개 지연 시간과 최소 집계 표본을 운영 규칙으로 확정한다.
-- 결과 응답은 활성 `candidateVersion`과 함께 검증하고 UI의 `resultCounts`, `updatedAt`에 연결한다.
+- 결과 응답은 활성 `candidateVersion`·`candidateSetHash`와 함께 검증하며 UI는 60초마다 `resultCounts`, `updatedAt`을 갱신한다.
 
 이 작업 전까지 운영 결과 화면은 준비 상태로 두며, 검수용 예시 득표를 실제 결과처럼 배포하지 않는다.
 
@@ -252,6 +293,7 @@ firebase hosting:channel:deploy allstar-review --expires 30d --project <project-
 검토 항목:
 
 - `/allstar/?division=allstar`에서 후보·팀·포지션·하단 전환 확인
+- hero의 투표 기간·경기 일시·장소와 미확정 fallback 문구 확인
 - `/allstar/?division=allstar&view=results`에서 예시 데이터 경고, 순위표, 그라운드 확인
 - `/allstar/?division=rookie`에서 준비 상태 확인
 - 페이지 source의 canonical, OG 이미지가 검토 채널을 가리키는지 확인
@@ -267,7 +309,7 @@ firebase hosting:channel:deploy allstar-review --expires 30d --project <project-
 
 ```bash
 firebase deploy --only firestore:rules,firestore:indexes
-firebase deploy --only functions:get_allstar_vote_event,functions:get_allstar_ballot_status,functions:submit_allstar_ballot
+firebase deploy --only functions:get_allstar_vote_event,functions:get_allstar_vote_results,functions:get_allstar_ballot_status,functions:submit_allstar_ballot
 ```
 
 5. 비활성 이벤트 문서와 후보 세트를 생성하고 callable 응답을 확인한다.
