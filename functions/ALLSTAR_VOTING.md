@@ -8,42 +8,47 @@
 | --- | --- | --- |
 | 전용 페이지 | 구현 완료 | `/allstar`, 모바일 우선 레이아웃, 독립 공유 링크 |
 | 진입 경로 | 구현 완료 | 메인 최상단 홍보 배너, 상단 메뉴 |
-| 후보 화면 | 구현 완료 | 올스타/루키, 1팀/2팀, 포지션 필터와 하단 팀 전환 |
-| 선택 규칙 | 구현 완료 | 올스타는 팀·포지션별 정확히 1명, 서버와 UI가 함께 강제 |
+| 후보 화면 | 구현 완료 | 전체 화면 랜딩·허브·실제 visual viewport에 고정한 올스타 카드 확인과 루키 읽기 전용 명단 |
+| 선택 규칙 | 구현 완료 | 일반 포지션은 정확히 1명, 통합 외야수는 15명 중 정확히 6명을 서버와 UI가 함께 강제 |
 | 인증·중복 방지 | 구현 완료 | Google 계정, 이벤트당 1회 또는 현지 날짜당 1회 |
 | 제출 백엔드 | 구현 완료·기본 비활성 | Functions, Firestore Rules, Secret과 이벤트 설정 배포 필요 |
-| 결과 화면 | UI 구현 완료 | 순위표와 그라운드 TOP 2. 검수 빌드는 예시 득표만 표시 |
+| 결과 화면 | UI 구현 완료 | 일반 포지션 TOP 2와 단일 OF TOP 6 순위표·그라운드. 검수 빌드는 예시 득표만 표시 |
 | 실시간 결과 | 읽기 경로 구현 | 승인된 합계 문서 조회·60초 갱신 완료. 합계 생성 작업은 미구현 |
-| 루키 후보 | 명단 확정 전 | 올스타와 별도 후보 세트·투표로 운영 |
+| 루키 후보 | 검토 명단 공개 | 2026-07-13 추천안 78명(1팀 40명·2팀 38명), 투표 기능은 기준 확정 전까지 비활성 |
 
 운영 빌드의 기본값은 안전한 준비 상태다. `VITE_ALLSTAR_VOTING_API_ENABLED=false`이면 callable을 호출하지 않으며, `VITE_ALLSTAR_SHOW_DRAFT_CANDIDATES=false`이면 초안 후보도 노출하지 않는다.
 
 ## 후보 명단 확정 전 병행 작업
 
-- [x] 후보 카드를 92px 높이의 압축형 레이아웃으로 변경
+- [x] Keen Slider 원통형 카드, 강도별 1~2장 이동, 카드 덱 확대 상세, 미세 기울기 제스처와 AUBL 고유 홀로그램 표면 구현
+- [x] 첫 접근과 올스타 허브 새로고침 랜딩, 후보 확인·투표·현황 허브 구현
 - [x] hero를 투표 기간·올스타전 일시·장소 안내 영역으로 구성
 - [x] 경기 일시와 장소를 Firestore 이벤트 설정에서 공개하도록 연결
-- [x] 결과 화면과 hero가 같은 TOP 2 순위 계산을 사용하도록 통합
+- [x] 결과 화면을 일반 포지션 TOP 2·통합 외야 TOP 6으로 통합
 - [x] 실제 집계 미연결 상태와 검수용 예시 득표를 시각적으로 구분
 - [x] 후보 버전·hash에 묶인 공개 합계 callable과 60초 갱신 연결
+- [x] 루키 78명 추천안을 로그인·선택·제출 없는 읽기 전용 화면으로 공개
 - [ ] 공개 집계 지연 시간, 동률, 무효표, 최소 공개 표본 정책 확정
 - [ ] 집계 전용 callable 또는 서버 집계 문서 구현과 부하 검증
-- [ ] 최종 후보 세트 생성·검증·게시 및 루키 후보 구조 확정
+- [ ] 최종 후보 세트 생성·검증·게시 및 루키 투표 단위·선발 규칙 확정
 - [ ] App Check, 운영 모니터링, 실제 Google 로그인·제출 리허설
 
-완료 표시된 항목은 후보 실명과 무관하게 진행했다. 나머지 항목은 운영 회의에서 공개·집계 정책이나 최종 후보 버전이 정해진 뒤 진행한다.
+루키 검토 명단 공개 항목만 2026-07-13 학교 추천 실명을 기준으로 한다. 나머지 미완료 항목은 운영 회의에서 공개·집계 정책이나 최종 후보 버전이 정해진 뒤 진행한다.
 
 ## 사용자 사용 방법
 
-1. 메인 페이지 홍보 배너나 상단 메뉴에서 `올스타전`을 선택한다. 직접 공유 주소 `/allstar`로 진입해도 같은 전용 페이지가 열린다.
-2. 안내 영역에서 투표 기간, 올스타전 일시와 장소를 확인하고 최상단에서 `올스타`와 `루키`를 전환한다. URL의 `division=allstar` 또는 `division=rookie`가 현재 부문을 보존한다.
-3. 올스타 후보 화면에서 1팀 또는 2팀과 포지션을 선택하고 각 포지션에서 한 명을 선택한다. 1팀 선택을 마치면 페이지 하단 팀 전환 영역이 2팀 진행을 안내한다.
-4. 선택 내용은 제출 전까지 현재 브라우저 탭의 `sessionStorage`에만 임시 보관된다. 후보 버전이 바뀌면 이전 임시 선택은 자동 폐기된다.
-5. 이용약관과 개인정보 처리방침에 동의한 뒤 Google 계정으로 로그인한다. 모바일에서는 redirect, 일반 데스크톱에서는 popup 로그인을 사용한다.
-6. 모든 contest 선택을 마친 뒤 최종 확인 창에서 제출한다. 성공한 투표는 사용자가 수정하거나 다시 제출할 수 없다.
-7. `투표 현황`에서 팀별 순위표와 그라운드 TOP 2를 전환한다. `view=results`가 결과 화면 링크를 보존한다.
+1. 메인 홍보 배너·상단 메뉴·공유 주소 `/allstar`로 전용 페이지를 연다. 첫 접근과 `?division=allstar` 허브를 새로 불러올 때 전체 화면 랜딩이 나오며 위로 60px 이상 스와이프하거나 버튼을 눌러 들어간다. 후보·결과 딥링크는 같은 세션의 첫 접근에만 랜딩을 거치고 이후에는 공유 화면을 바로 연다.
+2. 허브에서 투표 기간·경기 일시·장소를 확인하고 올스타 또는 루키를 고른다. `division=allstar|rookie`, `view=candidates|results`가 공유 대상 화면을 보존한다.
+3. `후보 확인하기`는 로그인 없이 동작한다. 올스타 후보 화면은 공용 상단바 없이 열리며 원통 카드를 좌우로 밀어 이동하고 중앙 카드를 눌러 확대한다. 약한 스와이프는 한 장, 충분히 길고 빠른 스와이프는 최대 두 장 이동한다. 확대 화면은 겹친 카드 덱에서 한 장씩 꺼내거나 다시 쌓는 전환으로 탐색한다. 좌우 이동이 아닌 세로·대각선 제스처에는 카드가 가볍게 기울었다가 손을 놓으면 복귀한다. 루키는 학교 추천 카드의 학교·조·추천 가능 포지션·비고를 확인한다.
+4. 실제 올스타 투표 시작을 누르면 이용약관·개인정보 처리방침 동의와 Google 로그인을 거친다. 인앱 브라우저는 Chrome 열기와 링크 복사 안내를 먼저 제공한다.
+5. 1팀의 `P → C → 1B → 2B → 3B → SS → OF` 순서로 선택한다. 투표 단계는 모바일에서 현재 보이는 viewport 한 화면에 제목·진행률·선택 상태·카드·확인 버튼을 모두 배치한다. 일반 포지션은 5명 중 1명, OF는 15명 중 6명을 선택한다. `maxSelections > 1`인 포지션의 확대 화면 상단에는 `선택 1 / 6명 · 후보 15명`처럼 현재 선택 수가 실시간 표시된다. 상세 카드의 `이 선수 선택`을 누르면 왼쪽 `선택 취소`, 오른쪽 `선택 확인`이 나타나며, 확인하면 포지션별 추가 팝업 없이 바로 다음 포지션으로 이동한다. OF는 정확히 6명을 채울 때까지 확인 버튼이 비활성화된다.
+6. 1팀 12명 요약 후 강조된 `2팀 투표 시작`으로 같은 7단계를 반복한다. 선택 내용은 후보 버전별 `sessionStorage`에만 임시 저장되며 버전 변경 시 폐기된다.
+7. 양 팀 합계 24명을 최종 확인하고 제출한다. 성공한 투표는 사용자가 수정하거나 다시 제출할 수 없다.
+8. 감사 화면에서 `투표 현황 보기`로 이동해 일반 포지션 TOP 2와 통합 OF TOP 6 순위표·그라운드를 확인한다.
 
-Google 로그인이 인앱 브라우저에서 차단되면 Chrome 또는 Safari로 링크를 다시 연다. Firebase Authentication의 승인된 도메인에 현재 운영 또는 검토 채널 도메인이 없으면 redirect 로그인도 완료되지 않는다.
+[Google OAuth 정책](https://developers.google.com/identity/protocols/oauth2/policies)에 따라 임베디드 WebView 로그인이 제한될 수 있고, Hosting 환경에서는 [Firebase redirect 권고](https://firebase.google.com/docs/auth/web/redirect-best-practices)를 적용한다. Android의 Chrome Intent와 iOS의 Chrome URL scheme은 사용자 버튼으로만 best-effort 실행하며 실패하면 링크 복사 또는 현재 브라우저 계속 시도를 제공한다. 자동 외부 브라우저 전환을 보장하지 않는다. Firebase Authentication 승인 도메인에 운영 또는 로그인 시험용 검토 채널 도메인이 없으면 redirect도 완료되지 않는다.
+
+일반 iPhone Safari·Chrome 탭에서는 웹페이지가 브라우저 상·하단 도구막대를 강제로 숨길 수 없다. 현재 구현은 `viewport-fit=cover`, safe-area inset, `visualViewport.height`를 함께 사용해 도구막대 안쪽의 실제 보이는 높이에 화면을 고정하고 페이지 자체 스크롤과 rubber-band를 막는다. 주소창까지 없는 앱 형태가 필요하면 사용자가 홈 화면에 추가한 standalone Web App 구성을 별도로 도입해야 한다. 관련 동작은 [WebKit viewport 단위 설명](https://webkit.org/blog/12445/new-webkit-features-in-safari-15-4/)과 [Apple 홈 화면 웹 앱 안내](https://developer.apple.com/library/archive/documentation/AppleApplications/Reference/SafariWebContent/ConfiguringWebApplications/ConfiguringWebApplications.html)를 기준으로 운영한다.
 
 결과 화면에서 `예시 데이터 · 실제 득표 아님`이 보이는 빌드는 검수 전용이다. 실제 운영에서는 예시 득표를 노출하지 않으며, 승인된 합계 문서가 생성·공개되기 전에는 준비 상태만 표시한다.
 
@@ -61,7 +66,7 @@ Google 로그인이 인앱 브라우저에서 차단되면 Chrome 또는 Safari�
   - voter key, period key, 원본 선택 묶음은 반환하지 않는다.
 - `submit_allstar_ballot({ eventId, division, candidateVersion, selections })`
   - Firebase Auth 로그인이 필요하다.
-  - `selections`는 모든 contest를 정확히 한 번씩 포함하는 `{ [contestId]: candidateId[] }` 객체다.
+  - `selections`는 모든 contest를 정확히 한 번씩 포함하는 `{ [contestId]: candidateId[] }` 객체다. 일반 올스타 contest는 배열 길이 1, `OF` contest는 배열 길이 6이어야 한다.
   - 이벤트/디비전 상태, 투표 기간, 후보 버전, contest 목록, 최소·최대 선택 수, 후보 자격, 중복 ID를 모두 서버에서 재검증한다.
   - 성공 응답의 `submittedAt`은 요청 판단에 사용한 서버 시각이며, 저장 문서에는 Firestore `SERVER_TIMESTAMP`가 기록된다.
 
@@ -71,7 +76,9 @@ Google 로그인이 인앱 브라우저에서 차단되면 Chrome 또는 Safari�
 
 이벤트 문서: `allstarVotingEvents/{eventId}`
 
-```json
+다음 블록은 필드 관계를 설명하는 **일부 발췌본이며 그대로 Firestore에 저장하면 안 된다.** 실제 문서는 후보 90명과 contest 14개를 모두 포함해야 하고, 먼저 `published: false`로 검증한다.
+
+```jsonc
 {
   "enabled": false,
   "status": "DRAFT",
@@ -89,8 +96,8 @@ Google 로그인이 인앱 브라우저에서 차단되면 Chrome 또는 Safari�
       "enabled": false,
       "published": false,
       "status": "DRAFT",
-      "candidateSetId": "allstar-v1",
-      "candidateVersion": "allstar-v1",
+      "candidateSetId": "allstar-v2-of",
+      "candidateVersion": "allstar-v2-of",
       "resultsPublished": false
     },
     "rookie": {
@@ -110,11 +117,13 @@ Google 로그인이 인앱 브라우저에서 차단되면 Chrome 또는 Safari�
 
 후보 세트 문서: `allstarVotingEvents/{eventId}/candidateSets/{candidateSetId}`
 
-```json
+다음 블록은 필드 구조를 설명하기 위한 일부 발췌 예시다. 실제 발행 문서에는 주석 없이 양 팀 14개 contest와 90명 후보를 모두 입력해야 한다.
+
+```jsonc
 {
   "published": true,
   "division": "allstar",
-  "version": "allstar-v1",
+  "version": "allstar-v2-of",
   "candidates": {
     "team_1-p-1": {
       "name": "홍길동",
@@ -123,23 +132,37 @@ Google 로그인이 인앱 브라우저에서 차단되면 Chrome 또는 Safari�
       "side": "TEAM_1",
       "group": "A"
     }
+    // team_1-p-2부터 team_2-of-15까지 나머지 후보 89명 필수
   },
   "contests": {
     "TEAM_1:P": {
       "label": "1팀 투수",
       "side": "TEAM_1",
       "position": "P",
-      "candidateIds": ["team_1-p-1"],
+      "candidateIds": ["team_1-p-1", "team_1-p-2", "team_1-p-3", "team_1-p-4", "team_1-p-5"],
       "minSelections": 1,
       "maxSelections": 1
+    },
+    "TEAM_1:OF": {
+      "label": "1팀 외야수",
+      "side": "TEAM_1",
+      "position": "OF",
+      "candidateIds": [
+        "team_1-of-1", "team_1-of-2", "team_1-of-3", "team_1-of-4", "team_1-of-5",
+        "team_1-of-6", "team_1-of-7", "team_1-of-8", "team_1-of-9", "team_1-of-10",
+        "team_1-of-11", "team_1-of-12", "team_1-of-13", "team_1-of-14", "team_1-of-15"
+      ],
+      "minSelections": 6,
+      "maxSelections": 6
     }
+    // TEAM_1의 나머지 5개 일반 contest와 TEAM_2의 7개 contest 필수
   }
 }
 ```
 
-공개 후보 필드는 `name`, `school`, `position`, `side`, `group`, `number`만 허용된다. 후보·contest ID는 영문자가 한 글자 이상 들어간 불투명 ASCII slug만 허용한다. 이메일, 전화번호, Firebase UID, Unique Play 사용자 ID를 ID로 재사용하지 않는다. 모든 공개 후보는 정확히 하나의 contest에 배정되어야 한다. 올스타 부문의 모든 contest는 `minSelections: 1`, `maxSelections: 1`로 설정하며 서버도 정확히 1명 선택을 강제한다. 그 밖의 필드를 후보 문서에 넣어도 callable 응답에는 포함되지 않는다.
+공개 후보 필드는 `name`, `school`, `position`, `side`, `group`, `number`만 허용된다. 후보·contest ID는 영문자가 한 글자 이상 들어간 불투명 ASCII slug만 허용한다. 이메일, 전화번호, Firebase UID, Unique Play 사용자 ID를 ID로 재사용하지 않는다. 모든 공개 후보는 정확히 하나의 contest에 배정되어야 한다. 올스타는 양 팀마다 `P/C/1B/2B/3B/SS` 후보 각 5명·정확히 1표와 `OF` 후보 15명·정확히 6표로 구성한다. 전체 후보는 90명이고 완성 ballot은 24명을 선택한다. `LF/CF/RF` contest는 새 서버 검증에서 거부되므로 새 후보 버전에서는 반드시 `OF`로 합친다. 그 밖의 필드를 후보 문서에 넣어도 callable 응답에는 포함되지 않는다.
 
-후보나 contest 구성을 한 글자라도 바꾸면 새 후보 세트 문서를 만들고 `candidateSetId`와 `candidateVersion`을 함께 올린다. Security Rules는 `published: true`가 된 후보 세트의 클라이언트 수정·삭제를 차단한다. 각 투표에는 `candidateSetId`, `candidateVersion`, 정규화된 후보 세트의 SHA-256 `candidateSetHash`가 함께 저장되므로 사후 집계 시 사용된 명단을 검증할 수 있다.
+후보나 contest 구성을 한 글자라도 바꾸면 새 후보 세트 문서를 만들고 `candidateSetId`와 `candidateVersion`을 함께 올린다. 기존 LF/CF/RF 후보 ID는 새 OF contest에서도 유지할 수 있지만, 이미 공개된 legacy 후보 세트는 과거 감사·조회용으로만 보존하고 수정하지 않는다. Security Rules는 `published: true`가 된 후보 세트의 클라이언트 수정·삭제를 차단한다. 각 투표에는 `candidateSetId`, `candidateVersion`, 정규화된 후보 세트의 SHA-256 `candidateSetHash`가 함께 저장되므로 사후 집계 시 사용된 명단을 검증할 수 있다.
 
 투표 문서: `allstarVotingEvents/{eventId}/ballots/{hmacDocumentId}`
 
@@ -154,7 +177,7 @@ HMAC ID는 익명값이 아니라 가명값이다. Secret과 provider subject �
 ```json
 {
   "published": false,
-  "candidateVersion": "allstar-v1",
+  "candidateVersion": "allstar-v2-of",
   "candidateSetHash": "활성 후보 세트의 contentHash",
   "totalBallots": 0,
   "counts": {
@@ -164,7 +187,7 @@ HMAC ID는 익명값이 아니라 가명값이다. Secret과 provider subject �
 }
 ```
 
-일반 클라이언트는 이 문서를 직접 읽을 수 없다. `get_allstar_vote_results`는 부문의 `resultsPublished: true`, 합계 문서의 `published: true`, 후보 버전·hash 일치, 0 이상의 정수 득표와 `득표수 <= totalBallots`를 모두 확인한 뒤 공개 필드만 반환한다. 둘 중 하나라도 비활성이면 `available: false`를 반환하므로 운영자가 공개를 명시적으로 두 번 승인해야 한다.
+일반 클라이언트는 이 문서를 직접 읽을 수 없다. `get_allstar_vote_results`는 부문의 `resultsPublished: true`, 합계 문서의 `published: true`, 후보 버전·hash 일치, 0 이상의 정수 득표와 `득표수 <= totalBallots`를 확인한다. 추가로 각 일반 contest의 득표 합계가 `totalBallots`, OF contest는 `6 × totalBallots`인지 검증한 뒤 공개 필드만 반환한다. 둘 중 하나라도 비활성이면 `available: false`를 반환하므로 운영자가 공개를 명시적으로 두 번 승인해야 한다.
 
 ## 1회/1일 정책 전환
 
@@ -228,13 +251,13 @@ OG_BASE_URL=https://aubl.club npm run build
 ### 3. 이벤트와 후보 설정
 
 1. 새 후보 세트를 `published: false`로 작성하고 ID, 학교, 팀, 포지션, contest 포함 관계를 검토한다.
-2. 올스타의 1팀·2팀 각각 `P`, `C`, `1B`, `2B`, `3B`, `SS`, `LF`, `CF`, `RF` contest가 모두 있고 각 contest가 `minSelections: 1`, `maxSelections: 1`인지 확인한다.
+2. 올스타의 1팀·2팀 각각 `P`, `C`, `1B`, `2B`, `3B`, `SS`, `OF` contest가 모두 있는지 확인한다. 일반 포지션은 후보 5명과 `minSelections=maxSelections=1`, OF는 후보 15명과 `minSelections=maxSelections=6`이어야 한다.
 3. 후보 검토가 끝나면 후보 세트의 `published`를 `true`로 바꾼다. 이후에는 이 문서를 수정하지 않고 변경이 필요할 때 새 `candidateSetId`와 `candidateVersion`을 만든다.
 4. 이벤트와 부문은 계속 `enabled: false`, `published: false`, `status: DRAFT`로 유지한 채 callable 응답과 UI를 검증한다.
 5. 공개 직전에 부문의 `candidateSetId`와 `candidateVersion`을 확정하고 `published: true`로 바꾼다.
 6. 이벤트의 `gameStartsAt`, `venue`를 확정하고 운영 URL의 안내 영역에서 표기와 시간대를 확인한다.
 
-후보 확정 전의 원본 시트, 회의 자료, Unique Play 기록 JSON은 공개 저장소나 Hosting 산출물에 포함하지 않는다. 웹에 필요한 확정 필드만 후보 세트로 옮긴다.
+루키 검토 화면에는 2026-07-13 추천안의 이름·학교·조·추천 가능 포지션·비고만 정적 데이터로 공개한다. 원본 시트, 회의용 성적 자료, Unique Play 기록·사용자 ID는 공개 저장소나 Hosting 산출물에 포함하지 않는다. 루키 투표 기준이 확정되면 이 검토 데이터를 그대로 투표 후보 세트로 간주하지 말고 새 후보 버전과 contest를 별도로 검증한다.
 
 ### 4. 일정과 상태
 
@@ -271,6 +294,8 @@ npm run build
 git diff --check
 ```
 
+2026-07-15 검수 빌드 기준으로 올스타 route 분리 전 초기 JS는 613.12 kB gzip이었고, 지연 로딩 적용 후 공통 초기 JS는 589.94 kB gzip, 올스타 전용 청크는 진입 시 26.96 kB gzip이다. 총 JS는 616.90 kB gzip으로 약 3.78 kB 늘었지만 메인 페이지 초기 전송은 약 23.18 kB 줄었다. 의존성이나 카드 자산을 바꿀 때 같은 방식으로 비교한다.
+
 Functions 연동 검증이 필요하면 Secret을 `functions/.secret.local`에만 두고 에뮬레이터를 실행한다.
 
 ```bash
@@ -292,13 +317,19 @@ firebase hosting:channel:deploy allstar-review --expires 30d --project <project-
 
 검토 항목:
 
-- `/allstar/?division=allstar`에서 후보·팀·포지션·하단 전환 확인
-- hero의 투표 기간·경기 일시·장소와 미확정 fallback 문구 확인
+- 첫 접근 및 `/allstar/?division=allstar` 새로고침에서 전체 화면 랜딩이 다시 나오고, 60px 위 스와이프와 버튼 진입이 모두 동작하는지 확인. 스와이프 중 아래 허브가 함께 스크롤되지 않고 진입 직후 `scrollY=0`인지도 확인
+- 허브의 투표 기간·경기 일시·장소와 미확정 fallback 문구 확인
+- `view=candidates`에서 전용 상단바가 숨겨지고, 로그인 없이 5장 일반 포지션·15장 OF 원통 카드가 겹치지 않는지 확인. 별도 이동·확대 버튼 없이 제스처 안내, 중앙 카드 탭 확대, 약한 스와이프 1장·강한 스와이프 최대 2장, 확대 카드 덱 양방향 전환이 동작하는지 확인
+- 캐러셀과 확대 카드에서 세로·대각선 제스처를 주면 카드가 제한된 각도만큼 기울고 손을 놓은 뒤 원위치로 복귀하는지 확인. 이 동작이 카드 상세 열기나 좌우 후보 이동을 오발시키지 않아야 한다
+- 검수용 투표 흐름에서 360×640 이상 모바일 세로 화면에 세로 스크롤이 생기지 않고 모든 조작 요소가 보이는지 확인. 일반 선수 선택 후 `선택 취소 / 선택 확인`, OF 확대 화면의 실시간 `선택 n / 6명 · 후보 15명`, OF 1~5명에서 확인 비활성·6명에서 활성, 확인 즉시 다음 포지션 이동, 1팀 요약→2팀 유도→24명 최종 확인과 실제 미제출 문구도 함께 확인
 - `/allstar/?division=allstar&view=results`에서 예시 데이터 경고, 순위표, 그라운드 확인
-- `/allstar/?division=rookie`에서 준비 상태 확인
+- `/allstar/?division=rookie`에서 후보 78명, 1팀 40명, 2팀 38명, 포지션 미기재 17명과 손주홍 비고 확인
+- 루키 화면에 로그인·선택·제출·결과 UI가 없고 루키 callable을 호출하지 않는지 확인
+- 360px·390px·430px 및 `prefers-reduced-motion`에서 카드 잘림, 세로 스크롤·가로 스와이프 충돌, 정적 포일 fallback 확인
+- 인앱 브라우저 경고의 Chrome 열기·링크 복사·현재 브라우저 계속 시도가 사용자 동작으로만 실행되는지 확인
 - 페이지 source의 canonical, OG 이미지가 검토 채널을 가리키는지 확인
 - 응답에 `x-robots-tag: noindex`가 있는지 확인
-- 실명 후보나 회의용 추천 문구가 `dist`에 섞이지 않았는지 확인
+- 회의용 성적, 원본 시트 경로, Unique Play 사용자 ID·기록 JSON이 `dist`에 섞이지 않았는지 확인
 
 ### C. 운영 배포 순서
 
@@ -361,3 +392,5 @@ firebase deploy --only hosting
 | Google 로그인 실패 | 승인 도메인과 redirect 복귀 URL 확인 | 인앱 브라우저 사용자에게 Chrome/Safari 재진입 안내, Auth 로그 확인 |
 
 설정 오류를 고친 뒤에는 바로 재오픈하지 말고 `get_allstar_vote_event`, 로그인 상태 조회, 후보 버전, 제출 차단·허용 조건을 차례로 재확인한다.
+
+잘못된 웹 배포를 되돌릴 때도 먼저 이벤트 또는 부문을 `CLOSED`로 바꿔 서버 제출을 차단한다. 그 다음 Firebase Hosting 릴리스 기록에서 검증 버전을 복원하거나 known-good 커밋을 재배포하고, Functions 문제가 함께 있으면 이전 검증 커밋의 callable을 재배포한다. 공개된 후보 문서는 직접 수정하지 않는다. 투표 생성 전 active pointer를 복원할 때는 현재 `P/C/1B/2B/3B/SS/OF` 검증과 호환되는 후보 버전만 선택한다. LF/CF/RF legacy 세트로 되돌려야 한다면 해당 스키마를 지원하던 Functions도 함께 복원한 뒤 닫힌 상태에서 검증한다. 투표가 이미 생성된 후보 오류는 새 후보 버전과 새 `eventId`로 재투표하는 방안을 우선한다. 로그인, 후보 version/hash, 제출 차단을 다시 검증한 뒤에만 재오픈한다.
