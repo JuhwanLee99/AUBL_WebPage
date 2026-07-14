@@ -7,9 +7,7 @@ export const ALL_STAR_POSITIONS: readonly AllStarPosition[] = [
   '2B',
   '3B',
   'SS',
-  'LF',
-  'CF',
-  'RF',
+  'OF',
 ];
 
 export const POSITION_LABELS: Record<AllStarPosition, string> = {
@@ -19,9 +17,7 @@ export const POSITION_LABELS: Record<AllStarPosition, string> = {
   '2B': '2루수',
   '3B': '3루수',
   SS: '유격수',
-  LF: '좌익수',
-  CF: '중견수',
-  RF: '우익수',
+  OF: '외야수',
 };
 
 export const TEAM_META: Record<AllStarTeam, { label: string; groups: string; tone: 'coral' | 'blue' }> = {
@@ -44,9 +40,7 @@ export const ALL_STAR_EVENT_CONFIG: AllStarEventConfig = {
     '2B': 1,
     '3B': 1,
     SS: 1,
-    LF: 1,
-    CF: 1,
-    RF: 1,
+    OF: 6,
   },
   opensAt: null,
   closesAt: null,

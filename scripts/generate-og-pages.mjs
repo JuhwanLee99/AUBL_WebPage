@@ -14,7 +14,7 @@ const ROUTES = [
   {
     route: '/allstar',
     title: '2026 AUBL 올스타전 팬 투표 | AUBL',
-    description: '2026 AUBL 올스타와 루키 후보를 확인하고 포지션별 팬 투표에 참여하세요.',
+    description: '2026 AUBL 올스타전 안내와 학교별 루키 후보 78명의 검토 명단을 확인하세요.',
     image: `${BASE_URL}/assets/allstar-og.png`,
     imageWidth: '1733',
     imageHeight: '907',

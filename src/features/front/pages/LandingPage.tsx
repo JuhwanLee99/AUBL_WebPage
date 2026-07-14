@@ -134,7 +134,7 @@ const ALLSTAR_PROMO = {
   enabled: true,
   eyebrow: '2026 AUBL ALL-STAR',
   title: '올스타전 후보 선정 · 팬 투표',
-  description: '올스타와 루키 후보 명단 및 투표 일정을 준비하고 있습니다. 전용 페이지에서 진행 상황을 확인해 주세요.',
+  description: '루키 후보 78명의 검토 명단을 공개했습니다. 전용 페이지에서 후보를 확인하고 올스타전 진행 상황을 확인해 주세요.',
   ctaLabel: '올스타전 페이지 보기',
 } as const;
 

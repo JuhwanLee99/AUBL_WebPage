@@ -16,9 +16,7 @@ const FIELD_POSITIONS: ReadonlyArray<{
   position: AllStarPosition;
   className: string;
 }> = [
-  { position: 'CF', className: 'is-cf' },
-  { position: 'LF', className: 'is-lf' },
-  { position: 'RF', className: 'is-rf' },
+  { position: 'OF', className: 'is-of' },
   { position: 'SS', className: 'is-ss' },
   { position: '2B', className: 'is-2b' },
   { position: '3B', className: 'is-3b' },
@@ -58,16 +56,25 @@ export function buildTeamRankings(
       .filter((contest) => contest.team === selectedTeam && contest.position === position)
       .flatMap((contest) => contest.candidateIds);
     const uniqueCandidateIds = [...new Set(candidateIds)];
-    const rankedCandidates = uniqueCandidateIds
-      .map((candidateId) => candidateById.get(candidateId))
-      .filter((candidate): candidate is VotingCandidate => Boolean(candidate))
-      .map((candidate) => ({
-        candidate,
-        votes: counts[candidate.id] ?? 0,
-        rank: 0,
-      }))
-      .sort((a, b) => b.votes - a.votes || a.candidate.name.localeCompare(b.candidate.name, 'ko'))
-      .map((candidate, index) => ({ ...candidate, rank: index + 1 }));
+    const sortedCandidates = uniqueCandidateIds
+      .flatMap((candidateId, stableOrder) => {
+        const candidate = candidateById.get(candidateId);
+
+        return candidate
+          ? [{ candidate, votes: counts[candidate.id] ?? 0, stableOrder }]
+          : [];
+      })
+      .sort((a, b) => b.votes - a.votes || a.stableOrder - b.stableOrder);
+
+    let previousVotes: number | null = null;
+    let previousRank = 0;
+    const rankedCandidates = sortedCandidates.map(({ candidate, votes }, index) => {
+      const rank = previousVotes === votes ? previousRank : index + 1;
+      previousVotes = votes;
+      previousRank = rank;
+
+      return { candidate, votes, rank };
+    });
 
     return { position, candidates: rankedCandidates };
   });
@@ -83,7 +90,7 @@ export function TopTwoField({ rankings, selectedTeam, hero = false }: TopTwoFiel
   return (
     <div
       className={`allstar-results__field${hero ? ' allstar-results__field--hero' : ''}`}
-      aria-label={`${TEAM_META[selectedTeam].label} 포지션별 상위 2명`}
+      aria-label={`${TEAM_META[selectedTeam].label} 내야와 배터리 상위 2명, 외야 상위 6명`}
     >
       <div className="allstar-results__field-surface" aria-hidden="true">
         <span className="allstar-results__foul-line is-left" />
@@ -96,16 +103,22 @@ export function TopTwoField({ rankings, selectedTeam, hero = false }: TopTwoFiel
       </div>
       <span className="allstar-results__base is-home" aria-hidden="true" />
       {FIELD_POSITIONS.map(({ position, className }) => {
-        const leaders = rankings.find((ranking) => ranking.position === position)?.candidates.slice(0, 2) ?? [];
+        const cutoff = position === 'OF' ? 6 : 2;
+        const leaders =
+          rankings
+            .find((ranking) => ranking.position === position)
+            ?.candidates.filter(({ rank }) => rank <= cutoff) ?? [];
 
         return (
           <section
             className={`allstar-results__field-position ${className}`}
-            aria-label={`${POSITION_LABELS[position]} 상위 선수`}
+            aria-label={`${POSITION_LABELS[position]} 상위 ${cutoff}명`}
             key={position}
           >
             <span>{position}</span>
-            <strong>{POSITION_LABELS[position]}</strong>
+            <strong>
+              {POSITION_LABELS[position]} <em>TOP {cutoff}</em>
+            </strong>
             {leaders.length ? (
               <ol>
                 {leaders.map(({ candidate, rank }) => (

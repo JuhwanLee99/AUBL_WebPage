@@ -143,31 +143,41 @@ export function VoteResultsPanel({
           {activeView === 'RANKING' ? (
             <div className="allstar-results__rankings">
               {rankings.map(({ position, candidates: rankedCandidates }) => (
-                <section className="allstar-results__position" key={position}>
+                <section
+                  className={`allstar-results__position${position === 'OF' ? ' is-of' : ''}`}
+                  key={position}
+                >
                   <header>
                     <span>{position}</span>
                     <h3>{POSITION_LABELS[position]}</h3>
-                    <small>상위 2명 선발권</small>
+                    <small>상위 {position === 'OF' ? 6 : 2}명 선발권</small>
                   </header>
 
                   {rankedCandidates.length ? (
                     <ol aria-label={`${TEAM_META[selectedTeam].label} ${POSITION_LABELS[position]} 득표 순위`}>
-                      {rankedCandidates.map(({ candidate, votes, rank }) => (
-                        <li className={rank <= 2 ? 'is-leading' : undefined} key={candidate.id}>
-                          <span className="allstar-results__rank" aria-label={`${rank}위`}>
-                            {rank}
-                          </span>
-                          <span className="allstar-results__candidate">
-                            <strong>{candidate.name}</strong>
-                            <small>{candidate.school}</small>
-                          </span>
-                          {rank <= 2 ? <span className="allstar-results__cut">TOP 2</span> : null}
-                          <strong className="allstar-results__votes">
-                            {votes.toLocaleString('ko-KR')}
-                            <small>표</small>
-                          </strong>
-                        </li>
-                      ))}
+                      {rankedCandidates.map(({ candidate, votes, rank }) => {
+                        const cutoff = position === 'OF' ? 6 : 2;
+                        const isLeading = rank <= cutoff;
+
+                        return (
+                          <li className={isLeading ? 'is-leading' : undefined} key={candidate.id}>
+                            <span className="allstar-results__rank" aria-label={`${rank}위`}>
+                              {rank}
+                            </span>
+                            <span className="allstar-results__candidate">
+                              <strong>{candidate.name}</strong>
+                              <small>{candidate.school}</small>
+                            </span>
+                            {isLeading ? (
+                              <span className="allstar-results__cut">TOP {cutoff}</span>
+                            ) : null}
+                            <strong className="allstar-results__votes">
+                              {votes.toLocaleString('ko-KR')}
+                              <small>표</small>
+                            </strong>
+                          </li>
+                        );
+                      })}
                     </ol>
                   ) : (
                     <p className="allstar-results__empty">후보 집계 전</p>
@@ -179,11 +189,13 @@ export function VoteResultsPanel({
             <div className="allstar-results__field-wrap">
               <div className="allstar-results__field-heading">
                 <span>{TEAM_META[selectedTeam].label}</span>
-                <strong>현재 TOP 2 라인업</strong>
+                <strong>현재 선두 라인업</strong>
                 <small>{TEAM_META[selectedTeam].groups}</small>
               </div>
               <TopTwoField rankings={rankings} selectedTeam={selectedTeam} />
-              <p className="allstar-results__field-note">현재 득표 기준 포지션별 상위 2명입니다.</p>
+              <p className="allstar-results__field-note">
+                현재 득표 기준 내야·배터리 상위 2명, 외야 상위 6명입니다.
+              </p>
             </div>
           )}
         </div>

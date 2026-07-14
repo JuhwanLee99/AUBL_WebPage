@@ -2,7 +2,7 @@ export type AllStarDivision = 'ALL_STAR' | 'ROOKIE';
 
 export type AllStarTeam = 'TEAM_1' | 'TEAM_2';
 
-export type AllStarPosition = 'P' | 'C' | '1B' | '2B' | '3B' | 'SS' | 'LF' | 'CF' | 'RF';
+export type AllStarPosition = 'P' | 'C' | '1B' | '2B' | '3B' | 'SS' | 'OF';
 
 export type VotingStatus = 'DRAFT' | 'SCHEDULED' | 'OPEN' | 'CLOSED' | 'DISABLED';
 
@@ -22,6 +22,16 @@ export type VotingCandidate = {
   group: string;
   draft: boolean;
   number?: string;
+};
+
+export type RookieCandidate = {
+  id: string;
+  team: AllStarTeam;
+  group: string;
+  school: string;
+  name: string;
+  positions: readonly string[];
+  note?: string;
 };
 
 export type VotingContest = {
