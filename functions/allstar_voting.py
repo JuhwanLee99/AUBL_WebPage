@@ -32,6 +32,28 @@ POLICY_ONCE_PER_EVENT = "ONCE_PER_EVENT"
 POLICY_ONCE_PER_DAY = "ONCE_PER_DAY"
 SUPPORTED_POLICIES = {POLICY_ONCE_PER_EVENT, POLICY_ONCE_PER_DAY}
 SUPPORTED_AUTH_PROVIDERS = {"google.com", "custom"}
+ALLSTAR_SIDES = ("TEAM_1", "TEAM_2")
+ALLSTAR_SELECTION_LIMITS = {
+    "P": 1,
+    "C": 1,
+    "1B": 1,
+    "2B": 1,
+    "3B": 1,
+    "SS": 1,
+    "OF": 6,
+}
+ALLSTAR_CANDIDATE_COUNTS = {
+    position: 15 if position == "OF" else 5
+    for position in ALLSTAR_SELECTION_LIMITS
+}
+ALLSTAR_EXPECTED_CONTESTS = frozenset(
+    (side, position)
+    for side in ALLSTAR_SIDES
+    for position in ALLSTAR_SELECTION_LIMITS
+)
+ALLSTAR_TOTAL_CANDIDATES = sum(ALLSTAR_CANDIDATE_COUNTS.values()) * len(
+    ALLSTAR_SIDES
+)
 
 _SLUG_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
 _PUBLIC_IDENTIFIER_PATTERN = re.compile(
@@ -125,6 +147,16 @@ def _candidate_set_identity(division: Mapping[str, Any]) -> tuple[str, str]:
         _require_slug(division.get("candidateSetId"), "candidateSetId", config=True),
         _require_slug(division.get("candidateVersion"), "candidateVersion", config=True),
     )
+
+
+def _require_candidate_version(requested_version: str, current_version: str) -> None:
+    if requested_version != current_version:
+        _error(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "Candidate list has changed. Refresh before voting.",
+            "CANDIDATE_VERSION_MISMATCH",
+            currentCandidateVersion=current_version,
+        )
 
 
 def _policy(event: Mapping[str, Any], division: Mapping[str, Any]) -> str:
@@ -397,8 +429,15 @@ def _public_candidate_set(
             _misconfigured("Every candidate must have a name.")
         candidates[candidate_id] = public_candidate
 
+    if division_id == "allstar" and len(candidates) != ALLSTAR_TOTAL_CANDIDATES:
+        _misconfigured(
+            f"All-Star candidate set must contain exactly {ALLSTAR_TOTAL_CANDIDATES} candidates.",
+            candidateCount=len(candidates),
+        )
+
     contests: dict[str, dict[str, Any]] = {}
     assigned_candidates: dict[str, str] = {}
+    allstar_contests: set[tuple[str, str]] = set()
     for raw_id, raw_contest in contests_raw.items():
         contest_id = _require_value_key(raw_id, "contestId", config=True)
         contest = _require_mapping(raw_contest, f"contests.{contest_id}", config=True)
@@ -427,10 +466,43 @@ def _public_candidate_set(
             or max_selections > min(20, len(candidate_ids))
         ):
             _misconfigured(f"Contest '{contest_id}' has invalid selection limits.")
-        if division_id == "allstar" and (min_selections != 1 or max_selections != 1):
-            _misconfigured(
-                f"All-Star contest '{contest_id}' must require exactly one selection."
-            )
+        if division_id == "allstar":
+            side = contest.get("side")
+            position = contest.get("position")
+            if not isinstance(side, str) or side not in ALLSTAR_SIDES:
+                _misconfigured(
+                    f"All-Star contest '{contest_id}' has an invalid side.",
+                    supportedSides=list(ALLSTAR_SIDES),
+                )
+            if not isinstance(position, str) or position not in ALLSTAR_SELECTION_LIMITS:
+                _misconfigured(
+                    f"All-Star contest '{contest_id}' has an invalid position.",
+                    supportedPositions=list(ALLSTAR_SELECTION_LIMITS),
+                )
+            contest_key = (side, position)
+            if contest_key in allstar_contests:
+                _misconfigured(
+                    "Every All-Star side and position may have only one contest.",
+                    side=side,
+                    position=position,
+                )
+            required_candidates = ALLSTAR_CANDIDATE_COUNTS[position]
+            if len(candidate_ids) != required_candidates:
+                _misconfigured(
+                    f"All-Star contest '{contest_id}' must contain exactly "
+                    f"{required_candidates} candidates.",
+                    candidateCount=len(candidate_ids),
+                )
+            required_selections = ALLSTAR_SELECTION_LIMITS[position]
+            if (
+                min_selections != required_selections
+                or max_selections != required_selections
+            ):
+                _misconfigured(
+                    f"All-Star contest '{contest_id}' must require exactly "
+                    f"{required_selections} selection(s)."
+                )
+            allstar_contests.add(contest_key)
 
         label = contest.get("label", contest_id)
         if not isinstance(label, str) or not label or len(label) > 120:
@@ -464,6 +536,13 @@ def _public_candidate_set(
                     )
             assigned_candidates[candidate_id] = contest_id
         contests[contest_id] = public_contest
+
+    if division_id == "allstar" and allstar_contests != ALLSTAR_EXPECTED_CONTESTS:
+        missing_contests = sorted(ALLSTAR_EXPECTED_CONTESTS - allstar_contests)
+        _misconfigured(
+            "All-Star candidate set must contain exactly one contest for every side and position.",
+            missingContests=[f"{side}:{position}" for side, position in missing_contests],
+        )
 
     unassigned_candidates = sorted(set(candidates) - set(assigned_candidates))
     if unassigned_candidates:
@@ -608,6 +687,29 @@ def _public_result_summary(
         ):
             _misconfigured("Vote result count is invalid.", candidateId=candidate_id)
         counts[candidate_id] = raw_count
+
+    contests = _require_mapping(public_set.get("contests"), "contests", config=True)
+    for raw_contest_id, raw_contest in contests.items():
+        contest_id = _require_value_key(raw_contest_id, "resultContestId", config=True)
+        contest = _require_mapping(raw_contest, f"contests.{contest_id}", config=True)
+        candidate_ids = contest.get("candidateIds")
+        if not isinstance(candidate_ids, list):
+            _misconfigured("Vote result contest candidate list is invalid.")
+        min_selections = contest.get("minSelections")
+        max_selections = contest.get("maxSelections")
+        if not isinstance(min_selections, int) or not isinstance(max_selections, int):
+            _misconfigured("Vote result contest selection limits are invalid.")
+        contest_total = sum(counts.get(str(candidate_id), 0) for candidate_id in candidate_ids)
+        minimum_total = total_ballots * min_selections
+        maximum_total = total_ballots * max_selections
+        if not minimum_total <= contest_total <= maximum_total:
+            _misconfigured(
+                "Vote result contest total is inconsistent with the ballot count.",
+                contestId=contest_id,
+                contestTotal=contest_total,
+                minimumTotal=minimum_total,
+                maximumTotal=maximum_total,
+            )
 
     updated_at = _as_datetime(raw.get("updatedAt"), "results.updatedAt")
     if updated_at is None:
@@ -862,13 +964,7 @@ def submit_ballot(
             )
 
         candidate_set_id, candidate_version = _candidate_set_identity(division)
-        if requested_version != candidate_version:
-            _error(
-                https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
-                "Candidate list has changed. Refresh before voting.",
-                "CANDIDATE_VERSION_MISMATCH",
-                currentCandidateVersion=candidate_version,
-            )
+        _require_candidate_version(requested_version, candidate_version)
 
         candidate_ref = event_ref.collection(CANDIDATE_SETS_SUBCOLLECTION).document(candidate_set_id)
         candidate_snapshot = candidate_ref.get(transaction=txn)
