@@ -1,0 +1,194 @@
+.card-asset-preview,
+.card-asset-preview * {
+  box-sizing: border-box;
+}
+
+.card-asset-preview {
+  position: relative;
+  min-height: 100svh;
+  overflow: hidden;
+  padding: clamp(40px, 6vw, 88px) 20px 56px;
+  background:
+    radial-gradient(circle at 12% 12%, rgba(73, 110, 224, .22), transparent 30%),
+    radial-gradient(circle at 88% 82%, rgba(214, 83, 52, .17), transparent 31%),
+    linear-gradient(155deg, #101827, #03070e 64%);
+  color: #fff;
+  font-family: Pretendard, system-ui, sans-serif;
+}
+
+.card-asset-preview__glow {
+  position: absolute;
+  top: 14%;
+  left: 50%;
+  width: min(74vw, 900px);
+  aspect-ratio: 1;
+  border: 1px solid rgba(255, 255, 255, .05);
+  border-radius: 50%;
+  box-shadow: 0 0 160px rgba(81, 112, 210, .13), inset 0 0 120px rgba(255, 255, 255, .025);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.card-asset-preview__hero {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  margin: 0 auto clamp(36px, 5vw, 62px);
+  text-align: center;
+}
+
+.card-asset-preview__hero img {
+  width: 108px;
+  height: 62px;
+  margin-bottom: 4px;
+  object-fit: contain;
+  filter: brightness(1.35) drop-shadow(0 12px 30px rgba(50, 91, 211, .34));
+}
+
+.card-asset-preview__hero p,
+.card-asset-preview__hero h1,
+.card-asset-preview__hero span,
+.card-asset-preview footer span,
+.card-asset-preview footer strong {
+  margin: 0;
+}
+
+.card-asset-preview__hero p {
+  color: #86a1ff;
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: .22em;
+}
+
+.card-asset-preview__hero h1 {
+  font-size: clamp(35px, 7vw, 64px);
+  line-height: .92;
+  letter-spacing: -.06em;
+}
+
+.card-asset-preview__hero span {
+  color: rgba(255, 255, 255, .52);
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: .09em;
+}
+
+.card-asset-preview__grid {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 820px);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(38px, 6vw, 72px) clamp(20px, 7vw, 76px);
+  margin: 0 auto;
+}
+
+.card-asset-preview__item {
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+}
+
+.card-asset-preview__item > header {
+  width: min(100%, 300px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 3px;
+}
+
+.card-asset-preview__item > header strong {
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.card-asset-preview__item > header span {
+  padding: 5px 9px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .05);
+  color: rgba(255, 255, 255, .62);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.card-asset-preview__item.is-blue > header strong { color: #8da5ff; }
+.card-asset-preview__item.is-coral > header strong { color: #ff8c6b; }
+
+.card-asset-preview__artboard {
+  width: min(100%, 300px);
+  aspect-ratio: 5 / 7;
+  perspective: 1600px;
+}
+
+.card-asset-preview__artboard .player-card-surface {
+  transform-style: preserve-3d;
+}
+
+.card-asset-preview__artboard.is-back .player-card-surface {
+  transform: rotateY(180deg);
+}
+
+.card-asset-preview footer {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 820px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 54px auto 0;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, .09);
+  color: rgba(255, 255, 255, .36);
+  font-size: 9px;
+  letter-spacing: .16em;
+}
+
+.card-asset-preview.is-single-view {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: #02050b;
+}
+
+.card-asset-preview.is-single-view .card-asset-preview__item {
+  width: min(100vw, 600px);
+  gap: 0;
+}
+
+.card-asset-preview.is-single-view .card-asset-preview__artboard {
+  width: min(100vw, 600px);
+  max-width: none;
+}
+
+@media (max-width: 680px) {
+  .card-asset-preview {
+    padding-inline: 16px;
+  }
+
+  .card-asset-preview__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .card-asset-preview__hero img {
+    width: 92px;
+    height: 54px;
+  }
+
+  .card-asset-preview footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-asset-preview .player-card-surface__foil,
+  .card-asset-preview .player-card-surface__glare {
+    animation: none !important;
+  }
+}
