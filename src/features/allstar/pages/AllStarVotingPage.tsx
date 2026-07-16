@@ -4,13 +4,16 @@ import {
   useMemo,
   useRef,
   useState,
-  type TouchEvent,
 } from 'react';
-import { gsap } from 'gsap';
+import html2canvas from 'html2canvas';
 import { useAuth } from '@shared/auth/AuthProvider';
 import { CylinderCardCarousel } from '../components/CylinderCardCarousel';
+import { PlayerCardDetailDialog } from '../components/PlayerCardDetailDialog';
 import type { CardDisplayCandidate } from '../components/PlayerCardSurface';
 import { RookieCandidateReview } from '../components/RookieCandidateReview';
+import { RosterReviewGrid } from '../components/RosterReviewGrid';
+import { RosterShareSheet } from '../components/RosterShareSheet';
+import { SharedRosterPackReveal } from '../components/SharedRosterPackReveal';
 import { VoteResultsPanel } from '../components/VoteResultsPanel';
 import {
   ALL_STAR_EVENT_CONFIG,
@@ -19,6 +22,16 @@ import {
   TEAM_META,
 } from '../data/eventConfig';
 import { ROOKIE_SCHOOL_COUNT } from '../data/rookieCandidates';
+import { useIntroSwipeDismiss } from '../hooks/useIntroSwipeDismiss';
+import {
+  loadRosterReceipt,
+  saveRosterReceipt,
+  type RosterReceipt,
+} from '../lib/rosterSession';
+import {
+  createRosterShareToken,
+  parseRosterShareToken,
+} from '../lib/rosterShareLink';
 import { allStarVoteService, toBackendDivision } from '../services/votingService';
 import type {
   AllStarDivision,
@@ -45,6 +58,10 @@ type ExperienceView =
   | 'THANKS';
 type SelectionState = Record<string, string[]>;
 type ShareFeedback = 'IDLE' | 'SHARED' | 'COPIED' | 'ERROR';
+type RosterShareFeedback = 'IDLE' | 'RENDERING' | 'SHARED' | 'DOWNLOADED' | 'COPIED' | 'ERROR';
+type RosterDetailState = { team: AllStarTeam; index: number } | null;
+type SharedRosterRequest = { token: string; requestKey: string } | null;
+type ExitTarget = 'HUB' | 'MAIN';
 type BallotSource = {
   version: string;
   published: boolean;
@@ -82,8 +99,19 @@ const readViewFromUrl = (): ExperienceView => {
   if (readDivisionFromUrl() === 'ROOKIE') return view ? 'CANDIDATES' : 'HUB';
   if (view === 'results') return 'RESULTS';
   if (view === 'candidates') return 'CANDIDATES';
+  if (view === 'roster') return 'FINAL_REVIEW';
+  if (view === 'thanks') return 'THANKS';
   if (view === 'vote') return 'AUTH';
   return 'HUB';
+};
+
+const readSharedRosterRequestFromUrl = (): SharedRosterRequest => {
+  if (typeof window === 'undefined' || readDivisionFromUrl() !== 'ALL_STAR') return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('view') !== 'roster' || !params.has('share')) return null;
+  const tokens = params.getAll('share');
+  const token = tokens.length === 1 ? tokens[0] : '';
+  return { token, requestKey: `${tokens.length}:${token}` };
 };
 
 const formatDateTime = (value: string | null) => {
@@ -237,18 +265,24 @@ function CandidateUnavailable({ loading = false }: { loading?: boolean }) {
 
 export default function AllStarVotingPage() {
   const { user, idToken, initializing, error: authError, loginWithGoogle } = useAuth();
+  const experienceRef = useRef<HTMLDivElement | null>(null);
   const introRef = useRef<HTMLElement | null>(null);
-  const introTouchStartRef = useRef<number | null>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const mainRef = useRef<HTMLElement | null>(null);
+  const rosterShareSheetRef = useRef<HTMLDivElement | null>(null);
+  const exitStayButtonRef = useRef<HTMLButtonElement | null>(null);
   const advanceLockRef = useRef(false);
   const [showIntro, setShowIntro] = useState(() => {
     if (typeof window === 'undefined') return true;
+    if (readSharedRosterRequestFromUrl()) return false;
     const params = new URLSearchParams(window.location.search);
     const isAllStarHubLoad = readDivisionFromUrl() === 'ALL_STAR' && !params.has('view');
     if (isAllStarHubLoad) return true;
     try { return window.sessionStorage.getItem(INTRO_STORAGE_KEY) !== '1'; } catch { return true; }
   });
+  const [sharedRosterRequest, setSharedRosterRequest] = useState<SharedRosterRequest>(readSharedRosterRequestFromUrl);
+  const [showSharedRosterReveal, setShowSharedRosterReveal] = useState(() => Boolean(readSharedRosterRequestFromUrl()));
+  const [showFinalRosterReveal, setShowFinalRosterReveal] = useState(false);
   const [division, setDivision] = useState<AllStarDivision>(readDivisionFromUrl);
   const [view, setView] = useState<ExperienceView>(readViewFromUrl);
   const [voteEvent, setVoteEvent] = useState<VoteEvent | null>(null);
@@ -258,6 +292,8 @@ export default function AllStarVotingPage() {
   const [reviewTeam, setReviewTeam] = useState<AllStarTeam>('TEAM_1');
   const [reviewPosition, setReviewPosition] = useState<AllStarPosition>('P');
   const [resultsTeam, setResultsTeam] = useState<AllStarTeam>('TEAM_1');
+  const [rosterReviewTeam, setRosterReviewTeam] = useState<AllStarTeam>('TEAM_1');
+  const [rosterDetail, setRosterDetail] = useState<RosterDetailState>(null);
   const [wizardTeamIndex, setWizardTeamIndex] = useState(0);
   const [wizardPositionIndex, setWizardPositionIndex] = useState(0);
   const [selections, setSelections] = useState<SelectionState>({});
@@ -268,15 +304,28 @@ export default function AllStarVotingPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [shareFeedback, setShareFeedback] = useState<ShareFeedback>('IDLE');
+  const [rosterShareFeedback, setRosterShareFeedback] = useState<RosterShareFeedback>('IDLE');
+  const [rosterShareFallback, setRosterShareFallback] = useState(false);
+  const [rosterReceipt, setRosterReceipt] = useState<RosterReceipt | null>(null);
+  const [rosterReceiptChecked, setRosterReceiptChecked] = useState(false);
+  const [sharedRosterActive, setSharedRosterActive] = useState(false);
   const [previewThanks, setPreviewThanks] = useState(false);
+  const [pendingExitTarget, setPendingExitTarget] = useState<ExitTarget | null>(null);
+  const rosterPackRevealActive = showSharedRosterReveal || showFinalRosterReveal;
+  const entryOverlayActive = showIntro || rosterPackRevealActive;
+  const interactionOverlayActive = entryOverlayActive || pendingExitTarget !== null;
 
   const serviceAvailable = allStarVoteService.isAvailable;
   const draftPreviewEnabled = import.meta.env.DEV || import.meta.env.VITE_ALLSTAR_SHOW_DRAFT_CANDIDATES === 'true';
 
   useEffect(() => {
     const syncFromHistory = () => {
+      const nextSharedRequest = readSharedRosterRequestFromUrl();
       setDivision(readDivisionFromUrl());
       setView(readViewFromUrl());
+      setSharedRosterRequest(nextSharedRequest);
+      setShowSharedRosterReveal(Boolean(nextSharedRequest));
+      if (nextSharedRequest) setShowIntro(false);
     };
     window.addEventListener('popstate', syncFromHistory);
     return () => window.removeEventListener('popstate', syncFromHistory);
@@ -285,10 +334,25 @@ export default function AllStarVotingPage() {
   useEffect(() => {
     const shell = shellRef.current;
     if (!shell) return;
-    if (showIntro) shell.setAttribute('inert', '');
+    if (interactionOverlayActive) shell.setAttribute('inert', '');
     else shell.removeAttribute('inert');
     return () => shell.removeAttribute('inert');
-  }, [showIntro]);
+  }, [interactionOverlayActive]);
+
+  useEffect(() => {
+    if (!pendingExitTarget) return;
+    const frame = window.requestAnimationFrame(() => exitStayButtonRef.current?.focus({ preventScroll: true }));
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setPendingExitTarget(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [pendingExitTarget]);
 
   useEffect(() => {
     const intro = introRef.current;
@@ -361,8 +425,21 @@ export default function AllStarVotingPage() {
   const chromelessView = resolvedView === 'CANDIDATES' || resolvedView === 'VOTE';
   const voteView = resolvedView === 'VOTE';
   const candidateView = division === 'ALL_STAR' && resolvedView === 'CANDIDATES';
+  const isUnsubmittedVotingFlow = division === 'ALL_STAR'
+    && !sharedRosterActive
+    && !rosterReceipt?.submitted
+    && (resolvedView === 'VOTE' || resolvedView === 'TEAM_REVIEW' || resolvedView === 'FINAL_REVIEW');
   const viewportLocked = division === 'ALL_STAR'
-    && (resolvedView === 'CANDIDATES' || resolvedView === 'VOTE');
+    && (interactionOverlayActive || resolvedView === 'CANDIDATES' || resolvedView === 'VOTE');
+
+  useEffect(() => {
+    if (!sharedRosterRequest || !eventReady || ballotSource) return;
+    setShowSharedRosterReveal(false);
+    setSharedRosterRequest(null);
+    setSharedRosterActive(false);
+    setNotice('공유 로스터를 불러올 후보 명단이 준비되지 않았습니다. 잠시 후 다시 시도해 주세요.');
+    setView('HUB');
+  }, [ballotSource, eventReady, sharedRosterRequest]);
 
   useEffect(() => {
     if (!viewportLocked) return;
@@ -407,13 +484,20 @@ export default function AllStarVotingPage() {
       ? 'results'
       : resolvedView === 'CANDIDATES'
         ? 'candidates'
-        : ['AUTH', 'VOTE', 'TEAM_REVIEW', 'FINAL_REVIEW', 'THANKS'].includes(resolvedView)
+        : resolvedView === 'FINAL_REVIEW'
+          ? 'roster'
+          : resolvedView === 'THANKS'
+            ? 'thanks'
+            : ['AUTH', 'VOTE', 'TEAM_REVIEW'].includes(resolvedView)
           ? 'vote'
           : null;
     if (publicView) url.searchParams.set('view', publicView);
     else url.searchParams.delete('view');
+    if (resolvedView !== 'FINAL_REVIEW' || (rosterReceiptChecked && !sharedRosterActive)) {
+      url.searchParams.delete('share');
+    }
     window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
-  }, [division, resolvedView]);
+  }, [division, resolvedView, rosterReceiptChecked, sharedRosterActive]);
 
   useEffect(() => {
     const previous = document.title;
@@ -457,6 +541,9 @@ export default function AllStarVotingPage() {
   useEffect(() => {
     if (!ballotSource || !selectionStorageKey) {
       setSelections({});
+      setRosterReceipt(null);
+      setRosterReceiptChecked(false);
+      setSharedRosterActive(false);
       return;
     }
     try {
@@ -464,9 +551,63 @@ export default function AllStarVotingPage() {
       Object.keys(window.sessionStorage).forEach((key) => {
         if (key.startsWith(prefix) && key !== selectionStorageKey) window.sessionStorage.removeItem(key);
       });
+      const params = new URLSearchParams(window.location.search);
+      const requestedView = params.get('view');
+      if (sharedRosterRequest) {
+        const sharedSelections = parseRosterShareToken({
+          token: sharedRosterRequest.token,
+          candidateVersion: ballotSource.version,
+          contests: ballotSource.contests,
+          candidates: ballotSource.candidates,
+        });
+        setRosterReceipt(null);
+        setRosterReceiptChecked(true);
+        if (sharedSelections) {
+          setSharedRosterActive(true);
+          setSelections(sharedSelections);
+          return;
+        }
+        setSharedRosterActive(false);
+        setShowSharedRosterReveal(false);
+        setSharedRosterRequest(null);
+        setSelections({});
+        setNotice('공유 링크의 로스터 정보가 만료되었거나 올바르지 않습니다.');
+        setView('HUB');
+        return;
+      }
+
+      setSharedRosterActive(false);
+      const receipt = loadRosterReceipt({
+        eventId: EVENT_CONFIG.eventId,
+        candidateVersion: ballotSource.version,
+        contests: ballotSource.contests,
+        candidates: ballotSource.candidates,
+      });
+      setRosterReceipt(receipt);
+      setRosterReceiptChecked(true);
+      const requestedReceipt = requestedView === 'roster' || requestedView === 'thanks';
+      if (receipt && requestedReceipt) {
+        setSelections(receipt.selections);
+        return;
+      }
       setSelections(restoreSelections(window.sessionStorage.getItem(selectionStorageKey), ballotSource));
-    } catch { setSelections({}); }
-  }, [ballotSource, division, selectionStorageKey]);
+      if (requestedReceipt && !receipt) {
+        setNotice('이 브라우저 세션에서 확인할 수 있는 로스터가 없습니다.');
+        setView('HUB');
+      }
+    } catch {
+      setSelections({});
+      setRosterReceipt(null);
+      setRosterReceiptChecked(true);
+      setSharedRosterActive(false);
+      if (sharedRosterRequest) {
+        setShowSharedRosterReveal(false);
+        setSharedRosterRequest(null);
+        setNotice('공유 링크의 로스터 정보를 확인하지 못했습니다.');
+        setView('HUB');
+      }
+    }
+  }, [ballotSource, division, selectionStorageKey, sharedRosterRequest]);
 
   const hasDirectGoogleIdentity = Boolean(user?.providerData.some((provider) => provider.providerId === 'google.com'));
   const hasAllowedCustomIdentity = Boolean(user && user.providerData.length === 0 && voteEvent?.allowedAuthProviders.includes('custom'));
@@ -537,7 +678,40 @@ export default function AllStarVotingPage() {
       return length >= contest.minSelections && length <= contest.maxSelections;
     }));
 
+  const rosterByTeam = useMemo<Record<AllStarTeam, CardDisplayCandidate[]>>(() => ({
+    TEAM_1: ALL_STAR_POSITIONS.flatMap((position) => {
+      const contest = contestFor('TEAM_1', position);
+      return (contest ? selections[contest.id] ?? [] : []).flatMap((candidateId) => {
+        const candidate = candidateById.get(candidateId);
+        return candidate ? [toCardCandidate(candidate)] : [];
+      });
+    }),
+    TEAM_2: ALL_STAR_POSITIONS.flatMap((position) => {
+      const contest = contestFor('TEAM_2', position);
+      return (contest ? selections[contest.id] ?? [] : []).flatMap((candidateId) => {
+        const candidate = candidateById.get(candidateId);
+        return candidate ? [toCardCandidate(candidate)] : [];
+      });
+    }),
+  }), [candidateById, contestFor, selections]);
+  const rosterComplete = rosterByTeam.TEAM_1.length === 12 && rosterByTeam.TEAM_2.length === 12;
+  const activeRosterCandidates = rosterByTeam[rosterReviewTeam];
+
+  const persistCompletedRoster = useCallback((submitted: boolean) => {
+    if (!ballotSource || !ballotComplete || !rosterComplete) return null;
+    const receipt = saveRosterReceipt({
+      eventId: EVENT_CONFIG.eventId,
+      candidateVersion: ballotSource.version,
+      selections,
+      submitted,
+    });
+    setRosterReceipt(receipt);
+    setRosterReceiptChecked(true);
+    return receipt;
+  }, [ballotComplete, ballotSource, rosterComplete, selections]);
+
   const completeIntro = useCallback(() => {
+    try { window.sessionStorage.setItem(INTRO_STORAGE_KEY, '1'); } catch { /* continue */ }
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
     setShowIntro(false);
     window.requestAnimationFrame(() => {
@@ -546,39 +720,70 @@ export default function AllStarVotingPage() {
     });
   }, []);
 
-  const dismissIntro = useCallback(() => {
+  const completeRosterPackReveal = useCallback(() => {
     try { window.sessionStorage.setItem(INTRO_STORAGE_KEY, '1'); } catch { /* continue */ }
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (!introRef.current || reduced) {
-      completeIntro();
-      return;
-    }
-    gsap.to(introRef.current, {
-      yPercent: -104,
-      duration: 0.62,
-      ease: 'power3.inOut',
-      onComplete: completeIntro,
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    setShowSharedRosterReveal(false);
+    setShowFinalRosterReveal(false);
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      const activeTeam = mainRef.current?.querySelector<HTMLButtonElement>(
+        '.allstar-roster-team-toggle button[aria-pressed="true"]',
+      );
+      (activeTeam ?? mainRef.current)?.focus({ preventScroll: true });
     });
-  }, [completeIntro]);
+  }, []);
 
-  const handleIntroTouchStart = (event: TouchEvent<HTMLElement>) => {
-    introTouchStartRef.current = event.touches[0]?.clientY ?? null;
-  };
-  const handleIntroTouchEnd = (event: TouchEvent<HTMLElement>) => {
-    const start = introTouchStartRef.current;
-    introTouchStartRef.current = null;
-    if (start === null) return;
-    const end = event.changedTouches[0]?.clientY ?? start;
-    if (start - end >= 60) dismissIntro();
-  };
+  const {
+    pointerHandlers: introPointerHandlers,
+    dismiss: dismissIntro,
+    isDragging: introDragging,
+    isCompleting: introCompleting,
+  } = useIntroSwipeDismiss({
+    active: showIntro,
+    introRef,
+    progressRootRef: experienceRef,
+    onComplete: completeIntro,
+  });
 
   const goTo = (next: ExperienceView) => {
     setNotice(null);
+    if (next !== 'FINAL_REVIEW') setShowFinalRosterReveal(false);
+    if (sharedRosterActive && next !== 'FINAL_REVIEW') {
+      setSharedRosterActive(false);
+      setSharedRosterRequest(null);
+      setShowSharedRosterReveal(false);
+      setRosterReceipt(null);
+      try {
+        setSelections(ballotSource && selectionStorageKey
+          ? restoreSelections(window.sessionStorage.getItem(selectionStorageKey), ballotSource)
+          : {});
+      } catch {
+        setSelections({});
+      }
+    }
     setView(next);
     window.scrollTo({
       top: 0,
       behavior: viewportLocked || window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
     });
+  };
+
+  const performExit = (target: ExitTarget) => {
+    setPendingExitTarget(null);
+    if (target === 'MAIN') {
+      window.location.assign('/');
+      return;
+    }
+    goTo('HUB');
+  };
+
+  const requestExit = (target: ExitTarget) => {
+    if (isUnsubmittedVotingFlow) {
+      setPendingExitTarget(target);
+      return;
+    }
+    performExit(target);
   };
 
   const resetWizard = () => {
@@ -610,6 +815,15 @@ export default function AllStarVotingPage() {
     goTo('AUTH');
   };
 
+  const startVoteFromSharedRoster = () => {
+    if (!canEnterVote || !ballotSource) return;
+    setRosterDetail(null);
+    setRosterReviewTeam('TEAM_1');
+    setRosterShareFeedback('IDLE');
+    setRosterShareFallback(false);
+    startVote();
+  };
+
   const toggleCandidate = useCallback((candidate: CardDisplayCandidate) => {
     if (!currentContest) return;
     setSelections((current) => {
@@ -635,7 +849,7 @@ export default function AllStarVotingPage() {
       setWizardPositionIndex(ALL_STAR_POSITIONS.length - 1);
       return;
     }
-    goTo('HUB');
+    requestExit('HUB');
   };
 
   const confirmCurrentStep = () => {
@@ -649,7 +863,14 @@ export default function AllStarVotingPage() {
       });
       return;
     }
-    setView('TEAM_REVIEW');
+    if (wizardTeamIndex === 0) {
+      setView('TEAM_REVIEW');
+    } else {
+      setRosterReviewTeam('TEAM_1');
+      persistCompletedRoster(false);
+      setShowFinalRosterReveal(true);
+      setView('FINAL_REVIEW');
+    }
     window.requestAnimationFrame(() => {
       advanceLockRef.current = false;
       mainRef.current?.focus({ preventScroll: true });
@@ -657,13 +878,9 @@ export default function AllStarVotingPage() {
   };
 
   const continueAfterTeamReview = () => {
-    if (wizardTeamIndex === 0) {
-      setWizardTeamIndex(1);
-      setWizardPositionIndex(0);
-      goTo('VOTE');
-    } else {
-      goTo('FINAL_REVIEW');
-    }
+    setWizardTeamIndex(1);
+    setWizardPositionIndex(0);
+    goTo('VOTE');
   };
 
   const handleGoogleLogin = async () => {
@@ -690,16 +907,23 @@ export default function AllStarVotingPage() {
 
   const copyText = async (value: string) => {
     if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(value);
-      return;
+      try {
+        await navigator.clipboard.writeText(value);
+        return;
+      } catch {
+        // In-app browsers can expose Clipboard API while denying its permission.
+      }
     }
     const textarea = document.createElement('textarea');
     textarea.value = value;
     textarea.setAttribute('readonly', '');
     textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
     textarea.style.opacity = '0';
     document.body.appendChild(textarea);
+    textarea.focus();
     textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
     const copied = document.execCommand('copy');
     textarea.remove();
     if (!copied) throw new Error('copy failed');
@@ -731,6 +955,7 @@ export default function AllStarVotingPage() {
   const submitBallot = async () => {
     if (!ballotSource || !ballotComplete) return;
     if (previewMode) {
+      persistCompletedRoster(false);
       setPreviewThanks(true);
       goTo('THANKS');
       return;
@@ -749,6 +974,7 @@ export default function AllStarVotingPage() {
         selections: Object.fromEntries(ballotSource.contests.map((contest) => [contest.id, selections[contest.id] ?? []])),
       });
       if (selectionStorageKey) window.sessionStorage.removeItem(selectionStorageKey);
+      persistCompletedRoster(true);
       setPreviewThanks(false);
       setBallotStatus({ eligibility: 'ALREADY_VOTED', votedAt: result.submittedAt, nextEligibleAt: result.nextEligibleAt });
       goTo('THANKS');
@@ -777,31 +1003,141 @@ export default function AllStarVotingPage() {
       }
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
-      setShareFeedback('ERROR');
+      try {
+        await copyText(data.url);
+        setShareFeedback('COPIED');
+      } catch {
+        setShareFeedback('ERROR');
+      }
     }
     window.setTimeout(() => setShareFeedback('IDLE'), 2200);
   };
 
-  const teamSummary = (team: AllStarTeam) => (
-    <section key={team}>
-      <h2>{TEAM_META[team].label} 선택 · 12명</h2>
-      <dl>
-        {ALL_STAR_POSITIONS.map((position) => {
-          const contest = contestFor(team, position);
-          const names = (contest ? selections[contest.id] ?? [] : [])
-            .map((id) => candidateById.get(id)?.name)
-            .filter(Boolean)
-            .join(', ');
-          return (
-            <div key={position}>
-              <dt>{POSITION_LABELS[position]}</dt>
-              <dd>{names || '선택 전'}</dd>
-            </div>
-          );
-        })}
-      </dl>
-    </section>
-  );
+  const fileShareSupported = useMemo(() => {
+    if (typeof navigator === 'undefined' || typeof navigator.share !== 'function'
+      || typeof navigator.canShare !== 'function' || typeof File === 'undefined') return false;
+    try {
+      return navigator.canShare({ files: [new File([''], 'aubl-roster.png', { type: 'image/png' })] });
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const renderRosterImage = useCallback(async () => {
+    const sheet = rosterShareSheetRef.current;
+    if (!sheet || !rosterComplete) throw new Error('roster not ready');
+    if (document.fonts?.ready) await document.fonts.ready;
+    await Promise.all([...sheet.querySelectorAll('img')].map((image) => (
+      image.complete
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => {
+          image.addEventListener('load', () => resolve(), { once: true });
+          image.addEventListener('error', () => resolve(), { once: true });
+        })
+    )));
+    const canvas = await html2canvas(sheet, {
+      backgroundColor: '#07101f',
+      width: 1080,
+      height: 1920,
+      windowWidth: 1080,
+      windowHeight: 1920,
+      scale: 1,
+      useCORS: true,
+      logging: false,
+    });
+    return new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error('image render failed'));
+      }, 'image/png');
+    });
+  }, [rosterComplete]);
+
+  const rosterShareToken = useMemo(() => (
+    ballotSource && rosterComplete
+      ? createRosterShareToken({
+        candidateVersion: ballotSource.version,
+        contests: ballotSource.contests,
+        selections,
+      })
+      : null
+  ), [ballotSource, rosterComplete, selections]);
+  const rosterShareUrl = useMemo(() => {
+    const url = new URL('/allstar', window.location.origin);
+    url.searchParams.set('division', 'allstar');
+    url.searchParams.set('view', 'roster');
+    if (rosterShareToken) url.searchParams.set('share', rosterShareToken);
+    return url.toString();
+  }, [rosterShareToken]);
+  const rosterShareText = '내가 선택한 2026 AUBL 올스타 로스터를 확인해 보세요.';
+  const finishRosterFeedback = (feedback: RosterShareFeedback) => {
+    setRosterShareFeedback(feedback);
+    window.setTimeout(() => setRosterShareFeedback('IDLE'), 2600);
+  };
+
+  const handleRosterNativeShare = async () => {
+    if (!fileShareSupported || !navigator.share) return;
+    setRosterShareFeedback('RENDERING');
+    try {
+      const blob = await renderRosterImage();
+      const file = new File([blob], '2026_AUBL_올스타_내로스터.png', { type: 'image/png' });
+      await navigator.share({
+        title: '2026 AUBL MY ALL-STAR ROSTER',
+        text: rosterShareText,
+        url: rosterShareUrl,
+        files: [file],
+      });
+      finishRosterFeedback('SHARED');
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        setRosterShareFeedback('IDLE');
+        return;
+      }
+      setRosterShareFallback(true);
+      finishRosterFeedback('ERROR');
+    }
+  };
+
+  const handleRosterDownload = async () => {
+    setRosterShareFeedback('RENDERING');
+    try {
+      const blob = await renderRosterImage();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = '2026_AUBL_올스타_내로스터.png';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 2_000);
+      finishRosterFeedback('DOWNLOADED');
+    } catch {
+      finishRosterFeedback('ERROR');
+    }
+  };
+
+  const handleRosterLinkCopy = async () => {
+    try {
+      if (!rosterShareToken) throw new Error('roster share link unavailable');
+      await copyText(rosterShareUrl);
+      finishRosterFeedback('COPIED');
+    } catch {
+      finishRosterFeedback('ERROR');
+    }
+  };
+
+  const rosterShareLabel = rosterShareFeedback === 'RENDERING'
+    ? '로스터 이미지 만드는 중…'
+    : rosterShareFeedback === 'SHARED'
+      ? '로스터를 공유했습니다.'
+      : rosterShareFeedback === 'DOWNLOADED'
+        ? '로스터 이미지를 저장했습니다.'
+        : rosterShareFeedback === 'COPIED'
+          ? '선택한 로스터 결과 링크를 복사했습니다.'
+          : rosterShareFeedback === 'ERROR'
+            ? '공유 준비에 실패했습니다. 다시 시도해 주세요.'
+            : '';
+  const thankYouIsPreview = previewThanks || (previewMode && rosterReceipt?.submitted === false);
 
   const opensAt = voteEvent?.opensAt ?? EVENT_CONFIG.opensAt;
   const closesAt = voteEvent?.closesAt ?? EVENT_CONFIG.closesAt;
@@ -813,13 +1149,20 @@ export default function AllStarVotingPage() {
     ? voteResults.counts
     : null;
   return (
-    <div className={`allstar-experience${chromelessView ? ' is-chromeless' : ''}${voteView ? ' is-vote-view' : ''}${candidateView ? ' is-candidate-view' : ''}${viewportLocked ? ' is-viewport-locked' : ''}`}>
-      {showIntro ? (
+    <div ref={experienceRef} className={`allstar-experience${showIntro ? ' has-intro' : ''}${chromelessView ? ' is-chromeless' : ''}${voteView ? ' is-vote-view' : ''}${candidateView ? ' is-candidate-view' : ''}${viewportLocked ? ' is-viewport-locked' : ''}`}>
+      {rosterPackRevealActive ? (
+        <SharedRosterPackReveal
+          key={showSharedRosterReveal ? sharedRosterRequest?.requestKey ?? 'shared-roster' : 'completed-vote'}
+          candidates={rosterByTeam.TEAM_1}
+          ready={rosterComplete && (sharedRosterActive || showFinalRosterReveal)}
+          mode={showSharedRosterReveal ? 'shared' : 'completed'}
+          onComplete={completeRosterPackReveal}
+        />
+      ) : showIntro ? (
         <section
-          className="allstar-intro"
+          className={`allstar-intro${introDragging ? ' is-dragging' : ''}${introCompleting ? ' is-completing' : ''}`}
           ref={introRef}
-          onTouchStart={handleIntroTouchStart}
-          onTouchEnd={handleIntroTouchEnd}
+          {...introPointerHandlers}
           aria-label="2026 AUBL 올스타전 투표 시작 화면"
         >
           <div className="allstar-intro__brand"><span className="allstar-intro__logo"><img src="/assets/aubl_clean.png" alt="" /></span>AUBL</div>
@@ -830,22 +1173,30 @@ export default function AllStarVotingPage() {
             <div className="allstar-intro__cards" aria-hidden="true"><i /><i /><i /><i /><i /></div>
           </div>
           <div className="allstar-intro__enter">
-            <span className="allstar-intro__chevron" aria-hidden="true">⌃</span>
+            <span className="allstar-intro__swipe-indicator" aria-hidden="true">
+              <span className="allstar-intro__swipe-track">
+                <i className="allstar-intro__swipe-trail is-one" />
+                <i className="allstar-intro__swipe-trail is-two" />
+                <span className="allstar-intro__swipe-thumb">
+                  <svg viewBox="0 0 24 24"><path d="M12 18V6m0 0-5 5m5-5 5 5" /></svg>
+                </span>
+              </span>
+            </span>
             <button type="button" onClick={dismissIntro}>위로 밀어 시작하기</button>
             <span>화면을 위로 쓸어올려도 시작할 수 있어요</span>
           </div>
         </section>
       ) : null}
 
-      <div className="allstar-shell" ref={shellRef} aria-hidden={showIntro ? true : undefined}>
+      <div className="allstar-shell" ref={shellRef} aria-hidden={interactionOverlayActive ? true : undefined}>
       {!chromelessView ? <header className="allstar-shell__header">
         <div className="allstar-shell__header-inner">
-          <button type="button" className="allstar-shell__brand" onClick={() => goTo('HUB')}>
+          <button type="button" className="allstar-shell__brand" onClick={() => requestExit('HUB')}>
             <span className="allstar-shell__logo"><img src="/assets/aubl_clean.png" alt="" /></span>
             <span><strong>AUBL</strong><small>2026 ALL-STAR</small></span>
           </button>
           <div className="allstar-shell__actions">
-            <button type="button" onClick={() => { window.location.href = '/'; }}>메인</button>
+            <button type="button" onClick={() => requestExit('HUB')}>메인</button>
             <button type="button" onClick={handleShare}>
               {shareFeedback === 'SHARED' ? '공유됨' : shareFeedback === 'COPIED' ? '복사됨' : shareFeedback === 'ERROR' ? '다시 시도' : '공유'}
             </button>
@@ -854,7 +1205,7 @@ export default function AllStarVotingPage() {
       </header> : null}
 
       <main className={`allstar-shell__main${chromelessView ? ' is-chromeless' : ''}${voteView ? ' is-vote-view' : ''}`} ref={mainRef} tabIndex={-1}>
-        {resolvedView !== 'HUB' && !chromelessView ? <button type="button" className="allstar-back" onClick={() => goTo('HUB')}>← 올스타전 홈</button> : null}
+        {resolvedView !== 'HUB' && resolvedView !== 'TEAM_REVIEW' && !sharedRosterActive && !chromelessView ? <button type="button" className="allstar-back" onClick={() => requestExit('HUB')}>← 올스타전 홈</button> : null}
         {eventError ? <div className="allstar-notice-v2" role="alert">{eventError}</div> : null}
         {authError ? <div className="allstar-notice-v2" role="alert">{authError}</div> : null}
         {notice ? <div className="allstar-notice-v2" role="status">{notice}</div> : null}
@@ -915,7 +1266,7 @@ export default function AllStarVotingPage() {
                 <span>팀과 포지션을 고른 뒤 카드를 좌우로 넘겨 보세요.</span>
               </header>
               <div className="allstar-team-picker" role="group" aria-label="후보 팀 선택">
-                {TEAMS.map((team) => <button type="button" key={team} className={reviewTeam === team ? 'is-active' : ''} aria-pressed={reviewTeam === team} onClick={() => setReviewTeam(team)}>{TEAM_META[team].label}<br /><small>{TEAM_META[team].groups}</small></button>)}
+                {TEAMS.map((team) => <button type="button" key={team} className={`${reviewTeam === team ? 'is-active ' : ''}is-${TEAM_META[team].tone}`} aria-pressed={reviewTeam === team} onClick={() => setReviewTeam(team)}>{TEAM_META[team].label}<br /><small>{TEAM_META[team].groups}</small></button>)}
               </div>
               <div className="allstar-position-picker" role="group" aria-label="후보 포지션 선택">
                 {ALL_STAR_POSITIONS.map((position) => <button type="button" key={position} className={reviewPosition === position ? 'is-active' : ''} aria-pressed={reviewPosition === position} onClick={() => setReviewPosition(position)}>{POSITION_LABELS[position]}</button>)}
@@ -963,17 +1314,22 @@ export default function AllStarVotingPage() {
         {resolvedView === 'VOTE' && ballotSource && currentContest ? (
           <section className="allstar-card-screen is-vote">
             <header className="allstar-card-screen__heading has-home">
-              <button type="button" className="allstar-card-screen__home" onClick={() => goTo('HUB')} aria-label="올스타전 홈으로 돌아가기">←</button>
+              <button type="button" className="allstar-card-screen__home" onClick={() => requestExit('HUB')} aria-label="올스타전 홈으로 돌아가기">←</button>
               <h1>{POSITION_LABELS[currentPosition]} 선택</h1>
+              <button
+                type="button"
+                className="allstar-card-screen__complete"
+                disabled={!currentComplete}
+                onClick={confirmCurrentStep}
+                aria-label="현재 포지션 선택 완료"
+              >
+                완료
+              </button>
               <span>{TEAM_META[currentTeam].groups} · {currentPosition === 'OF' ? '15명 중 6명을 선택해 주세요.' : '5명 중 1명을 선택해 주세요.'}</span>
             </header>
             <div className="allstar-wizard-progress">
               <div className="allstar-wizard-progress__bar"><span style={{ width: `${(((wizardTeamIndex * ALL_STAR_POSITIONS.length) + wizardPositionIndex) / (TEAMS.length * ALL_STAR_POSITIONS.length)) * 100}%` }} /></div>
               <p>{TEAM_META[currentTeam].label} · 전체 {(wizardTeamIndex * ALL_STAR_POSITIONS.length) + wizardPositionIndex + 1}/14단계</p>
-            </div>
-            <div className="allstar-selection-message" aria-live="polite">
-              <strong>{currentSelection.length}/{currentContest.maxSelections}</strong>
-              {currentPosition === 'OF' ? `15명 중 ${currentSelection.length}명 선택` : currentSelection.length ? '선택 완료' : '카드를 눌러 선수를 확인하세요'}
             </div>
             <CylinderCardCarousel
               key={`${currentTeam}:${currentPosition}:${ballotSource.version}`}
@@ -1000,31 +1356,132 @@ export default function AllStarVotingPage() {
         {resolvedView === 'TEAM_REVIEW' ? (
           <section className="allstar-review-summary">
             <h1>{TEAM_META[currentTeam].label} 선택 완료</h1>
-            <p>선택한 선수를 확인한 뒤 {wizardTeamIndex === 0 ? '2팀 투표로 넘어가세요.' : '전체 최종 확인으로 넘어가세요.'}</p>
-            <div className="allstar-summary-list">{teamSummary(currentTeam)}</div>
+            <p>선택한 12장의 카드를 확인한 뒤 2팀 투표로 넘어가세요. 카드를 누르면 크게 볼 수 있습니다.</p>
+            <RosterReviewGrid
+              candidates={rosterByTeam[currentTeam]}
+              team={currentTeam}
+              onOpen={(index) => setRosterDetail({ team: currentTeam, index })}
+            />
             <div className="allstar-summary-actions">
-              <button type="button" onClick={() => { setWizardPositionIndex(ALL_STAR_POSITIONS.length - 1); goTo('VOTE'); }}>수정하기</button>
-              <button type="button" className="is-primary" onClick={continueAfterTeamReview}>{wizardTeamIndex === 0 ? '2팀 투표 시작 →' : '전체 선택 확인 →'}</button>
+              <button type="button" onClick={() => { setWizardPositionIndex(0); goTo('VOTE'); }}>선택 수정</button>
+              <button type="button" className="is-primary" onClick={continueAfterTeamReview}>2팀 투표 시작 →</button>
             </div>
           </section>
         ) : null}
 
-        {resolvedView === 'FINAL_REVIEW' ? (
+        {(resolvedView === 'FINAL_REVIEW' || resolvedView === 'THANKS') && !rosterReceiptChecked && !rosterComplete ? (
+          <CandidateUnavailable loading />
+        ) : null}
+
+        {resolvedView === 'FINAL_REVIEW' && (rosterReceiptChecked || rosterComplete) ? (
           <section className="allstar-review-summary">
-            <h1>최종 선택 확인</h1>
-            <p>양 팀 합계 24명의 선택을 확인해 주세요. 실제 제출 후에는 변경할 수 없습니다.</p>
-            <div className="allstar-summary-list">{TEAMS.map(teamSummary)}</div>
-            <div className="allstar-summary-actions">
-              <button type="button" onClick={() => { setWizardTeamIndex(1); setWizardPositionIndex(ALL_STAR_POSITIONS.length - 1); goTo('VOTE'); }}>수정하기</button>
-              <button type="button" className="is-primary" disabled={!ballotComplete || submitting} onClick={submitBallot}>{submitting ? '제출 중…' : previewMode ? '검수 흐름 완료' : '투표 제출'}</button>
+            {!sharedRosterActive ? (
+              <>
+                <h1>{rosterReceipt?.submitted ? '내 올스타 로스터' : '최종 선택 확인'}</h1>
+                <p>{rosterReceipt?.submitted
+                  ? '이 브라우저 세션에서 선택한 양 팀 로스터입니다.'
+                  : '양 팀 합계 24명을 확인해 주세요. 실제 제출 후에는 변경할 수 없습니다.'}</p>
+              </>
+            ) : null}
+            <div className="allstar-roster-team-toggle" role="group" aria-label="확인할 로스터 팀 선택">
+              {TEAMS.map((team) => (
+                <button
+                  type="button"
+                  key={team}
+                  className={`${rosterReviewTeam === team ? 'is-active ' : ''}is-${TEAM_META[team].tone}`}
+                  aria-pressed={rosterReviewTeam === team}
+                  onClick={() => { setRosterDetail(null); setRosterReviewTeam(team); }}
+                >
+                  <strong>{TEAM_META[team].label}</strong>
+                  <small>{TEAM_META[team].groups} · 12명</small>
+                </button>
+              ))}
             </div>
+            <RosterReviewGrid
+              candidates={activeRosterCandidates}
+              team={rosterReviewTeam}
+              onOpen={(index) => setRosterDetail({ team: rosterReviewTeam, index })}
+            />
+            {sharedRosterActive ? (
+              <button
+                type="button"
+                className="allstar-shared-roster-cta is-primary"
+                disabled={!canEnterVote || !ballotSource}
+                onClick={startVoteFromSharedRoster}
+              >
+                투표 참여하기
+              </button>
+            ) : (
+              <>
+                <div className="allstar-roster-share-actions">
+                  {fileShareSupported && !rosterShareFallback ? (
+                    <>
+                      <button type="button" className="is-primary is-wide" disabled={!rosterComplete || rosterShareFeedback === 'RENDERING'} onClick={handleRosterNativeShare}>이미지와 링크 공유</button>
+                      <button type="button" disabled={!rosterComplete || rosterShareFeedback === 'RENDERING'} onClick={handleRosterDownload}>이미지 저장</button>
+                      <button type="button" disabled={!rosterShareToken} onClick={handleRosterLinkCopy}>결과 링크 복사</button>
+                    </>
+                  ) : (
+                    <>
+                      <button type="button" className="is-primary" disabled={!rosterComplete || rosterShareFeedback === 'RENDERING'} onClick={handleRosterDownload}>이미지 저장</button>
+                      <button type="button" disabled={!rosterShareToken} onClick={handleRosterLinkCopy}>결과 링크 복사</button>
+                    </>
+                  )}
+                  {rosterShareLabel ? <p role="status" aria-live="polite">{rosterShareLabel}</p> : null}
+                </div>
+                {!rosterReceipt?.submitted ? (
+                  <div className="allstar-summary-actions">
+                    <button type="button" onClick={() => { setWizardTeamIndex(rosterReviewTeam === 'TEAM_1' ? 0 : 1); setWizardPositionIndex(0); setRosterDetail(null); goTo('VOTE'); }}>선택 수정</button>
+                    <button type="button" className="is-primary" disabled={!ballotComplete || submitting} onClick={submitBallot}>{submitting ? '제출 중…' : previewMode ? '검수 흐름 완료' : '투표 제출'}</button>
+                  </div>
+                ) : (
+                  <div className="allstar-summary-actions">
+                    <button type="button" onClick={() => goTo('HUB')}>올스타전 홈</button>
+                    <button type="button" className="is-primary" onClick={() => goTo('RESULTS')}>투표 현황 보기</button>
+                  </div>
+                )}
+              </>
+            )}
           </section>
         ) : null}
 
-        {resolvedView === 'THANKS' ? (
+        {resolvedView === 'THANKS' && (rosterReceiptChecked || rosterComplete) ? (
           <section className="allstar-thank-you">
-            <h1>{previewThanks ? '검수 흐름을 완료했습니다' : '투표해 주셔서 감사합니다'}</h1>
-            <p>{previewThanks ? '현재는 검수용 화면이라 실제 득표는 저장되지 않았습니다.' : '선택한 선수들의 현재 득표 현황을 바로 확인할 수 있습니다.'}</p>
+            <h1>{thankYouIsPreview ? '검수 흐름을 완료했습니다' : '투표해 주셔서 감사합니다'}</h1>
+            <p>{thankYouIsPreview ? '현재는 검수용 화면이라 실제 득표는 저장되지 않았습니다.' : '선택한 양 팀의 로스터를 확인하고 공유할 수 있습니다.'}</p>
+            <div className="allstar-roster-team-toggle" role="group" aria-label="완료한 로스터 팀 선택">
+              {TEAMS.map((team) => (
+                <button
+                  type="button"
+                  key={team}
+                  className={`${rosterReviewTeam === team ? 'is-active ' : ''}is-${TEAM_META[team].tone}`}
+                  aria-pressed={rosterReviewTeam === team}
+                  onClick={() => { setRosterDetail(null); setRosterReviewTeam(team); }}
+                >
+                  <strong>{TEAM_META[team].label}</strong>
+                  <small>{TEAM_META[team].groups} · 12명</small>
+                </button>
+              ))}
+            </div>
+            <RosterReviewGrid
+              candidates={activeRosterCandidates}
+              team={rosterReviewTeam}
+              onOpen={(index) => setRosterDetail({ team: rosterReviewTeam, index })}
+            />
+            <div className="allstar-roster-share-actions">
+              {fileShareSupported && !rosterShareFallback ? (
+                <>
+                  <button type="button" className="is-primary is-wide" disabled={!rosterComplete || rosterShareFeedback === 'RENDERING'} onClick={handleRosterNativeShare}>이미지와 링크 공유</button>
+                  <button type="button" disabled={!rosterComplete || rosterShareFeedback === 'RENDERING'} onClick={handleRosterDownload}>이미지 저장</button>
+                  <button type="button" disabled={!rosterShareToken} onClick={handleRosterLinkCopy}>결과 링크 복사</button>
+                </>
+              ) : (
+                <>
+                  <button type="button" className="is-primary" disabled={!rosterComplete || rosterShareFeedback === 'RENDERING'} onClick={handleRosterDownload}>이미지 저장</button>
+                  <button type="button" disabled={!rosterShareToken} onClick={handleRosterLinkCopy}>결과 링크 복사</button>
+                </>
+              )}
+              {rosterShareLabel ? <p role="status" aria-live="polite">{rosterShareLabel}</p> : null}
+            </div>
             <div className="allstar-summary-actions">
               <button type="button" onClick={() => goTo('HUB')}>올스타전 홈</button>
               <button type="button" className="is-primary" onClick={() => goTo('RESULTS')}>투표 현황 보기</button>
@@ -1038,8 +1495,54 @@ export default function AllStarVotingPage() {
           ) : <CandidateUnavailable loading={eventLoading} />
         ) : null}
 
+        {rosterComplete
+          && !rosterPackRevealActive
+          && !sharedRosterActive
+          && (resolvedView === 'FINAL_REVIEW' || resolvedView === 'THANKS') ? (
+          <RosterShareSheet
+            ref={rosterShareSheetRef}
+            team1Candidates={rosterByTeam.TEAM_1}
+            team2Candidates={rosterByTeam.TEAM_2}
+          />
+        ) : null}
+
+        {rosterDetail ? (
+          <PlayerCardDetailDialog
+            key={`${rosterDetail.team}:${rosterDetail.index}`}
+            candidates={rosterByTeam[rosterDetail.team]}
+            initialIndex={rosterDetail.index}
+            readOnly
+            readOnlyMessage={`${TEAM_META[rosterDetail.team].label}에서 선택한 선수 카드입니다.`}
+            onClose={() => setRosterDetail(null)}
+          />
+        ) : null}
+
       </main>
       </div>
+      {pendingExitTarget ? (
+        <div className="allstar-exit-confirm" role="presentation" onClick={() => setPendingExitTarget(null)}>
+          <section
+            className="allstar-exit-confirm__dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="allstar-exit-confirm-title"
+            aria-describedby="allstar-exit-confirm-description"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <span className="allstar-exit-confirm__eyebrow">VOTE IN PROGRESS</span>
+            <h2 id="allstar-exit-confirm-title">투표를 중단하고 나갈까요?</h2>
+            <p id="allstar-exit-confirm-description">
+              아직 최종 제출되지 않았습니다. 현재 선택은 이 브라우저 세션에 임시 저장되지만 득표에는 반영되지 않습니다.
+            </p>
+            <div className="allstar-exit-confirm__actions">
+              <button type="button" ref={exitStayButtonRef} onClick={() => setPendingExitTarget(null)}>계속 투표하기</button>
+              <button type="button" className="is-danger" onClick={() => performExit(pendingExitTarget)}>
+                {pendingExitTarget === 'MAIN' ? '메인으로 나가기' : '올스타전 홈으로 나가기'}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
