@@ -18,6 +18,7 @@ type PlayerCardSurfaceProps = {
   index: number;
   active: boolean;
   selected: boolean;
+  variant?: 'full' | 'thumbnail' | 'share';
   expanded?: boolean;
   onOpen?: () => void;
 };
@@ -30,6 +31,7 @@ export function PlayerCardSurface({
   index,
   active,
   selected,
+  variant = 'full',
   expanded = false,
   onOpen,
 }: PlayerCardSurfaceProps) {
@@ -50,41 +52,53 @@ export function PlayerCardSurface({
   };
 
   const style = {
-    '--card-accent': candidate.team === 'TEAM_1' ? '#ff7048' : '#6b8dff',
+    '--card-accent': candidate.team === 'TEAM_1' ? '#6b8dff' : '#ff7048',
   } as CSSProperties;
 
-  const className = `player-card-surface is-${TEAM_META[candidate.team].tone}${active ? ' is-active' : ''}${selected ? ' is-selected' : ''}${expanded ? ' is-expanded' : ''}`;
+  const className = `player-card-surface is-${TEAM_META[candidate.team].tone} is-${variant}${active ? ' is-active' : ''}${selected ? ' is-selected' : ''}${expanded ? ' is-expanded' : ''}`;
   const label = `${candidate.name}, ${candidate.school}, ${positionLabel(candidate.position)}${selected ? ', 선택됨' : ''}`;
   const content: ReactNode = (
     <>
-      <span className="player-card-surface__texture" aria-hidden="true" />
-      <span className="player-card-surface__foil" aria-hidden="true" />
-      <span className="player-card-surface__glare" aria-hidden="true" />
+      <span className="player-card-surface__face player-card-surface__face--front">
+        <span className="player-card-surface__texture" aria-hidden="true" />
+        <span className="player-card-surface__foil" aria-hidden="true" />
+        <span className="player-card-surface__glare" aria-hidden="true" />
 
-      <span className="player-card-surface__frame" aria-hidden="true">
-        <span />
+        <span className="player-card-surface__frame" aria-hidden="true">
+          <span />
+        </span>
+
+        <span className="player-card-surface__topline">
+          <span className="player-card-surface__serial">AUBL {String(index + 1).padStart(2, '0')}</span>
+          <span className="player-card-surface__position">{positionLabel(candidate.position)}</span>
+        </span>
+
+        <span className="player-card-surface__portrait" aria-hidden="true">
+          <span className="player-card-surface__monogram">{candidate.name.slice(0, 1)}</span>
+          <span className="player-card-surface__diamond" />
+        </span>
+
+        <span className="player-card-surface__identity">
+          <span className="player-card-surface__team">{TEAM_META[candidate.team].label} · {candidate.group ? `${candidate.group}조` : 'AUBL'}</span>
+          <strong>{candidate.name}</strong>
+          <span className="player-card-surface__school">{candidate.school}</span>
+          {candidate.note ? <span className="player-card-surface__note">{candidate.note}</span> : null}
+        </span>
+
+        <span className="player-card-surface__selection" aria-hidden={!selected}>
+          <span>{selected ? '✓' : ''}</span>
+          {selected ? '선택됨' : 'AUBL ALL-STAR'}
+        </span>
       </span>
 
-      <span className="player-card-surface__topline">
-        <span className="player-card-surface__serial">AUBL {String(index + 1).padStart(2, '0')}</span>
-        <span className="player-card-surface__position">{positionLabel(candidate.position)}</span>
-      </span>
-
-      <span className="player-card-surface__portrait" aria-hidden="true">
-        <span className="player-card-surface__monogram">{candidate.name.slice(0, 1)}</span>
-        <span className="player-card-surface__diamond" />
-      </span>
-
-      <span className="player-card-surface__identity">
-        <span className="player-card-surface__team">{TEAM_META[candidate.team].label} · {candidate.group ? `${candidate.group}조` : 'AUBL'}</span>
-        <strong>{candidate.name}</strong>
-        <span className="player-card-surface__school">{candidate.school}</span>
-        {candidate.note ? <span className="player-card-surface__note">{candidate.note}</span> : null}
-      </span>
-
-      <span className="player-card-surface__selection" aria-hidden={!selected}>
-        <span>{selected ? '✓' : ''}</span>
-        {selected ? '선택됨' : 'AUBL ALL-STAR'}
+      <span className="player-card-surface__face player-card-surface__face--back" aria-hidden="true">
+        <span className="player-card-surface__texture" />
+        <span className="player-card-surface__back-rays" />
+        <span className="player-card-surface__foil" />
+        <span className="player-card-surface__glare" />
+        <span className="player-card-surface__back-mark">
+          <img src="/assets/aubl_clean.png" alt="" />
+        </span>
       </span>
     </>
   );

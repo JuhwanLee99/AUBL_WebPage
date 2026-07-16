@@ -21,8 +21,8 @@ export const POSITION_LABELS: Record<AllStarPosition, string> = {
 };
 
 export const TEAM_META: Record<AllStarTeam, { label: string; groups: string; tone: 'coral' | 'blue' }> = {
-  TEAM_1: { label: '1팀', groups: 'A · C · E · G조', tone: 'coral' },
-  TEAM_2: { label: '2팀', groups: 'B · D · F · H조', tone: 'blue' },
+  TEAM_1: { label: '1팀', groups: 'A · C · E · G조', tone: 'blue' },
+  TEAM_2: { label: '2팀', groups: 'B · D · F · H조', tone: 'coral' },
 };
 
 // 로컬 UI 검수용 기본값입니다. 운영 상태·일정·정책은 callable이 반환하는

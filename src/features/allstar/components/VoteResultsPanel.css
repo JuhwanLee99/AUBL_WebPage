@@ -122,16 +122,16 @@
   white-space: nowrap;
 }
 
-.allstar-results__team-switch button.is-active:first-child {
-  border-color: rgba(255, 101, 58, 0.48);
-  background: rgba(255, 101, 58, 0.15);
-  color: #ffb099;
-}
-
-.allstar-results__team-switch button.is-active:last-child {
+.allstar-results__team-switch button.is-active.is-blue {
   border-color: rgba(91, 130, 255, 0.48);
   background: rgba(91, 130, 255, 0.16);
   color: #adc0ff;
+}
+
+.allstar-results__team-switch button.is-active.is-coral {
+  border-color: rgba(255, 101, 58, 0.48);
+  background: rgba(255, 101, 58, 0.15);
+  color: #ffb099;
 }
 
 .allstar-results__team-switch button:active,

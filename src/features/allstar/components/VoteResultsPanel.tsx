@@ -89,7 +89,7 @@ export function VoteResultsPanel({
             <button
               key={team}
               type="button"
-              className={selectedTeam === team ? 'is-active' : undefined}
+              className={`${selectedTeam === team ? 'is-active ' : ''}is-${TEAM_META[team].tone}`}
               aria-pressed={selectedTeam === team}
               onClick={() => onTeamChange(team)}
             >
