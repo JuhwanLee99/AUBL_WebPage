@@ -9,19 +9,58 @@ from firebase_functions import https_fn
 
 from allstar_voting import POLICY_ONCE_PER_DAY
 from allstar_voting import POLICY_ONCE_PER_EVENT
+from allstar_voting import BALLOTS_SUBCOLLECTION
+from allstar_voting import ELIGIBILITY_SUBCOLLECTION
 from allstar_voting import _derive_ballot_id
+from allstar_voting import _assert_config_lock
+from allstar_voting import _config_lock_payload
+from allstar_voting import _division_ledger_exists
+from allstar_voting import _is_idempotent_retry
 from allstar_voting import _ledger_blocks_vote
 from allstar_voting import _period_for
 from allstar_voting import _public_candidate_set
 from allstar_voting import _public_result_summary
 from allstar_voting import _require_candidate_version
 from allstar_voting import _stable_voter_subject
+from allstar_voting import _submission_fingerprint
 from allstar_voting import _validate_auth_provider
 from allstar_voting import _validate_selections
+from allstar_voting import _voter_key_fingerprint
 
 
 ALLSTAR_SIDES = ("TEAM_1", "TEAM_2")
 ALLSTAR_POSITIONS = ("P", "C", "1B", "2B", "3B", "SS", "OF")
+
+
+class _FakeLedgerCollection:
+    def __init__(self, snapshots: list[object]) -> None:
+        self.snapshots = snapshots
+        self.filters: list[object] = []
+        self.limits: list[int] = []
+        self.transactions: list[object | None] = []
+
+    def where(self, *, filter: object) -> _FakeLedgerCollection:
+        self.filters.append(filter)
+        return self
+
+    def limit(self, value: int) -> _FakeLedgerCollection:
+        self.limits.append(value)
+        return self
+
+    def stream(self, transaction: object | None = None):
+        self.transactions.append(transaction)
+        return iter(self.snapshots)
+
+
+class _FakeEventReference:
+    def __init__(self, ballots: list[object], eligibility: list[object]) -> None:
+        self.collections = {
+            BALLOTS_SUBCOLLECTION: _FakeLedgerCollection(ballots),
+            ELIGIBILITY_SUBCOLLECTION: _FakeLedgerCollection(eligibility),
+        }
+
+    def collection(self, collection_id: str) -> _FakeLedgerCollection:
+        return self.collections[collection_id]
 
 
 def _raw_allstar_candidate_set() -> dict[str, Any]:
@@ -106,6 +145,209 @@ class VotingPolicyTests(unittest.TestCase):
         self.assertTrue(_ledger_blocks_vote(True, ledger, POLICY_ONCE_PER_EVENT, "2026-07-11"))
         self.assertTrue(_ledger_blocks_vote(True, ledger, POLICY_ONCE_PER_DAY, "2026-07-11"))
         self.assertFalse(_ledger_blocks_vote(True, ledger, POLICY_ONCE_PER_DAY, "2026-07-12"))
+
+
+class VotingConfigLockTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.secret = b"x" * 32
+        self.lock = _config_lock_payload(
+            secret=self.secret,
+            event_id="event",
+            division_id="allstar",
+            candidate_set_id="set-v1",
+            candidate_version="v1",
+            candidate_set_hash="a" * 64,
+            policy=POLICY_ONCE_PER_EVENT,
+            timezone_name="Asia/Seoul",
+        )
+
+    def test_lock_accepts_identical_critical_configuration(self) -> None:
+        _assert_config_lock(
+            {**self.lock, "createdAt": datetime(2026, 7, 20, tzinfo=timezone.utc)},
+            self.lock,
+        )
+
+    def test_lock_rejects_policy_candidate_timezone_and_secret_changes(self) -> None:
+        changed_values = {
+            "policy": POLICY_ONCE_PER_DAY,
+            "timezone": "UTC",
+            "candidateSetId": "set-v2",
+            "candidateVersion": "v2",
+            "candidateSetHash": "b" * 64,
+            "voterKeyFingerprint": _voter_key_fingerprint(
+                b"y" * 32,
+                "event",
+                "allstar",
+            ),
+        }
+        for field, value in changed_values.items():
+            with self.subTest(field=field):
+                with self.assertRaises(https_fn.HttpsError) as raised:
+                    _assert_config_lock({**self.lock, field: value}, self.lock)
+                self.assertEqual(
+                    raised.exception.details["reason"],
+                    "VOTING_CONFIG_LOCK_MISMATCH",
+                )
+                self.assertEqual(raised.exception.details["mismatchedFields"], [field])
+
+    def test_key_fingerprint_is_deterministic_and_scoped(self) -> None:
+        first = _voter_key_fingerprint(self.secret, "event", "allstar")
+        self.assertEqual(first, _voter_key_fingerprint(self.secret, "event", "allstar"))
+        self.assertNotEqual(first, _voter_key_fingerprint(self.secret, "event", "rookie"))
+        self.assertNotEqual(first, _voter_key_fingerprint(self.secret, "other", "allstar"))
+        self.assertNotIn(self.secret.decode("utf-8"), first)
+
+    def test_missing_lock_checks_the_whole_division_ledger_in_transaction(self) -> None:
+        transaction = object()
+        empty_event = _FakeEventReference([], [])
+        self.assertFalse(_division_ledger_exists(empty_event, "allstar", transaction))
+        for collection in empty_event.collections.values():
+            self.assertEqual(collection.limits, [1])
+            self.assertEqual(collection.transactions, [transaction])
+            self.assertEqual(getattr(collection.filters[0], "value", None), "allstar")
+
+        other_voter_ballot = _FakeEventReference([object()], [])
+        self.assertTrue(
+            _division_ledger_exists(other_voter_ballot, "allstar", transaction)
+        )
+        self.assertEqual(
+            other_voter_ballot.collections[BALLOTS_SUBCOLLECTION].transactions,
+            [transaction],
+        )
+        self.assertEqual(
+            other_voter_ballot.collections[ELIGIBILITY_SUBCOLLECTION].transactions,
+            [],
+        )
+
+        old_secret_eligibility = _FakeEventReference([], [object()])
+        self.assertTrue(
+            _division_ledger_exists(old_secret_eligibility, "allstar", transaction)
+        )
+        self.assertEqual(
+            old_secret_eligibility.collections[ELIGIBILITY_SUBCOLLECTION].transactions,
+            [transaction],
+        )
+
+    def test_submission_fingerprint_is_order_independent_and_content_bound(self) -> None:
+        first = _submission_fingerprint(
+            "event",
+            "allstar",
+            "v1",
+            "request-1",
+            {"TEAM_1:OF": ["candidate-b", "candidate-a"], "TEAM_1:P": ["candidate-p"]},
+        )
+        reordered = _submission_fingerprint(
+            "event",
+            "allstar",
+            "v1",
+            "request-1",
+            {"TEAM_1:P": ["candidate-p"], "TEAM_1:OF": ["candidate-a", "candidate-b"]},
+        )
+        changed = _submission_fingerprint(
+            "event",
+            "allstar",
+            "v1",
+            "request-1",
+            {"TEAM_1:P": ["candidate-p"], "TEAM_1:OF": ["candidate-a", "candidate-c"]},
+        )
+        self.assertEqual(first, reordered)
+        self.assertNotEqual(first, changed)
+        self.assertNotEqual(
+            first,
+            _submission_fingerprint(
+                "event",
+                "allstar",
+                "v1",
+                "request-2",
+                {"TEAM_1:P": ["candidate-p"], "TEAM_1:OF": ["candidate-a", "candidate-b"]},
+            ),
+        )
+
+    def test_idempotent_retry_requires_matching_ballot_and_ledger(self) -> None:
+        selections = {"TEAM_1:P": ["candidate-a"]}
+        fingerprint = _submission_fingerprint(
+            "event",
+            "allstar",
+            "v1",
+            "request-1",
+            selections,
+        )
+        ballot = {
+            "schemaVersion": 2,
+            "eventId": "event",
+            "division": "allstar",
+            "candidateSetId": "set-v1",
+            "candidateVersion": "v1",
+            "candidateSetHash": "b" * 64,
+            "policy": POLICY_ONCE_PER_EVENT,
+            "periodKey": "event",
+            "localDate": "2026-07-20",
+            "selections": selections,
+            "submissionId": "request-1",
+            "submissionFingerprint": fingerprint,
+            "voterKeyVersion": "provider-subject-hmac-sha256-v2",
+        }
+        ledger = {
+            "schemaVersion": 1,
+            "eventId": "event",
+            "division": "allstar",
+            "lastPolicy": POLICY_ONCE_PER_EVENT,
+            "lastPeriodKey": "event",
+            "lastLocalDate": "2026-07-20",
+            "lastCandidateVersion": "v1",
+            "lastSubmissionId": "request-1",
+            "lastSubmissionFingerprint": fingerprint,
+            "lastBallotId": "ballot-1",
+            "voterKeyVersion": "provider-subject-hmac-sha256-v2",
+        }
+        expected = {
+            "ballot_id": "ballot-1",
+            "event_id": "event",
+            "division_id": "allstar",
+            "candidate_set_id": "set-v1",
+            "candidate_version": "v1",
+            "candidate_set_hash": "b" * 64,
+            "policy": POLICY_ONCE_PER_EVENT,
+            "period_key": "event",
+            "local_date": "2026-07-20",
+            "submission_id": "request-1",
+            "submission_fingerprint": fingerprint,
+        }
+        self.assertTrue(
+            _is_idempotent_retry(
+                ballot,
+                ledger,
+                **expected,
+            )
+        )
+        self.assertFalse(
+            _is_idempotent_retry(
+                ballot,
+                {**ledger, "lastBallotId": "ballot-2"},
+                **expected,
+            )
+        )
+        self.assertFalse(
+            _is_idempotent_retry(
+                ballot,
+                ledger,
+                **{**expected, "submission_fingerprint": "c" * 64},
+            )
+        )
+        self.assertFalse(
+            _is_idempotent_retry(
+                {**ballot, "candidateSetHash": "d" * 64},
+                ledger,
+                **expected,
+            )
+        )
+        self.assertFalse(
+            _is_idempotent_retry(
+                {**ballot, "selections": {"TEAM_1:P": ["candidate-b"]}},
+                ledger,
+                **expected,
+            )
+        )
 
 
 class CandidateValidationTests(unittest.TestCase):

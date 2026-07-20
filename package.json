@@ -8,6 +8,8 @@
     "emulator": "firebase emulators:start --only firestore",
     "emulator:save": "firebase emulators:export ./firestore-local",
     "emulator:import": "firebase emulators:start --only firestore --import ./firestore-local",
+    "test:allstar:load": "firebase emulators:exec --only firestore \"PYTHONPATH=functions functions/venv/bin/python scripts/allstar_vote_emulator_load.py\"",
+    "test:allstar:rules": "firebase emulators:exec --only firestore --project demo-aubl-allstar-rules \"node scripts/allstar_firestore_rules_smoke.mjs\"",
     "build": "vite build && node scripts/generate-og-pages.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
