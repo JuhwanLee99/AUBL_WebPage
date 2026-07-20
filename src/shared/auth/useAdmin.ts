@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collectionGroup, doc, FieldPath, getDoc, getDocs, limit, query, where } from 'firebase/firestore';
+import { collectionGroup, doc, documentId, getDoc, getDocs, limit, query, where } from 'firebase/firestore';
 import { firestore } from '../firebase/client';
 import { useAuth } from './AuthProvider';
 
@@ -9,6 +9,7 @@ const FORCE_ADMIN = import.meta.env.DEV && false;
 export function useAdmin() {
   const { user } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [canAuditAllstarVotes, setCanAuditAllstarVotes] = useState(false);
   const [isScorer, setIsScorer] = useState(false);
   const [loading, setLoading] = useState(true);
   const [roleLabel, setRoleLabel] = useState('일반');
@@ -21,6 +22,7 @@ export function useAdmin() {
     const run = async () => {
       if (FORCE_ADMIN) {
         setIsAdmin(true);
+        setCanAuditAllstarVotes(false);
         setIsScorer(false);
         setLoading(false);
         setRoleLabel('관리자');
@@ -29,6 +31,7 @@ export function useAdmin() {
       }
       if (!user) {
         setIsAdmin(false);
+        setCanAuditAllstarVotes(false);
         setIsScorer(false);
         setLoading(false);
         setRoleLabel('일반');
@@ -37,14 +40,17 @@ export function useAdmin() {
       }
 
       let admin = false;
+      let allstarVoteAuditor = false;
       try {
         const idTokenResult = await user.getIdTokenResult(true);
         admin = !!idTokenResult.claims.admin;
+        allstarVoteAuditor = admin && idTokenResult.claims.allstarVoteAuditor === true;
       } catch (err) {
         console.error('권한 확인 실패(idToken):', err);
       }
       if (cancelled) return;
       setIsAdmin(admin);
+      setCanAuditAllstarVotes(allstarVoteAuditor);
       setIsScorer(false);
       if (admin) {
         setRoleLabel('관리자');
@@ -84,7 +90,7 @@ export function useAdmin() {
         if (cancelled) return;
         if (memberSnap.empty) {
           memberSnap = await getDocs(
-            query(collectionGroup(firestore, 'members'), where(FieldPath.documentId(), '==', user.uid), limit(1)),
+            query(collectionGroup(firestore, 'members'), where(documentId(), '==', user.uid), limit(1)),
           );
           if (cancelled) return;
         }
@@ -124,6 +130,7 @@ export function useAdmin() {
         setRoleLabel('일반');
         setRoleDetail('사용자');
         setIsScorer(false);
+        setCanAuditAllstarVotes(false);
         setLoading(false);
       }
     };
@@ -140,6 +147,7 @@ export function useAdmin() {
   return { 
     isAdmin, 
     isScorer,
+    canAuditAllstarVotes,
     canUseScorekeeper,
     canEditGameRecords,
     loading, 
