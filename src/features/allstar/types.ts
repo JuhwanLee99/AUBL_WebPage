@@ -60,6 +60,7 @@ export type AllStarEventConfig = {
 export type BallotStatus = {
   eligibility: BallotEligibility;
   votedAt: string | null;
+  submissionId: string | null;
   nextEligibleAt: string | null;
 };
 
@@ -121,5 +122,6 @@ export type SubmitBallotInput = {
   eventId: string;
   division: AllStarDivision;
   candidateVersion: string;
+  submissionId: string;
   selections: Record<string, string[]>;
 };

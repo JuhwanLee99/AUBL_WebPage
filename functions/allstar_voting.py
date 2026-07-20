@@ -12,6 +12,7 @@ import hashlib
 import hmac
 import json
 import re
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, NoReturn
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -19,14 +20,19 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from firebase_admin import firestore as admin_firestore
 from firebase_functions import https_fn
 from google.cloud import firestore as google_firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 
 EVENTS_COLLECTION = "allstarVotingEvents"
 BALLOTS_SUBCOLLECTION = "ballots"
 CANDIDATE_SETS_SUBCOLLECTION = "candidateSets"
+CONFIG_LOCKS_SUBCOLLECTION = "configLocks"
 ELIGIBILITY_SUBCOLLECTION = "voterEligibility"
 PUBLIC_RESULTS_SUBCOLLECTION = "publicResults"
+RESULT_DRAFTS_SUBCOLLECTION = "resultDrafts"
 CUSTOM_GOOGLE_SUBJECT_CLAIM = "aublGoogleSubject"
+CONFIG_LOCK_SCHEMA_VERSION = 1
+VOTER_KEY_VERSION = "provider-subject-hmac-sha256-v2"
 
 POLICY_ONCE_PER_EVENT = "ONCE_PER_EVENT"
 POLICY_ONCE_PER_DAY = "ONCE_PER_DAY"
@@ -67,6 +73,7 @@ _PUBLIC_CANDIDATE_STRING_FIELDS = (
     "group",
     "number",
 )
+_SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _error(
@@ -243,6 +250,112 @@ def _secret_bytes(secret: str) -> bytes:
             "VOTER_KEY_SECRET_MISSING",
         )
     return secret.encode("utf-8")
+
+
+def _voter_key_fingerprint(
+    secret: bytes,
+    event_id: str,
+    division_id: str,
+) -> str:
+    """Return an event-scoped key fingerprint without exposing the key itself."""
+    context = f"v1\nconfig-lock\n{event_id}\n{division_id}".encode("utf-8")
+    return hmac.new(secret, context, hashlib.sha256).hexdigest()
+
+
+def _config_lock_payload(
+    *,
+    secret: bytes,
+    event_id: str,
+    division_id: str,
+    candidate_set_id: str,
+    candidate_version: str,
+    candidate_set_hash: str,
+    policy: str,
+    timezone_name: str,
+) -> dict[str, Any]:
+    """Build the immutable settings captured by the first accepted ballot."""
+    return {
+        "schemaVersion": CONFIG_LOCK_SCHEMA_VERSION,
+        "eventId": event_id,
+        "division": division_id,
+        "candidateSetId": candidate_set_id,
+        "candidateVersion": candidate_version,
+        "candidateSetHash": candidate_set_hash,
+        "policy": policy,
+        "timezone": timezone_name,
+        "voterKeyVersion": VOTER_KEY_VERSION,
+        "voterKeyFingerprint": _voter_key_fingerprint(secret, event_id, division_id),
+    }
+
+
+def _assert_config_lock(
+    stored: Mapping[str, Any],
+    expected: Mapping[str, Any],
+) -> None:
+    """Fail closed when voting-critical settings differ from the first ballot."""
+    mismatched_fields: list[str] = []
+    for field, expected_value in expected.items():
+        stored_value = stored.get(field)
+        if field == "voterKeyFingerprint":
+            matches = (
+                isinstance(stored_value, str)
+                and isinstance(expected_value, str)
+                and _SHA256_PATTERN.fullmatch(stored_value) is not None
+                and hmac.compare_digest(stored_value, expected_value)
+            )
+        else:
+            matches = stored_value == expected_value
+        if not matches:
+            mismatched_fields.append(field)
+    if mismatched_fields:
+        _error(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "Voting configuration changed after the first accepted ballot.",
+            "VOTING_CONFIG_LOCK_MISMATCH",
+            mismatchedFields=sorted(mismatched_fields),
+        )
+
+
+def _config_lock_missing() -> NoReturn:
+    _error(
+        https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+        "Voting configuration lock is missing for an existing ballot ledger.",
+        "VOTING_CONFIG_LOCK_MISSING",
+    )
+
+
+def _query_has_document(
+    query: Any,
+    transaction: google_firestore.Transaction | None = None,
+) -> bool:
+    """Return whether a limit-one query sees a document in the same read context."""
+    limited_query = query.limit(1)
+    snapshots = (
+        limited_query.stream(transaction=transaction)
+        if transaction is not None
+        else limited_query.stream()
+    )
+    return next(iter(snapshots), None) is not None
+
+
+def _division_ledger_exists(
+    event_ref: Any,
+    division_id: str,
+    transaction: google_firestore.Transaction | None = None,
+) -> bool:
+    """Check the whole division for a pre-lock ballot or eligibility ledger.
+
+    This deliberately does not derive a voter-specific HMAC document ID.  A
+    missing configuration lock must fail closed even when the existing ledger
+    belongs to another voter or was written with an older HMAC secret.
+    """
+    for collection_id in (BALLOTS_SUBCOLLECTION, ELIGIBILITY_SUBCOLLECTION):
+        query = event_ref.collection(collection_id).where(
+            filter=FieldFilter("division", "==", division_id)
+        )
+        if _query_has_document(query, transaction):
+            return True
+    return False
 
 
 def _derive_ballot_id(
@@ -644,6 +757,100 @@ def _validate_selections(
     return canonical
 
 
+def _submission_fingerprint(
+    event_id: str,
+    division_id: str,
+    candidate_version: str,
+    submission_id: str,
+    selections: Mapping[str, list[str]],
+) -> str:
+    """Bind a client request ID to one canonical ballot without voter data."""
+    payload = {
+        "eventId": event_id,
+        "division": division_id,
+        "candidateVersion": candidate_version,
+        "submissionId": submission_id,
+        "selections": {
+            contest_id: sorted(candidate_ids)
+            for contest_id, candidate_ids in sorted(selections.items())
+        },
+    }
+    serialized = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(serialized).hexdigest()
+
+
+def _is_idempotent_retry(
+    ballot: Mapping[str, Any],
+    eligibility: Mapping[str, Any],
+    *,
+    ballot_id: str,
+    event_id: str,
+    division_id: str,
+    candidate_set_id: str,
+    candidate_version: str,
+    candidate_set_hash: str,
+    policy: str,
+    period_key: str,
+    local_date: str,
+    submission_id: str,
+    submission_fingerprint: str,
+) -> bool:
+    """Accept only an exact retry whose ballot and eligibility ledger agree."""
+    if _SHA256_PATTERN.fullmatch(submission_fingerprint) is None:
+        return False
+    stored_selections = ballot.get("selections")
+    if not isinstance(stored_selections, Mapping):
+        return False
+    normalized_stored: dict[str, list[str]] = {}
+    for contest_id, candidate_ids in stored_selections.items():
+        if (
+            not isinstance(contest_id, str)
+            or not isinstance(candidate_ids, list)
+            or any(not isinstance(candidate_id, str) for candidate_id in candidate_ids)
+        ):
+            return False
+        normalized_stored[contest_id] = candidate_ids
+    if _submission_fingerprint(
+        event_id,
+        division_id,
+        candidate_version,
+        submission_id,
+        normalized_stored,
+    ) != submission_fingerprint:
+        return False
+    return (
+        ballot.get("schemaVersion") == 2
+        and ballot.get("eventId") == event_id
+        and ballot.get("division") == division_id
+        and ballot.get("candidateSetId") == candidate_set_id
+        and ballot.get("candidateVersion") == candidate_version
+        and ballot.get("candidateSetHash") == candidate_set_hash
+        and ballot.get("policy") == policy
+        and ballot.get("periodKey") == period_key
+        and ballot.get("localDate") == local_date
+        and ballot.get("voterKeyVersion") == VOTER_KEY_VERSION
+        and ballot.get("submissionId") == submission_id
+        and ballot.get("submissionFingerprint") == submission_fingerprint
+        and eligibility.get("schemaVersion") == 1
+        and eligibility.get("eventId") == event_id
+        and eligibility.get("division") == division_id
+        and eligibility.get("lastPolicy") == policy
+        and eligibility.get("lastPeriodKey") == period_key
+        and eligibility.get("lastLocalDate") == local_date
+        and eligibility.get("lastCandidateVersion") == candidate_version
+        and eligibility.get("voterKeyVersion")
+        == VOTER_KEY_VERSION
+        and eligibility.get("lastSubmissionId") == submission_id
+        and eligibility.get("lastSubmissionFingerprint") == submission_fingerprint
+        and eligibility.get("lastBallotId") == ballot_id
+    )
+
+
 def _iso(value: object) -> str | None:
     return value.isoformat() if isinstance(value, datetime) else None
 
@@ -726,7 +933,11 @@ def _public_result_summary(
 
 
 def get_event_config(data: object) -> dict[str, Any]:
+    payload = _require_mapping(data, "data")
     event_id, division_id = _request_ids(data)
+    include_candidate_set = payload.get("includeCandidateSet", True)
+    if not isinstance(include_candidate_set, bool):
+        _invalid("'includeCandidateSet' must be a boolean.")
     db = admin_firestore.client()
     event_ref = db.collection(EVENTS_COLLECTION).document(event_id)
     event_snapshot = event_ref.get()
@@ -757,7 +968,7 @@ def get_event_config(data: object) -> dict[str, Any]:
         _misconfigured("Voting event venue is invalid.")
 
     public_set: dict[str, Any] | None = None
-    if published:
+    if published and include_candidate_set:
         set_snapshot = event_ref.collection(CANDIDATE_SETS_SUBCOLLECTION).document(candidate_set_id).get()
         if not set_snapshot.exists:
             _misconfigured("Published candidate set was not found.")
@@ -809,7 +1020,18 @@ def get_vote_results(data: object) -> dict[str, Any]:
         "updatedAt": None,
     }
 
-    if division.get("published") is not True or division.get("resultsPublished") is not True:
+    # Public aggregates are final snapshots behind the same explicit CLOSED
+    # barrier used by the result writer. A disabled-but-closed historical event
+    # may remain visible, while reopening/resetting the round hides stale data.
+    explicitly_closed = (
+        str(event.get("status", "DRAFT")).upper() == "CLOSED"
+        or str(division.get("status", "DRAFT")).upper() == "CLOSED"
+    )
+    if (
+        not explicitly_closed
+        or division.get("published") is not True
+        or division.get("resultsPublished") is not True
+    ):
         return unavailable
 
     candidate_snapshot = (
@@ -882,6 +1104,33 @@ def get_ballot_status(
         candidate_set_hash = str(public_set["contentHash"])
         candidate_ready = True
 
+    config_lock_snapshot = (
+        event_ref.collection(CONFIG_LOCKS_SUBCOLLECTION).document(division_id).get()
+    )
+    if config_lock_snapshot.exists:
+        if not candidate_ready or candidate_set_hash is None:
+            _error(
+                https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+                "Voting candidate configuration changed after the first accepted ballot.",
+                "VOTING_CONFIG_LOCK_MISMATCH",
+                mismatchedFields=["candidateSetPublished"],
+            )
+        _assert_config_lock(
+            config_lock_snapshot.to_dict() or {},
+            _config_lock_payload(
+                secret=secret,
+                event_id=event_id,
+                division_id=division_id,
+                candidate_set_id=candidate_set_id,
+                candidate_version=candidate_version,
+                candidate_set_hash=candidate_set_hash,
+                policy=policy,
+                timezone_name=timezone_name,
+            ),
+        )
+    elif _division_ledger_exists(event_ref, division_id):
+        _config_lock_missing()
+
     eligibility_id = _derive_eligibility_id(secret, event_id, division_id, voter_subject)
     eligibility_snapshot = (
         event_ref.collection(ELIGIBILITY_SUBCOLLECTION).document(eligibility_id).get()
@@ -901,6 +1150,9 @@ def get_ballot_status(
     submitted_at = ledger.get("lastSubmittedAt") if ledger_blocks else ballot.get("submittedAt")
     if submitted_at is None and ballot_snapshot.exists:
         submitted_at = ballot.get("submittedAt")
+    submission_id = ledger.get("lastSubmissionId") if ledger_blocks else ballot.get("submissionId")
+    if submission_id is None and ballot_snapshot.exists:
+        submission_id = ballot.get("submissionId")
 
     return {
         "eventId": event_id,
@@ -916,6 +1168,7 @@ def get_ballot_status(
         "submitted": submitted,
         "canVote": state == "OPEN" and candidate_ready and not submitted,
         "submittedAt": _iso(submitted_at) if submitted else None,
+        "submissionId": submission_id if submitted and isinstance(submission_id, str) else None,
         "nextEligibleAt": next_eligible_at if submitted and policy == POLICY_ONCE_PER_DAY else None,
     }
 
@@ -927,6 +1180,12 @@ def submit_ballot(
     payload = _require_mapping(request.data, "data")
     event_id, division_id = _request_ids(payload)
     requested_version = _require_slug(payload.get("candidateVersion"), "candidateVersion")
+    raw_submission_id = payload.get("submissionId")
+    submission_id = (
+        _require_slug(raw_submission_id, "submissionId")
+        if raw_submission_id is not None
+        else f"legacy-{secrets.token_hex(16)}"
+    )
     token = _auth_token(request)
     secret = _secret_bytes(voter_key_secret)
     db = admin_firestore.client()
@@ -976,9 +1235,41 @@ def submit_ballot(
             candidate_version,
         )
         selections = _validate_selections(payload.get("selections"), public_set["contests"])
+        submission_fingerprint = _submission_fingerprint(
+            event_id,
+            division_id,
+            candidate_version,
+            submission_id,
+            selections,
+        )
 
         policy = _policy(event, division)
         timezone_name = _timezone_name(event, division)
+        config_lock_ref = (
+            event_ref.collection(CONFIG_LOCKS_SUBCOLLECTION).document(division_id)
+        )
+        config_lock_snapshot = config_lock_ref.get(transaction=txn)
+        expected_config_lock = _config_lock_payload(
+            secret=secret,
+            event_id=event_id,
+            division_id=division_id,
+            candidate_set_id=candidate_set_id,
+            candidate_version=candidate_version,
+            candidate_set_hash=str(public_set["contentHash"]),
+            policy=policy,
+            timezone_name=timezone_name,
+        )
+        if config_lock_snapshot.exists:
+            _assert_config_lock(
+                config_lock_snapshot.to_dict() or {},
+                expected_config_lock,
+            )
+        elif _division_ledger_exists(event_ref, division_id, txn):
+            # Read the empty/non-empty division queries inside the same
+            # transaction as the missing lock. Concurrent first submissions
+            # still serialize on config_lock_ref, while any pre-lock ledger
+            # from another voter or Secret version blocks bootstrapping.
+            _config_lock_missing()
         period_key, next_eligible_at = _period_for(policy, timezone_name, request_now)
         local_date = _local_date(timezone_name, request_now)
         eligibility_id = _derive_eligibility_id(secret, event_id, division_id, voter_subject)
@@ -988,6 +1279,37 @@ def submit_ballot(
         ballot_id = _derive_ballot_id(secret, event_id, division_id, voter_subject, period_key)
         ballot_ref = event_ref.collection(BALLOTS_SUBCOLLECTION).document(ballot_id)
         existing = ballot_ref.get(transaction=txn)
+        existing_ballot = existing.to_dict() or {}
+        if existing.exists and _is_idempotent_retry(
+            existing_ballot,
+            eligibility,
+            ballot_id=ballot_id,
+            event_id=event_id,
+            division_id=division_id,
+            candidate_set_id=candidate_set_id,
+            candidate_version=candidate_version,
+            candidate_set_hash=str(public_set["contentHash"]),
+            policy=policy,
+            period_key=period_key,
+            local_date=local_date,
+            submission_id=submission_id,
+            submission_fingerprint=submission_fingerprint,
+        ):
+            existing_submitted_at = _iso(existing_ballot.get("submittedAt"))
+            return {
+                "eventId": event_id,
+                "division": division_id,
+                "candidateVersion": candidate_version,
+                "policy": policy,
+                "periodKey": period_key,
+                "submissionId": submission_id,
+                "submitted": True,
+                "idempotent": True,
+                "submittedAt": existing_submitted_at or request_now.isoformat(),
+                "nextEligibleAt": (
+                    next_eligible_at if policy == POLICY_ONCE_PER_DAY else None
+                ),
+            }
         if existing.exists or _ledger_blocks_vote(
             eligibility_snapshot.exists,
             eligibility,
@@ -1002,6 +1324,17 @@ def submit_ballot(
                 nextEligibleAt=next_eligible_at,
             )
 
+        if not config_lock_snapshot.exists:
+            # The transaction already read the missing document. A normal set
+            # lets Firestore abort/retry concurrent first submissions instead
+            # of surfacing a non-retryable create precondition failure.
+            txn.set(
+                config_lock_ref,
+                {
+                    **expected_config_lock,
+                    "createdAt": admin_firestore.SERVER_TIMESTAMP,
+                },
+            )
         txn.create(
             ballot_ref,
             {
@@ -1015,7 +1348,9 @@ def submit_ballot(
                 "periodKey": period_key,
                 "localDate": local_date,
                 "selections": selections,
-                "voterKeyVersion": "provider-subject-hmac-sha256-v2",
+                "submissionId": submission_id,
+                "submissionFingerprint": submission_fingerprint,
+                "voterKeyVersion": VOTER_KEY_VERSION,
                 "submittedAt": admin_firestore.SERVER_TIMESTAMP,
             },
         )
@@ -1027,7 +1362,10 @@ def submit_ballot(
             "lastPeriodKey": period_key,
             "lastLocalDate": local_date,
             "lastCandidateVersion": candidate_version,
-            "voterKeyVersion": "provider-subject-hmac-sha256-v2",
+            "lastSubmissionId": submission_id,
+            "lastSubmissionFingerprint": submission_fingerprint,
+            "lastBallotId": ballot_id,
+            "voterKeyVersion": VOTER_KEY_VERSION,
             "lastSubmittedAt": admin_firestore.SERVER_TIMESTAMP,
         }
         if not eligibility_snapshot.exists:
@@ -1039,7 +1377,9 @@ def submit_ballot(
             "candidateVersion": candidate_version,
             "policy": policy,
             "periodKey": period_key,
+            "submissionId": submission_id,
             "submitted": True,
+            "idempotent": False,
             "submittedAt": request_now.isoformat(),
             "nextEligibleAt": next_eligible_at if policy == POLICY_ONCE_PER_DAY else None,
         }

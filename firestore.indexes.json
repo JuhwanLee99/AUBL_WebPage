@@ -1,5 +1,42 @@
 {
-  "indexes": [],
+  "indexes": [
+    {
+      "collectionGroup": "ballots",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "division",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "submittedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "ballots",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "division",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "candidateSetId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "candidateVersion",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "candidateSetHash",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ],
   "fieldOverrides": [
     {
       "collectionGroup": "members",
@@ -10,6 +47,21 @@
           "queryScope": "COLLECTION_GROUP"
         }
       ]
+    },
+    {
+      "collectionGroup": "ballots",
+      "fieldPath": "selections",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "publicResults",
+      "fieldPath": "counts",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "resultDrafts",
+      "fieldPath": "counts",
+      "indexes": []
     }
   ]
 }

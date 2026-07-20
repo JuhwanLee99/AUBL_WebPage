@@ -9,9 +9,13 @@ from firebase_admin import firestore as admin_firestore
 from firebase_admin import messaging
 from firebase_admin import initialize_app
 from firebase_functions import firestore_fn, https_fn
+from firebase_functions import logger as functions_logger
 from firebase_functions.options import set_global_options
 from firebase_functions.params import SecretParam
 
+from allstar_admin import get_admin_vote_overview as get_allstar_vote_admin_overview_impl
+from allstar_results import rebuild_vote_results as rebuild_allstar_vote_results_impl
+from allstar_results import set_vote_results_published as set_allstar_vote_results_published_impl
 from allstar_voting import CUSTOM_GOOGLE_SUBJECT_CLAIM
 from allstar_voting import get_ballot_status as get_allstar_ballot_status_impl
 from allstar_voting import get_event_config as get_allstar_vote_event_impl
@@ -24,6 +28,15 @@ logger = logging.getLogger(__name__)
 BACKEND_API_URL = os.environ.get("BACKEND_API_URL", "https://api.aubl.club")
 _COMPLETED_STATUSES = {"completed", "final", "ended", "종료"}
 ALLSTAR_VOTER_KEY_SECRET = SecretParam("ALLSTAR_VOTER_KEY_SECRET")
+_LEGACY_ALLSTAR_APP_CHECK = os.environ.get("ALLSTAR_ENFORCE_APP_CHECK", "false")
+ALLSTAR_ENFORCE_APP_CHECK_SENSITIVE = os.environ.get(
+    "ALLSTAR_ENFORCE_APP_CHECK_SENSITIVE",
+    _LEGACY_ALLSTAR_APP_CHECK,
+).strip().lower() == "true"
+ALLSTAR_ENFORCE_APP_CHECK_PUBLIC = os.environ.get(
+    "ALLSTAR_ENFORCE_APP_CHECK_PUBLIC",
+    "false",
+).strip().lower() == "true"
 
 set_global_options(max_instances=10)
 initialize_app()
@@ -31,6 +44,13 @@ initialize_app()
 
 def _normalize_whitespace(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
+
+
+def _safe_log_label(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = re.sub(r"[^A-Za-z0-9._:-]", "_", value)
+    return normalized[:100] or None
 
 
 def _delta_ops_to_text(ops: list[object]) -> str:
@@ -170,28 +190,132 @@ def _send_topic_notification(topic: str, title: str, body: str, data: dict[str, 
     messaging.send(message)
 
 
-@https_fn.on_call(region="asia-northeast3")
+@https_fn.on_call(
+    region="asia-northeast3",
+    enforce_app_check=ALLSTAR_ENFORCE_APP_CHECK_PUBLIC,
+)
 def get_allstar_vote_event(req: https_fn.CallableRequest[object]) -> dict[str, object]:
     """Return only the published event/candidate configuration; never results."""
     return get_allstar_vote_event_impl(req.data)
 
 
-@https_fn.on_call(region="asia-northeast3")
+@https_fn.on_call(
+    region="asia-northeast3",
+    enforce_app_check=ALLSTAR_ENFORCE_APP_CHECK_PUBLIC,
+)
 def get_allstar_vote_results(req: https_fn.CallableRequest[object]) -> dict[str, object]:
     """Return only an explicitly published, candidate-version-bound aggregate."""
     return get_allstar_vote_results_impl(req.data)
 
 
-@https_fn.on_call(region="asia-northeast3", secrets=[ALLSTAR_VOTER_KEY_SECRET])
+@https_fn.on_call(
+    region="asia-northeast3",
+    secrets=[ALLSTAR_VOTER_KEY_SECRET],
+    enforce_app_check=ALLSTAR_ENFORCE_APP_CHECK_SENSITIVE,
+)
 def get_allstar_ballot_status(req: https_fn.CallableRequest[object]) -> dict[str, object]:
     """Return whether the authenticated account may vote in the current period."""
     return get_allstar_ballot_status_impl(req, ALLSTAR_VOTER_KEY_SECRET.value)
 
 
-@https_fn.on_call(region="asia-northeast3", secrets=[ALLSTAR_VOTER_KEY_SECRET])
+@https_fn.on_call(
+    region="asia-northeast3",
+    secrets=[ALLSTAR_VOTER_KEY_SECRET],
+    enforce_app_check=ALLSTAR_ENFORCE_APP_CHECK_SENSITIVE,
+)
 def submit_allstar_ballot(req: https_fn.CallableRequest[object]) -> dict[str, object]:
     """Validate and atomically create one immutable ballot for the policy period."""
-    return submit_allstar_ballot_impl(req, ALLSTAR_VOTER_KEY_SECRET.value)
+    payload = req.data if isinstance(req.data, dict) else {}
+    log_context = {
+        "eventId": _safe_log_label(payload.get("eventId")),
+        "division": _safe_log_label(payload.get("division")),
+        "candidateVersion": _safe_log_label(payload.get("candidateVersion")),
+    }
+    try:
+        result = submit_allstar_ballot_impl(req, ALLSTAR_VOTER_KEY_SECRET.value)
+        functions_logger.info(
+            "All-Star ballot accepted",
+            event="allstar_ballot_accepted",
+            **log_context,
+            policy=_safe_log_label(result.get("policy")),
+            periodKey=_safe_log_label(result.get("periodKey")),
+            idempotent=result.get("idempotent") is True,
+        )
+        return result
+    except https_fn.HttpsError as exc:
+        details = exc.details if isinstance(exc.details, dict) else {}
+        functions_logger.warn(
+            "All-Star ballot rejected",
+            event="allstar_ballot_rejected",
+            **log_context,
+            reason=_safe_log_label(details.get("reason")) or "UNKNOWN",
+        )
+        raise
+    except Exception as error:
+        functions_logger.error(
+            "All-Star ballot failed unexpectedly",
+            event="allstar_ballot_failed",
+            **log_context,
+            reason="UNEXPECTED_ERROR",
+            errorType=type(error).__name__,
+        )
+        raise
+
+
+@https_fn.on_call(
+    region="asia-northeast3",
+    timeout_sec=300,
+    memory=1024,
+    max_instances=1,
+    enforce_app_check=ALLSTAR_ENFORCE_APP_CHECK_SENSITIVE,
+)
+def get_allstar_vote_admin_overview(req: https_fn.CallableRequest[object]) -> dict[str, object]:
+    """Return redacted ballot receipts and integrity metrics to administrators."""
+    return get_allstar_vote_admin_overview_impl(req)
+
+
+@https_fn.on_call(
+    region="asia-northeast3",
+    timeout_sec=300,
+    memory=1024,
+    max_instances=1,
+    enforce_app_check=ALLSTAR_ENFORCE_APP_CHECK_SENSITIVE,
+)
+def rebuild_allstar_vote_results(req: https_fn.CallableRequest[object]) -> dict[str, object]:
+    """Strictly rebuild a private result draft from every closed-event ballot."""
+    result = rebuild_allstar_vote_results_impl(req)
+    functions_logger.info(
+        "All-Star result draft rebuilt",
+        event="allstar_result_rebuilt",
+        eventId=_safe_log_label(result.get("eventId")),
+        division=_safe_log_label(result.get("division")),
+        candidateVersion=_safe_log_label(result.get("candidateVersion")),
+        totalBallots=result.get("totalBallots"),
+    )
+    return result
+
+
+@https_fn.on_call(
+    region="asia-northeast3",
+    timeout_sec=300,
+    memory=1024,
+    max_instances=1,
+    enforce_app_check=ALLSTAR_ENFORCE_APP_CHECK_SENSITIVE,
+)
+def set_allstar_vote_results_published(
+    req: https_fn.CallableRequest[object],
+) -> dict[str, object]:
+    """Atomically publish or hide a validated, source-digest-bound result."""
+    result = set_allstar_vote_results_published_impl(req)
+    functions_logger.info(
+        "All-Star result publication changed",
+        event="allstar_result_publication_changed",
+        eventId=_safe_log_label(result.get("eventId")),
+        division=_safe_log_label(result.get("division")),
+        candidateVersion=_safe_log_label(result.get("candidateVersion")),
+        published=result.get("published") is True,
+    )
+    return result
 
 
 @https_fn.on_request(region="asia-northeast3")

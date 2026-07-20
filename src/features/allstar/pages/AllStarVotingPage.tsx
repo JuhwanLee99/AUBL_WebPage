@@ -32,6 +32,13 @@ import {
   createRosterShareToken,
   parseRosterShareToken,
 } from '../lib/rosterShareLink';
+import {
+  clearPendingSubmission,
+  clearPendingSubmissionForCandidateChange,
+  createSelectionFingerprint,
+  loadPendingSubmissionId,
+  savePendingSubmission,
+} from '../lib/submissionRetry';
 import { allStarVoteService, toBackendDivision } from '../services/votingService';
 import type {
   AllStarDivision,
@@ -73,6 +80,13 @@ const EVENT_CONFIG = ALL_STAR_EVENT_CONFIG;
 const TEAMS: readonly AllStarTeam[] = ['TEAM_1', 'TEAM_2'];
 const INTRO_STORAGE_KEY = 'aubl:allstar:intro-seen:2026';
 const SELECTION_STORAGE_PREFIX = 'aubl:allstar-vote-draft';
+const SUBMISSION_SCOPE = { eventId: EVENT_CONFIG.eventId, division: 'ALL_STAR' as const };
+
+const createSubmissionId = () => {
+  const bytes = new Uint8Array(16);
+  window.crypto.getRandomValues(bytes);
+  return `submission-${Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')}`;
+};
 
 const normalizePosition = (position: string | undefined): AllStarPosition | null => {
   if (position === 'LF' || position === 'CF' || position === 'RF' || position === 'OF') return 'OF';
@@ -370,26 +384,37 @@ export default function AllStarVotingPage() {
       return () => { cancelled = true; };
     }
     let hasLoaded = false;
-    const load = (initial = false) => {
+    let loadedVersion: string | null = null;
+    let inFlight = false;
+    const load = async (initial = false) => {
+      if (inFlight || (!initial && document.visibilityState !== 'visible')) return;
+      inFlight = true;
       if (initial) {
         setEventError(null);
         setEventLoading(true);
       }
-      void allStarVoteService.getVoteEvent({ eventId: EVENT_CONFIG.eventId, division: 'ALL_STAR' })
-        .then((event) => {
-          if (cancelled) return;
-          hasLoaded = true;
-          setVoteEvent(event);
-          setEventError(null);
-        })
-        .catch(() => {
-          if (!cancelled && !hasLoaded) setEventError('투표 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
-        })
-        .finally(() => { if (!cancelled && initial) setEventLoading(false); });
+      try {
+        let event = initial || !loadedVersion
+          ? await allStarVoteService.getVoteEvent({ eventId: EVENT_CONFIG.eventId, division: 'ALL_STAR' })
+          : await allStarVoteService.getVoteEventState({ eventId: EVENT_CONFIG.eventId, division: 'ALL_STAR' });
+        if (!initial && loadedVersion && event.candidateVersion !== loadedVersion) {
+          event = await allStarVoteService.getVoteEvent({ eventId: EVENT_CONFIG.eventId, division: 'ALL_STAR' });
+        }
+        if (cancelled) return;
+        hasLoaded = true;
+        loadedVersion = event.candidateVersion;
+        setVoteEvent((previous) => event.candidateSet ? event : previous ? { ...event, candidateSet: previous.candidateSet } : event);
+        setEventError(null);
+      } catch {
+        if (!cancelled && !hasLoaded) setEventError('투표 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
+      } finally {
+        inFlight = false;
+        if (!cancelled && initial) setEventLoading(false);
+      }
     };
-    const handleVisibility = () => { if (document.visibilityState === 'visible') load(); };
-    load(true);
-    const timer = window.setInterval(load, 60_000);
+    const handleVisibility = () => { if (document.visibilityState === 'visible') void load(); };
+    void load(true);
+    const timer = window.setInterval(() => { void load(); }, 60_000);
     document.addEventListener('visibilitychange', handleVisibility);
     return () => {
       cancelled = true;
@@ -512,19 +537,27 @@ export default function AllStarVotingPage() {
   useEffect(() => {
     let cancelled = false;
     let timer: number | null = null;
+    let inFlight = false;
     if (resolvedView !== 'RESULTS' || division !== 'ALL_STAR' || !serviceAvailable || !voteEvent?.published) {
       return () => { cancelled = true; };
     }
-    const load = () => {
-      void allStarVoteService.getVoteResults({ eventId: EVENT_CONFIG.eventId, division })
-        .then((result) => { if (!cancelled) setVoteResults(result); })
-        .catch(() => { /* keep the last successful public result during a transient failure */ });
+    const load = async () => {
+      if (inFlight || document.visibilityState !== 'visible') return;
+      inFlight = true;
+      try {
+        const result = await allStarVoteService.getVoteResults({ eventId: EVENT_CONFIG.eventId, division });
+        if (!cancelled) setVoteResults(result);
+      } catch { /* keep the last successful public result during a transient failure */ }
+      finally { inFlight = false; }
     };
-    load();
-    timer = window.setInterval(load, 60_000);
+    const handleVisibility = () => { if (document.visibilityState === 'visible') void load(); };
+    void load();
+    timer = window.setInterval(() => { void load(); }, 60_000);
+    document.addEventListener('visibilitychange', handleVisibility);
     return () => {
       cancelled = true;
       if (timer !== null) window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [division, resolvedView, serviceAvailable, voteEvent?.candidateVersion, voteEvent?.published]);
 
@@ -537,6 +570,16 @@ export default function AllStarVotingPage() {
       else window.sessionStorage.removeItem(selectionStorageKey);
     } catch { /* private browsing can disable storage */ }
   }, [selectionStorageKey]);
+
+  useEffect(() => {
+    if (!ballotSource || division !== 'ALL_STAR') return;
+    try {
+      clearPendingSubmissionForCandidateChange(window.sessionStorage, {
+        ...SUBMISSION_SCOPE,
+        candidateVersion: ballotSource.version,
+      });
+    } catch { /* private browsing can disable storage */ }
+  }, [ballotSource, division]);
 
   useEffect(() => {
     if (!ballotSource || !selectionStorageKey) {
@@ -622,8 +665,11 @@ export default function AllStarVotingPage() {
     }
     setBallotStatusLoading(true);
     void allStarVoteService.getBallotStatus({ eventId: EVENT_CONFIG.eventId, division: 'ALL_STAR' })
-      .then((status) => { if (!cancelled) setBallotStatus(status); })
-      .catch(() => { if (!cancelled) setBallotStatus({ eligibility: 'UNAVAILABLE', votedAt: null, nextEligibleAt: null }); })
+      .then((status) => {
+        if (cancelled) return;
+        setBallotStatus(status);
+      })
+      .catch(() => { if (!cancelled) setBallotStatus({ eligibility: 'UNAVAILABLE', votedAt: null, submissionId: null, nextEligibleAt: null }); })
       .finally(() => { if (!cancelled) setBallotStatusLoading(false); });
     return () => { cancelled = true; };
   }, [division, idToken, user, votingIdentityEligible, votingOpen]);
@@ -709,6 +755,68 @@ export default function AllStarVotingPage() {
     setRosterReceiptChecked(true);
     return receipt;
   }, [ballotComplete, ballotSource, rosterComplete, selections]);
+
+  useEffect(() => {
+    if (
+      previewMode
+      || ballotStatus?.eligibility !== 'ALREADY_VOTED'
+      || !ballotStatus.submissionId
+      || !ballotSource
+      || !rosterReceiptChecked
+    ) return;
+
+    let cancelled = false;
+    const reconcilePendingSubmission = async () => {
+      if (!ballotComplete || !rosterComplete) {
+        try { clearPendingSubmission(window.sessionStorage, SUBMISSION_SCOPE); } catch { /* continue */ }
+        return;
+      }
+      const submissionSelections = Object.fromEntries(
+        ballotSource.contests.map((contest) => [contest.id, selections[contest.id] ?? []]),
+      );
+      const selectionFingerprint = await createSelectionFingerprint({
+        ...SUBMISSION_SCOPE,
+        candidateVersion: ballotSource.version,
+        selections: submissionSelections,
+      });
+      if (cancelled) return;
+
+      let pendingSubmissionId: string | null = null;
+      try {
+        if (selectionFingerprint) {
+          pendingSubmissionId = loadPendingSubmissionId(window.sessionStorage, {
+            ...SUBMISSION_SCOPE,
+            candidateVersion: ballotSource.version,
+            selectionFingerprint,
+          });
+        }
+      } catch { /* storage unavailable */ }
+
+      try { clearPendingSubmission(window.sessionStorage, SUBMISSION_SCOPE); } catch { /* continue */ }
+      if (pendingSubmissionId !== ballotStatus.submissionId) return;
+
+      if (selectionStorageKey) {
+        try { window.sessionStorage.removeItem(selectionStorageKey); } catch { /* continue */ }
+      }
+      persistCompletedRoster(true);
+      setPreviewThanks(false);
+      setNotice('이전 요청의 투표 접수를 서버 원장에서 확인했습니다.');
+      setView('THANKS');
+    };
+    void reconcilePendingSubmission();
+    return () => { cancelled = true; };
+  }, [
+    ballotComplete,
+    ballotSource,
+    ballotStatus?.eligibility,
+    ballotStatus?.submissionId,
+    persistCompletedRoster,
+    previewMode,
+    rosterComplete,
+    rosterReceiptChecked,
+    selectionStorageKey,
+    selections,
+  ]);
 
   const completeIntro = useCallback(() => {
     try { window.sessionStorage.setItem(INTRO_STORAGE_KEY, '1'); } catch { /* continue */ }
@@ -834,6 +942,7 @@ export default function AllStarVotingPage() {
       else if (ids.length < currentContest.maxSelections) nextIds = [...ids, candidate.id];
       else return current;
       const next = { ...current, [currentContest.id]: nextIds };
+      try { clearPendingSubmission(window.sessionStorage, SUBMISSION_SCOPE); } catch { /* continue */ }
       persistSelections(next);
       return next;
     });
@@ -966,20 +1075,81 @@ export default function AllStarVotingPage() {
     }
     setSubmitting(true);
     setNotice(null);
+    const submissionSelections = Object.fromEntries(
+      ballotSource.contests.map((contest) => [contest.id, selections[contest.id] ?? []]),
+    );
+    const selectionFingerprint = await createSelectionFingerprint({
+      ...SUBMISSION_SCOPE,
+      candidateVersion: ballotSource.version,
+      selections: submissionSelections,
+    });
+    let submissionId = createSubmissionId();
+    try {
+      if (selectionFingerprint) {
+        submissionId = loadPendingSubmissionId(window.sessionStorage, {
+          ...SUBMISSION_SCOPE,
+          candidateVersion: ballotSource.version,
+          selectionFingerprint,
+        }) ?? submissionId;
+        // Persist before the network call so a committed request whose response
+        // is lost can be retried with the exact same idempotency key.
+        savePendingSubmission(window.sessionStorage, {
+          ...SUBMISSION_SCOPE,
+          candidateVersion: ballotSource.version,
+          selectionFingerprint,
+        }, submissionId);
+      } else {
+        // Never store the canonical selection payload as a hash fallback. Voting
+        // still works, but cross-reload retry recovery is unavailable without WebCrypto.
+        clearPendingSubmission(window.sessionStorage, SUBMISSION_SCOPE);
+      }
+    } catch {
+      // Submission remains available when sessionStorage is unavailable; only
+      // cross-reload/retry idempotency recovery is reduced in that browser.
+    }
     try {
       const result = await allStarVoteService.submitBallot({
         eventId: EVENT_CONFIG.eventId,
         division: 'ALL_STAR',
         candidateVersion: ballotSource.version,
-        selections: Object.fromEntries(ballotSource.contests.map((contest) => [contest.id, selections[contest.id] ?? []])),
+        submissionId,
+        selections: submissionSelections,
       });
+      try { clearPendingSubmission(window.sessionStorage, SUBMISSION_SCOPE); } catch { /* continue */ }
       if (selectionStorageKey) window.sessionStorage.removeItem(selectionStorageKey);
       persistCompletedRoster(true);
       setPreviewThanks(false);
-      setBallotStatus({ eligibility: 'ALREADY_VOTED', votedAt: result.submittedAt, nextEligibleAt: result.nextEligibleAt });
+      setBallotStatus({ eligibility: 'ALREADY_VOTED', votedAt: result.submittedAt, submissionId: result.submissionId, nextEligibleAt: result.nextEligibleAt });
       goTo('THANKS');
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : '투표 제출에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+      const failureMessage = error instanceof Error ? error.message : '투표 제출에 실패했습니다. 잠시 후 다시 시도해 주세요.';
+      try {
+        // The transaction may have committed even when the response was lost.
+        // Re-read the server ledger before telling the voter to submit again.
+        const recoveredStatus = await allStarVoteService.getBallotStatus({
+          eventId: EVENT_CONFIG.eventId,
+          division: 'ALL_STAR',
+        });
+        if (recoveredStatus.eligibility === 'ALREADY_VOTED' && recoveredStatus.submissionId === submissionId) {
+          try { clearPendingSubmission(window.sessionStorage, SUBMISSION_SCOPE); } catch { /* continue */ }
+          if (selectionStorageKey) window.sessionStorage.removeItem(selectionStorageKey);
+          persistCompletedRoster(true);
+          setPreviewThanks(false);
+          setBallotStatus(recoveredStatus);
+          setNotice('응답은 중간에 끊겼지만 서버에서 투표 접수를 확인했습니다.');
+          goTo('THANKS');
+          return;
+        }
+        if (recoveredStatus.eligibility === 'ALREADY_VOTED') {
+          try { clearPendingSubmission(window.sessionStorage, SUBMISSION_SCOPE); } catch { /* continue */ }
+          setBallotStatus(recoveredStatus);
+          setNotice('이 계정의 다른 제출이 먼저 접수되었습니다. 현재 화면의 선택은 접수된 로스터로 저장하지 않았습니다.');
+          return;
+        }
+      } catch {
+        // Preserve the original submission error when status recovery is unavailable.
+      }
+      setNotice(failureMessage);
     } finally {
       setSubmitting(false);
     }

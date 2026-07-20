@@ -1,5 +1,6 @@
 import { getApp } from 'firebase/app';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import { ensureFirebaseAppCheck } from '@core/firebase/client';
 import type {
   AllStarDivision,
   BallotStatus,
@@ -12,17 +13,19 @@ import type {
 } from '../types';
 
 type BackendDivision = 'allstar' | 'rookie';
-type CallableRequest = { eventId: string; division: BackendDivision };
+type CallableRequest = { eventId: string; division: BackendDivision; includeCandidateSet?: boolean };
 type GetBallotStatusInput = Pick<SubmitBallotInput, 'eventId' | 'division'>;
 
 type SubmitBallotResult = {
   submittedAt: string;
+  submissionId: string;
   nextEligibleAt: string | null;
 };
 
 export type AllStarVoteService = {
   isAvailable: boolean;
   getVoteEvent: (input: GetBallotStatusInput) => Promise<VoteEvent>;
+  getVoteEventState: (input: GetBallotStatusInput) => Promise<VoteEvent>;
   getVoteResults: (input: GetBallotStatusInput) => Promise<VoteResults>;
   getBallotStatus: (input: GetBallotStatusInput) => Promise<BallotStatus>;
   submitBallot: (input: SubmitBallotInput) => Promise<SubmitBallotResult>;
@@ -56,6 +59,7 @@ type BallotStatusResponse = {
   submitted: boolean;
   canVote: boolean;
   submittedAt?: string | null;
+  submissionId?: string | null;
   nextEligibleAt?: string | null;
 };
 
@@ -71,6 +75,7 @@ type VoteResultsResponse = {
 type SubmitBallotResponse = {
   submitted: boolean;
   submittedAt: string;
+  submissionId?: string;
   nextEligibleAt?: string | null;
 };
 
@@ -85,31 +90,36 @@ const functions = getFunctions(getApp(), 'asia-northeast3');
 const getVoteEventCallable = httpsCallable<CallableRequest, VoteEventResponse>(
   functions,
   'get_allstar_vote_event',
+  { timeout: 15_000 },
 );
 
 const getBallotStatusCallable = httpsCallable<CallableRequest, BallotStatusResponse>(
   functions,
   'get_allstar_ballot_status',
+  { timeout: 15_000 },
 );
 
 const getVoteResultsCallable = httpsCallable<CallableRequest, VoteResultsResponse>(
   functions,
   'get_allstar_vote_results',
+  { timeout: 15_000 },
 );
 
 const submitBallotCallable = httpsCallable<
-  CallableRequest & Pick<SubmitBallotInput, 'candidateVersion' | 'selections'>,
+  CallableRequest & Pick<SubmitBallotInput, 'candidateVersion' | 'submissionId' | 'selections'>,
   SubmitBallotResponse
->(functions, 'submit_allstar_ballot');
+>(functions, 'submit_allstar_ballot', { timeout: 20_000 });
 
 const isApiEnabled = import.meta.env.VITE_ALLSTAR_VOTING_API_ENABLED === 'true';
 
 export const allStarVoteService: AllStarVoteService = {
   isAvailable: isApiEnabled,
   async getVoteEvent(input) {
+    ensureFirebaseAppCheck();
     const response = await getVoteEventCallable({
       eventId: input.eventId,
       division: toBackendDivision(input.division),
+      includeCandidateSet: true,
     });
     const payload = response.data;
     return {
@@ -131,7 +141,35 @@ export const allStarVoteService: AllStarVoteService = {
       candidateSet: payload.candidateSet ?? null,
     };
   },
+  async getVoteEventState(input) {
+    ensureFirebaseAppCheck();
+    const response = await getVoteEventCallable({
+      eventId: input.eventId,
+      division: toBackendDivision(input.division),
+      includeCandidateSet: false,
+    });
+    const payload = response.data;
+    return {
+      eventId: payload.eventId,
+      division: fromBackendDivision(payload.division),
+      title: payload.title,
+      divisionLabel: payload.divisionLabel,
+      state: payload.state,
+      enabled: payload.enabled,
+      published: payload.published,
+      candidateVersion: payload.candidateVersion,
+      policy: payload.policy,
+      timezone: payload.timezone,
+      allowedAuthProviders: payload.allowedAuthProviders,
+      opensAt: payload.opensAt ?? null,
+      closesAt: payload.closesAt ?? null,
+      gameStartsAt: payload.gameStartsAt ?? null,
+      venue: payload.venue ?? null,
+      candidateSet: null,
+    };
+  },
   async getVoteResults(input) {
+    ensureFirebaseAppCheck();
     const response = await getVoteResultsCallable({
       eventId: input.eventId,
       division: toBackendDivision(input.division),
@@ -147,6 +185,7 @@ export const allStarVoteService: AllStarVoteService = {
     };
   },
   async getBallotStatus(input) {
+    ensureFirebaseAppCheck();
     const response = await getBallotStatusCallable({
       eventId: input.eventId,
       division: toBackendDivision(input.division),
@@ -157,19 +196,23 @@ export const allStarVoteService: AllStarVoteService = {
     return {
       eligibility,
       votedAt: payload.submittedAt ?? null,
+      submissionId: payload.submissionId ?? null,
       nextEligibleAt: payload.nextEligibleAt ?? null,
     };
   },
   async submitBallot(input) {
+    ensureFirebaseAppCheck();
     const response = await submitBallotCallable({
       eventId: input.eventId,
       division: toBackendDivision(input.division),
       candidateVersion: input.candidateVersion,
+      submissionId: input.submissionId,
       selections: input.selections,
     });
 
     return {
       submittedAt: response.data.submittedAt,
+      submissionId: response.data.submissionId ?? input.submissionId,
       nextEligibleAt: response.data.nextEligibleAt ?? null,
     };
   },
