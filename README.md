@@ -8,6 +8,8 @@
 * 웹 버전: [`docs/web-user-manual.md`](docs/web-user-manual.md)
 * 앱 버전: [`docs/app-user-manual.md`](docs/app-user-manual.md)
 * 올스타·루키 투표 운영: [`functions/ALLSTAR_VOTING.md`](functions/ALLSTAR_VOTING.md)
+* 올스타 투표 안정성·Google Forms 비교·장애 대응: [`docs/ALLSTAR_VOTING_RELIABILITY.md`](docs/ALLSTAR_VOTING_RELIABILITY.md)
+* 올스타 투표 실행 체크리스트·백업/복원 절차: [`docs/ALLSTAR_VOTING_OPERATIONS_CHECKLIST.md`](docs/ALLSTAR_VOTING_OPERATIONS_CHECKLIST.md)
 
 ## 📊 승부 예측 모델
 
@@ -47,7 +49,10 @@
    * 세로·대각선 제스처에는 카드가 살짝 기울었다가 복귀하며, 선수 선택 후 `선택 취소 / 선택 확인`에서 확인하면 별도 팝업 없이 다음 포지션으로 이동
    * 1팀→2팀 순서로 `P/C/1B/2B/3B/SS/OF` 투표: 일반 포지션 1명, 외야수 15명 중 6명 선택
    * 순위표와 야구장에 일반 포지션 TOP 2, 통합 외야 TOP 6을 표시해 팀당 18명 로스터 구성
+   * `/admin/allstar-voting`에서 원장 수량·후보 버전/hash·비식별 최근 로그를 경량 관제하고, 종료 후 전체 원장·후보별 공개 집계를 수동 대조
+   * 제출 전 `submissionId`와 선택 fingerprint를 브라우저 세션에 보존해 응답·상태 조회가 유실된 재시도도 같은 요청으로 복구하고, 서버 원장이 일치할 때만 완료 처리
    * 루키 78명은 읽기 전용 카드로 공개하며 투표 단위·선발 규칙 확정 후 별도 연결
+   * 운영 절차는 [`docs/ALLSTAR_VOTING_OPERATIONS_CHECKLIST.md`](docs/ALLSTAR_VOTING_OPERATIONS_CHECKLIST.md), 안정성 구현·측정·한계의 평가 근거는 [`docs/ALLSTAR_VOTING_RESILIENCE_ENGINEERING_REVIEW.md`](docs/ALLSTAR_VOTING_RESILIENCE_ENGINEERING_REVIEW.md)에 정리
    * 사용 라이브러리와 라이선스는 [`public/third-party-notices.txt`](public/third-party-notices.txt)에 기록
 
 ## 🧑‍✈️ 감독 권한 (Coach Role)
