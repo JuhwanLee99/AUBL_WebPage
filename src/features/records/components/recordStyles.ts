@@ -1,23 +1,23 @@
 import type { CSSProperties } from 'react';
 
 export const ERA_HIGHLIGHT_STYLE: CSSProperties = {
-  color: '#60a5fa',
-  background: 'rgba(59,130,246,0.16)',
-  border: '1px solid rgba(96,165,250,0.45)',
+  color: 'var(--season-blue-700)',
+  background: 'var(--season-blue-100)',
+  border: '1px solid var(--season-blue-600)',
   fontWeight: 800,
 };
 
 export const BATTER_HIGHLIGHT_STYLE: CSSProperties = {
-  color: '#f472b6',
-  background: 'rgba(236,72,153,0.16)',
-  border: '1px solid rgba(244,114,182,0.45)',
+  color: 'var(--season-danger)',
+  background: 'var(--season-surface-muted)',
+  border: '1px solid var(--season-danger)',
   fontWeight: 800,
 };
 
 export const STANDINGS_HIGHLIGHT_STYLE: CSSProperties = {
-  color: '#34d399',
-  background: 'rgba(16,185,129,0.16)',
-  border: '1px solid rgba(52,211,153,0.45)',
+  color: 'var(--season-success)',
+  background: 'var(--season-surface-muted)',
+  border: '1px solid var(--season-success)',
   fontWeight: 800,
 };
 
@@ -33,7 +33,7 @@ export const labelStyle: CSSProperties = {
   display: 'inline-flex',
   gap: '8px',
   alignItems: 'center',
-  color: '#94a3b8',
+  color: 'var(--season-muted)',
   fontWeight: 700,
   fontSize: '12px',
 };
@@ -42,9 +42,9 @@ export function selectStyle(minWidth: string): CSSProperties {
   return {
     minWidth,
     borderRadius: '10px',
-    border: '1px solid rgba(148,163,184,0.35)',
-    background: '#0f172a',
-    color: '#e2e8f0',
+    border: '1px solid var(--season-line)',
+    background: 'var(--season-surface)',
+    color: 'var(--season-ink)',
     padding: '8px 10px',
     fontWeight: 800,
   };
@@ -68,23 +68,23 @@ export function noticeCardStyle(color: string): CSSProperties {
     textAlign: 'center',
     color,
     borderRadius: '14px',
-    border: '1px solid rgba(148,163,184,0.24)',
-    background: 'rgba(15,23,42,0.55)',
+    border: '1px solid var(--season-line)',
+    background: 'var(--season-surface)',
     fontWeight: 700,
   };
 }
 
 export const tableCardStyle: CSSProperties = {
   borderRadius: '18px',
-  border: '1px solid rgba(148,163,184,0.22)',
+  border: '1px solid var(--season-line)',
   overflow: 'hidden',
-  background: 'rgba(15,23,42,0.55)',
+  background: 'var(--season-surface)',
 };
 
 export const tableTitleStyle: CSSProperties = {
   padding: '14px 16px',
-  borderBottom: '1px solid rgba(148,163,184,0.2)',
-  color: '#cbd5e1',
+  borderBottom: '1px solid var(--season-line)',
+  color: 'var(--season-ink)',
   fontWeight: 900,
 };
 
@@ -97,7 +97,7 @@ export function tableStyle(minWidth: number): CSSProperties {
 }
 
 export const theadRowStyle: CSSProperties = {
-  color: '#94a3b8',
+  color: 'var(--season-muted)',
   fontSize: '12px',
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
@@ -115,7 +115,7 @@ export function tdStyle(align: 'left' | 'center'): CSSProperties {
   return {
     padding: '10px',
     textAlign: align,
-    color: '#cbd5e1',
+    color: 'var(--season-ink)',
     whiteSpace: 'nowrap',
     fontVariantNumeric: 'tabular-nums',
   };
@@ -123,8 +123,8 @@ export function tdStyle(align: 'left' | 'center'): CSSProperties {
 
 export function tbodyRowStyle(index: number): CSSProperties {
   return {
-    borderTop: '1px solid rgba(148,163,184,0.12)',
-    background: index % 2 === 0 ? 'transparent' : 'rgba(148,163,184,0.04)',
+    borderTop: '1px solid var(--season-line)',
+    background: index % 2 === 0 ? 'transparent' : 'var(--season-surface-muted)',
   };
 }
 
@@ -132,5 +132,5 @@ export const emptyTextStyle: CSSProperties = {
   margin: 0,
   padding: '20px',
   textAlign: 'center',
-  color: '#94a3b8',
+  color: 'var(--season-muted)',
 };

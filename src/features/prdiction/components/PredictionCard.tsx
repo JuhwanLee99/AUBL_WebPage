@@ -12,7 +12,7 @@ export default function PredictionCard() {
 
   return (
     <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
-      <h3 className="text-lg font-bold text-gray-800 mb-4">🔥 금주의 빅매치 예측</h3>
+      <h3 className="text-lg font-bold text-gray-800 mb-4">금주의 빅매치 예측</h3>
       <div className="flex justify-between items-center mb-6">
         <div className="text-center">
           <div className="w-16 h-16 bg-blue-600 rounded-full mx-auto mb-2 flex items-center justify-center text-white font-bold">SSU</div>
@@ -37,7 +37,7 @@ export default function PredictionCard() {
         onClick={simulate}
         className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold transition"
       >
-        AI 분석 실행 (Hybrid Model)
+        예측 시뮬레이션
       </button>
     </div>
   );

@@ -797,7 +797,7 @@ export default function RecordPage() {
   );
 
   return (
-    <div style={{ display: 'grid', gap: '22px' }} ref={sectionRef}>
+    <div className="season-content-page records-page" style={{ display: 'grid', gap: '22px' }} ref={sectionRef}>
       <RecordsHubShell
         yearLabel={selectedSeason ? `${selectedSeason.year} 시즌 기록 허브` : '기록 허브'}
         tab={tab}

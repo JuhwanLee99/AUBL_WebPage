@@ -459,6 +459,7 @@ export default function PlayerDetailPage() {
 
   return (
     <div
+      className="season-content-page player-detail-page"
       style={{
         padding: '20px',
         borderRadius: '18px',
