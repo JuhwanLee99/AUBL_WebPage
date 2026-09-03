@@ -304,7 +304,7 @@ export default function TeamNoticeDetailPage() {
   );
 
   return (
-    <div style={{ display: 'grid', gap: '18px' }}>
+    <div className="season-content-page detail-board-page" style={{ display: 'grid', gap: '18px' }}>
       <section style={cardBase}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
           <div style={{ display: 'grid', gap: '6px' }}>

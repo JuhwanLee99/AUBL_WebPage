@@ -8,10 +8,11 @@ const tabs = [
   { path: '/admin/teams', label: '참가팀 · 조편성 관리', requiresAdmin: true },
   { path: '/admin/roles', label: '계정 권한', requiresAdmin: true },
   { path: '/admin/games', label: '경기 기록 수정', requiresGameEditor: true },
+  { path: '/admin/unique-play-sync', label: 'UniquePlay 동기화', requiresAdmin: true },
   { path: '/admin/moderation', label: '신고/차단 관리', requiresAdmin: true },
   { path: '/admin/allstar-voting', label: '올스타 투표 관리', requiresAdmin: true },
   { path: '/admin/power-ranking', label: '파워랭킹 재계산', requiresAdmin: true },
-  { path: '/admin/maintenance', label: '🔴 서비스 점검', requiresAdmin: true },
+  { path: '/admin/maintenance', label: '서비스 점검', requiresAdmin: true },
 ] as const;
 
 export default function AdminLayoutPage() {
@@ -23,13 +24,13 @@ export default function AdminLayoutPage() {
   });
 
   return (
-    <div style={{ display: 'grid', gap: '18px', padding: 'var(--section-padding) 0' }}>
-      <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+    <div className="season-content-page admin-cms-page" style={{ display: 'grid', gap: '18px', padding: 'var(--section-padding) 0' }}>
+      <header className="admin-cms-page__header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
         <div style={{ display: 'grid', gap: '6px' }}>
           <h1 style={{ margin: 0, fontSize: '30px', fontWeight: 900, color: '#e2e8f0' }}>콘텐츠 CMS</h1>
           <p style={{ margin: 0, color: '#94a3b8', fontWeight: 700 }}>
             {isAdmin
-              ? '랜딩 · 리그소개 · 회칙 · 팀/권한 · 신고/차단 · 올스타 투표를 관리합니다.'
+              ? '랜딩 · 리그소개 · 회칙 · 팀/권한 · 데이터 동기화 · 신고/차단 · 올스타 투표를 관리합니다.'
               : '기록원 권한: 경기 기록 수정 메뉴만 사용할 수 있습니다.'}
           </p>
         </div>
@@ -58,7 +59,7 @@ export default function AdminLayoutPage() {
         )}
       </header>
 
-      <nav style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      <nav className="admin-cms-page__nav" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
         {visibleTabs.map((tab) => (
           <NavLink
             key={tab.path}

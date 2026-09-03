@@ -234,7 +234,7 @@ export default function InquiryDetailPage() {
   };
 
   return (
-    <div style={{ maxWidth: '1100px', margin: '0 auto', color: '#f8fafc', paddingBottom: '40px' }}>
+    <div className="season-content-page detail-board-page" style={{ maxWidth: '1100px', margin: '0 auto', color: '#f8fafc', paddingBottom: '40px' }}>
       {/* 상단 네비 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <button

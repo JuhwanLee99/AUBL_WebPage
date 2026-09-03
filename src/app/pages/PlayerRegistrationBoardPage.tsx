@@ -90,7 +90,7 @@ export default function PlayerRegistrationBoardPage() {
   if (!isAuthenticated || !isPlayerOrAbove) {
     return (
       <div style={{ color: '#f8fafc', maxWidth: '900px', margin: '0 auto', paddingBottom: '40px' }}>
-        <h2 style={{ fontSize: '24px', fontWeight: 900, marginBottom: '20px' }}>🧢 선수 등록 게시판</h2>
+        <h2 style={{ fontSize: '24px', fontWeight: 900, marginBottom: '20px' }}>선수 등록 게시판</h2>
         <div
           style={{
             borderRadius: '14px',
@@ -118,9 +118,9 @@ export default function PlayerRegistrationBoardPage() {
   }
 
   return (
-    <div style={{ color: '#f8fafc', maxWidth: '1100px', margin: '0 auto', paddingBottom: '40px' }}>
+    <div className="season-content-page board-list-page" style={{ color: '#f8fafc', maxWidth: '1100px', margin: '0 auto', paddingBottom: '40px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2 style={{ fontSize: '24px', fontWeight: 900, margin: 0 }}>🧢 선수 등록 게시판</h2>
+        <h2 style={{ fontSize: '24px', fontWeight: 900, margin: 0 }}>선수 등록 게시판</h2>
         {canWriteAny && (
           <button
             onClick={() => navigate('new')}

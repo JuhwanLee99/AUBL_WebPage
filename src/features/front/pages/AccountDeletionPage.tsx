@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 
 export default function AccountDeletionPage() {
   return (
-    <div style={{ maxWidth: '760px', margin: '0 auto', display: 'grid', gap: '18px' }}>
+    <div className="season-content-page legal-page account-deletion-page" style={{ maxWidth: '760px', margin: '0 auto', display: 'grid', gap: '18px' }}>
       <section
         style={{
           borderRadius: '16px',

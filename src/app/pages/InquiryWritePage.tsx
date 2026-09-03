@@ -70,8 +70,8 @@ export default function InquiryWritePage() {
   };
 
   return (
-    <div style={{ maxWidth: '1100px', margin: '0 auto', color: '#f8fafc', padding: '20px' }}>
-      <h2 style={{ fontSize: '24px', fontWeight: 900, marginBottom: '24px' }}>💬 건의/문의 작성</h2>
+    <div className="season-content-page board-write-page" style={{ maxWidth: '1100px', margin: '0 auto', color: '#f8fafc', padding: '20px' }}>
+      <h2 style={{ fontSize: '24px', fontWeight: 900, marginBottom: '24px' }}>건의/문의 작성</h2>
 
       <div
         style={{

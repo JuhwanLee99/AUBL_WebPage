@@ -139,7 +139,7 @@ export default function RulePage() {
     '본 회칙은 1997년 추계에 제정되었으며, 이후 대표자회의 의결을 거쳐 2024년까지 연차별로 개정되었다. 회칙에 규정되지 않은 사항은 KBO 규정집을 적용한다.';
 
   return (
-    <div style={{ display: 'grid', gap: '28px' }} ref={pageRef}>
+    <div className="season-content-page rules-page" style={{ display: 'grid', gap: '28px' }} ref={pageRef}>
       {/* ── 헤더 ── */}
       <section
         className="rule-chunk"

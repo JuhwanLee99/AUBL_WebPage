@@ -525,9 +525,10 @@ export default function TeamDetailPage() {
   const historyText = teamInfo?.history ?? '연혁 정보가 아직 등록되지 않았습니다.';
 
   return (
-    <div style={{ display: 'grid', gap: '24px' }}>
+    <div className="season-content-page team-profile-page" style={{ display: 'grid', gap: '24px' }}>
       {/* ── HERO ── */}
       <section
+        className="team-profile-hero"
         style={{
           borderRadius: '24px',
           padding: '26px',

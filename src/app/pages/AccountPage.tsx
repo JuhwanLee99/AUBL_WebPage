@@ -74,7 +74,7 @@ export default function AccountPage() {
   };
 
   return (
-    <div style={{ display: 'grid', gap: '16px' }}>
+    <div className="season-content-page account-page" style={{ display: 'grid', gap: '16px' }}>
       <div
         style={{
           borderRadius: '18px',

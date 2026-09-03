@@ -47,7 +47,7 @@ export default function TeamsPage() {
     : null;
 
   return (
-    <div style={{ display: 'grid', gap: '28px' }} ref={pageRef}>
+    <div className="season-content-page teams-page" style={{ display: 'grid', gap: '28px' }} ref={pageRef}>
       {/* ── 헤더 ── */}
       <section
         className="teams-chunk"

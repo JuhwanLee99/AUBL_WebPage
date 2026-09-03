@@ -76,7 +76,7 @@ export default function PlayerRegistrationWritePage() {
   if (!isPlayerOrAbove || writableCategories.length === 0) {
     return (
       <div style={{ maxWidth: '900px', margin: '0 auto', color: '#f8fafc', padding: '20px' }}>
-        <h2 style={{ fontSize: '24px', fontWeight: 900, marginBottom: '16px' }}>🧢 선수 등록 게시판</h2>
+        <h2 style={{ fontSize: '24px', fontWeight: 900, marginBottom: '16px' }}>선수 등록 게시판</h2>
         <div
           style={{
             borderRadius: '12px',
@@ -106,8 +106,8 @@ export default function PlayerRegistrationWritePage() {
   };
 
   return (
-    <div style={{ maxWidth: '1100px', margin: '0 auto', color: '#f8fafc', padding: '20px' }}>
-      <h2 style={{ fontSize: '24px', fontWeight: 900, marginBottom: '24px' }}>🧢 선수 등록 게시글 작성</h2>
+    <div className="season-content-page board-write-page" style={{ maxWidth: '1100px', margin: '0 auto', color: '#f8fafc', padding: '20px' }}>
+      <h2 style={{ fontSize: '24px', fontWeight: 900, marginBottom: '24px' }}>선수 등록 게시글 작성</h2>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div>

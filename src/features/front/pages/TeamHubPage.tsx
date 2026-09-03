@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import gsap from 'gsap';
 import { collection, getDocs } from 'firebase/firestore';
@@ -129,6 +129,37 @@ export default function TeamHubPage() {
   const logoForTeam = useMemo(() => {
     return (name: string) => logoById[encodeTeamId(name)];
   }, [logoById]);
+
+  const renderDirectoryCard = (team: (typeof teams)[number], grouped = false) => {
+    const logoUrl = logoForTeam(team.name);
+    const needsBoost = logoUrl ? shouldForceLogoContrastBoost(logoUrl) : false;
+
+    return (
+      <Link
+        key={team.name}
+        to={`/teams/${encodeTeamId(team.name)}`}
+        className={`team-card team-directory-card${grouped ? ' team-hub-group-card' : ''}`}
+        style={{ '--team-accent': team.color } as CSSProperties}
+      >
+        <div className={`team-directory-card__logo${needsBoost ? ' needs-contrast' : ''}`} aria-hidden="true">
+          {logoUrl ? (
+            <img src={logoUrl} alt="" loading="lazy" />
+          ) : (
+            <span>{team.name.slice(0, 2)}</span>
+          )}
+        </div>
+        <div className="team-directory-card__body">
+          <div className="team-directory-card__meta">
+            <span className="team-directory-card__group">{team.group}조</span>
+            <span>TEAM PROFILE</span>
+          </div>
+          <h3>{team.name}</h3>
+          <p>일정 · 로스터 · 공지</p>
+        </div>
+        <span className="team-directory-card__arrow" aria-hidden="true">→</span>
+      </Link>
+    );
+  };
 
   return (
     <div style={{ display: 'grid', gap: '28px' }} ref={pageRef}>
@@ -321,8 +352,8 @@ export default function TeamHubPage() {
       </section>
 
       {/* ── 팀 디렉토리 ── */}
-      <section className="team-hub-section" style={{ display: 'grid', gap: '14px' }}>
-        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+      <section className="team-hub-section team-directory" style={{ display: 'grid', gap: '14px' }}>
+        <header className="team-directory__header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 900 }}>팀 디렉토리</h2>
             <p style={{ margin: '6px 0 0', color: '#94a3b8', fontSize: '13px' }}>
@@ -330,7 +361,7 @@ export default function TeamHubPage() {
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', gap: '6px' }}>
+            <div className="team-directory__sort" style={{ display: 'flex', gap: '6px' }}>
               {[
                 { key: 'NAME', label: '가나다' },
                 { key: 'GROUP', label: '조별' },
@@ -363,7 +394,7 @@ export default function TeamHubPage() {
 
         {visibleTeams.length ? (
           sortKey === 'GROUP' ? (
-            <div style={{ display: 'grid', gap: '12px' }}>
+            <div className="team-directory__groups" style={{ display: 'grid', gap: '12px' }}>
               {groupedVisibleTeams.map((row) => (
                 <div
                   key={row.group}
@@ -384,135 +415,15 @@ export default function TeamHubPage() {
                   </div>
                   <div className="team-hub-group-track" style={{ position: 'relative' }}>
                     <div className="team-hub-group-grid" style={{ display: 'grid', gap: '10px' }}>
-                      {row.teams.map((team) => {
-                        const logoUrl = logoForTeam(team.name);
-                        const needsBoost = logoUrl ? shouldForceLogoContrastBoost(logoUrl) : false;
-                        return (
-                          <Link
-                            key={team.name}
-                            to={`/teams/${encodeTeamId(team.name)}`}
-                            className="team-card team-hub-group-card"
-                            style={{
-                              padding: '16px',
-                              borderRadius: '18px',
-                              border: '1px solid rgba(148,163,184,0.25)',
-                              backgroundColor: 'rgba(15,23,42,0.65)',
-                              backgroundImage: logoUrl
-                                ? needsBoost
-                                  ? `linear-gradient(180deg, rgba(15,23,42,0.7), rgba(15,23,42,0.7)), url("${logoUrl}"), radial-gradient(circle at center, rgba(255,255,255,1) 0%, rgba(255,255,255,0.93) 22%, rgba(255,255,255,0.54) 40%, rgba(255,255,255,0.12) 56%, rgba(255,255,255,0) 74%)`
-                                  : `linear-gradient(180deg, rgba(15,23,42,0.7), rgba(15,23,42,0.7)), url("${logoUrl}")`
-                                : undefined,
-                              backgroundRepeat: logoUrl
-                                ? needsBoost
-                                  ? 'no-repeat, no-repeat, no-repeat'
-                                  : 'no-repeat, no-repeat'
-                                : undefined,
-                              backgroundPosition: logoUrl
-                                ? needsBoost
-                                  ? 'center, center, center'
-                                  : 'center, center'
-                                : undefined,
-                              backgroundSize: logoUrl
-                                ? needsBoost
-                                  ? '100% 100%, 120px auto, 180px 180px'
-                                  : '100% 100%, 120px auto'
-                                : undefined,
-                              color: '#e2e8f0',
-                              textDecoration: 'none',
-                              display: 'grid',
-                              gap: '10px',
-                              boxShadow: '0 12px 30px rgba(0,0,0,0.25)',
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                              <span
-                                style={{
-                                  padding: '4px 8px',
-                                  borderRadius: '999px',
-                                  fontWeight: 800,
-                                  fontSize: '11px',
-                                  background: `${team.color}22`,
-                                  color: team.color,
-                                  border: `1px solid ${team.color}55`,
-                                }}
-                              >
-                                {team.group}조
-                              </span>
-                              <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>TEAM PAGE</span>
-                            </div>
-                            <div style={{ fontWeight: 800, fontSize: '16px' }}>{team.name}</div>
-                            <div style={{ color: '#94a3b8', fontSize: '12px' }}>일정 · 로스터 · 공지 확인</div>
-                          </Link>
-                        );
-                      })}
+                      {row.teams.map((team) => renderDirectoryCard(team, true))}
                     </div>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
-              {visibleTeams.map((team) => {
-                const logoUrl = logoForTeam(team.name);
-                const needsBoost = logoUrl ? shouldForceLogoContrastBoost(logoUrl) : false;
-                return (
-                  <Link
-                    key={team.name}
-                    to={`/teams/${encodeTeamId(team.name)}`}
-                    className="team-card"
-                    style={{
-                      padding: '16px',
-                      borderRadius: '18px',
-                      border: '1px solid rgba(148,163,184,0.25)',
-                      backgroundColor: 'rgba(15,23,42,0.65)',
-                      backgroundImage: logoUrl
-                        ? needsBoost
-                          ? `linear-gradient(180deg, rgba(15,23,42,0.7), rgba(15,23,42,0.7)), url("${logoUrl}"), radial-gradient(circle at center, rgba(255,255,255,1) 0%, rgba(255,255,255,0.93) 22%, rgba(255,255,255,0.54) 40%, rgba(255,255,255,0.12) 56%, rgba(255,255,255,0) 74%)`
-                          : `linear-gradient(180deg, rgba(15,23,42,0.7), rgba(15,23,42,0.7)), url("${logoUrl}")`
-                        : undefined,
-                      backgroundRepeat: logoUrl
-                        ? needsBoost
-                          ? 'no-repeat, no-repeat, no-repeat'
-                          : 'no-repeat, no-repeat'
-                        : undefined,
-                      backgroundPosition: logoUrl
-                        ? needsBoost
-                          ? 'center, center, center'
-                          : 'center, center'
-                        : undefined,
-                      backgroundSize: logoUrl
-                        ? needsBoost
-                          ? '100% 100%, 120px auto, 180px 180px'
-                          : '100% 100%, 120px auto'
-                        : undefined,
-                      color: '#e2e8f0',
-                      textDecoration: 'none',
-                      display: 'grid',
-                      gap: '10px',
-                      boxShadow: '0 12px 30px rgba(0,0,0,0.25)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                      <span
-                        style={{
-                          padding: '4px 8px',
-                          borderRadius: '999px',
-                          fontWeight: 800,
-                          fontSize: '11px',
-                          background: `${team.color}22`,
-                          color: team.color,
-                          border: `1px solid ${team.color}55`,
-                        }}
-                      >
-                        {team.group}조
-                      </span>
-                      <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>TEAM PAGE</span>
-                    </div>
-                    <div style={{ fontWeight: 800, fontSize: '16px' }}>{team.name}</div>
-                    <div style={{ color: '#94a3b8', fontSize: '12px' }}>일정 · 로스터 · 공지 확인</div>
-                  </Link>
-                );
-              })}
+            <div className="team-directory__grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+              {visibleTeams.map((team) => renderDirectoryCard(team))}
             </div>
           )
         ) : (

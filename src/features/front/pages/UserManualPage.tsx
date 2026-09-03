@@ -879,7 +879,7 @@ export default function UserManualPage() {
   const troubleshooting = TROUBLESHOOTING_MAP[platform];
 
   return (
-    <div style={{ display: 'grid', gap: '28px' }} ref={pageRef}>
+    <div className="season-content-page manual-page" style={{ display: 'grid', gap: '28px' }} ref={pageRef}>
       {/* ── 헤더 ── */}
       <section
         className="manual-chunk"

@@ -14,7 +14,7 @@ export default function CommunityPage() {
   const showBlockedNotice = waited && !iframeLoaded;
 
   return (
-    <div style={{ display: 'grid', gap: '16px', color: '#f8fafc' }}>
+    <div className="season-content-page gallery-page" style={{ display: 'grid', gap: '16px', color: '#f8fafc' }}>
       <section
         id="aubl-gallery-embed"
         style={{

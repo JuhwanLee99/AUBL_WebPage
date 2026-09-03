@@ -109,10 +109,10 @@ export default function InquiryBoardPage() {
   const sep = <div style={{ width: '1px', background: 'rgba(148,163,184,0.25)', margin: '0 4px', alignSelf: 'stretch' }} />;
 
   return (
-    <div style={{ color: '#f8fafc', maxWidth: '1100px', margin: '0 auto', paddingBottom: '40px' }}>
+    <div className="season-content-page board-list-page" style={{ color: '#f8fafc', maxWidth: '1100px', margin: '0 auto', paddingBottom: '40px' }}>
       {/* 헤더 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2 style={{ fontSize: '24px', fontWeight: 900, margin: 0 }}>💬 건의/문의 게시판</h2>
+        <h2 style={{ fontSize: '24px', fontWeight: 900, margin: 0 }}>건의/문의 게시판</h2>
         {currentUser && (
           <button
             onClick={() => navigate('new')}

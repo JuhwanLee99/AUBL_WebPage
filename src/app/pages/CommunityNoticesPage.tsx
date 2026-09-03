@@ -64,11 +64,11 @@ export default function CommunityNoticesPage() {
   }, [notices, activeFilter, searchQuery, blockedUserIds]);
 
   return (
-    <div style={{ color: '#f8fafc', maxWidth: '1100px', margin: '0 auto', paddingBottom: '40px' }}>
+    <div className="season-content-page board-list-page" style={{ color: '#f8fafc', maxWidth: '1100px', margin: '0 auto', paddingBottom: '40px' }}>
       
       {/* 상단 헤더 및 글쓰기 버튼 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <h2 style={{ fontSize: '24px', fontWeight: 900, margin: 0 }}>📢 공지사항</h2>
+        <h2 style={{ fontSize: '24px', fontWeight: 900, margin: 0 }}>공지사항</h2>
         {isAdmin && (
           <button
             onClick={() => navigate('new')}

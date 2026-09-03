@@ -116,7 +116,7 @@ export default function PrivacyPage() {
   }, []);
 
   return (
-    <div style={{ display: 'grid', gap: '24px', maxWidth: '800px', margin: '0 auto' }} ref={pageRef}>
+    <div className="season-content-page legal-page" style={{ display: 'grid', gap: '24px', maxWidth: '800px', margin: '0 auto' }} ref={pageRef}>
       {/* 헤더 */}
       <section
         className="privacy-chunk"

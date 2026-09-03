@@ -102,12 +102,12 @@ export default function CommunityPage() {
   }, [isPlayerOrAbove, communityAccessLoading]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', minHeight: '60vh' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '24px' }}>
+    <div className="season-content-page community-dashboard" style={{ display: 'flex', flexDirection: 'column', gap: '24px', minHeight: '60vh' }}>
+      <div className="community-dashboard__grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '24px' }}>
         {/* 좌상: 공지사항 */}
-        <section style={cardStyle}>
+        <section className="community-dashboard__panel" style={cardStyle}>
           <div style={headerStyle}>
-            <h2 style={titleStyle}>📢 공지사항</h2>
+            <h2 style={titleStyle}>공지사항</h2>
             <Link to="notices" style={linkStyle}>
               더보기 &rarr;
             </Link>
@@ -160,9 +160,9 @@ export default function CommunityPage() {
         </section>
 
         {/* 우상: 건의/문의 */}
-        <section style={cardStyle}>
+        <section className="community-dashboard__panel" style={cardStyle}>
           <div style={headerStyle}>
-            <h2 style={titleStyle}>💬 건의/문의 게시판</h2>
+            <h2 style={titleStyle}>건의/문의 게시판</h2>
             <Link to="inquiry" style={linkStyle}>
               더보기 &rarr;
             </Link>
@@ -230,9 +230,9 @@ export default function CommunityPage() {
         </section>
 
         {/* 좌하: 선수 등록 */}
-        <section style={cardStyle}>
+        <section className="community-dashboard__panel" style={cardStyle}>
           <div style={headerStyle}>
-            <h2 style={titleStyle}>🧢 선수 등록 게시판</h2>
+            <h2 style={titleStyle}>선수 등록 게시판</h2>
             <Link to="player-registration" style={linkStyle}>
               더보기 &rarr;
             </Link>
@@ -300,9 +300,9 @@ export default function CommunityPage() {
         </section>
 
         {/* 우하: 갤러리 */}
-        <section style={cardStyle}>
+        <section className="community-dashboard__panel community-dashboard__panel--gallery" style={cardStyle}>
           <div style={headerStyle}>
-            <h2 style={titleStyle}>⚾ AUBL 갤러리</h2>
+            <h2 style={titleStyle}>AUBL 갤러리</h2>
             <Link to="gallery" style={linkStyle}>
               전체보기 &rarr;
             </Link>
