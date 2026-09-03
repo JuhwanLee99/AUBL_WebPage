@@ -63,7 +63,7 @@ export function useScheduleActions(params: {
   markSkipFirestoreWrite: () => void;
   setLastFeedLength: (length: number) => void;
   setLastEventsLength: (length: number) => void;
-  pushMatchUpdate: (matchId: string, overrides?: Partial<MatchSchedule>) => Promise<unknown> | unknown;
+  pushMatchUpdate: (matchId: string, overrides?: Partial<MatchSchedule>) => Promise<unknown>;
   purgeMatchFromFirestore: (matchId: string) => Promise<void>;
   updateCurrentMatchPointer: (matchId: string | null) => void;
   initialState: DemoState;

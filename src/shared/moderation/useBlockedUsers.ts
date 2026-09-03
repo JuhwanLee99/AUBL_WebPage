@@ -3,64 +3,58 @@ import { useAuth } from '@shared/auth/AuthProvider';
 import { watchBlockedUserIds, watchBlockedUsers } from './moderationService';
 import type { BlockedUserEntry } from '@shared/types';
 
+const EMPTY_BLOCKED_IDS = new Set<string>();
+
 export function useBlockedUserIds() {
   const { user } = useAuth();
-  const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(true);
+  const [snapshot, setSnapshot] = useState<{ uid: string; values: Set<string> } | null>(null);
 
   useEffect(() => {
-    if (!user) {
-      setBlockedUserIds(new Set());
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
+    if (!user) return;
     const unsubscribe = watchBlockedUserIds(
       user.uid,
       (next) => {
-        setBlockedUserIds(next);
-        setLoading(false);
+        setSnapshot({ uid: user.uid, values: next });
       },
       () => {
-        setBlockedUserIds(new Set());
-        setLoading(false);
+        setSnapshot({ uid: user.uid, values: EMPTY_BLOCKED_IDS });
       },
     );
 
     return () => unsubscribe();
   }, [user]);
 
-  return { blockedUserIds, loading, uid: user?.uid ?? null };
+  const current = user && snapshot?.uid === user.uid ? snapshot : null;
+  return {
+    blockedUserIds: current?.values ?? EMPTY_BLOCKED_IDS,
+    loading: Boolean(user && !current),
+    uid: user?.uid ?? null,
+  };
 }
 
 export function useBlockedUsers() {
   const { user } = useAuth();
-  const [blockedUsers, setBlockedUsers] = useState<BlockedUserEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [snapshot, setSnapshot] = useState<{ uid: string; values: BlockedUserEntry[] } | null>(null);
 
   useEffect(() => {
-    if (!user) {
-      setBlockedUsers([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
+    if (!user) return;
     const unsubscribe = watchBlockedUsers(
       user.uid,
       (next) => {
-        setBlockedUsers(next);
-        setLoading(false);
+        setSnapshot({ uid: user.uid, values: next });
       },
       () => {
-        setBlockedUsers([]);
-        setLoading(false);
+        setSnapshot({ uid: user.uid, values: [] });
       },
     );
 
     return () => unsubscribe();
   }, [user]);
 
-  return { blockedUsers, loading, uid: user?.uid ?? null };
+  const current = user && snapshot?.uid === user.uid ? snapshot : null;
+  return {
+    blockedUsers: current?.values ?? [],
+    loading: Boolean(user && !current),
+    uid: user?.uid ?? null,
+  };
 }

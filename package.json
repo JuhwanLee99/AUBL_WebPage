@@ -12,8 +12,9 @@
     "test:allstar:rules": "firebase emulators:exec --only firestore --project demo-aubl-allstar-rules \"node scripts/allstar_firestore_rules_smoke.mjs\"",
     "build": "vite build && node scripts/generate-og-pages.mjs",
     "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.app.json --pretty false",
     "preview": "vite preview",
-    "check:ci": "npm run lint && npm run build"
+    "check:ci": "npm run lint && npm run typecheck && npm run build"
   },
   "dependencies": {
     "dompurify": "^3.3.1",

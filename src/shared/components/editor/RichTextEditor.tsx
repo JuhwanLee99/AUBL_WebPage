@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import Quill from 'quill';
+import { BlockEmbed } from 'quill/blots/block.js';
 import {
   AUBL_TABLE_EMBED_KEY,
   createAublTableData,
@@ -63,8 +64,6 @@ let tableBlotRegistered = false;
 function ensureAublTableBlotRegistered() {
   if (tableBlotRegistered) return;
 
-  const BlockEmbed = Quill.import('blots/block/embed') as any;
-
   class AublTableBlot extends BlockEmbed {
     static blotName = AUBL_TABLE_EMBED_KEY;
     static tagName = 'div';
@@ -92,13 +91,16 @@ export default function RichTextEditor({ value, onChange, mini = false, placehol
   const containerRef = useRef<HTMLDivElement>(null);
   const quillRef = useRef<Quill | null>(null);
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
 
   const lastValueRef = useRef<string>('');
 
   const [embedDialog, setEmbedDialog] = useState<{ type: 'image' | 'video'; resolve: (url: string | null) => void } | null>(null);
   const [tableDialog, setTableDialog] = useState<TableDialogState | null>(null);
   const embedInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   const initDelta = useCallback((raw: string) => {
     if (isJsonDelta(raw)) return JSON.parse(raw);

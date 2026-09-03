@@ -1,5 +1,3 @@
-import { EloEngine } from '../../rankings/utils/rankingEngine';
-
 interface PredictionInput {
   homeElo: number;
   awayElo: number;
@@ -9,10 +7,8 @@ interface PredictionInput {
 }
 
 export const predictMatch = (data: PredictionInput) => {
-  const eloEngine = new EloEngine();
-  
   // 1. Elo 기반 승률 (기본 전력) - 가중치 50%
-  const eloProb = eloEngine.getExpectedScore(data.homeElo, data.awayElo);
+  const eloProb = 1 / (1 + Math.pow(10, (data.awayElo - data.homeElo) / 400));
 
   // 2. Bradley-Terry 기반 승률 (상대성) - 가중치 30%
   // BT 점수는 비율 척도이므로 단순 비율로 계산

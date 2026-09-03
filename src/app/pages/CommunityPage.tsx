@@ -47,6 +47,7 @@ export default function CommunityPage() {
   const [recentInquiries, setRecentInquiries] = useState<InquiryPost[]>([]);
   const [recentPlayerRegistrations, setRecentPlayerRegistrations] = useState<PlayerRegistrationPost[]>([]);
   const { isPlayerOrAbove, loading: communityAccessLoading } = useCommunityAccess();
+  const visiblePlayerRegistrations = isPlayerOrAbove ? recentPlayerRegistrations : [];
 
   useEffect(() => {
     const fetchInquiries = async () => {
@@ -87,10 +88,7 @@ export default function CommunityPage() {
 
   useEffect(() => {
     if (communityAccessLoading) return;
-    if (!isPlayerOrAbove) {
-      setRecentPlayerRegistrations([]);
-      return;
-    }
+    if (!isPlayerOrAbove) return;
     const fetchPlayerRegistrations = async () => {
       try {
         const q = query(collection(firestore, 'playerRegistrationPosts'), orderBy('createdAt', 'desc'), limit(5));
@@ -255,12 +253,12 @@ export default function CommunityPage() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {recentPlayerRegistrations.length === 0 ? (
+              {visiblePlayerRegistrations.length === 0 ? (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', padding: '24px 0' }}>
                   아직 게시글이 없습니다.
                 </div>
               ) : (
-                recentPlayerRegistrations.map((post) => (
+                visiblePlayerRegistrations.map((post) => (
                   <Link
                     key={post.id}
                     to={`player-registration/${post.id}`}

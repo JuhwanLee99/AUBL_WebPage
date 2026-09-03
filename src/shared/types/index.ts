@@ -1,6 +1,6 @@
 // `src/shared/types/index.ts`
 
-export type LeagueDivision = 'EUTTEUM' | 'BEOGEUM'; // 으뜸/버금
+export type LeagueDivision = 'LEAGUE' | 'PLAYOFF' | 'EUTTEUM' | 'BEOGEUM';
 
 export interface Team {
   id: string;

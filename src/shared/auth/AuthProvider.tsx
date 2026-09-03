@@ -21,9 +21,10 @@ import type { User } from 'firebase/auth';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { PropsWithChildren } from 'react';
 import { auth } from '../firebase/client';
-import { collectionGroup, doc, documentId, getDocs, query, setDoc, where, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, writeBatch } from 'firebase/firestore';
 import { firestore } from '../firebase/client';
 import { sendLogoutToFlutter, sendTokenRefreshToFlutter } from '../bridge/flutterBridge';
+import { getMembershipsByUid } from './membershipLookup';
 
 // -----------------------------------------------------------
 // [로컬 테스트용 설정]
@@ -228,23 +229,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     const refs = new Set<string>();
     try {
-      const snap = await getDocs(
-        query(collectionGroup(firestore, 'members'), where('uid', '==', uid)),
-      );
+      const snap = await getMembershipsByUid(uid);
       for (const d of snap.docs) refs.add(d.ref.path);
     } catch {
       // ignore
-    }
-
-    if (refs.size === 0) {
-      try {
-        const byDocId = await getDocs(
-          query(collectionGroup(firestore, 'members'), where(documentId(), '==', uid)),
-        );
-        for (const d of byDocId.docs) refs.add(d.ref.path);
-      } catch {
-        // ignore
-      }
     }
 
     for (const path of refs) {

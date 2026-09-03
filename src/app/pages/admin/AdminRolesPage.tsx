@@ -72,7 +72,7 @@ export default function AdminRolesPage() {
   useEffect(() => {
     const q = query(collection(firestore, 'roles'), where('role', 'in', ['coach', 'scorer']));
     const unsub = onSnapshot(q, (snap) => {
-      const next = snap.docs.map((docSnap) => ({ uid: docSnap.id, ...(docSnap.data() as RoleEntry) }));
+      const next = snap.docs.map((docSnap) => ({ ...(docSnap.data() as RoleEntry), uid: docSnap.id }));
       setRoleEntries(next);
     });
     return () => unsub();

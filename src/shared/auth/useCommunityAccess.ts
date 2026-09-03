@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { collectionGroup, doc, FieldPath, getDoc, getDocs, limit, query, setDoc, where } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { firestore } from '../firebase/client';
 import { useAuth } from './AuthProvider';
 import { useAdmin } from './useAdmin';
+import { getMembershipsByUid } from './membershipLookup';
 
 export function useCommunityAccess() {
   const { user } = useAuth();
@@ -33,14 +34,7 @@ export function useCommunityAccess() {
     const run = async () => {
       setSyncingMemberRole(true);
       try {
-        let memberSnap = await getDocs(
-          query(collectionGroup(firestore, 'members'), where('uid', '==', user.uid), limit(1)),
-        );
-        if (memberSnap.empty) {
-          memberSnap = await getDocs(
-            query(collectionGroup(firestore, 'members'), where(FieldPath.documentId(), '==', user.uid), limit(1)),
-          );
-        }
+        const memberSnap = await getMembershipsByUid(user.uid, 1);
         if (memberSnap.empty) return;
 
         const memberDoc = memberSnap.docs[0];

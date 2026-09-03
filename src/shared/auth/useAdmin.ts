@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { collectionGroup, doc, documentId, getDoc, getDocs, limit, query, where } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { firestore } from '../firebase/client';
 import { useAuth } from './AuthProvider';
+import { getMembershipsByUid } from './membershipLookup';
 
 // 개발 모드(DEV)에서만 true로 설정 가능하도록 제한
 const FORCE_ADMIN = import.meta.env.DEV && false; 
@@ -84,15 +85,16 @@ export function useAdmin() {
       }
 
       try {
-        let memberSnap = await getDocs(
-          query(collectionGroup(firestore, 'members'), where('uid', '==', user.uid), limit(1)),
-        );
+        const memberSnap = await getMembershipsByUid(user.uid, 2);
         if (cancelled) return;
-        if (memberSnap.empty) {
-          memberSnap = await getDocs(
-            query(collectionGroup(firestore, 'members'), where(documentId(), '==', user.uid), limit(1)),
-          );
-          if (cancelled) return;
+        if (memberSnap.size > 1) {
+          console.error('동일 UID의 팀 소속 문서가 여러 개여서 권한 부여를 중단합니다.', { uid: user.uid });
+          setRoleLabel('일반');
+          setRoleDetail('소속 확인 필요');
+          setIsScorer(false);
+          setCanAuditAllstarVotes(false);
+          setLoading(false);
+          return;
         }
         if (!memberSnap.empty) {
           const docSnap = memberSnap.docs[0];

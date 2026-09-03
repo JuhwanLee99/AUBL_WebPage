@@ -283,7 +283,7 @@ export default function StatsTable({ title, stats, variant, density = 'regular' 
                         if (!isBatter && col.key === 'outs') {
                           return (row as PitcherStatLine & { outsIp?: string }).outsIp ?? (row as PitcherStatLine).outs;
                         }
-                        return (row as Record<string, string | number | undefined>)[col.key] ?? '-';
+                        return (row as unknown as Record<string, string | number | undefined>)[col.key] ?? '-';
                       })()
                     )}
                   </td>
