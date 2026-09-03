@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import { useDemoStore } from '@shared/state/demoStore';
 import type { MatchSchedule } from '@shared/state/demoStore';
-import { collection, collectionGroup, doc, FieldPath, getDoc, getDocs, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { firestore } from '@shared/firebase/client';
 import { useContent } from '@shared/state/contentProvider';
 import { useAdmin } from '@shared/auth/useAdmin';
@@ -12,6 +12,8 @@ import { useAuth } from '@shared/auth/AuthProvider';
 import { useTeamRole } from '@shared/auth/useTeamRole';
 import { decodeTeamId } from '@shared/lib/teamDirectory';
 import type { Notice, TeamNotice } from '@shared/types';
+import { useFeatureFlags } from '@shared/config/FeatureFlagsProvider';
+import { getMembershipsByUid } from '@shared/auth/membershipLookup';
 
 const formatLiveTime = (value: string) => {
   const date = new Date(value);
@@ -131,7 +133,6 @@ const UNIQUE_PLAY_URL = 'https://unique-play.com/league/57?item=%5Bobject%20Obje
 
 // 올스타전 홍보 배너는 이 설정만 수정하면 문구 교체 또는 숨김 처리가 가능합니다.
 const ALLSTAR_PROMO = {
-  enabled: true,
   eyebrow: '2026 AUBL ALL-STAR',
   title: '올스타전 후보 선정 · 팬 투표',
   description: '루키 후보 78명의 검토 명단을 공개했습니다. 전용 페이지에서 후보를 확인하고 올스타전 진행 상황을 확인해 주세요.',
@@ -236,6 +237,7 @@ function MiniBases({ bases }: { bases?: (string | null | undefined)[] }) {
 
 export default function LandingPage() {
   const { state, actions } = useDemoStore();
+  const { allstarEnabled } = useFeatureFlags();
   const { isAdmin } = useAdmin();
   const { user } = useAuth();
   const { isCoach, coachTeamId } = useTeamRole();
@@ -272,14 +274,7 @@ export default function LandingPage() {
     let cancelled = false;
     const run = async () => {
       try {
-        let snap = await getDocs(
-          query(collectionGroup(firestore, 'members'), where('uid', '==', user.uid), limit(1)),
-        );
-        if (snap.empty) {
-          snap = await getDocs(
-            query(collectionGroup(firestore, 'members'), where(FieldPath.documentId(), '==', user.uid), limit(1)),
-          );
-        }
+        const snap = await getMembershipsByUid(user.uid, 1);
         if (cancelled) return;
         if (snap.empty) {
           setMemberTeamId(null);
@@ -527,7 +522,7 @@ export default function LandingPage() {
   return (
     <div className="landing-stack">
       {/* All-Star promotional banner */}
-      {ALLSTAR_PROMO.enabled && (
+      {allstarEnabled && (
         <section
           aria-labelledby="allstar-promo-title"
           style={{

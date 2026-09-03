@@ -39,6 +39,9 @@ from allstar_voting import ELIGIBILITY_SUBCOLLECTION  # noqa: E402
 from allstar_voting import EVENTS_COLLECTION  # noqa: E402
 from allstar_voting import get_ballot_status  # noqa: E402
 from allstar_voting import submit_ballot  # noqa: E402
+from feature_flags import ALLSTAR_FEATURE_ID  # noqa: E402
+from feature_flags import FEATURE_FLAG_SCHEMA_VERSION  # noqa: E402
+from feature_flags import PUBLIC_FEATURE_FLAGS_COLLECTION  # noqa: E402
 
 
 SECRET = "emulator-only-secret-value-with-more-than-32-bytes"
@@ -215,6 +218,14 @@ def main() -> int:
     project = os.environ.get("GCLOUD_PROJECT", "aubl-allstar-load-test")
     initialize_app(_EmulatorCredential(), options={"projectId": project})
     db = admin_firestore.client()
+    db.collection(PUBLIC_FEATURE_FLAGS_COLLECTION).document(ALLSTAR_FEATURE_ID).set(
+        {
+            "schemaVersion": FEATURE_FLAG_SCHEMA_VERSION,
+            "enabled": True,
+            "revision": 1,
+            "updatedAt": admin_firestore.SERVER_TIMESTAMP,
+        }
+    )
     candidate_set = _candidate_set()
     run_id = uuid.uuid4().hex[:10]
 

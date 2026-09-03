@@ -7,6 +7,7 @@ import {
   type AdminVotingDivision,
 } from '@features/allstar/services/adminVotingService';
 import { useAdmin } from '@shared/auth/useAdmin';
+import { useFeatureFlags } from '@shared/config/FeatureFlagsProvider';
 
 const cardStyle: CSSProperties = {
   borderRadius: '16px',
@@ -242,6 +243,7 @@ function MetricCard({ label, value, note, tone = 'blue' }: { label: string; valu
 
 export default function AdminAllStarVotingPage() {
   const { canAuditAllstarVotes } = useAdmin();
+  const featureFlags = useFeatureFlags();
   const [division, setDivision] = useState<AdminVotingDivision>('allstar');
   const [overview, setOverview] = useState<AdminVoteOverview | null>(null);
   const [loading, setLoading] = useState(false);
@@ -249,6 +251,7 @@ export default function AdminAllStarVotingPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [resultAction, setResultAction] = useState<ResultAction | null>(null);
+  const [featureAction, setFeatureAction] = useState(false);
   const [confirmation, setConfirmation] = useState<ActionConfirmation | null>(null);
   const [confirmationText, setConfirmationText] = useState('');
   const [logQuery, setLogQuery] = useState('');
@@ -312,6 +315,42 @@ export default function AdminAllStarVotingPage() {
   const runFullAudit = () => {
     if (overview?.event.state === 'OPEN' && !window.confirm('투표 진행 중 전체 검사는 읽기 시점 차이가 생길 수 있습니다. 계속할까요?')) return;
     void loadOverview(true);
+  };
+
+  const changeFeatureState = async (enabled: boolean) => {
+    if (featureFlags.loading || featureAction) return;
+    let confirmation = '';
+    if (enabled) {
+      confirmation = window.prompt(
+        '공개 페이지를 활성화합니다. 실제 투표 접수는 이벤트 설정에서 별도로 열어야 합니다.\n계속하려면 “올스타 기능 공개”를 입력하세요.',
+      ) ?? '';
+      if (confirmation !== '올스타 기능 공개') return;
+    } else if (!window.confirm('올스타 공개 기능을 즉시 중지하고 이벤트·부문 접수도 비활성화할까요?')) {
+      return;
+    }
+
+    setFeatureAction(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await allStarAdminVotingService.setFeatureEnabled({
+        eventId: ALL_STAR_EVENT_CONFIG.eventId,
+        enabled,
+        expectedRevision: featureFlags.allstarRevision,
+        confirmation,
+        reason: enabled ? '관리자 수동 공개' : '관리자 수동 비공개 및 접수 중지',
+      });
+      setNotice(
+        enabled
+          ? `올스타 공개 기능을 켰습니다. revision ${result.revision}. 투표 접수 상태를 별도로 확인하세요.`
+          : `올스타 공개 기능과 이벤트 접수를 중지했습니다. revision ${result.revision}.`,
+      );
+      if (!enabled) await loadOverview(false);
+    } catch (cause) {
+      setError(friendlyErrorMessage(cause, '올스타 공개 상태를 변경하지 못했습니다.'));
+    } finally {
+      setFeatureAction(false);
+    }
   };
 
   const canPublishDraft = Boolean(
@@ -574,6 +613,50 @@ export default function AdminAllStarVotingPage() {
           </button>
           <button type="button" onClick={runFullAudit} disabled={loading || !overview || resultAction !== null} style={buttonStyle}>
             전체 무결성 검사
+          </button>
+        </div>
+      </section>
+
+      <section
+        style={{
+          ...cardStyle,
+          display: 'grid',
+          gap: '12px',
+          borderColor: featureFlags.allstarEnabled ? 'rgba(74,222,128,0.5)' : 'rgba(248,113,113,0.45)',
+          background: featureFlags.allstarEnabled ? 'rgba(20,83,45,0.2)' : 'rgba(127,29,29,0.18)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div>
+            <h3 style={{ margin: 0, color: '#f8fafc' }}>올스타 기능 공개</h3>
+            <p style={{ margin: '6px 0 0', color: '#cbd5e1', fontSize: '13px', lineHeight: 1.6 }}>
+              OFF이면 메뉴·홍보 배너·직접 주소·공개 API를 모두 차단합니다. ON은 페이지 공개만 허용하며 투표 접수를 자동으로 열지 않습니다.
+            </p>
+          </div>
+          <strong style={{ color: featureFlags.allstarEnabled ? '#86efac' : '#fca5a5', fontSize: '20px' }}>
+            {featureFlags.loading ? '확인 중' : featureFlags.allstarEnabled ? 'ON' : 'OFF'}
+          </strong>
+        </div>
+        <div style={{ color: '#94a3b8', fontSize: '12px' }}>
+          revision {featureFlags.allstarRevision} · 마지막 변경 {formatDateTime(featureFlags.allstarUpdatedAt)}
+          {!featureFlags.verifiedByServer && !featureFlags.loading ? ' · 서버 확인 실패로 안전하게 OFF 처리됨' : ''}
+        </div>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => void changeFeatureState(true)}
+            disabled={featureFlags.loading || featureAction || featureFlags.allstarEnabled || !featureFlags.verifiedByServer}
+            style={{ ...buttonStyle, opacity: featureFlags.allstarEnabled ? 0.55 : 1 }}
+          >
+            {featureAction ? '변경 중…' : '공개 기능 켜기'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void changeFeatureState(false)}
+            disabled={featureFlags.loading || featureAction || (!featureFlags.allstarEnabled && featureFlags.allstarRevision > 0) || !featureFlags.verifiedByServer}
+            style={{ ...buttonStyle, borderColor: 'rgba(248,113,113,0.55)', background: 'rgba(127,29,29,0.3)', color: '#fecaca', opacity: !featureFlags.allstarEnabled && featureFlags.allstarRevision > 0 ? 0.55 : 1 }}
+          >
+            {featureAction ? '변경 중…' : featureFlags.allstarRevision === 0 ? '기본 OFF 상태 저장' : '공개 및 접수 중지'}
           </button>
         </div>
       </section>

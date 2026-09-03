@@ -14,6 +14,7 @@ from firebase_functions.options import set_global_options
 from firebase_functions.params import SecretParam
 
 from allstar_admin import get_admin_vote_overview as get_allstar_vote_admin_overview_impl
+from allstar_admin import set_allstar_feature_enabled as set_allstar_feature_enabled_impl
 from allstar_results import rebuild_vote_results as rebuild_allstar_vote_results_impl
 from allstar_results import set_vote_results_published as set_allstar_vote_results_published_impl
 from allstar_voting import CUSTOM_GOOGLE_SUBJECT_CLAIM
@@ -272,6 +273,23 @@ def submit_allstar_ballot(req: https_fn.CallableRequest[object]) -> dict[str, ob
 def get_allstar_vote_admin_overview(req: https_fn.CallableRequest[object]) -> dict[str, object]:
     """Return redacted ballot receipts and integrity metrics to administrators."""
     return get_allstar_vote_admin_overview_impl(req)
+
+
+@https_fn.on_call(
+    region="asia-northeast3",
+    enforce_app_check=ALLSTAR_ENFORCE_APP_CHECK_SENSITIVE,
+)
+def set_allstar_feature_enabled(req: https_fn.CallableRequest[object]) -> dict[str, object]:
+    """Allow an administrator to change the audited, fail-closed master switch."""
+    result = set_allstar_feature_enabled_impl(req)
+    functions_logger.warn(
+        "All-Star public feature state changed",
+        event="allstar_feature_changed",
+        enabled=result.get("enabled") is True,
+        before=result.get("before") is True,
+        revision=result.get("revision"),
+    )
+    return result
 
 
 @https_fn.on_call(

@@ -4,6 +4,7 @@ import path from 'node:path';
 const DIST_DIR = path.resolve('dist');
 const BASE_URL = (process.env.OG_BASE_URL || 'https://aubl.club').replace(/\/$/, '');
 const DEFAULT_IMAGE = `${BASE_URL}/assets/aubl_clean.png`;
+const ALLSTAR_STATIC_PAGES_ENABLED = process.env.ALLSTAR_STATIC_PAGES_ENABLED === 'true';
 
 const ROUTES = [
   { route: '/', title: 'AUBL - 아마추어 대학 야구 리그', description: '전국대학아마추어야구연합회(AUBL) 공식 웹사이트. 공지, 일정, 기록, 팀 정보와 커뮤니티를 확인하세요.' },
@@ -11,14 +12,14 @@ const ROUTES = [
   { route: '/rules', title: '회칙 | AUBL', description: '전국대학아마추어야구연합회 회칙을 확인하세요.' },
   { route: '/intro/teams', title: '참가팀 · 조편성 | AUBL', description: 'AUBL 참가팀과 조편성 정보를 확인하세요.' },
   { route: '/teams', title: '팀 허브 | AUBL', description: 'AUBL 팀별 페이지, 공지, 로스터, 기록 정보를 확인하세요.' },
-  {
+  ...(ALLSTAR_STATIC_PAGES_ENABLED ? [{
     route: '/allstar',
     title: '2026 AUBL 올스타전 팬 투표 | AUBL',
     description: '2026 AUBL 올스타전 안내와 학교별 루키 후보 78명의 검토 명단을 확인하세요.',
     image: `${BASE_URL}/assets/allstar-og.png`,
     imageWidth: '1733',
     imageHeight: '907',
-  },
+  }] : []),
   { route: '/standings', title: '순위 | AUBL', description: 'AUBL 리그 순위와 팀 성적 정보를 확인하세요.' },
   { route: '/standings/power-ranking', title: '파워랭킹 | AUBL', description: 'AUBL 파워랭킹을 확인하세요.' },
   { route: '/schedule', title: '경기 일정 | AUBL', description: 'AUBL 경기 일정과 진행 상태를 확인하세요.' },

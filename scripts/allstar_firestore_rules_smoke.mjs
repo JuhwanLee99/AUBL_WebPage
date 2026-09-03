@@ -51,6 +51,8 @@ setLogLevel("silent");
 
 const eventId = `rules-smoke-${Date.now()}`;
 const eventPath = `allstarVotingEvents/${eventId}`;
+const featureFlagPath = "publicFeatureFlags/allstar";
+const featureAuditPath = `featureFlagAudit/rules-smoke-${Date.now()}`;
 const protectedDocuments = {
   configLocks: `${eventPath}/configLocks/allstar`,
   ballots: `${eventPath}/ballots/seeded-ballot`,
@@ -160,35 +162,72 @@ async function assertPrivilegedReadBoundary(identity, db, allowedAreas) {
   }
 }
 
+async function assertFeatureFlagBoundary(identity, db, canReadAudit) {
+  const feature = doc(db, featureFlagPath);
+  const featureCollection = collection(db, "publicFeatureFlags");
+  await expectAllowed(`${identity} can read public feature flag`, () => getDoc(feature));
+  await expectAllowed(`${identity} can list public feature flags`, () => getDocs(query(featureCollection, limit(1))));
+  await expectDenied(`${identity} cannot create public feature flag`, () =>
+    setDoc(doc(featureCollection, `client-created-${identity}`), { enabled: true }),
+  );
+  await expectDenied(`${identity} cannot update public feature flag`, () => updateDoc(feature, { enabled: true }));
+  await expectDenied(`${identity} cannot delete public feature flag`, () => deleteDoc(feature));
+
+  const audit = doc(db, featureAuditPath);
+  const auditCollection = collection(db, "featureFlagAudit");
+  const readExpectation = canReadAudit ? expectAllowed : expectDenied;
+  await readExpectation(`${identity} audit get boundary`, () => getDoc(audit));
+  await readExpectation(`${identity} audit list boundary`, () => getDocs(query(auditCollection, limit(1))));
+  await expectDenied(`${identity} cannot create feature audit`, () =>
+    setDoc(doc(auditCollection, `client-created-${identity}`), { feature: "allstar" }),
+  );
+  await expectDenied(`${identity} cannot update feature audit`, () => updateDoc(audit, { feature: "changed" }));
+  await expectDenied(`${identity} cannot delete feature audit`, () => deleteDoc(audit));
+}
+
 const adminApp = initializeAdminApp({ projectId }, `rules-smoke-seed-${Date.now()}`);
 const adminDb = getAdminFirestore(adminApp);
 
 try {
   await adminDb.doc(eventPath).set({ title: "Disposable rules smoke fixture" });
+  await adminDb.doc(featureFlagPath).set({ schemaVersion: 1, enabled: false, revision: 1 });
+  await adminDb.doc(featureAuditPath).set({ feature: "allstar", seeded: true });
   await Promise.all(
     Object.entries(protectedDocuments).map(([area, documentPath]) =>
       adminDb.doc(documentPath).set({ area, seeded: true }),
     ),
   );
 
-  await assertFullyBlocked("unauthenticated", createClient("unauthenticated"));
-  await assertFullyBlocked("regular-user", createClient("regular-user", token("regular-user")));
+  const unauthenticated = createClient("unauthenticated");
+  const regularUser = createClient("regular-user", token("regular-user"));
+  const adminOnly = createClient("admin-only", token("admin-only", { admin: true }));
+  const auditorOnly = createClient("auditor-only", token("auditor-only", { allstarVoteAuditor: true }));
+  const adminAuditor = createClient("admin-auditor", token("admin-auditor", { admin: true, allstarVoteAuditor: true }));
+
+  await assertFullyBlocked("unauthenticated", unauthenticated);
+  await assertFullyBlocked("regular-user", regularUser);
 
   await assertPrivilegedReadBoundary(
     "admin-only",
-    createClient("admin-only", token("admin-only", { admin: true })),
+    adminOnly,
     new Set(["publicResults"]),
   );
   await assertPrivilegedReadBoundary(
     "auditor-only",
-    createClient("auditor-only", token("auditor-only", { allstarVoteAuditor: true })),
+    auditorOnly,
     new Set(),
   );
   await assertPrivilegedReadBoundary(
     "admin-auditor",
-    createClient("admin-auditor", token("admin-auditor", { admin: true, allstarVoteAuditor: true })),
+    adminAuditor,
     new Set(["ballots", "voterEligibility", "publicResults"]),
   );
+
+  await assertFeatureFlagBoundary("unauthenticated", unauthenticated, false);
+  await assertFeatureFlagBoundary("regular-user", regularUser, false);
+  await assertFeatureFlagBoundary("admin-only", adminOnly, true);
+  await assertFeatureFlagBoundary("auditor-only", auditorOnly, false);
+  await assertFeatureFlagBoundary("admin-auditor", adminAuditor, true);
 
   process.stdout.write(
     JSON.stringify(
@@ -204,6 +243,8 @@ try {
           adminAndAuditor: "ballots/voterEligibility/publicResults read only",
           configLocks: "no client access for any tested identity",
           resultDrafts: "no client access for any tested identity",
+          publicFeatureFlags: "public read and Admin SDK-only write",
+          featureFlagAudit: "admin read and Admin SDK-only write",
         },
       },
       null,
@@ -214,5 +255,7 @@ try {
   await Promise.allSettled(clients.map(({ db }) => terminate(db)));
   await Promise.allSettled(clients.map(({ app }) => deleteApp(app)));
   await adminDb.recursiveDelete(adminDb.doc(eventPath));
+  await adminDb.doc(featureFlagPath).delete();
+  await adminDb.doc(featureAuditPath).delete();
   await deleteAdminApp(adminApp);
 }

@@ -112,6 +112,23 @@ type SetResultsPublishedRequest = RebuildResultsRequest & {
   published: boolean;
 };
 
+export type SetAllStarFeatureEnabledRequest = {
+  eventId: string;
+  enabled: boolean;
+  expectedRevision: number;
+  confirmation?: string;
+  reason?: string;
+};
+
+export type AllStarFeatureOperation = {
+  feature: 'allstar';
+  enabled: boolean;
+  before: boolean;
+  revision: number;
+  updatedAt: string | null;
+  eventIntakeDisabled: boolean;
+};
+
 export type AdminResultOperation = {
   eventId: string;
   division: AdminVotingDivision;
@@ -145,9 +162,14 @@ const setResultsPublishedCallable = httpsCallable<SetResultsPublishedRequest, Ad
   // the public gate, so it shares the heavy-path deadline.
   { timeout: 300_000 },
 );
+const setFeatureEnabledCallable = httpsCallable<SetAllStarFeatureEnabledRequest, AllStarFeatureOperation>(
+  functions,
+  'set_allstar_feature_enabled',
+  { timeout: 30_000 },
+);
 
 export const allStarAdminVotingService = {
-  isAvailable: import.meta.env.VITE_ALLSTAR_VOTING_API_ENABLED === 'true',
+  isAvailable: true,
   async getOverview(input: AdminVoteOverviewRequest): Promise<AdminVoteOverview> {
     ensureFirebaseAppCheck();
     const response = await getOverviewCallable(input);
@@ -161,6 +183,11 @@ export const allStarAdminVotingService = {
   async setResultsPublished(input: SetResultsPublishedRequest): Promise<AdminResultOperation> {
     ensureFirebaseAppCheck();
     const response = await setResultsPublishedCallable(input);
+    return response.data;
+  },
+  async setFeatureEnabled(input: SetAllStarFeatureEnabledRequest): Promise<AllStarFeatureOperation> {
+    ensureFirebaseAppCheck();
+    const response = await setFeatureEnabledCallable(input);
     return response.data;
   },
 };

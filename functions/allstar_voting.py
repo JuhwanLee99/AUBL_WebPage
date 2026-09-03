@@ -22,6 +22,8 @@ from firebase_functions import https_fn
 from google.cloud import firestore as google_firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
+from feature_flags import require_allstar_feature_enabled
+
 
 EVENTS_COLLECTION = "allstarVotingEvents"
 BALLOTS_SUBCOLLECTION = "ballots"
@@ -939,6 +941,7 @@ def get_event_config(data: object) -> dict[str, Any]:
     if not isinstance(include_candidate_set, bool):
         _invalid("'includeCandidateSet' must be a boolean.")
     db = admin_firestore.client()
+    require_allstar_feature_enabled(db)
     event_ref = db.collection(EVENTS_COLLECTION).document(event_id)
     event_snapshot = event_ref.get()
     if not event_snapshot.exists:
@@ -998,6 +1001,7 @@ def get_event_config(data: object) -> dict[str, Any]:
 def get_vote_results(data: object) -> dict[str, Any]:
     event_id, division_id = _request_ids(data)
     db = admin_firestore.client()
+    require_allstar_feature_enabled(db)
     event_ref = db.collection(EVENTS_COLLECTION).document(event_id)
     event_snapshot = event_ref.get()
     if not event_snapshot.exists:
@@ -1069,6 +1073,7 @@ def get_ballot_status(
     token = _auth_token(request)
     secret = _secret_bytes(voter_key_secret)
     db = admin_firestore.client()
+    require_allstar_feature_enabled(db)
     event_ref = db.collection(EVENTS_COLLECTION).document(event_id)
     event_snapshot = event_ref.get()
     if not event_snapshot.exists:
@@ -1196,6 +1201,9 @@ def submit_ballot(
 
     @google_firestore.transactional
     def write_ballot(txn: google_firestore.Transaction) -> dict[str, Any]:
+        # Read the global kill switch in the same transaction as the ballot.
+        # A concurrent OFF transition therefore retries and rejects the write.
+        require_allstar_feature_enabled(db, txn)
         event_snapshot = event_ref.get(transaction=txn)
         if not event_snapshot.exists:
             _error(

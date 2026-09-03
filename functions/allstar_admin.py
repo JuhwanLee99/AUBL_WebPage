@@ -14,6 +14,7 @@ from typing import Any, Mapping
 
 from firebase_admin import firestore as admin_firestore
 from firebase_functions import https_fn
+from google.cloud import firestore as google_firestore
 from google.cloud.firestore_v1 import aggregation
 from google.cloud.firestore_v1.base_query import FieldFilter
 
@@ -36,9 +37,15 @@ from allstar_voting import _policy
 from allstar_voting import _public_candidate_set
 from allstar_voting import _public_result_summary
 from allstar_voting import _request_ids
+from allstar_voting import _require_slug
 from allstar_voting import _submission_fingerprint
 from allstar_voting import _timezone_name
 from allstar_voting import _validate_selections
+from feature_flags import ALLSTAR_FEATURE_ID
+from feature_flags import FEATURE_FLAG_AUDIT_COLLECTION
+from feature_flags import FEATURE_FLAG_SCHEMA_VERSION
+from feature_flags import allstar_feature_ref
+from feature_flags import parse_allstar_feature
 
 
 DEFAULT_LOG_LIMIT = 100
@@ -65,6 +72,148 @@ def _require_admin(request: https_fn.CallableRequest[Any]) -> Mapping[str, Any]:
             "ADMIN_REQUIRED",
         )
     return token
+
+
+def set_allstar_feature_enabled(
+    request: https_fn.CallableRequest[Any],
+) -> dict[str, Any]:
+    """Change the public master switch with revision checks and an audit record."""
+    payload = request.data
+    if not isinstance(payload, Mapping):
+        _error(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "Request data must be an object.",
+            "INVALID_REQUEST",
+        )
+    token = _require_admin(request)
+    enabled = payload.get("enabled")
+    if not isinstance(enabled, bool):
+        _error(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "'enabled' must be a boolean.",
+            "INVALID_FEATURE_STATE",
+        )
+    expected_revision = payload.get("expectedRevision")
+    if (
+        isinstance(expected_revision, bool)
+        or not isinstance(expected_revision, int)
+        or expected_revision < 0
+    ):
+        _error(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "'expectedRevision' must be a non-negative integer.",
+            "INVALID_FEATURE_REVISION",
+        )
+    event_id = _require_slug(payload.get("eventId"), "eventId")
+    confirmation = payload.get("confirmation", "")
+    if enabled and confirmation != "올스타 기능 공개":
+        _error(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "The activation confirmation phrase is incorrect.",
+            "FEATURE_CONFIRMATION_REQUIRED",
+        )
+    reason = payload.get("reason", "")
+    if not isinstance(reason, str) or len(reason.strip()) > 240:
+        _error(
+            https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            "'reason' must be a string up to 240 characters.",
+            "INVALID_FEATURE_REASON",
+        )
+
+    db = admin_firestore.client()
+    feature_ref = allstar_feature_ref(db)
+    event_ref = db.collection(EVENTS_COLLECTION).document(event_id)
+    audit_ref = db.collection(FEATURE_FLAG_AUDIT_COLLECTION).document()
+    transaction = db.transaction()
+    actor_uid = getattr(getattr(request, "auth", None), "uid", None)
+    if not isinstance(actor_uid, str) or not actor_uid:
+        actor_uid = token.get("uid") if isinstance(token.get("uid"), str) else "unknown-admin"
+
+    @google_firestore.transactional
+    def update_flag(txn: google_firestore.Transaction) -> tuple[bool, int]:
+        feature_snapshot = feature_ref.get(transaction=txn)
+        before = parse_allstar_feature(feature_snapshot)
+        current_revision = int(before["revision"])
+        if current_revision != expected_revision:
+            _error(
+                https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+                "Feature state changed in another administrator session.",
+                "FEATURE_FLAG_REVISION_CONFLICT",
+                currentRevision=current_revision,
+            )
+
+        event_snapshot = event_ref.get(transaction=txn)
+        event = event_snapshot.to_dict() or {} if event_snapshot.exists else {}
+        if enabled:
+            divisions = event.get("divisions")
+            if not event_snapshot.exists or not isinstance(divisions, Mapping) or not divisions:
+                _error(
+                    https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+                    "A valid All-Star event configuration is required before publication.",
+                    "FEATURE_ACTIVATION_NOT_READY",
+                )
+
+        next_revision = current_revision + 1
+        changed_at = admin_firestore.SERVER_TIMESTAMP
+        txn.set(
+            feature_ref,
+            {
+                "schemaVersion": FEATURE_FLAG_SCHEMA_VERSION,
+                "enabled": enabled,
+                "revision": next_revision,
+                "updatedAt": changed_at,
+            },
+        )
+
+        # Emergency OFF is a one-way safety action for the active round. The
+        # public switch can later be enabled, but event intake must be reopened
+        # explicitly in a separate operation.
+        if not enabled and event_snapshot.exists:
+            divisions = event.get("divisions")
+            disabled_divisions: dict[str, Any] = {}
+            if isinstance(divisions, Mapping):
+                for division_id, raw_division in divisions.items():
+                    if isinstance(raw_division, Mapping):
+                        disabled_divisions[str(division_id)] = {
+                            **dict(raw_division),
+                            "enabled": False,
+                        }
+            txn.update(
+                event_ref,
+                {
+                    "enabled": False,
+                    "divisions": disabled_divisions,
+                    "updatedAt": changed_at,
+                },
+            )
+
+        txn.create(
+            audit_ref,
+            {
+                "schemaVersion": 1,
+                "feature": ALLSTAR_FEATURE_ID,
+                "before": before["enabled"] is True,
+                "after": enabled,
+                "revision": next_revision,
+                "eventId": event_id,
+                "actorUid": actor_uid,
+                "reason": reason.strip() or None,
+                "changedAt": changed_at,
+            },
+        )
+        return before["enabled"] is True, next_revision
+
+    before_enabled, revision = update_flag(transaction)
+    after_snapshot = feature_ref.get()
+    after = parse_allstar_feature(after_snapshot)
+    return {
+        "feature": ALLSTAR_FEATURE_ID,
+        "enabled": after["enabled"] is True,
+        "before": before_enabled,
+        "revision": revision,
+        "updatedAt": _iso(after.get("updatedAt")),
+        "eventIntakeDisabled": not enabled,
+    }
 
 
 def _log_limit(payload: Mapping[str, Any]) -> int:

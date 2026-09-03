@@ -1,6 +1,8 @@
 # AUBL 올스타/루키 투표 시스템
 
-투표는 Firestore 클라이언트 쓰기가 아니라 `asia-northeast3`의 callable Cloud Functions를 통해서만 접수한다. 일반 사용자의 Firestore 직접 접근은 Security Rules에서 차단된다. 후보 설정은 `admin` 계정이 관리하고, 투표 원문은 `admin: true`와 `allstarVoteAuditor: true` custom claim을 모두 가진 감사 계정만 클라이언트에서 읽을 수 있다. 공개 결과 callable은 이벤트와 합계 문서의 두 공개 flag를 모두 통과한 후보별 합계만 반환한다. 이는 두 사람의 승인 기능이 아니라 이중 공개 게이트다.
+전체 기능은 `publicFeatureFlags/allstar` 전역 플래그가 기본 OFF인 상태로 배포한다. 메뉴·배너·직접 주소와 모든 공개 callable은 서버에서 확인된 전역 플래그가 정확한 `true`일 때만 동작한다. 실제 투표는 여기에 이벤트·부문 접수 상태까지 통과해야 한다.
+
+투표는 Firestore 클라이언트 쓰기가 아니라 `asia-northeast3`의 callable Cloud Functions를 통해서만 접수한다. 일반 사용자의 Firestore 직접 접근은 Security Rules에서 차단된다. 후보 설정은 `admin` 계정이 관리하고, 투표 원문은 `admin: true`와 `allstarVoteAuditor: true` custom claim을 모두 가진 감사 계정만 클라이언트에서 읽을 수 있다. 공개 결과 callable은 이벤트와 합계 문서의 공개 flag를 모두 통과한 후보별 합계만 반환한다.
 
 ## 현재 구현 범위
 
@@ -15,12 +17,12 @@
 | 제출 백엔드 | 구현 완료·기본 비활성 | Functions, Firestore Rules, Secret과 이벤트 설정 배포 필요 |
 | 결과 화면 | UI 구현 완료 | 일반 포지션 TOP 2와 단일 OF TOP 6 순위표·그라운드. 검수 빌드는 예시 득표만 표시 |
 | 공개 결과 | 구현 완료·기본 비공개 | 닫힌 원장 전체 검증 → 비공개 초안 → generation 단위 공개/숨김, 공개 조회·60초 갱신. OPEN 중 진정한 실시간 집계는 별도 과제 |
-| 관리자 관제 | 구현 완료 | `/admin/allstar-voting`, 비식별 접수 로그·원장 수·후보 hash·공개 집계 대조 |
+| 관리자 관제 | 구현 완료 | `/admin/allstar-voting`, 기본 OFF 공개 토글·비식별 접수 로그·원장 수·후보 hash·공개 집계 대조 |
 | 제출 응답 유실 복구 | 구현 완료 | 요청 전에 `submissionId`와 선택 fingerprint를 세션에 보존하고, 같은 제출만 멱등 재시도·완료 화면으로 복구 |
 | 백업·복원 | 프로젝트 설정 필요 | PITR·예약 백업·종료 후 export·별도 DB 복원 리허설 필요 |
 | 루키 후보 | 검토 명단 공개 | 2026-07-13 추천안 78명(1팀 40명·2팀 38명), 투표 기능은 기준 확정 전까지 비활성 |
 
-운영 빌드의 기본값은 안전한 준비 상태다. `VITE_ALLSTAR_VOTING_API_ENABLED=false`이면 callable을 호출하지 않으며, `VITE_ALLSTAR_SHOW_DRAFT_CANDIDATES=false`이면 초안 후보도 노출하지 않는다.
+운영 기본값은 안전한 비공개 상태다. 전역 플래그 문서가 없거나 잘못됐거나 서버에서 확인되지 않으면 페이지와 callable이 모두 fail-closed된다. `VITE_ALLSTAR_SHOW_DRAFT_CANDIDATES=false`이면 초안 후보도 노출하지 않는다. 상세 절차는 `docs/ALLSTAR_FEATURE_FLAG_RUNBOOK.md`를 따른다.
 
 ## 후보 명단 확정 전 병행 작업
 
@@ -264,18 +266,18 @@ ALLSTAR_VOTER_KEY_SECRET=32-byte-minimum-random-secret-value
 
 ### 1. 웹 환경 변수
 
-`.env.example`을 기준으로 Firebase Web 설정과 아래 두 값을 준비한다.
+`.env.example`을 기준으로 Firebase Web 설정과 아래 값을 준비한다.
 
 ```dotenv
-# callable을 실제로 호출할 때만 true
-VITE_ALLSTAR_VOTING_API_ENABLED=true
 # 익명 초안 후보를 표시하는 로컬·검토 전용 옵션
 VITE_ALLSTAR_SHOW_DRAFT_CANDIDATES=false
+# 실제 캠페인 공유 OG 페이지를 생성하는 배포 전용 옵션
+ALLSTAR_STATIC_PAGES_ENABLED=false
 ```
 
 운영에서는 `VITE_ALLSTAR_SHOW_DRAFT_CANDIDATES=false`를 반드시 유지한다. 검토 빌드에서 이 값을 `true`로 켜면 페이지에 `DRAFT`와 `예시 데이터 · 실제 득표 아님` 표시가 함께 보여야 한다.
 
-OG와 canonical 주소는 빌드 시 `OG_BASE_URL`로 바꿀 수 있다. 값을 생략하면 `https://aubl.club`을 사용한다.
+OG와 canonical 주소는 빌드 시 `OG_BASE_URL`로 바꿀 수 있다. 값을 생략하면 `https://aubl.club`을 사용한다. 런타임 공개 토글은 정적 OG를 바꾸지 않으므로 실제 캠페인 공개 배포에서만 `ALLSTAR_STATIC_PAGES_ENABLED=true`를 사용한다.
 
 ```bash
 OG_BASE_URL=https://aubl.club npm run build
@@ -429,12 +431,12 @@ firebase emulators:start --only functions,firestore
 
 ### B. 공유용 검토 채널 배포
 
-검토 채널은 실제 투표 제출을 끄고 익명 초안만 표시한다. 채널 URL이 한 번 생성된 뒤에는 그 주소를 `OG_BASE_URL`로 사용해 다시 빌드하면 공유 미리보기도 검토 채널을 가리킨다.
+검토 채널은 운영 Firestore가 아니라 별도 staging Firebase 프로젝트를 사용한다. staging의 전역 플래그만 ON으로 두고 이벤트 접수는 비활성화한다. 채널 URL이 한 번 생성된 뒤에는 그 주소를 `OG_BASE_URL`로 사용해 다시 빌드하면 공유 미리보기도 검토 채널을 가리킨다.
 
 ```bash
 OG_BASE_URL=https://<project>--allstar-review-<id>.web.app \
-VITE_ALLSTAR_VOTING_API_ENABLED=false \
 VITE_ALLSTAR_SHOW_DRAFT_CANDIDATES=true \
+ALLSTAR_STATIC_PAGES_ENABLED=true \
 npm run build
 
 firebase hosting:channel:deploy allstar-review --expires 30d --project <project-id>
@@ -465,16 +467,16 @@ firebase hosting:channel:deploy allstar-review --expires 30d --project <project-
 
 ```bash
 firebase deploy --only firestore:rules,firestore:indexes
-firebase deploy --only functions:get_allstar_vote_event,functions:get_allstar_vote_results,functions:get_allstar_ballot_status,functions:submit_allstar_ballot,functions:get_allstar_vote_admin_overview,functions:rebuild_allstar_vote_results,functions:set_allstar_vote_results_published
+firebase deploy --only functions:get_allstar_vote_event,functions:get_allstar_vote_results,functions:get_allstar_ballot_status,functions:submit_allstar_ballot,functions:get_allstar_vote_admin_overview,functions:set_allstar_feature_enabled,functions:rebuild_allstar_vote_results,functions:set_allstar_vote_results_published
 ```
 
 5. 비활성 이벤트 문서와 후보 세트를 생성하고 callable 응답을 확인한다.
-6. 운영 웹을 실제 API 활성·초안 비활성 설정으로 빌드하고 Hosting에 배포한다.
+6. 전역 플래그를 명시적으로 OFF로 저장하고, 운영 웹을 초안 비활성 설정으로 빌드해 Hosting에 배포한다.
 
 ```bash
 OG_BASE_URL=https://aubl.club \
-VITE_ALLSTAR_VOTING_API_ENABLED=true \
 VITE_ALLSTAR_SHOW_DRAFT_CANDIDATES=false \
+ALLSTAR_STATIC_PAGES_ENABLED=false \
 npm run build
 
 firebase deploy --only hosting

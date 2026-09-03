@@ -110,10 +110,10 @@ const submitBallotCallable = httpsCallable<
   SubmitBallotResponse
 >(functions, 'submit_allstar_ballot', { timeout: 20_000 });
 
-const isApiEnabled = import.meta.env.VITE_ALLSTAR_VOTING_API_ENABLED === 'true';
-
 export const allStarVoteService: AllStarVoteService = {
-  isAvailable: isApiEnabled,
+  // Runtime availability is controlled by the server-backed feature flag.
+  // Public callables independently enforce the same flag as the authority.
+  isAvailable: true,
   async getVoteEvent(input) {
     ensureFirebaseAppCheck();
     const response = await getVoteEventCallable({
