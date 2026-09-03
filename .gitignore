@@ -19,6 +19,7 @@ dist-ssr/
 # Environment / Secrets
 .env
 serviceAccountKey.json
+*.enc
 
 # Editor / OS
 .vscode/*

@@ -12,6 +12,7 @@ import AdminGameEditPage from '../pages/admin/AdminGameEditPage';
 import AdminPowerRankingPage from '../pages/admin/AdminPowerRankingPage';
 import AdminModerationPage from '../pages/admin/AdminModerationPage';
 import AdminAllStarVotingPage from '../pages/admin/AdminAllStarVotingPage';
+import AdminUniquePlaySyncPage from '../pages/admin/AdminUniquePlaySyncPage';
 import { RequireAdmin } from '@shared/auth/RequireAdmin';
 import { RequireScorerOrAdmin } from '@shared/auth/RequireScorerOrAdmin';
 import { useAdmin } from '@shared/auth/useAdmin';
@@ -89,6 +90,14 @@ export const adminRoutes: RouteObject[] = [
         element: (
           <RequireAdmin>
             <AdminPowerRankingPage />
+          </RequireAdmin>
+        ),
+      },
+      {
+        path: 'unique-play-sync',
+        element: (
+          <RequireAdmin>
+            <AdminUniquePlaySyncPage />
           </RequireAdmin>
         ),
       },

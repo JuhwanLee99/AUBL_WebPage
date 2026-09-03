@@ -1,4 +1,32 @@
 import { getAuth } from 'firebase/auth';
+import type {
+  ActivateUniquePlayRevisionRequest,
+  FinalizeSeasonQualificationRequest,
+  FinalizeSeasonQualificationResult,
+  FinalizedSeasonQualificationTeam,
+  PublishUniquePlaySyncRunRequest,
+  ResolveUniquePlaySyncItemRequest,
+  StartUniquePlaySyncRunRequest,
+  UniquePlayMappingCandidate,
+  UniquePlayRevisionActivationResult,
+  UniquePlayRevisionSummary,
+  UniquePlaySessionStatus,
+  UniquePlaySyncDiffAction,
+  UniquePlaySyncDiffItem,
+  UniquePlaySyncDiffPage,
+  UniquePlaySyncDiffQuery,
+  UniquePlaySyncEntityType,
+  UniquePlaySyncFieldChange,
+  UniquePlaySyncPublishResult,
+  UniquePlaySyncResolution,
+  UniquePlaySyncRun,
+  UniquePlaySyncRunStatus,
+  UniquePlaySyncSession,
+  UniquePlaySyncSummary,
+  UniquePlaySyncValidation,
+  UniquePlayValidationIssue,
+  UniquePlayValidationStatus,
+} from '../contracts/uniquePlaySync';
 
 const ENV_BASE_URL = (import.meta.env.VITE_BACKEND_API_URL || '').trim();
 const IS_DEFAULT_API_ORIGIN = /^https?:\/\/api\.aubl\.club\/?$/.test(ENV_BASE_URL);
@@ -340,6 +368,36 @@ export interface TeamRecordStanding {
   group: string | null;
   seasonType: string | null;
   scope: string | null;
+  rank?: number | null;
+  qualificationState?: string | null;
+  syncRevision?: string | null;
+}
+
+export interface SeasonOverviewFreshness {
+  provider: string | null;
+  syncMode: string | null;
+  publishedRevision: string | null;
+  publishedAt: string | null;
+  latestSourceUpdatedAt: string | null;
+  checkedAt: string | null;
+  ageSeconds: number | null;
+  status: string | null;
+}
+
+export interface SeasonOverviewGroup {
+  groupCode: string;
+  teamCount: number;
+  completedGameCount: number;
+  standings: TeamRecordStanding[];
+}
+
+export interface SeasonPublicOverview {
+  seasonId: number;
+  seasonYear: number | null;
+  sourceFreshness: SeasonOverviewFreshness;
+  groups: SeasonOverviewGroup[];
+  batterLeaders: BatterRanking[];
+  pitcherLeaders: PitcherRanking[];
 }
 
 export interface RecordsOverview {
@@ -1057,6 +1115,89 @@ export async function getTeamRecordStandings(
     .sort((a, b) => b.winPct - a.winPct || b.wins - a.wins || a.losses - b.losses);
 }
 
+export async function getSeasonPublicOverview(seasonId: number): Promise<SeasonPublicOverview> {
+  if (!Number.isInteger(seasonId) || seasonId <= 0) {
+    throw new Error('seasonId is required and must be a positive integer.');
+  }
+  const raw = await fetchApi<unknown>(`/api/seasons/${seasonId}/overview`);
+  if (!raw || typeof raw !== 'object') throw new Error('시즌 통합 현황 응답 형식이 올바르지 않습니다.');
+  const row = raw as Record<string, unknown>;
+  const groups = (Array.isArray(row.groups) ? row.groups : [])
+    .map((entry): SeasonOverviewGroup | null => {
+      if (!entry || typeof entry !== 'object') return null;
+      const groupRow = entry as Record<string, unknown>;
+      const groupCode = toStringValue(groupRow.groupCode ?? groupRow.group)?.toUpperCase() ?? '';
+      if (!/^[A-H]$/.test(groupCode)) return null;
+      const standings = (Array.isArray(groupRow.standings) ? groupRow.standings : [])
+        .map((standingEntry): TeamRecordStanding | null => {
+          if (!standingEntry || typeof standingEntry !== 'object') return null;
+          const standing = standingEntry as Record<string, unknown>;
+          const teamId = toFiniteNumber(standing.teamId ?? standing.id);
+          const teamName = toStringValue(standing.teamName ?? standing.name);
+          if (teamId == null || !teamName) return null;
+          return {
+            teamId,
+            teamName,
+            wins: toFiniteNumber(standing.wins) ?? 0,
+            losses: toFiniteNumber(standing.losses) ?? 0,
+            ties: toFiniteNumber(standing.ties ?? standing.draws) ?? 0,
+            winPct: toFiniteNumber(standing.winPct ?? standing.winPercentage) ?? 0,
+            partCode: String(groupCode.charCodeAt(0) - 64),
+            group: groupCode,
+            seasonType: null,
+            scope: 'LEAGUE',
+            rank: toFiniteNumber(standing.rank),
+            qualificationState: toStringValue(standing.qualificationState),
+            syncRevision: toStringValue(standing.syncRevision),
+          } satisfies TeamRecordStanding;
+        })
+        .filter((standing): standing is TeamRecordStanding => standing !== null);
+      return {
+        groupCode,
+        teamCount: toFiniteNumber(groupRow.teamCount) ?? standings.length,
+        completedGameCount: toFiniteNumber(groupRow.completedGameCount) ?? 0,
+        standings,
+      } satisfies SeasonOverviewGroup;
+    })
+    .filter((group): group is SeasonOverviewGroup => group !== null);
+
+  const sourceRow = row.sourceFreshness && typeof row.sourceFreshness === 'object'
+    ? row.sourceFreshness as Record<string, unknown>
+    : {};
+  const sourceFreshness: SeasonOverviewFreshness = {
+    provider: toStringValue(sourceRow.provider),
+    syncMode: toStringValue(sourceRow.syncMode),
+    publishedRevision: toStringValue(sourceRow.publishedRevision),
+    publishedAt: toStringValue(sourceRow.publishedAt),
+    latestSourceUpdatedAt: toStringValue(sourceRow.latestSourceUpdatedAt),
+    checkedAt: toStringValue(sourceRow.checkedAt),
+    ageSeconds: toFiniteNumber(sourceRow.ageSeconds),
+    status: toStringValue(sourceRow.status),
+  };
+  const batterRows = Array.isArray(row.batterLeaders) ? row.batterLeaders : [];
+  const pitcherRows = Array.isArray(row.pitcherLeaders) ? row.pitcherLeaders : [];
+  return {
+    seasonId: toFiniteNumber(row.seasonId) ?? seasonId,
+    seasonYear: toFiniteNumber(row.seasonYear),
+    sourceFreshness,
+    groups,
+    batterLeaders: batterRows
+      .map((entry, index) => {
+        if (!entry || typeof entry !== 'object') return null;
+        const leader = entry as Record<string, unknown>;
+        return normalizeBatterRankingRow({ ...leader, group: leader.groupCode, scope: 'LEAGUE' }, seasonId, index + 1);
+      })
+      .filter((entry): entry is BatterRanking => entry !== null),
+    pitcherLeaders: pitcherRows
+      .map((entry, index) => {
+        if (!entry || typeof entry !== 'object') return null;
+        const leader = entry as Record<string, unknown>;
+        return normalizePitcherRankingRow({ ...leader, group: leader.groupCode, scope: 'LEAGUE' }, seasonId, index + 1);
+      })
+      .filter((entry): entry is PitcherRanking => entry !== null),
+  };
+}
+
 export async function getPlayoffSummaries(
   seasonId: number,
   filters?: RecordFilterParams,
@@ -1528,5 +1669,607 @@ export async function triggerBulkImport(): Promise<FirestoreImportResult | null>
     gamesProcessed: toFiniteNumber(row.gamesProcessed) ?? 0,
     batterLogsInserted: toFiniteNumber(row.batterLogsInserted) ?? 0,
     pitcherLogsInserted: toFiniteNumber(row.pitcherLogsInserted) ?? 0,
+  };
+}
+
+// ── UniquePlay manual sync (admin) ──
+
+type SyncJsonRecord = Record<string, unknown>;
+
+const UNIQUE_PLAY_SYNC_BASE = '/api/admin/sync/unique-play';
+
+export class UniquePlaySyncApiError extends Error {
+  readonly status: number;
+  readonly code: string | null;
+  readonly details: unknown;
+  readonly reauthRequired: boolean;
+
+  constructor(args: {
+    message: string;
+    status: number;
+    code: string | null;
+    details: unknown;
+    reauthRequired: boolean;
+  }) {
+    super(args.message);
+    this.name = 'UniquePlaySyncApiError';
+    this.status = args.status;
+    this.code = args.code;
+    this.details = args.details;
+    this.reauthRequired = args.reauthRequired;
+  }
+}
+
+function asSyncRecord(value: unknown): SyncJsonRecord | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as SyncJsonRecord
+    : null;
+}
+
+function readSyncString(row: SyncJsonRecord, ...keys: string[]): string | null {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  }
+  return null;
+}
+
+function readSyncNumber(row: SyncJsonRecord, ...keys: string[]): number | null {
+  for (const key of keys) {
+    const value = toFiniteNumber(row[key]);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function readSyncBoolean(row: SyncJsonRecord, ...keys: string[]): boolean | null {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === 'boolean') return value;
+    if (value === 'true' || value === 1) return true;
+    if (value === 'false' || value === 0) return false;
+  }
+  return null;
+}
+
+function unwrapSyncRecord(raw: unknown, ...keys: string[]): SyncJsonRecord {
+  const root = asSyncRecord(raw) ?? {};
+  for (const key of keys) {
+    const direct = asSyncRecord(root[key]);
+    if (direct) return direct;
+  }
+  const data = asSyncRecord(root.data);
+  if (data) {
+    for (const key of keys) {
+      const nested = asSyncRecord(data[key]);
+      if (nested) return nested;
+    }
+    return data;
+  }
+  return root;
+}
+
+function normalizeSessionStatus(value: unknown, authenticated?: boolean | null): UniquePlaySessionStatus {
+  const raw = typeof value === 'string' ? value.trim().toUpperCase().replace(/[\s-]+/g, '_') : '';
+  if (['READY', 'AUTHENTICATED', 'VALID', 'ACTIVE', 'CONNECTED'].includes(raw)) return 'READY';
+  if (['CONNECTING', 'AUTHENTICATING', 'REFRESHING', 'PENDING'].includes(raw)) return 'CONNECTING';
+  if (['REAUTH_REQUIRED', 'REQUIRES_REAUTH', 'EXPIRED', 'UNAUTHENTICATED', 'INVALID'].includes(raw)) {
+    return 'REAUTH_REQUIRED';
+  }
+  if (['UNAVAILABLE', 'DISABLED', 'ERROR', 'FAILED'].includes(raw)) return 'UNAVAILABLE';
+  if (authenticated === true) return 'READY';
+  if (authenticated === false) return 'REAUTH_REQUIRED';
+  return 'UNKNOWN';
+}
+
+function normalizeRunStatus(value: unknown): UniquePlaySyncRunStatus {
+  const raw = typeof value === 'string' ? value.trim().toUpperCase().replace(/[\s-]+/g, '_') : '';
+  if (['QUEUED', 'PENDING', 'CREATED'].includes(raw)) return 'QUEUED';
+  if (['RUNNING', 'STARTED', 'FETCHING', 'NORMALIZING', 'DIFFING', 'PROCESSING', 'IN_PROGRESS'].includes(raw)) {
+    return 'RUNNING';
+  }
+  if (['REVIEW_REQUIRED', 'AWAITING_REVIEW', 'DIFF_READY', 'PREVIEW_READY', 'COMPLETED', 'SUCCEEDED'].includes(raw)) {
+    return 'REVIEW_REQUIRED';
+  }
+  if (raw === 'VALIDATING') return 'VALIDATING';
+  if (['VALIDATION_FAILED', 'INVALID'].includes(raw)) return 'VALIDATION_FAILED';
+  if (['READY_TO_PUBLISH', 'VALIDATED', 'VALIDATION_PASSED'].includes(raw)) return 'READY_TO_PUBLISH';
+  if (raw === 'PUBLISHING') return 'PUBLISHING';
+  if (['PUBLISHED', 'REVISION_CREATED'].includes(raw)) return 'PUBLISHED';
+  if (raw === 'ACTIVATING') return 'ACTIVATING';
+  if (['ACTIVE', 'ACTIVATED'].includes(raw)) return 'ACTIVE';
+  if (['REPAIR_REQUIRED', 'CROSS_STORE_REPAIR_REQUIRED'].includes(raw)) return 'REPAIR_REQUIRED';
+  if (['FAILED', 'ERROR'].includes(raw)) return 'FAILED';
+  if (['CANCELED', 'CANCELLED'].includes(raw)) return 'CANCELED';
+  if (['REAUTH_REQUIRED', 'REQUIRES_REAUTH', 'SESSION_EXPIRED'].includes(raw)) return 'REAUTH_REQUIRED';
+  return 'UNKNOWN';
+}
+
+function normalizeEntityType(value: unknown): UniquePlaySyncEntityType {
+  const raw = typeof value === 'string' ? value.trim().toUpperCase().replace(/[\s-]+/g, '_') : '';
+  const singular = raw.endsWith('S') ? raw.slice(0, -1) : raw;
+  if (singular === 'SEASON') return 'SEASON';
+  if (['GROUP', 'SUB_LEAGUE', 'SUBLEAGUE'].includes(singular)) return 'GROUP';
+  if (singular === 'TEAM') return 'TEAM';
+  if (['PLAYER', 'TEAM_PLAYER', 'ROSTER'].includes(singular)) return 'PLAYER';
+  if (['GAME', 'MATCH', 'SCHEDULE'].includes(singular)) return 'GAME';
+  if (['GAME_RECORD', 'BOX_SCORE', 'GAME_LOG'].includes(singular)) return 'GAME_RECORD';
+  if (['BATTER_STAT', 'BATTER_RECORD', 'HITTER_STAT'].includes(singular)) return 'BATTER_STAT';
+  if (['PITCHER_STAT', 'PITCHER_RECORD'].includes(singular)) return 'PITCHER_STAT';
+  return 'UNKNOWN';
+}
+
+function normalizeDiffAction(value: unknown): UniquePlaySyncDiffAction {
+  const raw = typeof value === 'string' ? value.trim().toUpperCase().replace(/[\s-]+/g, '_') : '';
+  if (['CREATE', 'CREATED', 'ADD', 'ADDED', 'INSERT'].includes(raw)) return 'CREATE';
+  if (['UPDATE', 'UPDATED', 'MODIFY', 'MODIFIED', 'CHANGE', 'CHANGED'].includes(raw)) return 'UPDATE';
+  if (['DELETE', 'DELETED', 'REMOVE', 'REMOVED'].includes(raw)) return 'DELETE';
+  if (['UNCHANGED', 'NO_CHANGE', 'SAME'].includes(raw)) return 'UNCHANGED';
+  if (['CONFLICT', 'MAPPING_REQUIRED', 'UNRESOLVED'].includes(raw)) return 'CONFLICT';
+  return 'UNKNOWN';
+}
+
+function normalizeResolution(value: unknown): UniquePlaySyncResolution | null {
+  const raw = typeof value === 'string' ? value.trim().toUpperCase() : '';
+  if (raw === 'USE_SOURCE' || raw === 'KEEP_AUBL' || raw === 'MAP_ENTITY') return raw;
+  return null;
+}
+
+function normalizeValidationStatus(value: unknown): UniquePlayValidationStatus {
+  const raw = typeof value === 'string' ? value.trim().toUpperCase().replace(/[\s-]+/g, '_') : '';
+  if (['NOT_RUN', 'PENDING', 'NONE'].includes(raw)) return 'NOT_RUN';
+  if (['RUNNING', 'VALIDATING', 'IN_PROGRESS'].includes(raw)) return 'RUNNING';
+  if (['PASSED', 'PASS', 'VALID', 'SUCCESS', 'SUCCEEDED'].includes(raw)) return 'PASSED';
+  if (['FAILED', 'FAIL', 'INVALID', 'ERROR'].includes(raw)) return 'FAILED';
+  return 'UNKNOWN';
+}
+
+function emptySyncSummary(): UniquePlaySyncSummary {
+  return {
+    total: 0,
+    created: 0,
+    updated: 0,
+    deleted: 0,
+    unchanged: 0,
+    conflicts: 0,
+    unresolved: 0,
+    errors: 0,
+    warnings: 0,
+  };
+}
+
+function normalizeSyncSummary(value: unknown): UniquePlaySyncSummary {
+  const row = asSyncRecord(value) ?? {};
+  const summary = {
+    total: readSyncNumber(row, 'total', 'TOTAL', 'totalElements', 'totalCount') ?? 0,
+    created: readSyncNumber(row, 'created', 'creates', 'CREATE', 'CREATED', 'createCount', 'createdCount') ?? 0,
+    updated: readSyncNumber(row, 'updated', 'updates', 'UPDATE', 'UPDATED', 'updateCount', 'updatedCount') ?? 0,
+    deleted: readSyncNumber(row, 'deleted', 'deletes', 'DELETE', 'DELETED', 'deleteCount', 'deletedCount') ?? 0,
+    unchanged: readSyncNumber(row, 'unchanged', 'UNCHANGED', 'unchangedCount', 'noChangeCount') ?? 0,
+    conflicts: readSyncNumber(row, 'conflicts', 'CONFLICT', 'conflictCount') ?? 0,
+    unresolved: readSyncNumber(row, 'unresolved', 'UNRESOLVED', 'unresolvedCount', 'unresolvedConflicts') ?? 0,
+    errors: readSyncNumber(row, 'errors', 'ERROR', 'errorCount') ?? 0,
+    warnings: readSyncNumber(row, 'warnings', 'WARNING', 'warningCount') ?? 0,
+  };
+  if (summary.total === 0) {
+    summary.total = summary.created + summary.updated + summary.deleted + summary.unchanged + summary.conflicts;
+  }
+  return summary;
+}
+
+function normalizeValidationIssue(value: unknown, index: number, fallbackSeverity?: 'ERROR' | 'WARNING'): UniquePlayValidationIssue | null {
+  if (typeof value === 'string') {
+    return {
+      id: `${fallbackSeverity ?? 'INFO'}-${index}`,
+      severity: fallbackSeverity ?? 'INFO',
+      code: null,
+      message: value,
+      entityType: 'UNKNOWN',
+      itemId: null,
+      field: null,
+    };
+  }
+  const row = asSyncRecord(value);
+  if (!row) return null;
+  const severityRaw = readSyncString(row, 'severity', 'level')?.toUpperCase();
+  const severity = severityRaw === 'ERROR' || severityRaw === 'WARNING' || severityRaw === 'INFO'
+    ? severityRaw
+    : fallbackSeverity ?? 'INFO';
+  return {
+    id: readSyncString(row, 'id', 'issueId') ?? `${severity}-${index}`,
+    severity,
+    code: readSyncString(row, 'code', 'errorCode'),
+    message: readSyncString(row, 'message', 'detail', 'reason') ?? '세부 설명이 없는 검증 항목입니다.',
+    entityType: normalizeEntityType(row.entityType ?? row.entity),
+    itemId: readSyncString(row, 'itemId', 'diffItemId'),
+    field: readSyncString(row, 'field', 'fieldName'),
+  };
+}
+
+function normalizeSyncValidation(value: unknown, parent?: SyncJsonRecord): UniquePlaySyncValidation {
+  const row = asSyncRecord(value) ?? {};
+  const directIssues = Array.isArray(row.issues) ? row.issues : Array.isArray(row.items) ? row.items : [];
+  const errors = Array.isArray(row.errors) ? row.errors : [];
+  const warnings = Array.isArray(row.warnings) ? row.warnings : [];
+  const issues = [
+    ...directIssues.map((item, index) => normalizeValidationIssue(item, index)),
+    ...errors.map((item, index) => normalizeValidationIssue(item, directIssues.length + index, 'ERROR')),
+    ...warnings.map((item, index) => normalizeValidationIssue(item, directIssues.length + errors.length + index, 'WARNING')),
+  ].filter((item): item is UniquePlayValidationIssue => item !== null);
+  const rawStatus = row.status ?? row.validationStatus ?? parent?.validationStatus;
+  return {
+    status: normalizeValidationStatus(rawStatus),
+    validatedAt: readSyncString(row, 'validatedAt', 'completedAt'),
+    issues,
+    errorCount: readSyncNumber(row, 'errorCount', 'errors') ?? issues.filter((item) => item.severity === 'ERROR').length,
+    warningCount: readSyncNumber(row, 'warningCount', 'warnings') ?? issues.filter((item) => item.severity === 'WARNING').length,
+  };
+}
+
+function normalizeRunProgress(value: unknown, parent: SyncJsonRecord): UniquePlaySyncRun['progress'] {
+  const row = asSyncRecord(value) ?? {};
+  const current = readSyncNumber(row, 'current', 'processed', 'completed');
+  const total = readSyncNumber(row, 'total', 'totalItems');
+  let percent = readSyncNumber(row, 'percent', 'percentage', 'progressPercent');
+  if (percent !== null && percent >= 0 && percent <= 1) percent *= 100;
+  if (percent === null && current !== null && total !== null && total > 0) percent = (current / total) * 100;
+  return {
+    phase: readSyncString(row, 'phase', 'step') ?? readSyncString(parent, 'phase'),
+    current,
+    total,
+    percent: percent === null ? null : Math.max(0, Math.min(100, percent)),
+    message: readSyncString(row, 'message', 'detail'),
+  };
+}
+
+function normalizeUniquePlaySyncRun(raw: unknown): UniquePlaySyncRun {
+  const row = unwrapSyncRecord(raw, 'run', 'syncRun', 'result');
+  const runId = readSyncString(row, 'runId', 'id', 'jobId');
+  if (!runId) throw new Error('동기화 실행 응답에 runId가 없습니다.');
+  const rawStatus = readSyncString(row, 'status', 'state') ?? '';
+  const sessionRow = asSyncRecord(row.session);
+  const sessionRawStatus = row.sessionStatus ?? sessionRow?.status;
+  const summaryValue = row.summary ?? row.counts ?? row.diffSummary;
+  const validationValue = row.validation ?? row.validationResult;
+  const revisions: UniquePlayRevisionSummary[] = (Array.isArray(row.revisions) ? row.revisions : [])
+    .map((value) => {
+      const revision = asSyncRecord(value);
+      if (!revision) return null;
+      const revisionId = readSyncString(revision, 'revisionId', 'id');
+      if (!revisionId) return null;
+      return {
+        revisionId,
+        checksum: readSyncString(revision, 'checksum'),
+        active: readSyncBoolean(revision, 'active', 'isActive') ?? false,
+        createdBy: readSyncString(revision, 'createdBy', 'actor'),
+        createdAt: readSyncString(revision, 'createdAt', 'publishedAt'),
+      } satisfies UniquePlayRevisionSummary;
+    })
+    .filter((value): value is UniquePlayRevisionSummary => value !== null);
+  return {
+    runId,
+    status: normalizeRunStatus(rawStatus),
+    rawStatus,
+    seasonYear: readSyncNumber(row, 'seasonYear', 'year'),
+    checksum: readSyncString(row, 'checksum', 'snapshotChecksum', 'diffChecksum'),
+    expectedPublishedRevision: readSyncString(row, 'expectedPublishedRevision', 'basePublishedRevision', 'expectedRevision'),
+    publishedRevision: readSyncString(row, 'publishedRevision', 'revision'),
+    revisionId: readSyncString(row, 'revisionId', 'publishedRevisionId'),
+    sessionStatus: sessionRawStatus == null ? null : normalizeSessionStatus(sessionRawStatus),
+    progress: normalizeRunProgress(row.progress, row),
+    summary: summaryValue == null ? emptySyncSummary() : normalizeSyncSummary(summaryValue),
+    validation: normalizeSyncValidation(validationValue, row),
+    message: readSyncString(row, 'message', 'detail', 'errorMessage'),
+    startedAt: readSyncString(row, 'startedAt', 'createdAt'),
+    updatedAt: readSyncString(row, 'updatedAt', 'modifiedAt'),
+    completedAt: readSyncString(row, 'completedAt', 'finishedAt'),
+    revisions,
+  };
+}
+
+function normalizeFieldChange(value: unknown, fallbackField = ''): UniquePlaySyncFieldChange | null {
+  const row = asSyncRecord(value);
+  if (!row) return null;
+  const field = readSyncString(row, 'field', 'fieldName', 'key') ?? fallbackField;
+  if (!field) return null;
+  return {
+    field,
+    label: readSyncString(row, 'label', 'fieldLabel'),
+    sourceValue: row.sourceValue ?? row.source ?? row.incomingValue ?? null,
+    aublValue: row.aublValue ?? row.localValue ?? row.currentValue ?? row.target ?? null,
+  };
+}
+
+function normalizeFieldChanges(value: unknown): UniquePlaySyncFieldChange[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeFieldChange(item)).filter((item): item is UniquePlaySyncFieldChange => item !== null);
+  }
+  const row = asSyncRecord(value);
+  if (!row) return [];
+  return Object.entries(row)
+    .map(([field, change]) => normalizeFieldChange(change, field))
+    .filter((item): item is UniquePlaySyncFieldChange => item !== null);
+}
+
+function normalizeMappingCandidate(value: unknown): UniquePlayMappingCandidate | null {
+  const row = asSyncRecord(value);
+  if (!row) return null;
+  const localEntityId = readSyncString(row, 'localEntityId', 'entityId', 'id');
+  if (!localEntityId) return null;
+  return {
+    localEntityId,
+    label: readSyncString(row, 'label', 'displayName', 'name') ?? localEntityId,
+    description: readSyncString(row, 'description', 'teamName', 'detail'),
+    confidence: readSyncNumber(row, 'confidence', 'score'),
+  };
+}
+
+function normalizeDiffItem(value: unknown): UniquePlaySyncDiffItem | null {
+  const row = asSyncRecord(value);
+  if (!row) return null;
+  const rawEntityType = readSyncString(row, 'entityType', 'entity', 'type') ?? '';
+  const rawAction = readSyncString(row, 'action', 'changeType', 'operation') ?? '';
+  const resolutionRow = asSyncRecord(row.resolution);
+  const resolution = normalizeResolution(resolutionRow?.type ?? row.resolution);
+  const candidatesValue = row.mappingCandidates ?? row.candidates ?? row.localCandidates;
+  const mappingCandidates = Array.isArray(candidatesValue)
+    ? candidatesValue.map(normalizeMappingCandidate).filter((item): item is UniquePlayMappingCandidate => item !== null)
+    : [];
+  const explicitResolved = readSyncBoolean(row, 'resolved', 'isResolved');
+  return {
+    itemId: readSyncString(row, 'itemId', 'diffItemId', 'id') ?? '',
+    entityType: normalizeEntityType(rawEntityType),
+    rawEntityType,
+    action: normalizeDiffAction(rawAction),
+    rawAction,
+    displayName: readSyncString(row, 'displayName', 'label', 'name', 'title') ?? '이름 없음',
+    externalId: readSyncString(row, 'externalId', 'sourceId', 'uniquePlayId'),
+    localEntityId: readSyncString(row, 'localEntityId', 'aublEntityId', 'targetId'),
+    groupCode: readSyncString(row, 'groupCode', 'group', 'partCode'),
+    changes: normalizeFieldChanges(row.changes ?? row.fieldChanges ?? row.diff),
+    conflictReason: readSyncString(row, 'conflictReason', 'reason', 'message'),
+    mappingCandidates,
+    resolution,
+    resolutionNote: readSyncString(resolutionRow ?? row, 'note', 'resolutionNote'),
+    resolved: explicitResolved ?? resolution !== null,
+  };
+}
+
+async function fetchUniquePlaySyncApi(path: string, init?: RequestInit): Promise<unknown> {
+  const authHeaders = await getAuthHeaders();
+  const headers = new Headers(init?.headers ?? {});
+  Object.entries(authHeaders).forEach(([key, value]) => headers.set(key, value));
+  if (init?.body !== undefined && init.body !== null && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  const response = await fetch(`${BASE_URL}${path}`, { ...init, headers });
+  const rawText = response.status === 204 ? '' : await response.text();
+  let payload: unknown = null;
+  if (rawText.trim()) {
+    try {
+      payload = JSON.parse(rawText) as unknown;
+    } catch {
+      payload = rawText;
+    }
+  }
+  if (!response.ok) {
+    const row = asSyncRecord(payload);
+    const errorRow = asSyncRecord(row?.error) ?? row;
+    const code = errorRow ? readSyncString(errorRow, 'code', 'errorCode', 'status') : null;
+    const detail = errorRow ? readSyncString(errorRow, 'message', 'detail', 'error') : typeof payload === 'string' ? payload : null;
+    const reauthRequired = code?.toUpperCase().includes('REAUTH') === true
+      || code?.toUpperCase().includes('SESSION_EXPIRED') === true
+      || detail?.toUpperCase().includes('REAUTH_REQUIRED') === true;
+    throw new UniquePlaySyncApiError({
+      message: detail ?? `UniquePlay 동기화 API 요청 실패 (${response.status})`,
+      status: response.status,
+      code,
+      details: payload,
+      reauthRequired,
+    });
+  }
+  return payload;
+}
+
+export async function getUniquePlaySyncSession(): Promise<UniquePlaySyncSession> {
+  const raw = await fetchUniquePlaySyncApi(`${UNIQUE_PLAY_SYNC_BASE}/session`);
+  const row = unwrapSyncRecord(raw, 'session', 'result');
+  const authenticated = readSyncBoolean(row, 'authenticated', 'isAuthenticated', 'valid');
+  const rawStatus = readSyncString(row, 'status', 'state', 'sessionStatus') ?? '';
+  const status = normalizeSessionStatus(rawStatus, authenticated);
+  return {
+    status,
+    rawStatus,
+    authenticated: authenticated ?? status === 'READY',
+    expiresAt: readSyncString(row, 'expiresAt', 'expiredAt', 'sessionExpiresAt'),
+    checkedAt: readSyncString(row, 'checkedAt', 'updatedAt'),
+    message: readSyncString(row, 'message', 'detail'),
+    reauthUrl: readSyncString(row, 'reauthUrl', 'authenticationUrl', 'loginUrl'),
+    activeRunId: readSyncString(row, 'activeRunId', 'currentRunId', 'runId'),
+  };
+}
+
+export async function startUniquePlaySyncRun(
+  request: StartUniquePlaySyncRunRequest = {},
+): Promise<UniquePlaySyncRun> {
+  const raw = await fetchUniquePlaySyncApi(`${UNIQUE_PLAY_SYNC_BASE}/runs`, {
+    method: 'POST',
+    body: request.seasonYear == null ? undefined : JSON.stringify({ seasonYear: request.seasonYear }),
+  });
+  return normalizeUniquePlaySyncRun(raw);
+}
+
+export async function getUniquePlaySyncRun(runId: string): Promise<UniquePlaySyncRun> {
+  const raw = await fetchUniquePlaySyncApi(`${UNIQUE_PLAY_SYNC_BASE}/runs/${encodeURIComponent(runId)}`);
+  return normalizeUniquePlaySyncRun(raw);
+}
+
+export async function getUniquePlaySyncDiff(
+  runId: string,
+  query: UniquePlaySyncDiffQuery = {},
+): Promise<UniquePlaySyncDiffPage> {
+  const params = new URLSearchParams();
+  if (query.entity) params.set('entity', query.entity);
+  if (query.action) params.set('action', query.action);
+  params.set('page', String(Math.max(0, query.page ?? 0)));
+  params.set('size', String(Math.max(1, query.size ?? 25)));
+  const raw = await fetchUniquePlaySyncApi(
+    `${UNIQUE_PLAY_SYNC_BASE}/runs/${encodeURIComponent(runId)}/diff?${params.toString()}`,
+  );
+  const row = unwrapSyncRecord(raw, 'diff', 'page', 'result');
+  const itemsValue = Array.isArray(row.items) ? row.items : Array.isArray(row.content) ? row.content : [];
+  const items = itemsValue.map(normalizeDiffItem).filter((item): item is UniquePlaySyncDiffItem => item !== null);
+  const page = readSyncNumber(row, 'page', 'number', 'pageNumber') ?? query.page ?? 0;
+  const size = readSyncNumber(row, 'size', 'pageSize') ?? query.size ?? 25;
+  const totalElements = readSyncNumber(row, 'totalElements', 'total', 'totalCount') ?? items.length;
+  const totalPages = readSyncNumber(row, 'totalPages', 'pageCount') ?? (size > 0 ? Math.ceil(totalElements / size) : 0);
+  const summaryValue = row.summary ?? row.counts ?? row.actionCounts;
+  return {
+    items,
+    page,
+    size,
+    totalElements,
+    totalPages,
+    hasNext: readSyncBoolean(row, 'hasNext') ?? page + 1 < totalPages,
+    summary: summaryValue == null ? emptySyncSummary() : normalizeSyncSummary(summaryValue),
+  };
+}
+
+export async function resolveUniquePlaySyncItem(
+  runId: string,
+  itemId: string,
+  request: ResolveUniquePlaySyncItemRequest,
+): Promise<UniquePlaySyncRun | null> {
+  const body: ResolveUniquePlaySyncItemRequest = { resolution: request.resolution };
+  if (request.localEntityId?.trim()) body.localEntityId = request.localEntityId.trim();
+  if (request.note?.trim()) body.note = request.note.trim();
+  const raw = await fetchUniquePlaySyncApi(
+    `${UNIQUE_PLAY_SYNC_BASE}/runs/${encodeURIComponent(runId)}/resolutions/${encodeURIComponent(itemId)}`,
+    { method: 'PATCH', body: JSON.stringify(body) },
+  );
+  if (raw == null) return null;
+  const row = asSyncRecord(raw);
+  const runCandidate = row?.run ?? raw;
+  try {
+    return normalizeUniquePlaySyncRun(runCandidate);
+  } catch {
+    return null;
+  }
+}
+
+export async function validateUniquePlaySyncRun(runId: string): Promise<UniquePlaySyncRun> {
+  const raw = await fetchUniquePlaySyncApi(
+    `${UNIQUE_PLAY_SYNC_BASE}/runs/${encodeURIComponent(runId)}/validate`,
+    { method: 'POST' },
+  );
+  try {
+    return normalizeUniquePlaySyncRun(raw);
+  } catch {
+    return getUniquePlaySyncRun(runId);
+  }
+}
+
+export async function publishUniquePlaySyncRun(
+  runId: string,
+  request: PublishUniquePlaySyncRunRequest,
+): Promise<UniquePlaySyncPublishResult> {
+  const raw = await fetchUniquePlaySyncApi(
+    `${UNIQUE_PLAY_SYNC_BASE}/runs/${encodeURIComponent(runId)}/publish`,
+    { method: 'POST', body: JSON.stringify(request) },
+  );
+  const row = unwrapSyncRecord(raw, 'publication', 'publishResult', 'result');
+  const revisionRow = asSyncRecord(row.revision) ?? row;
+  let run: UniquePlaySyncRun | null = null;
+  if (row.run != null) {
+    try { run = normalizeUniquePlaySyncRun(row.run); } catch { run = null; }
+  }
+  let revisionId = readSyncString(revisionRow, 'revisionId', 'id', 'publishedRevisionId') ?? run?.revisionId ?? '';
+  if (!revisionId) {
+    const latestRun = await getUniquePlaySyncRun(runId);
+    run = latestRun;
+    revisionId = latestRun.revisionId ?? '';
+  }
+  if (!revisionId) throw new Error('게시 응답에 revisionId가 없습니다. 활성화하지 않고 중단했습니다.');
+  return {
+    run,
+    revisionId,
+    checksum: readSyncString(revisionRow, 'checksum', 'snapshotChecksum') ?? run?.checksum ?? null,
+    expectedPublishedRevision: readSyncString(revisionRow, 'expectedPublishedRevision', 'expectedRevision')
+      ?? run?.expectedPublishedRevision ?? null,
+    publishedRevision: readSyncString(revisionRow, 'publishedRevision', 'revision', 'version') ?? run?.publishedRevision ?? null,
+    status: readSyncString(revisionRow, 'status', 'state') ?? 'PUBLISHED',
+    publishedAt: readSyncString(revisionRow, 'publishedAt', 'createdAt'),
+  };
+}
+
+export async function activateUniquePlayRevision(
+  revisionId: string,
+  request: ActivateUniquePlayRevisionRequest,
+): Promise<UniquePlayRevisionActivationResult> {
+  const raw = await fetchUniquePlaySyncApi(
+    `${UNIQUE_PLAY_SYNC_BASE}/revisions/${encodeURIComponent(revisionId)}/activate`,
+    { method: 'POST', body: JSON.stringify(request) },
+  );
+  const row = unwrapSyncRecord(raw, 'activation', 'revision', 'result');
+  let run: UniquePlaySyncRun | null = null;
+  if (row.run != null) {
+    try { run = normalizeUniquePlaySyncRun(row.run); } catch { run = null; }
+  }
+  return {
+    revisionId: readSyncString(row, 'revisionId', 'id') ?? revisionId,
+    status: readSyncString(row, 'status', 'state') ?? 'UNKNOWN',
+    expectedPublishedRevision: readSyncString(row, 'expectedPublishedRevision', 'expectedRevision'),
+    publishedRevision: readSyncString(row, 'publishedRevision', 'revision'),
+    activeRevision: readSyncString(row, 'activeRevision', 'activatedRevision'),
+    activatedAt: readSyncString(row, 'activatedAt', 'updatedAt'),
+    run,
+  };
+}
+
+export async function finalizeSeasonQualification(
+  seasonId: number,
+  request: FinalizeSeasonQualificationRequest,
+): Promise<FinalizeSeasonQualificationResult> {
+  if (!Number.isInteger(seasonId) || seasonId <= 0) {
+    throw new Error('seasonId is required and must be a positive integer.');
+  }
+  if (!request.expectedPublishedRevision.trim()) {
+    throw new Error('expectedPublishedRevision is required to finalize season qualification.');
+  }
+  const raw = await fetchUniquePlaySyncApi(
+    `/api/admin/seasons/${seasonId}/qualification/finalize`,
+    { method: 'POST', body: JSON.stringify(request) },
+  );
+  const row = unwrapSyncRecord(raw, 'result', 'qualification');
+  const revisionId = readSyncString(row, 'revisionId', 'syncRevision');
+  if (!revisionId) throw new Error('진출권 확정 응답에 revisionId가 없습니다.');
+  const teams = (Array.isArray(row.teams) ? row.teams : [])
+    .map((entry): FinalizedSeasonQualificationTeam | null => {
+      const team = asSyncRecord(entry);
+      if (!team) return null;
+      const teamId = readSyncNumber(team, 'teamId', 'id');
+      const teamName = readSyncString(team, 'teamName', 'name');
+      const groupCode = readSyncString(team, 'groupCode', 'group')?.toUpperCase();
+      const qualificationState = readSyncString(team, 'qualificationState', 'state');
+      const syncRevision = readSyncString(team, 'syncRevision', 'revisionId');
+      if (teamId === null || !teamName || !groupCode || !qualificationState || !syncRevision) return null;
+      return {
+        teamId,
+        teamName,
+        groupCode,
+        standingRank: readSyncNumber(team, 'standingRank', 'rank'),
+        qualificationState,
+        finalizedAt: readSyncString(team, 'finalizedAt'),
+        syncRevision,
+      };
+    })
+    .filter((entry): entry is FinalizedSeasonQualificationTeam => entry !== null);
+  return {
+    seasonId: readSyncNumber(row, 'seasonId') ?? seasonId,
+    revisionId,
+    finalizedAt: readSyncString(row, 'finalizedAt'),
+    teams,
   };
 }

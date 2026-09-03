@@ -6,7 +6,10 @@ const createFallbackMatchId = () => `match-${Math.random().toString(36).slice(2,
 
 export function normalizeMatches(matches: unknown): MatchSchedule[] {
   if (!Array.isArray(matches)) return [];
-  return matches.map((entry) => {
+  return matches.filter((entry) => {
+    if (!entry || typeof entry !== 'object') return true;
+    return (entry as Partial<MatchSchedule>).sourceActive !== false;
+  }).map((entry) => {
     if (!entry || typeof entry !== 'object') {
       return {
         id: createFallbackMatchId(),
@@ -28,7 +31,7 @@ export function normalizeMatches(matches: unknown): MatchSchedule[] {
       awayTeamName: typeof match.awayTeamName === 'string' ? match.awayTeamName : '미정',
       startTime: typeof match.startTime === 'string' ? match.startTime : new Date().toISOString(),
       venue: typeof match.venue === 'string' ? match.venue : '미정',
-      status: match.status === 'completed' || match.status === 'inProgress' ? match.status : 'scheduled',
+      status: match.status === 'completed' || match.status === 'inProgress' || match.status === 'canceled' ? match.status : 'scheduled',
       recordMode: match.recordMode === 'practice' ? 'practice' : 'official',
       scoreInputMode: match.scoreInputMode === 'manual' ? 'manual' : 'live',
       liveVideoUrl: typeof match.liveVideoUrl === 'string' ? match.liveVideoUrl : undefined,
@@ -46,6 +49,12 @@ export function normalizeMatches(matches: unknown): MatchSchedule[] {
       deletedAt: typeof match.deletedAt === 'number' ? match.deletedAt : undefined,
       purgeAt: typeof match.purgeAt === 'number' ? match.purgeAt : undefined,
       deletedBy: typeof match.deletedBy === 'string' ? match.deletedBy : undefined,
+      groupCode: typeof match.groupCode === 'string' ? match.groupCode : undefined,
+      sourceProvider: typeof match.sourceProvider === 'string' ? match.sourceProvider : undefined,
+      sourceGameId: typeof match.sourceGameId === 'string' ? match.sourceGameId : undefined,
+      sourceActive: typeof match.sourceActive === 'boolean' ? match.sourceActive : undefined,
+      syncRevision: typeof match.syncRevision === 'string' ? match.syncRevision : undefined,
+      sourceUpdatedAt: typeof match.sourceUpdatedAt === 'string' ? match.sourceUpdatedAt : undefined,
     };
   });
 }
@@ -76,6 +85,12 @@ export function projectSpectatorMatch(match: MatchSchedule): MatchSchedule {
     deletedAt: match.deletedAt,
     purgeAt: match.purgeAt,
     deletedBy: match.deletedBy,
+    groupCode: match.groupCode,
+    sourceProvider: match.sourceProvider,
+    sourceGameId: match.sourceGameId,
+    sourceActive: match.sourceActive,
+    syncRevision: match.syncRevision,
+    sourceUpdatedAt: match.sourceUpdatedAt,
   };
 }
 

@@ -182,6 +182,12 @@ export interface MatchSchedule {
   deletedAt?: number;
   purgeAt?: number;
   deletedBy?: string;
+  groupCode?: string;
+  sourceProvider?: string;
+  sourceGameId?: string;
+  sourceActive?: boolean;
+  syncRevision?: string;
+  sourceUpdatedAt?: string;
 }
 
 export type RunnerAdvanceOutcome = 'hold' | 'advance' | 'out' | 'score' | 1 | 2 | 3 | 4;

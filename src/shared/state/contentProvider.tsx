@@ -67,12 +67,12 @@ export type ContentState = {
 };
 
 const DEFAULT_LANDING: LandingContent = {
-  heroEyebrow: '46TH AUBL · HOSTED BY CHUNG-ANG UNIVERSITY (SEOUL)',
+  heroEyebrow: '46TH AUBL · 2026 연합회교 중앙대학교(서울)',
   heroBadgeText: '전국대학아마추어야구연합회 · SINCE 1981',
   heroTitle: '그라운드 위의 지성,\n멈추지 않는 열정.',
   heroDescription:
     '2026 제46회 전국대학아마추어야구연합회(AUBL). 대한민국 유일의 순수 대학 아마추어 야구 리그에서\n40개 대학 2,000여 명의 선수가 써 내려가는 각본 없는 드라마가 지금 시작됩니다.',
-  heroSubDescription: '중앙대학교(서울)가 주최하는 2026 시즌 — 실시간 기록과 중계, 디지털화를 핵심 가치로 리그의 새로운 도약을 준비했습니다.',
+  heroSubDescription: '2026 연합회교 중앙대학교(서울)와 함께하는 시즌 — 실시간 기록과 중계, 디지털화를 핵심 가치로 리그의 새로운 도약을 준비했습니다.',
   valueProps: [
     {
       title: 'Pure Amateurism',
@@ -92,9 +92,9 @@ const DEFAULT_LANDING: LandingContent = {
   ],
   snapshotCards: [
     {
-      label: '2026 HOST',
+      label: '2026 연합회교',
       value: '중앙대학교(서울)',
-      desc: '46주년 시즌 운영 전권을 맡은 호스트 대학',
+      desc: '46주년 시즌 운영을 담당하는 연합회교',
     },
     {
       label: 'FORMAT',
@@ -132,7 +132,7 @@ const DEFAULT_LANDING: LandingContent = {
 const DEFAULT_INTRO: IntroContent = {
   tagline: 'AUBL · LEAGUE INTRO',
   heroTitle: '순수 아마추어 대학 야구의 46년 — 2026년, 중앙대학교(서울)와 함께 새로운 도약을 준비합니다.',
-  heroSubtitle: '46th Amateur University Baseball League · Hosted by Chung-Ang University (Seoul)',
+  heroSubtitle: '46th Amateur University Baseball League · 2026 연합회교 중앙대학교(서울)',
   heroDescription:
     '1981년 출범한 전국대학아마추어야구연합회(AUBL)는 엘리트 선수 중심이 아닌 일반 대학생들의 땀방울로 성장했습니다. 2026 시즌은 중앙대학교(서울)가 주최를 맡아 조별 예선과 으뜸·버금 토너먼트를 통해 리그의 전통과 혁신을 모두 보여줄 예정입니다.',
   historyHighlights: [
@@ -148,15 +148,15 @@ const DEFAULT_INTRO: IntroContent = {
     },
     {
       title: '2025 → 2026',
-      desc: '2025년 아주대 주최 시즌을 지나 2026년에는 중앙대학교(서울)가 호스트를 맡아 8개 조 예선과 으뜸·버금 토너먼트로 리그를 운영합니다.',
+      desc: '2025년 아주대 연합회교 시즌을 지나 2026년에는 중앙대학교(서울)가 연합회교로서 8개 조 예선과 으뜸·버금 토너먼트를 함께 운영합니다.',
       accent: '#34d399',
     },
   ],
   governance: [
     {
-      label: '주최 (2026)',
+      label: '연합회교 (2026)',
       value: '중앙대학교(서울)',
-      detail: '46주년 시즌 운영 전권을 위임받은 호스트 대학',
+      detail: '46주년 시즌 운영을 담당하는 연합회교',
     },
     {
       label: '회장단',
@@ -194,7 +194,7 @@ const DEFAULT_INTRO: IntroContent = {
     },
   ],
   heroMetrics: [
-    { label: '2026 HOST', value: '중앙대학교(서울)', note: '제46회 AUBL 운영' },
+    { label: '2026 연합회교', value: '중앙대학교(서울)', note: '제46회 AUBL 운영' },
     { label: '참가 규모', value: '약 40개 대학', note: 'A~H조 조별 예선 후 으뜸·버금' },
     { label: '핵심 가치', value: '실시간 기록 · 중계 · 디지털화', note: '모바일 친화 기록/중계로 모두가 같은 정보를 공유' },
   ],

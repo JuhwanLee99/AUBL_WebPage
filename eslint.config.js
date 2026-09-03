@@ -58,6 +58,20 @@ export default [
   js.configs.recommended,
   ...(tseslintConfigs?.recommended ?? tseslint.configs?.recommended ?? []),
   {
+    files: ['services/uniqueplay-sync-worker/**/*.mjs'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: globals.node,
+    },
+  },
+  {
+    files: ['services/uniqueplay-sync-worker/src/adapter.mjs'],
+    languageOptions: {
+      globals: globals.browser,
+    },
+  },
+  {
     files: ['**/*.{ts,tsx}'],
     languageOptions: {
       ecmaVersion: 2020,

@@ -1,0 +1,17 @@
+{
+  "name": "@aubl/uniqueplay-sync-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "session:bootstrap": "node scripts/bootstrap-session.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "playwright": "1.62.0"
+  }
+}
