@@ -55,10 +55,11 @@ export default function ScheduleLivePage() {
   }, []);
 
   return (
-    <div style={{ display: 'grid', gap: '24px', padding: '0 0 40px' }}>
+    <div className="schedule-page schedule-page--live" style={{ display: 'grid', gap: '24px', padding: '0 0 40px' }}>
       {/* 헤더 */}
-      <header style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+      <header className="schedule-page__hero" style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
         <div>
+          <span className="schedule-page__eyebrow">2026 SEASON · LIVE CENTER</span>
           <h1 style={{ fontSize: '32px', fontWeight: 900, margin: 0, color: '#f8fafc' }}>
             실시간 경기 전광판
           </h1>
@@ -104,6 +105,7 @@ export default function ScheduleLivePage() {
 
       {liveMatches.length === 0 ? (
         <div
+          className="schedule-empty"
           style={{
             borderRadius: '18px',
             padding: '80px 20px',
@@ -122,6 +124,7 @@ export default function ScheduleLivePage() {
         </div>
       ) : (
         <div
+          className="schedule-live-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: liveMatches.length === 1 ? '1fr' : 'repeat(auto-fit, minmax(min(100%, 600px), 1fr))',
@@ -133,6 +136,7 @@ export default function ScheduleLivePage() {
             return (
               <div
                 key={match.id}
+                className="schedule-live-card"
                 style={{
                   borderRadius: '16px',
                   overflow: 'hidden',
@@ -147,6 +151,7 @@ export default function ScheduleLivePage() {
               >
                 {/* 경기 정보 헤더 */}
                 <div
+                  className="schedule-live-card__heading"
                   style={{
                     padding: '12px 16px',
                     background: 'linear-gradient(90deg, rgba(56, 189, 248, 0.15), rgba(99, 102, 241, 0.10))',

@@ -141,7 +141,7 @@ export default function ScheduleGroupsPage() {
   );
 
   return (
-    <div style={{ display: 'grid', gap: '18px' }}>
+    <div className="schedule-page schedule-page--groups" style={{ display: 'grid', gap: '18px' }}>
       {tooltip && (
         <div
           style={{
@@ -166,8 +166,9 @@ export default function ScheduleGroupsPage() {
       )}
 
       {/* ── 헤더 ── */}
-      <header style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+      <header className="schedule-page__hero" style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
         <div>
+          <span className="schedule-page__eyebrow">2026 SEASON · GROUPS</span>
           <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 900 }}>조별 일정</h1>
           <p style={{ margin: '6px 0 0', color: '#94a3b8' }}>
             A~H조 조별 리그{hasPostseason ? ' 및 포스트시즌(으뜸·버금)' : ''} 일정을 확인하세요.
@@ -191,7 +192,7 @@ export default function ScheduleGroupsPage() {
       </header>
 
       {/* ── 탭 ── */}
-      <section style={{ display: 'grid', gap: '8px' }}>
+      <section className="schedule-group-tabs" style={{ display: 'grid', gap: '8px' }}>
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
           <span style={{ color: '#64748b', fontWeight: 700, fontSize: '12px', marginRight: '4px' }}>조별 리그</span>
           {groupTabs.map((tab) => {
@@ -255,6 +256,7 @@ export default function ScheduleGroupsPage() {
 
       {/* ── 경기 목록 ── */}
       <div
+        className="schedule-group-grid"
         style={{
           display: 'grid',
           gridTemplateColumns: activeTab === 'ALL' ? 'repeat(auto-fit, minmax(320px, 1fr))' : '1fr',
@@ -264,6 +266,7 @@ export default function ScheduleGroupsPage() {
         {visibleSections.map((section) => (
           <div
             key={section.key}
+            className="schedule-board schedule-group-board"
             style={{
               ...cardBase,
               borderColor: `${section.color}55`,
@@ -289,6 +292,7 @@ export default function ScheduleGroupsPage() {
                   return (
                     <div
                       key={match.id}
+                      className="schedule-match-row schedule-group-match"
                       style={{
                         padding: '10px 12px',
                         borderRadius: '12px',

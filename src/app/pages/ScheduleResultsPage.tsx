@@ -59,9 +59,10 @@ export default function ScheduleResultsPage() {
   }, [results]);
 
   return (
-    <div style={{ display: 'grid', gap: '18px' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+    <div className="schedule-page schedule-page--results" style={{ display: 'grid', gap: '18px' }}>
+      <header className="schedule-page__hero" style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
         <div>
+          <span className="schedule-page__eyebrow">2026 SEASON · RESULTS</span>
           <h1 style={{ fontSize: '28px', fontWeight: 900, margin: 0 }}>경기 결과</h1>
           <p style={{ color: '#94a3b8', margin: '6px 0 0' }}>최신 종료 경기 흐름을 한눈에 확인하세요.</p>
         </div>
@@ -107,18 +108,18 @@ export default function ScheduleResultsPage() {
         </div>
       </header>
 
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-        <div style={gradientCard('#f97316')}>
+      <section className="schedule-summary" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+        <div className="schedule-summary__card" style={gradientCard('#f97316')}>
           <span style={{ color: '#fca5a5', fontWeight: 700, fontSize: '12px' }}>TOTAL</span>
           <div style={{ fontSize: '26px', fontWeight: 900, color: '#e2e8f0' }}>{summary.total} 경기</div>
           <p style={{ margin: '6px 0 0', color: '#94a3b8', fontSize: '13px' }}>최근 8경기 기준</p>
         </div>
-        <div style={gradientCard('#38bdf8')}>
+        <div className="schedule-summary__card" style={gradientCard('#38bdf8')}>
           <span style={{ color: '#bae6fd', fontWeight: 700, fontSize: '12px' }}>AVG RUNS</span>
           <div style={{ fontSize: '26px', fontWeight: 900, color: '#e2e8f0' }}>{summary.avgRuns}</div>
           <p style={{ margin: '6px 0 0', color: '#94a3b8', fontSize: '13px' }}>경기당 득점 합계</p>
         </div>
-        <div style={gradientCard('#22c55e')}>
+        <div className="schedule-summary__card" style={gradientCard('#22c55e')}>
           <span style={{ color: '#bbf7d0', fontWeight: 700, fontSize: '12px' }}>CLOSE GAMES</span>
           <div style={{ fontSize: '26px', fontWeight: 900, color: '#e2e8f0' }}>{summary.closeGames} 경기</div>
           <p style={{ margin: '6px 0 0', color: '#94a3b8', fontSize: '13px' }}>2점 차 이내 접전</p>
@@ -126,6 +127,7 @@ export default function ScheduleResultsPage() {
       </section>
 
       <section
+        className="schedule-board schedule-results-board"
         style={{
           border: '1px solid rgba(148,163,184,0.25)',
           borderRadius: '16px',
@@ -147,6 +149,7 @@ export default function ScheduleResultsPage() {
               return (
                 <div
                   key={match.id}
+                  className="schedule-result-row"
                   style={{
                     display: 'grid',
                     gridTemplateColumns: 'auto 1fr auto',

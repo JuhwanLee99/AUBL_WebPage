@@ -122,7 +122,7 @@ export default function SchedulePracticePage() {
   };
 
   return (
-    <div className="schedule-practice-page" style={{ display: 'grid', gap: '18px' }}>
+    <div className="schedule-practice-page schedule-page schedule-page--practice" style={{ display: 'grid', gap: '18px' }}>
       <style>
         {`
           .schedule-practice-page input[type="datetime-local"]::-webkit-calendar-picker-indicator {
@@ -132,8 +132,9 @@ export default function SchedulePracticePage() {
           }
         `}
       </style>
-      <header style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+      <header className="schedule-page__hero" style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
         <div>
+          <span className="schedule-page__eyebrow">2026 SEASON · PRACTICE</span>
           <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 900 }}>연습경기</h1>
           <p style={{ margin: '6px 0 0', color: '#94a3b8' }}>
             공식기록 미반영 경기만 모아봅니다.
@@ -177,6 +178,7 @@ export default function SchedulePracticePage() {
 
       {isAdmin && showAddForm && (
         <form
+          className="schedule-page__form"
           onSubmit={handleCreatePracticeMatch}
           style={{
             border: '1px solid rgba(16,185,129,0.25)',
@@ -367,6 +369,7 @@ export default function SchedulePracticePage() {
 
       {practiceMatches.length === 0 ? (
         <div
+          className="schedule-empty"
           style={{
             border: '1px dashed rgba(148,163,184,0.35)',
             borderRadius: '14px',
@@ -379,11 +382,11 @@ export default function SchedulePracticePage() {
           등록된 연습경기가 없습니다.
         </div>
       ) : (
-        <div style={{ display: 'grid', gap: '10px' }}>
+        <div className="schedule-board schedule-practice-list" style={{ display: 'grid', gap: '10px' }}>
           {practiceMatches.map((match) => {
             const badge = statusBadge(match);
             return (
-              <div key={match.id} style={cardStyle}>
+              <div key={match.id} className="schedule-match-row schedule-practice-match" style={cardStyle}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <span style={{ fontWeight: 900, color: '#e2e8f0' }}>

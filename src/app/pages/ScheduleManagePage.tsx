@@ -170,9 +170,10 @@ export default function ScheduleManagePage() {
           }
         `}
       </style>
-      <div style={{ display: 'grid', gap: '18px' }}>
-        <header style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+      <div className="schedule-page schedule-page--manage" style={{ display: 'grid', gap: '18px' }}>
+        <header className="schedule-page__hero" style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
           <div>
+            <span className="schedule-page__eyebrow">2026 SEASON · SCHEDULE ADMIN</span>
             <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 900 }}>일정 관리</h1>
             <p style={{ margin: '6px 0 0', color: '#94a3b8' }}>데모용 더미 일정을 빠르게 추가·상태 변경해 보세요.</p>
           </div>
@@ -229,6 +230,7 @@ export default function ScheduleManagePage() {
       </header>
 
       <section
+        className="schedule-board schedule-manage-board"
         style={{
           border: '1px solid rgba(148,163,184,0.25)',
           borderRadius: '16px',
@@ -247,7 +249,7 @@ export default function ScheduleManagePage() {
           {upcoming.map((match) => {
             const color = divisionColor(match.homeTeamId);
             return (
-              <div key={match.id} style={{ display: 'grid', gap: '8px' }}>
+              <div key={match.id} className="schedule-manage-row" style={{ display: 'grid', gap: '8px' }}>
                 <div
                   style={{
                     border: '1px solid rgba(148,163,184,0.25)',
@@ -471,6 +473,7 @@ export default function ScheduleManagePage() {
       </section>
 
       <section
+        className="schedule-board schedule-manage-board"
         style={{
           border: '1px solid rgba(148,163,184,0.25)',
           borderRadius: '16px',
@@ -529,6 +532,7 @@ export default function ScheduleManagePage() {
       {showTrash && (
         <section
           id="match-trash-bin"
+          className="schedule-board schedule-manage-board"
           style={{
             border: '1px solid rgba(148,163,184,0.25)',
             borderRadius: '16px',

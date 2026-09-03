@@ -550,6 +550,7 @@ export default function MatchSchedulePage() {
     return (
       <div
         key={match.id}
+        className="schedule-match-row"
         style={{
           borderRadius: '16px',
           border: isActive ? '1px solid rgba(249,115,22,0.6)' : '1px solid rgba(148,163,184,0.3)',
@@ -828,6 +829,7 @@ export default function MatchSchedulePage() {
 
   const renderSection = (title: string, matches: MatchSchedule[], emptyText: string) => (
     <section
+      className="schedule-board"
       style={{
         border: '1px solid rgba(148,163,184,0.2)',
         borderRadius: '14px',
@@ -837,7 +839,7 @@ export default function MatchSchedulePage() {
         gap: '12px',
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+      <div className="schedule-board__heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <span style={{ fontWeight: 900, fontSize: '17px', color: '#e2e8f0' }}>{title}</span>
           <span
@@ -882,7 +884,7 @@ export default function MatchSchedulePage() {
           }
         `}
       </style>
-      <div style={{ display: 'grid', gap: '24px' }}>
+      <div className="schedule-page schedule-page--overview" style={{ display: 'grid', gap: '24px' }}>
         {tooltip && (
           <div
             style={{
@@ -905,8 +907,9 @@ export default function MatchSchedulePage() {
           {tooltip.text}
         </div>
       )}
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+      <header className="schedule-page__hero" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
         <div>
+          <span className="schedule-page__eyebrow">2026 SEASON · GAME CENTER</span>
           <h1 style={{ fontSize: '28px', fontWeight: 900, marginBottom: '8px' }}>경기 일정 및 결과</h1>
           <p style={{ color: '#94a3b8' }}>경기 일정, 결과, 라인업 사전 저장을 한 곳에서 관리합니다.</p>
         </div>
@@ -946,6 +949,7 @@ export default function MatchSchedulePage() {
       </header>
 
       <div
+        className="schedule-page__nav"
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
@@ -964,6 +968,7 @@ export default function MatchSchedulePage() {
         ].map((item) => (
           <button
             key={item.path}
+            className="schedule-page__nav-card"
             type="button"
             onClick={() => navigate(item.path)}
             style={{
@@ -987,6 +992,7 @@ export default function MatchSchedulePage() {
 
       {canEdit && showForm && (
         <form
+          className="schedule-page__form"
           onSubmit={handleFormSubmit}
           style={{
             padding: '20px',
@@ -1277,6 +1283,7 @@ export default function MatchSchedulePage() {
       )}
 
       <div
+        className="schedule-page__toolbar"
         style={{
           display: 'flex',
           justifyContent: 'space-between',
@@ -1322,13 +1329,14 @@ export default function MatchSchedulePage() {
       </div>
 
       {viewMode === 'list' ? (
-        <div style={{ display: 'grid', gap: '14px' }}>
+        <div className="schedule-page__sections" style={{ display: 'grid', gap: '14px' }}>
           {renderSection('진행 중 경기', categorizedMatches.live, '현재 진행 중인 경기가 없습니다.')}
           {renderSection('예정된 경기', categorizedMatches.upcoming, '예정된 경기가 없습니다.')}
           {renderSection('종료된 경기', categorizedMatches.past, '지난 경기가 없습니다.')}
         </div>
       ) : (
         <div
+          className="schedule-calendar"
           style={{
             border: '1px solid rgba(148,163,184,0.2)',
             borderRadius: '14px',
@@ -1400,6 +1408,7 @@ export default function MatchSchedulePage() {
                   return (
                     <div
                       key={`${weekIdx}-${dayIdx}`}
+                      className="schedule-calendar__day"
                       style={{
                         minHeight: '110px',
                         borderRadius: '12px',
@@ -1422,6 +1431,7 @@ export default function MatchSchedulePage() {
                           return (
                             <button
                               key={match.id}
+                              className="schedule-calendar__match"
                               type="button"
                               onClick={() => {
                                 actions.selectMatch(match.id);
