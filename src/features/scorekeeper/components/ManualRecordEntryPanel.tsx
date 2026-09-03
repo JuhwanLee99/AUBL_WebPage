@@ -367,7 +367,7 @@ export default function ManualRecordEntryPanel({
   };
 
   return (
-    <section style={{ display: 'grid', gap: '14px' }}>
+    <section className="manual-record-panel" style={{ display: 'grid', gap: '14px' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
         <div style={{ display: 'grid', gap: '3px' }}>
           <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: '#e2e8f0' }}>수기 기록 입력</h3>

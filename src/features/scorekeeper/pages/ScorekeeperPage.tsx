@@ -3310,6 +3310,7 @@ const handleConfirmHitWizard = () => {
 
   return (
     <div
+      className="score-operations-page scorekeeper-page"
       style={{
         borderRadius: '20px',
         border: '1px solid rgba(148, 163, 184, 0.25)',
@@ -3319,6 +3320,7 @@ const handleConfirmHitWizard = () => {
       }}
     >
       <section
+        className="scorekeeper-page__match-selector"
         style={{
           padding: '12px 18px 10px',
           borderBottom: '1px solid rgba(148, 163, 184, 0.2)',
@@ -3422,6 +3424,7 @@ const handleConfirmHitWizard = () => {
         )}
       </section>
       <header
+        className="scorekeeper-page__status-bar"
         style={{
           padding: '12px 18px',
           background: '#111827',
@@ -3468,6 +3471,7 @@ const handleConfirmHitWizard = () => {
       </header>
 
       <section
+        className="scorekeeper-page__box-score"
         style={{
           padding: '10px 18px 4px',
         }}
@@ -3518,6 +3522,7 @@ const handleConfirmHitWizard = () => {
       ) : null}
 
       <div
+        className="scorekeeper-page__workspace"
         style={{
           display: isManualInputMode ? 'none' : 'grid',
           gridTemplateColumns: '550px 960px',
@@ -4936,6 +4941,7 @@ function FieldView({
   };
   return (
     <div
+      className="scorekeeper-field"
       style={{
         position: 'relative',
         borderRadius: '18px',

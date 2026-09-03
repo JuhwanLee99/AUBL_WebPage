@@ -396,6 +396,7 @@ export default function ScoreboardPanel({
 
   return (
     <div
+      className="scoreboard-panel"
       style={{
         aspectRatio: '16 / 9',
         background: '#000',
@@ -432,6 +433,7 @@ export default function ScoreboardPanel({
         />
 
         <div
+          className="scoreboard-panel__score-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr 1fr',
@@ -486,6 +488,7 @@ export default function ScoreboardPanel({
       </div>
 
       <div
+        className="scoreboard-panel__game-grid"
         style={{
           background: '#0b1220',
           borderRadius: '14px',
@@ -527,6 +530,7 @@ export default function ScoreboardPanel({
       </div>
 
       <div
+        className="scoreboard-panel__last-play"
         style={{
           borderRadius: '12px',
           border: '2px solid #1f2937',
@@ -576,6 +580,7 @@ export default function ScoreboardPanel({
 function ScoreCell({ label, value }: { label: string; value: number }) {
   return (
     <div
+      className="scoreboard-panel__score-cell"
       style={{
         background: '#0b1220',
         border: '2px solid #111827',

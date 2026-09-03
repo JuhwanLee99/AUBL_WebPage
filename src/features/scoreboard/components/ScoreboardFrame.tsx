@@ -33,7 +33,7 @@ export default function ScoreboardFrame({
   hideBases = false,
 }: ScoreboardFrameProps) {
   return (
-    <div style={variantStyles[variant]}>
+    <div className={`scoreboard-frame scoreboard-frame--${variant}`} style={variantStyles[variant]}>
       <ScoreboardPanel
         style={panelStyle}
         showFootnote={showFootnote}

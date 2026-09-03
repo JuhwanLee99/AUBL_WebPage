@@ -108,8 +108,8 @@ export default function AdminGamesPage() {
   }
 
   return (
-    <div style={{ display: 'grid', gap: '16px' }}>
-      <div style={cardStyle}>
+    <div className="score-operations-page game-records-page" style={{ display: 'grid', gap: '16px' }}>
+      <div className="game-records-board" style={cardStyle}>
         <h3 style={{ margin: '0 0 4px', color: '#e2e8f0' }}>완료된 경기 목록</h3>
         <p style={{ margin: '0 0 16px', color: '#64748b', fontSize: '13px' }}>
           경기를 클릭하면 라인업 · 박스스코어를 수정할 수 있습니다.
@@ -166,6 +166,7 @@ export default function AdminGamesPage() {
             {matches.map((match) => (
               <div
                 key={match.id}
+                className="game-records-row"
                 style={rowStyle}
                 onClick={() => navigate(`/admin/games/${match.id}`)}
                 onMouseEnter={(e) => {

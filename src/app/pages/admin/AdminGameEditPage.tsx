@@ -701,7 +701,7 @@ export default function AdminGameEditPage() {
   }
 
   return (
-    <div style={{ display: 'grid', gap: '16px' }}>
+    <div className="score-operations-page game-record-edit-page" style={{ display: 'grid', gap: '16px' }}>
       {/* 뒤로 가기 */}
       <button
         type="button"
@@ -712,7 +712,7 @@ export default function AdminGameEditPage() {
       </button>
 
       {/* 경기 기본 정보 */}
-      <div style={cardStyle}>
+      <div className="game-record-edit-card game-record-edit-card--summary" style={cardStyle}>
         <h3 style={{ margin: '0 0 12px', color: '#e2e8f0' }}>경기 정보</h3>
         <div style={{ display: 'grid', gap: '6px' }}>
           <div style={{ color: '#94a3b8', fontSize: '13px' }}>{formatDate(match.startTime)} · {match.venue}</div>
@@ -727,7 +727,7 @@ export default function AdminGameEditPage() {
       </div>
 
       {/* ── 라인업 수정 ── */}
-      <div style={cardStyle}>
+      <div className="game-record-edit-card" style={cardStyle}>
         <h3 style={{ margin: '0 0 4px', color: '#e2e8f0' }}>라인업 수정</h3>
         <p style={{ margin: '0 0 16px', color: '#64748b', fontSize: '13px' }}>
           선수 이름, 등번호, 포지션을 수정합니다. 수정 후 반드시 저장하세요.
@@ -778,7 +778,7 @@ export default function AdminGameEditPage() {
       </div>
 
       {/* ── 박스스코어 수정 ── */}
-      <div style={cardStyle}>
+      <div className="game-record-edit-card" style={cardStyle}>
         <h3 style={{ margin: '0 0 4px', color: '#e2e8f0' }}>박스스코어 수정</h3>
         <p style={{ margin: '0 0 16px', color: '#64748b', fontSize: '13px' }}>
           타자 · 투수 기록과 라인스코어를 직접 수정합니다.

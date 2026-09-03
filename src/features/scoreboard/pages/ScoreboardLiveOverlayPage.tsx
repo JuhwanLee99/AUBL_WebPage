@@ -322,6 +322,7 @@ export default function ScoreboardLiveOverlayPage() {
 
   return (
     <div
+      className="live-overlay-page"
       style={{
         width: '100vw',
         height: '100vh',
@@ -345,7 +346,7 @@ export default function ScoreboardLiveOverlayPage() {
           }
         `}
       </style>
-      <div style={containerStyle}>
+      <div className="live-overlay-stage" style={containerStyle}>
         <iframe
           title="AUBL Live Stream"
           src={youtubeLiveSrc}
@@ -373,6 +374,7 @@ export default function ScoreboardLiveOverlayPage() {
         >
           {/* 상단 컨트롤 버튼 그룹 */}
           <div
+            className="live-overlay-controls"
             style={{
               position: 'absolute',
               top: 12 * uiScale, // 여백 축소
@@ -529,6 +531,7 @@ export default function ScoreboardLiveOverlayPage() {
 
           {/* 왼쪽 상단 점수판 (컴팩트 버전) */}
           <div
+            className="live-overlay-score"
             style={{
               position: 'absolute',
               top: 12 * uiScale,
@@ -604,6 +607,7 @@ export default function ScoreboardLiveOverlayPage() {
 
           {/* 하단 Last Play */}
           <div
+            className="live-overlay-last-play"
             style={{
               position: 'absolute',
               left: 12 * uiScale,

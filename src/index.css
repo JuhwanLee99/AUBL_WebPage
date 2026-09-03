@@ -2905,6 +2905,387 @@ textarea:focus-visible {
   box-shadow: none !important;
 }
 
+/* ---------- Score operations and broadcast surfaces ---------- */
+.score-operations-page {
+  min-width: 0;
+  color: var(--season-ink) !important;
+}
+
+.scorekeeper-page {
+  overflow: hidden;
+  border: 1px solid var(--season-line) !important;
+  border-top: 5px solid var(--season-navy-900) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  box-shadow: none !important;
+}
+
+.scorekeeper-page :where(h2, h3),
+.game-records-page :where(h2, h3),
+.game-record-edit-page :where(h2, h3) {
+  color: var(--season-navy-950) !important;
+  letter-spacing: -0.03em;
+}
+
+.scorekeeper-page__match-selector {
+  border-bottom: 1px solid var(--season-line) !important;
+  background: var(--season-surface) !important;
+  padding: 18px 20px !important;
+}
+
+.scorekeeper-page__match-selector > div:first-child {
+  align-items: flex-end;
+}
+
+.scorekeeper-page__match-selector h2 {
+  font-size: 22px !important;
+}
+
+.scorekeeper-page__match-selector p,
+.scorekeeper-page__match-selector > div:last-child,
+.scorekeeper-page [style*='color: rgb(148, 163, 184)'],
+.scorekeeper-page [style*='color: rgb(203, 213, 225)'] {
+  color: var(--season-muted) !important;
+}
+
+.scorekeeper-page input:not([type='checkbox']):not([type='radio']),
+.scorekeeper-page select,
+.scorekeeper-page textarea,
+.game-record-edit-page input:not([type='checkbox']):not([type='radio']),
+.game-record-edit-page select,
+.game-record-edit-page textarea {
+  min-height: 42px;
+  border: 1px solid var(--season-line-strong) !important;
+  border-radius: 2px !important;
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+  box-shadow: none !important;
+}
+
+.scorekeeper-page button,
+.game-records-page button,
+.game-record-edit-page button {
+  min-height: 40px;
+  border-radius: 2px !important;
+  box-shadow: none !important;
+}
+
+.scorekeeper-page__status-bar {
+  min-height: 58px;
+  border-bottom: 1px solid var(--season-blue-600);
+  background: var(--season-navy-900) !important;
+  color: #ffffff !important;
+  padding: 12px 20px !important;
+}
+
+.scorekeeper-page__status-bar > div:first-child > span:first-child {
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 2px !important;
+  background: transparent !important;
+  color: #ffffff !important;
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-style: italic;
+  letter-spacing: 0.08em;
+}
+
+.scorekeeper-page__status-bar [style*='color: rgb(203, 213, 225)'] {
+  color: #ffffff !important;
+}
+
+.scorekeeper-page__box-score {
+  border-bottom: 1px solid var(--season-line);
+  background: var(--season-surface-muted);
+  padding: 12px 20px !important;
+}
+
+.scorekeeper-page__box-score > div {
+  border-color: var(--season-line) !important;
+  border-radius: 2px !important;
+  background: var(--season-surface) !important;
+  box-shadow: none !important;
+}
+
+.manual-record-panel > div[style*='border'] {
+  border-color: var(--season-line) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+  box-shadow: none !important;
+}
+
+.manual-record-panel > div[style*='border'] > div:first-child {
+  border-bottom: 2px solid var(--season-navy-900);
+  padding-bottom: 10px;
+}
+
+.manual-record-panel table {
+  border-collapse: collapse;
+  color: var(--season-ink);
+}
+
+.manual-record-panel th {
+  border-color: var(--season-navy-900) !important;
+  background: var(--season-navy-900) !important;
+  color: #ffffff !important;
+}
+
+.manual-record-panel td {
+  border-color: var(--season-line) !important;
+  background: var(--season-surface) !important;
+}
+
+.scorekeeper-page__workspace {
+  gap: 16px !important;
+  overflow-x: auto;
+  background: var(--season-surface-muted);
+  padding: 18px !important;
+}
+
+.scorekeeper-page__workspace > div > div:not(.scorekeeper-field),
+.scorekeeper-page__workspace > div:nth-child(2) {
+  border-color: var(--season-line) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+  box-shadow: none !important;
+}
+
+.scorekeeper-page__workspace > div:nth-child(2) > div:first-child {
+  border-bottom: 2px solid var(--season-navy-900);
+  padding-bottom: 14px;
+}
+
+.scorekeeper-page__workspace [style*='background: rgba(15, 23, 42'],
+.scorekeeper-page__workspace [style*='background: rgba(255, 255, 255, 0.0'],
+.scorekeeper-page__workspace [style*='background: rgb(17, 24, 39)'] {
+  border-color: var(--season-line) !important;
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+  box-shadow: none !important;
+}
+
+.scorekeeper-page__workspace [style*='color: rgb(226, 232, 240)'],
+.scorekeeper-page__workspace [style*='color: rgb(248, 250, 252)'] {
+  color: var(--season-ink) !important;
+}
+
+.scorekeeper-page > :not(.scorekeeper-page__status-bar) [style*='color: rgb(226, 232, 240)'],
+.scorekeeper-page > :not(.scorekeeper-page__status-bar) [style*='color: rgb(248, 250, 252)'] {
+  color: var(--season-ink) !important;
+}
+
+.scorekeeper-field {
+  overflow: hidden;
+  border: 2px solid var(--season-navy-900) !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
+
+.scorekeeper-field [style*='color: rgb(226, 232, 240)'],
+.scorekeeper-field [style*='color: rgb(248, 250, 252)'] {
+  color: #ffffff !important;
+}
+
+.scoreboard-frame--page {
+  border: 1px solid var(--season-line);
+  border-radius: 4px !important;
+  background: var(--season-surface-muted) !important;
+  padding: clamp(6px, 1vw, 12px) !important;
+}
+
+.scoreboard-panel {
+  border: 2px solid #154da2 !important;
+  border-radius: 4px !important;
+  background: #041839 !important;
+  box-shadow: none !important;
+}
+
+.match-selector-bar {
+  border-color: rgba(150, 179, 224, 0.34) !important;
+  border-radius: 2px !important;
+  background: #082456 !important;
+  box-shadow: none !important;
+}
+
+.match-selector-bar select {
+  border-radius: 2px !important;
+  background: #061d48 !important;
+}
+
+.scoreboard-panel__score-cell,
+.scoreboard-panel__score-grid > div:nth-child(2) > div,
+.scoreboard-panel__game-grid,
+.scoreboard-panel__last-play {
+  border-color: rgba(150, 179, 224, 0.32) !important;
+  border-radius: 2px !important;
+  background: #082456 !important;
+  box-shadow: none !important;
+}
+
+.scoreboard-panel__score-cell > span:last-child,
+.scoreboard-panel__score-grid > div:nth-child(2) > div:nth-child(2) {
+  color: #ffffff !important;
+  text-shadow: none !important;
+}
+
+.scoreboard-panel__score-cell > span:first-child {
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-style: italic;
+}
+
+.scoreboard-panel__last-play {
+  border-left: 5px solid #2d72d9 !important;
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif !important;
+}
+
+.scoreboard-panel__last-play > span:first-child {
+  color: #8fbdff !important;
+}
+
+.game-records-board,
+.game-record-edit-card {
+  border: 1px solid var(--season-line) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+  box-shadow: none !important;
+  padding: clamp(18px, 2.4vw, 24px) !important;
+}
+
+.game-records-board {
+  border-top: 4px solid var(--season-navy-900) !important;
+}
+
+.game-records-board > h3,
+.game-record-edit-card > h3 {
+  border-bottom: 2px solid var(--season-navy-900);
+  padding-bottom: 12px;
+}
+
+.game-records-row {
+  border: 0 !important;
+  border-top: 1px solid var(--season-line) !important;
+  border-radius: 0 !important;
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+  box-shadow: none !important;
+}
+
+.game-records-row:hover {
+  background: var(--season-surface-muted) !important;
+}
+
+.game-record-edit-card--summary {
+  border-top: 4px solid var(--season-blue-600) !important;
+}
+
+.game-record-edit-page > div[style*='border'] {
+  border-color: var(--season-line) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+  box-shadow: none !important;
+}
+
+.game-record-edit-page table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--season-ink);
+}
+
+.game-record-edit-page th {
+  border-color: var(--season-navy-900) !important;
+  background: var(--season-navy-900) !important;
+  color: #ffffff !important;
+  white-space: nowrap;
+}
+
+.game-record-edit-page td {
+  border-color: var(--season-line) !important;
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+}
+
+.live-overlay-page {
+  background: #020b1d !important;
+}
+
+.live-overlay-stage {
+  overflow: hidden;
+  border: 1px solid rgba(143, 189, 255, 0.4);
+  border-radius: 4px;
+  box-shadow: none !important;
+}
+
+.live-overlay-controls > :where(button, select, span) {
+  min-height: 32px;
+  border: 1px solid rgba(143, 189, 255, 0.42) !important;
+  border-radius: 2px !important;
+  background: rgba(4, 24, 57, 0.92) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.live-overlay-score,
+.live-overlay-last-play {
+  border-color: rgba(143, 189, 255, 0.48) !important;
+  border-radius: 2px !important;
+  background: rgba(4, 24, 57, 0.9) !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(8px);
+}
+
+.live-overlay-score {
+  border-top: 3px solid #3c82e8 !important;
+}
+
+.live-overlay-last-play {
+  border-left: 4px solid #3c82e8 !important;
+}
+
+.live-overlay-last-play [style*='color: rgb(249, 115, 22)'] {
+  color: #8fbdff !important;
+}
+
+.admin-cms-page__header h1 {
+  color: var(--season-navy-950) !important;
+}
+
+.admin-cms-page__header p {
+  color: var(--season-muted) !important;
+}
+
+@media (max-width: 1200px) {
+  .scorekeeper-page__workspace {
+    grid-template-columns: minmax(480px, 550px) minmax(720px, 960px) !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .scorekeeper-page__match-selector > div:first-child,
+  .scorekeeper-page__status-bar {
+    align-items: flex-start !important;
+    flex-direction: column;
+  }
+
+  .scorekeeper-page__match-selector select {
+    min-width: min(100%, 240px) !important;
+  }
+
+  .game-records-row {
+    grid-template-columns: minmax(84px, 0.8fr) minmax(150px, 2fr) 64px 64px !important;
+    min-width: 470px;
+  }
+
+  .game-records-board > div:last-child {
+    overflow-x: auto;
+  }
+
+  .game-record-edit-card {
+    overflow-x: auto;
+  }
+}
+
 @media (max-width: 720px) {
   .season-detail-scope {
     overflow-x: clip;

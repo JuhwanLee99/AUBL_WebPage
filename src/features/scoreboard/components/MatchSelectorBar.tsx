@@ -40,6 +40,7 @@ export default function MatchSelectorBar({ summaryTime, summaryVenue, showViewer
 
   return (
     <div
+      className="match-selector-bar"
       style={{
         display: 'flex',
         alignItems: 'center',

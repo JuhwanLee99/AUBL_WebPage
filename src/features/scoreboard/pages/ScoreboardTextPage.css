@@ -464,6 +464,108 @@
   max-height: none !important;
 }
 
+/* 2026 season broadcast layout */
+.scoreboard-text-page {
+  color: var(--season-ink);
+}
+
+.scoreboard-text-page .main-content-grid {
+  gap: clamp(14px, 1.8vw, 22px);
+}
+
+.scoreboard-text-page .scoreboard-section {
+  min-width: 0;
+}
+
+.scoreboard-text-page .live-feed-section,
+.scoreboard-text-page .csv-preview {
+  border: 1px solid var(--season-line);
+  border-top: 4px solid var(--season-navy-900);
+  border-radius: 4px;
+  background: var(--season-surface);
+  color: var(--season-ink);
+  box-shadow: none;
+}
+
+.scoreboard-text-page .live-feed-section > div:first-child {
+  border-bottom: 2px solid var(--season-navy-900);
+  padding-bottom: 12px;
+}
+
+.scoreboard-text-page .live-feed-section [style*='background: rgba(15, 23, 42'],
+.scoreboard-text-page .live-feed-section [style*='background: rgba(255, 255, 255, 0.0'],
+.scoreboard-text-page .live-feed-section [style*='background: rgb(11, 15, 26)'],
+.scoreboard-text-page .csv-preview [style*='background: rgba(15, 23, 42'] {
+  border-color: var(--season-line) !important;
+  border-radius: 2px !important;
+  background: var(--season-surface-muted) !important;
+  color: var(--season-ink) !important;
+  box-shadow: none !important;
+}
+
+.scoreboard-text-page .live-feed-section [style*='color: rgb(226, 232, 240)'],
+.scoreboard-text-page .live-feed-section [style*='color: rgb(203, 213, 225)'],
+.scoreboard-text-page .csv-preview__title,
+.scoreboard-text-page .csv-preview__table {
+  color: var(--season-ink) !important;
+}
+
+.scoreboard-text-page .live-feed-section [style*='color: rgb(148, 163, 184)'],
+.scoreboard-text-page .csv-preview__subtitle {
+  color: var(--season-muted) !important;
+}
+
+.scoreboard-text-page button {
+  min-height: 38px;
+  border-radius: 2px !important;
+  box-shadow: none !important;
+}
+
+.scoreboard-text-page .stats-grid > div,
+.scoreboard-text-page .removed-players-grid > div {
+  border-color: var(--season-line) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  box-shadow: none !important;
+}
+
+.scoreboard-text-page .csv-preview__tabs {
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--season-line);
+  border-radius: 2px;
+}
+
+.scoreboard-text-page .csv-preview__tab {
+  min-height: 36px;
+  border: 0;
+  border-right: 1px solid var(--season-line);
+  border-radius: 0 !important;
+  background: var(--season-surface);
+  color: var(--season-muted);
+}
+
+.scoreboard-text-page .csv-preview__tab.is-active {
+  background: var(--season-navy-900);
+  color: #ffffff;
+}
+
+.scoreboard-text-page .csv-preview__table th {
+  border-color: var(--season-navy-900);
+  background: var(--season-navy-900);
+  color: #ffffff;
+}
+
+.scoreboard-text-page .csv-preview__table td {
+  border-color: var(--season-line);
+  background: var(--season-surface);
+  color: var(--season-ink);
+}
+
+.scoreboard-text-page .csv-preview__table tbody tr:nth-child(even) td {
+  background: var(--season-surface-muted);
+}
+
 :root[data-preview-mode='mobile'] .scoreboard-section > div:last-child {
   height: auto !important;
 }
