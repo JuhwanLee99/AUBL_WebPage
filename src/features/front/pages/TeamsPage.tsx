@@ -36,6 +36,7 @@ export default function TeamsPage() {
   }, []);
 
   const filteredTeams = activeGroup === 'ALL' ? teams : teams.filter((t) => t.group === activeGroup);
+  const activeGroupColor = activeGroup === 'ALL' ? '#94a3b8' : GROUP_COLORS[activeGroup];
 
   // 조별 그룹핑 (전체 보기에서 사용)
   const groupedTeams = activeGroup === 'ALL'
@@ -220,7 +221,7 @@ export default function TeamsPage() {
             gap: '14px',
             padding: '24px',
             borderRadius: '18px',
-            border: `1px solid ${GROUP_COLORS[activeGroup]}30`,
+            border: `1px solid ${activeGroupColor}30`,
             background: 'rgba(255,255,255,0.02)',
           }}
         >
@@ -230,11 +231,11 @@ export default function TeamsPage() {
                 width: '10px',
                 height: '10px',
                 borderRadius: '999px',
-                backgroundColor: GROUP_COLORS[activeGroup],
-                boxShadow: `0 0 0 5px ${GROUP_COLORS[activeGroup]}25`,
+                backgroundColor: activeGroupColor,
+                boxShadow: `0 0 0 5px ${activeGroupColor}25`,
               }}
             />
-            <p style={{ margin: 0, fontWeight: 800, fontSize: '16px', color: GROUP_COLORS[activeGroup] }}>
+            <p style={{ margin: 0, fontWeight: 800, fontSize: '16px', color: activeGroupColor }}>
               {activeGroup}조
             </p>
             <span style={{ color: '#64748b', fontSize: '13px', fontWeight: 700 }}>
@@ -261,8 +262,8 @@ export default function TeamsPage() {
                     width: '28px',
                     height: '28px',
                     borderRadius: '8px',
-                    background: `${GROUP_COLORS[activeGroup]}18`,
-                    color: GROUP_COLORS[activeGroup],
+                    background: `${activeGroupColor}18`,
+                    color: activeGroupColor,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',

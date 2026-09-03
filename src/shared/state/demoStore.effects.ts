@@ -795,7 +795,7 @@ export function syncLiveScorePatch(params: {
   homeScore: number;
   awayScore: number;
   lastLiveScoreSyncKeyRef: RefLike<string>;
-  pushMatchUpdate: (matchId: string, overrides?: Partial<MatchSchedule>) => Promise<unknown> | unknown;
+  pushMatchUpdate: (matchId: string, overrides?: Partial<MatchSchedule>) => Promise<unknown>;
 }) {
   const { canRecordGame, activeMatchId, matches, homeScore, awayScore, lastLiveScoreSyncKeyRef, pushMatchUpdate } = params;
   if (!canRecordGame) return;

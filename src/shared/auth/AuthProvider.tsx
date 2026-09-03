@@ -21,9 +21,10 @@ import type { User } from 'firebase/auth';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { PropsWithChildren } from 'react';
 import { auth } from '../firebase/client';
-import { collectionGroup, doc, documentId, getDocs, query, setDoc, where, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, writeBatch } from 'firebase/firestore';
 import { firestore } from '../firebase/client';
 import { sendLogoutToFlutter, sendTokenRefreshToFlutter } from '../bridge/flutterBridge';
+import { getMembershipsByUid } from './membershipLookup';
 
 // -----------------------------------------------------------
 // [로컬 테스트용 설정]
@@ -54,7 +55,7 @@ type AuthContextValue = {
   error: string | null;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   registerWithEmail: (email: string, password: string) => Promise<void>;
-  loginWithGoogle: () => Promise<{ isNewUser: boolean }>;
+  loginWithGoogle: (options?: { useRedirect?: boolean }) => Promise<{ isNewUser: boolean }>;
   loginWithApple: (options?: { useRedirect?: boolean }) => Promise<{ isNewUser: boolean }>;
   logout: () => Promise<void>;
   deleteAccount: (currentPassword?: string) => Promise<void>;
@@ -178,7 +179,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     [],
   );
 
-  const loginWithGoogle = useCallback(async () => {
+  const loginWithGoogle = useCallback(async (options?: { useRedirect?: boolean }) => {
     if (IS_TEST_MODE) {
       console.log('[TEST] 구글 로그인 시도');
       return { isNewUser: false };
@@ -186,6 +187,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setError(null);
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
+    if (options?.useRedirect) {
+      await signInWithRedirect(auth, provider);
+      return { isNewUser: false };
+    }
     const result = await signInWithPopup(auth, provider);
     return { isNewUser: getAdditionalUserInfo(result)?.isNewUser ?? false };
   }, []);
@@ -224,23 +229,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     const refs = new Set<string>();
     try {
-      const snap = await getDocs(
-        query(collectionGroup(firestore, 'members'), where('uid', '==', uid)),
-      );
+      const snap = await getMembershipsByUid(uid);
       for (const d of snap.docs) refs.add(d.ref.path);
     } catch {
       // ignore
-    }
-
-    if (refs.size === 0) {
-      try {
-        const byDocId = await getDocs(
-          query(collectionGroup(firestore, 'members'), where(documentId(), '==', uid)),
-        );
-        for (const d of byDocId.docs) refs.add(d.ref.path);
-      } catch {
-        // ignore
-      }
     }
 
     for (const path of refs) {

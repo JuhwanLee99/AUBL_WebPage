@@ -7,6 +7,12 @@ service cloud.firestore {
   return request.auth != null && request.auth.token.admin == true;
   }
 
+  function canAuditAllstarVotes() {
+    return request.auth != null
+      && request.auth.token.admin == true
+      && request.auth.token.allstarVoteAuditor == true;
+  }
+
   function coachRoleDoc() {
     return get(/databases/(default)/documents/roles/$(request.auth.uid));
   }
@@ -119,6 +125,19 @@ service cloud.firestore {
     match /config/{docId} {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    // 공개 기능 상태는 누구나 읽되 Admin SDK callable만 변경한다.
+    // 문서가 없거나 enabled가 정확한 true가 아니면 클라이언트와 서버 모두 OFF로 처리한다.
+    match /publicFeatureFlags/{featureId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // 기능 공개 변경 이력은 관리자만 조회하며 브라우저에서 생성·수정할 수 없다.
+    match /featureFlagAudit/{auditId} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     // 경기 일정
@@ -322,6 +341,50 @@ service cloud.firestore {
     // 컬렉션 그룹(members) 조회 허용
     match /{path=**}/members/{memberId} {
       allow read: if true;
+    }
+
+    // 올스타/루키 투표 데이터. 일반 클라이언트는 callable Functions만 사용한다.
+    // 후보 설정은 관리자, 비공개 결과는 별도 감사 claim 계정만 직접 읽을 수 있다.
+    match /allstarVotingEvents/{eventId} {
+      allow read, write: if isAdmin();
+
+      match /candidateSets/{candidateSetId} {
+        allow read, create: if isAdmin();
+        // published 후보 세트는 일반 관리자 도구에서도 불변이다. 수정 시 새 ID를 만든다.
+        allow update, delete: if isAdmin() && resource.data.published != true;
+      }
+
+      // 첫 정상 투표와 같은 transaction에서 한 번만 생성되는 설정 잠금.
+      // 이후 제출은 읽기만 하며 클라이언트는 조회하거나 변경할 수 없다.
+      match /configLocks/{divisionId} {
+        allow read, write: if false;
+      }
+
+      match /ballots/{ballotId} {
+        allow read: if canAuditAllstarVotes();
+        allow write: if false;
+      }
+
+      match /voterEligibility/{eligibilityId} {
+        allow read: if canAuditAllstarVotes();
+        allow write: if false;
+      }
+
+      // 공개 callable이 반환할 후보별 합계 원본. 일반 클라이언트 직접 읽기는 금지한다.
+      match /publicResults/{divisionId} {
+        allow read: if isAdmin();
+        // 결과는 CLOSED 원장을 검증하는 Admin SDK callable만 생성·변경한다.
+        allow write: if false;
+      }
+
+      // 원본 전체 검사에서 만들어진 비공개 결과 초안. 클라이언트 접근 금지.
+      match /resultDrafts/{divisionId} {
+        allow read, write: if false;
+      }
+
+      match /{document=**} {
+        allow read, write: if false;
+      }
     }
 
     // 그 외 모든 접근 거부

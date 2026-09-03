@@ -47,6 +47,8 @@ export default [
     ignores: [
       'dist',
       'node_modules',
+      '.tmp/**',
+      'outputs/**',
       'functions/venv/**',
       'flutter_app/**',
       'scripts/**',

@@ -75,3 +75,9 @@ flutter_app/env/
 flutter_app/*.csv
 crawler/import_2024.sql
 crawler/output/
+unique-play-aubl-*-records.json
+
+# Local All-Star candidate review inputs/outputs (unpublished player data)
+outputs/
+.tmp/
+올스타_루키 후보*.xlsx
