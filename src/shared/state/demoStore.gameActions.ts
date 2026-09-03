@@ -140,7 +140,7 @@ export function useGameActions(params: {
   stateRef: RefLike<DemoState>;
   spectatorFeedLimitRef: RefLike<number>;
   setSpectatorFeedLimit: (limit: number) => void;
-  pushMatchUpdate: (matchId: string, overrides?: Partial<MatchSchedule>) => Promise<unknown> | unknown;
+  pushMatchUpdate: (matchId: string, overrides?: Partial<MatchSchedule>) => Promise<unknown>;
 }) {
   const { dispatch, stateRef, spectatorFeedLimitRef, setSpectatorFeedLimit, pushMatchUpdate } = params;
 

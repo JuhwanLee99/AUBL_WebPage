@@ -63,9 +63,9 @@ import { normalizeState, shouldTrackHistory, snapshotState } from './demoStore.s
 export { canPitcherBat };
 export { buildGameRecord };
 
-type Half = 'top' | 'bottom';
+export type Half = 'top' | 'bottom';
 
-type Bases = (string | null)[];
+export type Bases = (string | null)[];
 
 type Side = 'home' | 'away';
 export interface PlayerSlot {
@@ -3141,7 +3141,7 @@ interface DemoStoreValue {
     substitute: (side: Side, benchIndex: number, lineupIndex: number, substitutionType?: '대수비' | '대타' | '대주자') => void;
     setPlay: (message: string) => void;
     startGame: () => void;
-    endGame: (endedAt: string) => void;
+    endGame: (endedAt: string, postGameOverride?: PostGameRecord) => void;
     resetGame: () => void;
     undo: () => void;
     redo: () => void;

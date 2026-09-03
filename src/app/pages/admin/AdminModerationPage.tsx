@@ -18,6 +18,8 @@ import {
 } from '@shared/moderation/moderationService';
 import type { ModerationReport } from '@shared/types';
 
+const currentTimestamp = () => Date.now();
+
 const cardStyle: React.CSSProperties = {
   borderRadius: '16px',
   border: '1px solid rgba(148,163,184,0.28)',
@@ -126,7 +128,7 @@ export default function AdminModerationPage() {
       await updateDoc(doc(firestore, 'contentReports', report.id), {
         status: nextStatus,
         reviewNote: note.trim(),
-        reviewedAt: Date.now(),
+        reviewedAt: currentTimestamp(),
         reviewedBy: user?.uid ?? 'admin',
       });
     } catch (error) {

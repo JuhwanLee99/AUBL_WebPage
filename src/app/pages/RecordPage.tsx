@@ -529,7 +529,7 @@ export default function RecordPage() {
 
         setPlayoffFilterEnabled(playoffSupported);
 
-        const effectiveFilters = playoffSupported
+        const effectiveFilters: RecordFilterState = playoffSupported
           ? currentFilters
           : {
               ...currentFilters,

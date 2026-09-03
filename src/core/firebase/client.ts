@@ -1,5 +1,10 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import type { FirebaseOptions } from 'firebase/app';
+import {
+  initializeAppCheck,
+  ReCaptchaEnterpriseProvider,
+  type AppCheck,
+} from 'firebase/app-check';
 import { getAuth } from 'firebase/auth';
 import {
   connectFirestoreEmulator,
@@ -19,6 +24,22 @@ const firebaseConfig: FirebaseOptions = {
 };
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+
+const appCheckSiteKey = import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY?.trim();
+
+let appCheckInstance: AppCheck | null = null;
+
+// Initialize only when an All-Star callable is actually used. This avoids an
+// attestation request for visitors who only browse unrelated AUBL pages.
+export function ensureFirebaseAppCheck(): AppCheck | null {
+  if (!appCheckSiteKey) return null;
+  if (appCheckInstance) return appCheckInstance;
+  appCheckInstance = initializeAppCheck(app, {
+    provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
+    isTokenAutoRefreshEnabled: true,
+  });
+  return appCheckInstance;
+}
 
 export const auth = getAuth(app);
 

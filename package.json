@@ -8,10 +8,13 @@
     "emulator": "firebase emulators:start --only firestore",
     "emulator:save": "firebase emulators:export ./firestore-local",
     "emulator:import": "firebase emulators:start --only firestore --import ./firestore-local",
+    "test:allstar:load": "firebase emulators:exec --only firestore \"PYTHONPATH=functions functions/venv/bin/python scripts/allstar_vote_emulator_load.py\"",
+    "test:allstar:rules": "firebase emulators:exec --only firestore --project demo-aubl-allstar-rules \"node scripts/allstar_firestore_rules_smoke.mjs\"",
     "build": "vite build && node scripts/generate-og-pages.mjs",
     "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.app.json --pretty false",
     "preview": "vite preview",
-    "check:ci": "npm run lint && npm run build"
+    "check:ci": "npm run lint && npm run typecheck && npm run build"
   },
   "dependencies": {
     "dompurify": "^3.3.1",
@@ -19,6 +22,7 @@
     "firebase-admin": "^12.7.0",
     "gsap": "^3.12.5",
     "html2canvas": "^1.4.1",
+    "keen-slider": "6.8.6",
     "quill": "^2.0.3",
     "quill-delta-to-html": "^0.12.1",
     "react": "^18.2.0",

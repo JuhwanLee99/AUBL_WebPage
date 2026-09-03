@@ -6,6 +6,7 @@ import { useAuth } from '../shared/auth/AuthProvider';
 import { useAdmin } from '../shared/auth/useAdmin';
 import { useDemoStore } from '../shared/state/demoStore';
 import { ContentProvider } from '../shared/state/contentProvider';
+import { useFeatureFlags } from '../shared/config/FeatureFlagsProvider';
 
 const NOTIFICATION_PROMPT_KEY = 'aubl:notificationPrompt:v1';
 const NOTIFICATION_PROMPT_SNOOZE_MS = 1000 * 60 * 60 * 24; // 24시간 동안 재등장 방지
@@ -13,11 +14,27 @@ const NOTIFICATION_PROMPT_SNOOZE_WEEK_MS = NOTIFICATION_PROMPT_SNOOZE_MS * 7; //
 const MOBILE_NOTICE_KEY = 'aubl:mobileNotice:v1';
 const MOBILE_NOTICE_SNOOZE_MS = 1000 * 60 * 60 * 24; // 모바일 팝업 24시간 스누즈
 
+type NavigationChild = {
+  path: string;
+  label: string;
+  requiresAdmin?: boolean;
+};
+
+type NavigationItem = {
+  path: string;
+  label: string;
+  children?: NavigationChild[];
+  requiresAdmin?: boolean;
+  requiresScorekeeper?: boolean;
+  showWhenBlocked?: boolean;
+};
+
 export default function Layout() {
   const location = useLocation();
   const { user, logout, initializing } = useAuth();
   const { isAdmin, canUseScorekeeper, canEditGameRecords, roleLabel, roleDetail } = useAdmin();
   const { state } = useDemoStore();
+  const { allstarEnabled } = useFeatureFlags();
   const isLiveOverlay = location.pathname.startsWith('/live-overlay');
   const isScoreboardText = location.pathname.startsWith('/scoreboard-text');
   const isEmbeddedParam = new URLSearchParams(location.search).get('embedded') === 'flutter';
@@ -231,7 +248,7 @@ export default function Layout() {
   const isMobileHeader = previewMode === 'mobile';
   const scorekeeperPath = state.activeMatchId ? `/scorekeeper/${state.activeMatchId}` : '/scorekeeper';
 
-  const navItems = useMemo(
+  const navItems = useMemo<NavigationItem[]>(
     () => [
       {
         path: '/intro',
@@ -255,6 +272,7 @@ export default function Layout() {
           { path: '/schedule/manage', label: '일정 관리', requiresAdmin: true },
         ],
       },
+      ...(allstarEnabled ? [{ path: '/allstar', label: '올스타전' }] : []),
       {
         path: '/records',
         label: '기록',
@@ -274,7 +292,7 @@ export default function Layout() {
       // 사용설명서: 네이티브 페이지
       { path: '/manual', label: '사용설명서' },
     ],
-    [scorekeeperPath],
+    [allstarEnabled, scorekeeperPath],
   );
   const [hoveredMenu, setHoveredMenu] = useState<string | null>(null);
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);

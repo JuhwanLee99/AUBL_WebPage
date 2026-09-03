@@ -4,7 +4,7 @@ import type {
   PowerRankingRow,
   TeamSeasonPowerInput,
 } from '../types';
-import type { Team } from '../../shared/types';
+import type { Team } from '@shared/types';
 
 // 직전 3개년 가중치(최근연도 → 1.0, -1년 → 0.6, -2년 → 0.3)
 export const POWER_RANKING_WEIGHTS: number[] = [1, 0.6, 0.3];
