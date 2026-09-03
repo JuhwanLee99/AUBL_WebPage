@@ -1,25 +1,66 @@
 /* Quill rich text editor */
 @import 'quill/dist/quill.snow.css';
 
+@font-face {
+  font-family: 'Pretendard Variable';
+  src: url('/fonts/pretendard/PretendardVariable.woff2') format('woff2-variations');
+  font-style: normal;
+  font-weight: 45 920;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Barlow Condensed';
+  src: url('/fonts/barlow-condensed/BarlowCondensed-SemiBold.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Barlow Condensed';
+  src: url('/fonts/barlow-condensed/BarlowCondensed-Black.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+}
+
 /* Global base styles for the landing layout */
 * {
   box-sizing: border-box;
 }
 
 :root {
-  font-family: 'Pretendard', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Pretendard Variable', 'Pretendard', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color: #e2e8f0;
-  background-color: #0b1220;
+  color: #102854;
+  background-color: #f4f7fc;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  --page-max-width: 1600px;
-  --page-padding: 40px 24px 72px;
+  --season-navy-950: #061638;
+  --season-navy-900: #0a2457;
+  --season-navy-800: #123873;
+  --season-blue-700: #174f9d;
+  --season-blue-600: #2565bd;
+  --season-blue-100: #dceafe;
+  --season-ink: #102854;
+  --season-muted: #62718c;
+  --season-canvas: #f4f7fc;
+  --season-surface: #ffffff;
+  --season-surface-muted: #edf2f9;
+  --season-line: #d8e1ee;
+  --season-line-strong: #b9c8dd;
+  --season-focus: #2c70d0;
+  --season-success: #13795b;
+  --season-warning: #9a5b05;
+  --season-danger: #b4233c;
+  --page-max-width: 1440px;
+  --page-padding: 32px 24px 72px;
   --header-height: 72px;
   --header-padding: 0 24px;
-  --nav-gap: 28px;
+  --nav-gap: 6px;
   --nav-font-size: 15px;
   --hero-padding: 56px;
   --hero-radius: 32px;
@@ -32,19 +73,43 @@
   --surface-radius-sm: 14px;
 }
 
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  color: #e7eef9;
+  background-color: #07142b;
+  --season-navy-950: #f3f7ff;
+  --season-navy-900: #d8e7ff;
+  --season-navy-800: #b7d2fb;
+  --season-blue-700: #8db9fb;
+  --season-blue-600: #6ea7f5;
+  --season-blue-100: #17345f;
+  --season-ink: #e7eef9;
+  --season-muted: #a8b8cf;
+  --season-canvas: #07142b;
+  --season-surface: #0d203d;
+  --season-surface-muted: #132b4d;
+  --season-line: #29476f;
+  --season-line-strong: #42628d;
+  --season-focus: #8ab9ff;
+  --season-success: #65d8ae;
+  --season-warning: #f3bd61;
+  --season-danger: #ff899b;
+}
+
 a {
   color: inherit;
   text-decoration: none;
 }
 
 a:hover {
-  opacity: 0.9;
+  text-decoration-color: currentColor;
 }
 
 body {
   margin: 0;
-  background: linear-gradient(135deg, #0b1220 0%, #111827 100%);
-  color: #e2e8f0;
+  min-width: 320px;
+  background: var(--season-canvas);
+  color: var(--season-ink);
 }
 
 #root {
@@ -58,19 +123,24 @@ button {
   font-size: 1rem;
   font-weight: 700;
   font-family: inherit;
-  background-color: #f97316;
-  color: #0f172a;
+  background-color: var(--season-navy-900);
+  color: #ffffff;
   cursor: pointer;
   transition: transform 150ms ease, box-shadow 150ms ease;
 }
 
 button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 12px 30px rgba(249, 115, 22, 0.25);
+  box-shadow: 0 10px 24px rgba(10, 36, 87, 0.2);
 }
 
-button:focus-visible {
-  outline: 3px solid rgba(249, 115, 22, 0.5);
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--season-focus) 48%, transparent);
   outline-offset: 3px;
 }
 
@@ -83,10 +153,9 @@ button:focus-visible {
 .app-header {
   position: sticky;
   top: 0;
-  z-index: 50;
-  backdrop-filter: blur(12px);
-  background: rgba(17, 24, 39, 0.7);
-  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  z-index: 80;
+  background: rgba(255, 255, 255, 0.96);
+  border-bottom: 1px solid var(--season-line);
   overflow: visible;
 }
 
@@ -133,6 +202,7 @@ button:focus-visible {
 .landing-hero {
   border-radius: var(--hero-radius);
   padding: var(--hero-padding);
+  color: #f8fafc;
 }
 
 .landing-section {
@@ -148,73 +218,6 @@ button:focus-visible {
 .cta-band {
   border-radius: var(--surface-radius-lg);
   padding: var(--cta-padding);
-}
-
-:root[data-preview-mode='mobile'] {
-  --page-max-width: 480px;
-  --page-padding: 22px 14px 56px;
-  --header-height: 68px;
-  --header-padding: 0 14px;
-  --nav-gap: 14px;
-  --nav-font-size: 13px;
-  --hero-padding: 30px;
-  --hero-radius: 22px;
-  --section-gap: 32px;
-  --section-padding: 18px;
-  --card-padding: 16px;
-  --cta-padding: 20px 18px;
-}
-
-:root[data-preview-mode='mobile'] body {
-  display: flex;
-  justify-content: center;
-}
-
-:root[data-preview-mode='mobile'] #root {
-  width: min(100%, 480px);
-  margin: 0 auto;
-  min-height: 100vh;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
-}
-
-.preview-toggle-inline {
-  margin-top: 12px;
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  align-items: center;
-  flex-wrap: wrap;
-  color: #94a3b8;
-  font-size: 12px;
-}
-
-.preview-toggle-inline__label {
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.preview-toggle-inline__button {
-  background: none;
-  border: none;
-  color: #cbd5e1;
-  font-weight: 800;
-  cursor: pointer;
-  padding: 0;
-  font-size: 12px;
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-decoration-color: transparent;
-  transition: color 120ms ease, text-decoration-color 120ms ease;
-}
-
-.preview-toggle-inline__button:hover {
-  color: #f97316;
-  text-decoration-color: rgba(249, 115, 22, 0.5);
-}
-
-.preview-toggle-inline__button.is-active {
-  color: #f97316;
-  text-decoration-color: #f97316;
 }
 
 .badge-hoverable {
@@ -294,6 +297,246 @@ button:focus-visible {
   min-width: 0;
 }
 
+/* 2026 team directory cards */
+.team-directory {
+  border: 1px solid var(--season-line);
+  border-radius: 4px;
+  background: var(--season-surface);
+  padding: clamp(18px, 2.6vw, 28px);
+}
+
+.team-directory__header {
+  border-bottom: 2px solid var(--season-navy-900);
+  padding-bottom: 18px;
+}
+
+.team-directory__sort {
+  border: 1px solid var(--season-line);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.team-directory__sort button {
+  min-height: 38px !important;
+  margin: 0;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--season-surface) !important;
+  color: var(--season-muted) !important;
+}
+
+.team-directory__sort button + button {
+  border-left: 1px solid var(--season-line) !important;
+}
+
+.team-directory__sort button[style*='rgba(56, 189, 248'] {
+  background: var(--season-navy-900) !important;
+  color: #ffffff !important;
+}
+
+.team-directory__groups {
+  gap: 22px !important;
+}
+
+.team-directory .team-hub-group-row {
+  border-bottom: 1px solid var(--season-line);
+  padding-bottom: 22px;
+}
+
+.team-directory .team-hub-group-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.team-directory-card {
+  --team-accent: var(--season-blue-600);
+  position: relative;
+  display: grid !important;
+  grid-template-rows: 112px minmax(88px, auto);
+  gap: 0 !important;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--season-line) !important;
+  border-top: 3px solid var(--team-accent) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+  text-decoration: none;
+  box-shadow: none !important;
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.team-directory-card:hover,
+.team-directory-card:focus-visible {
+  border-color: var(--team-accent) !important;
+  color: var(--season-ink) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(10, 36, 87, 0.1) !important;
+}
+
+.team-directory-card:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--team-accent) 28%, transparent);
+  outline-offset: 3px;
+}
+
+.team-directory-card__logo {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  overflow: hidden;
+  border-bottom: 1px solid var(--season-line);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--team-accent) 9%, transparent), transparent 64%),
+    var(--season-surface-muted);
+  padding: 14px 18px;
+}
+
+.team-directory-card__logo::after {
+  content: '';
+  position: absolute;
+  top: 18px;
+  right: 16px;
+  width: 28px;
+  height: 1px;
+  background: var(--team-accent);
+  opacity: 0.48;
+}
+
+.team-directory-card__logo img {
+  width: 100%;
+  height: 100%;
+  max-width: 116px;
+  object-fit: contain;
+  opacity: 0.82;
+  filter: saturate(0.9) contrast(1.03);
+  transition: opacity 160ms ease, transform 160ms ease, filter 160ms ease;
+}
+
+.team-directory-card:hover .team-directory-card__logo img,
+.team-directory-card:focus-visible .team-directory-card__logo img {
+  opacity: 1;
+  filter: saturate(1) contrast(1.06);
+  transform: scale(1.035);
+}
+
+.team-directory-card__logo.needs-contrast {
+  background: #f8fafc;
+}
+
+.team-directory-card__logo.needs-contrast img {
+  opacity: 0.94;
+}
+
+.team-directory-card__logo > span {
+  color: var(--team-accent);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 34px;
+  font-style: italic;
+  font-weight: 950;
+  letter-spacing: -0.04em;
+  opacity: 0.46;
+}
+
+.team-directory-card__body {
+  display: grid;
+  align-content: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 15px 42px 16px 16px;
+}
+
+.team-directory-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--season-muted);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+}
+
+.team-directory-card__group {
+  border: 1px solid color-mix(in srgb, var(--team-accent) 40%, var(--season-line));
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--team-accent) 8%, var(--season-surface));
+  color: var(--team-accent);
+  font-family: 'Pretendard Variable', sans-serif;
+  font-size: 10px;
+  letter-spacing: 0;
+  padding: 3px 6px;
+}
+
+.team-directory-card h3 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--season-navy-950) !important;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-directory-card p {
+  margin: 0;
+  color: var(--season-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.team-directory-card__arrow {
+  position: absolute;
+  right: 16px;
+  bottom: 17px;
+  color: var(--team-accent);
+  font-size: 17px;
+  font-weight: 900;
+  transition: transform 160ms ease;
+}
+
+.team-directory-card:hover .team-directory-card__arrow,
+.team-directory-card:focus-visible .team-directory-card__arrow {
+  transform: translateX(3px);
+}
+
+:root[data-theme='dark'] .team-directory-card__logo {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--team-accent) 16%, transparent), transparent 64%),
+    color-mix(in srgb, var(--season-surface-muted) 86%, #000000);
+}
+
+:root[data-theme='dark'] .team-directory-card__logo img {
+  opacity: 0.74;
+  filter: saturate(0.82) brightness(1.06) contrast(1.05);
+}
+
+:root[data-theme='dark'] .team-directory-card__logo.needs-contrast {
+  background: #eef2f7;
+}
+
+:root[data-theme='dark'] .team-directory-card__logo.needs-contrast img,
+:root[data-theme='dark'] .team-directory-card:hover .team-directory-card__logo img,
+:root[data-theme='dark'] .team-directory-card:focus-visible .team-directory-card__logo img {
+  opacity: 0.96;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .team-directory-card,
+  .team-directory-card__logo img,
+  .team-directory-card__arrow {
+    transition: none;
+  }
+
+  .team-directory-card:hover,
+  .team-directory-card:focus-visible,
+  .team-directory-card:hover .team-directory-card__logo img,
+  .team-directory-card:focus-visible .team-directory-card__logo img {
+    transform: none;
+  }
+}
+
 @media (max-width: 1024px) {
   :root {
     --page-padding: 32px 18px 64px;
@@ -348,6 +591,10 @@ button:focus-visible {
     flex: 0 0 clamp(220px, 68vw, 280px);
     min-width: clamp(220px, 68vw, 280px);
   }
+
+  .team-directory-card {
+    grid-template-rows: 104px minmax(88px, auto);
+  }
 }
 
 @media (max-width: 640px) {
@@ -393,6 +640,41 @@ button:focus-visible {
     flex: initial;
     min-width: 0;
     width: 100%;
+  }
+
+  .team-directory {
+    padding: 16px;
+  }
+
+  .team-directory__header {
+    align-items: flex-start !important;
+  }
+
+  .team-directory__grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .team-directory-card {
+    grid-template-columns: 104px minmax(0, 1fr);
+    grid-template-rows: minmax(108px, auto);
+  }
+
+  .team-directory-card__logo {
+    border-right: 1px solid var(--season-line);
+    border-bottom: 0;
+    padding: 16px 12px;
+  }
+
+  .team-directory-card__logo img {
+    max-width: 82px;
+  }
+
+  .team-directory-card__logo::after {
+    display: none;
+  }
+
+  .team-directory-card__body {
+    padding: 15px 38px 15px 14px;
   }
 }
 
@@ -649,4 +931,2199 @@ button:focus-visible {
   .auth-shell {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---------- 2026 season system ---------- */
+.season-badge {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.2;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.season-badge--navy {
+  border-color: #b9c8dd;
+  background: #edf2f9;
+  color: var(--season-navy-900);
+}
+
+.season-badge--blue {
+  border-color: #b7d1f6;
+  background: #e9f2ff;
+  color: #174f9d;
+}
+
+.season-badge--muted {
+  border-color: #d3dbe7;
+  background: #f4f6f9;
+  color: #5e6c83;
+}
+
+.season-badge--success {
+  border-color: #a9dccb;
+  background: #e9f8f2;
+  color: var(--season-success);
+}
+
+.season-badge--warning {
+  border-color: #ead09e;
+  background: #fff7df;
+  color: var(--season-warning);
+}
+
+.season-badge--danger {
+  border-color: #efbcc5;
+  background: #fff0f2;
+  color: var(--season-danger);
+}
+
+.season-action {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1px solid var(--season-navy-900);
+  border-radius: 8px;
+  background: var(--season-navy-900);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.season-action:hover {
+  background: var(--season-navy-800);
+  border-color: var(--season-navy-800);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.season-action--secondary {
+  border-color: var(--season-line-strong);
+  background: #ffffff;
+  color: var(--season-navy-900);
+}
+
+.season-action--secondary:hover {
+  border-color: var(--season-blue-600);
+  background: #f5f9ff;
+  color: var(--season-blue-700);
+}
+
+.season-action--ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--season-navy-800);
+}
+
+.season-action--ghost:hover {
+  border-color: var(--season-line);
+  background: var(--season-surface-muted);
+  color: var(--season-navy-950);
+}
+
+.season-action--danger {
+  border-color: #e5aab4;
+  background: #ffffff;
+  color: var(--season-danger);
+}
+
+.season-action--danger:hover {
+  border-color: var(--season-danger);
+  background: #fff0f2;
+  color: var(--season-danger);
+}
+
+.season-action--compact {
+  min-height: 44px;
+  padding: 9px 13px;
+  font-size: 13px;
+}
+
+.season-action--full {
+  width: 100%;
+}
+
+.season-action:disabled {
+  cursor: wait;
+  opacity: 0.58;
+  transform: none;
+}
+
+.season-wordmark {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  color: var(--season-navy-900);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.season-wordmark__league {
+  position: relative;
+  font-size: 25px;
+  font-weight: 950;
+  font-style: italic;
+  letter-spacing: -0.055em;
+}
+
+.season-wordmark__league::after {
+  content: '';
+  position: absolute;
+  right: -5px;
+  bottom: -3px;
+  left: 1px;
+  height: 2px;
+  background: var(--season-blue-600);
+  transform: skewX(-36deg);
+  transform-origin: left;
+}
+
+.season-wordmark__season {
+  margin-top: 7px;
+  color: var(--season-blue-700);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.13em;
+}
+
+.season-wordmark--compact .season-wordmark__league {
+  font-size: 21px;
+}
+
+.season-wordmark--compact .season-wordmark__season {
+  font-size: 8px;
+}
+
+.season-page-hero {
+  min-height: 260px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 28px;
+  padding: clamp(28px, 5vw, 58px);
+  overflow: hidden;
+  border: 2px solid var(--season-navy-900);
+  border-radius: 4px;
+  background: var(--season-surface);
+  color: var(--season-ink);
+  position: relative;
+}
+
+.season-page-hero::before,
+.season-page-hero::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--season-navy-900);
+}
+
+.season-page-hero::before { top: 14px; }
+.season-page-hero::after { bottom: 14px; }
+
+.season-page-hero__copy,
+.season-page-hero__aside {
+  position: relative;
+  z-index: 1;
+}
+
+.season-page-hero__eyebrow,
+.season-section-header__eyebrow {
+  margin: 0 0 8px;
+  color: var(--season-blue-700);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.season-page-hero h1 {
+  max-width: 860px;
+  margin: 0;
+  color: var(--season-navy-950);
+  font-size: clamp(32px, 5vw, 64px);
+  font-weight: 920;
+  letter-spacing: -0.05em;
+  line-height: 1.02;
+}
+
+.season-page-hero__description {
+  max-width: 780px;
+  margin-top: 18px;
+  color: var(--season-muted);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.season-page-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.season-section-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid var(--season-navy-900);
+}
+
+.season-section-header h2 {
+  margin: 0;
+  color: var(--season-navy-950);
+  font-size: clamp(22px, 2.5vw, 32px);
+  letter-spacing: -0.035em;
+  line-height: 1.16;
+}
+
+.season-section-header__description {
+  max-width: 760px;
+  margin-top: 7px;
+  color: var(--season-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.season-match-card {
+  display: grid;
+  gap: 15px;
+  padding: 18px;
+  border: 1px solid var(--season-line);
+  border-radius: 4px;
+  background: var(--season-surface);
+}
+
+.season-match-card > header,
+.season-match-card > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--season-muted);
+  font-size: 12px;
+}
+
+.season-match-card__teams {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  color: var(--season-navy-950);
+}
+
+.season-match-card__teams strong:last-child { text-align: right; }
+.season-match-card__teams span {
+  min-width: 58px;
+  color: var(--season-blue-700);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 22px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.season-data-freshness {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--season-line);
+  border-left: 4px solid var(--season-blue-600);
+  background: var(--season-surface);
+}
+
+.season-data-freshness > div {
+  display: grid;
+  gap: 2px;
+}
+
+.season-data-freshness span,
+.season-data-freshness code {
+  color: var(--season-muted);
+  font-size: 11px;
+}
+
+.record-hub-section {
+  display: grid;
+  gap: 14px;
+}
+
+.record-hub-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--season-line);
+  background: var(--season-surface);
+}
+
+.record-hub-tabs > span {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.record-hub-filters {
+  padding: 16px;
+  border: 1px solid var(--season-line);
+  background: var(--season-surface);
+}
+
+.record-hub-note {
+  margin: 0;
+  padding: 12px 14px;
+  border-left: 3px solid var(--season-warning);
+  background: var(--season-surface);
+  color: var(--season-warning);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.season-data-freshness strong {
+  color: var(--season-ink);
+  font-size: 13px;
+}
+
+.season-data-freshness code {
+  padding: 4px 6px;
+  border: 1px solid var(--season-line);
+  background: var(--season-surface-muted);
+}
+
+/* ---------- Responsive public shell ---------- */
+.season-shell-header {
+  isolation: isolate;
+  box-shadow: 0 6px 22px rgba(8, 34, 78, 0.06);
+}
+
+.season-shell-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 3px;
+  background: var(--season-navy-900);
+}
+
+.season-shell-header__inner {
+  height: var(--header-height);
+  padding: var(--header-padding);
+  gap: 22px;
+}
+
+.season-shell-brand {
+  width: 104px;
+  min-width: 104px;
+  height: var(--header-height);
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.season-shell-brand__logo {
+  width: 100px;
+  height: auto;
+  display: block;
+  flex: 0 0 auto;
+}
+
+.shell-theme-button {
+  width: 44px;
+  height: 44px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 44px;
+  padding: 0;
+  border: 1px solid var(--season-line);
+  border-radius: 8px;
+  background: var(--season-surface);
+  color: var(--season-navy-900);
+  box-shadow: none;
+}
+
+.shell-theme-button:hover {
+  border-color: var(--season-line-strong);
+  background: var(--season-surface-muted);
+  box-shadow: none;
+  transform: none;
+}
+
+.shell-theme-button--mobile {
+  display: none;
+}
+
+.shell-desktop-nav {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--nav-gap);
+  margin-left: auto;
+}
+
+.shell-nav-menu,
+.shell-account-menu {
+  position: relative;
+}
+
+.shell-nav-menu > summary,
+.shell-account-menu > summary {
+  list-style: none;
+}
+
+.shell-nav-menu > summary::-webkit-details-marker,
+.shell-account-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.shell-nav__item {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 10px;
+  border-radius: 7px;
+  color: #314767;
+  font-size: var(--nav-font-size);
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.shell-nav__item svg {
+  transition: transform 140ms ease;
+}
+
+.shell-nav-menu[open] > .shell-nav__item svg {
+  transform: rotate(180deg);
+}
+
+.shell-nav__item:hover,
+.shell-nav__item.is-active,
+.shell-nav-menu[open] > .shell-nav__item {
+  background: #edf3fb;
+  color: var(--season-navy-900);
+}
+
+.shell-nav__item.is-active {
+  box-shadow: inset 0 -2px 0 var(--season-blue-600);
+}
+
+.shell-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  z-index: 110;
+  width: max-content;
+  min-width: 184px;
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid var(--season-line);
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 18px 44px rgba(8, 34, 78, 0.16);
+  transform: translateX(-50%);
+}
+
+.shell-nav-menu:last-child .shell-menu {
+  right: 0;
+  left: auto;
+  transform: none;
+}
+
+.shell-menu__link,
+.shell-account-link {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 9px 12px;
+  border-radius: 7px;
+  color: #304664;
+  font-size: 13px;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.shell-menu__link:hover,
+.shell-menu__link.is-active,
+.shell-account-link:hover {
+  background: #edf3fb;
+  color: var(--season-navy-900);
+}
+
+.shell-menu__link--disabled {
+  color: #8b97aa;
+  cursor: not-allowed;
+}
+
+.shell-account-area {
+  min-width: 118px;
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.mobile-sheet__header-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.shell-account-loading {
+  color: var(--season-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.shell-account-summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 5px;
+  border: 1px solid var(--season-line);
+  border-radius: 9px;
+  background: #ffffff;
+  color: var(--season-navy-900);
+  cursor: pointer;
+}
+
+.shell-account-menu[open] .shell-account-summary,
+.shell-account-summary:hover {
+  border-color: var(--season-line-strong);
+  background: #f7f9fc;
+}
+
+.shell-account-avatar {
+  width: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 34px;
+  border-radius: 50%;
+  background: var(--season-navy-900);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.shell-account-copy {
+  min-width: 0;
+  display: grid;
+  line-height: 1.1;
+}
+
+.shell-account-copy strong {
+  max-width: 106px;
+  overflow: hidden;
+  color: var(--season-ink);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-account-copy small {
+  margin-top: 4px;
+  color: var(--season-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.shell-account-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 110;
+  width: 250px;
+  display: grid;
+  gap: 2px;
+  padding: 10px;
+  border: 1px solid var(--season-line);
+  border-radius: 11px;
+  background: #ffffff;
+  box-shadow: 0 18px 44px rgba(8, 34, 78, 0.16);
+}
+
+.shell-account-popover__identity {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 5px;
+  padding: 7px 8px 12px;
+  border-bottom: 1px solid var(--season-line);
+}
+
+.shell-account-popover__identity strong {
+  margin-top: 4px;
+  color: var(--season-ink);
+  font-size: 14px;
+}
+
+.shell-account-popover__identity span:last-child {
+  overflow: hidden;
+  color: var(--season-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-context-nav {
+  width: fit-content;
+  display: flex;
+  gap: 4px;
+  margin-bottom: 18px;
+  padding: 4px;
+  border: 1px solid var(--season-line);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.shell-context-nav a,
+.shell-context-nav span {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 13px;
+  border-radius: 7px;
+  color: var(--season-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.shell-context-nav a.is-active {
+  background: var(--season-navy-900);
+  color: #ffffff;
+}
+
+.shell-context-nav span[aria-disabled='true'] {
+  color: #9aa5b5;
+}
+
+.shell-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--season-line);
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 10px 28px rgba(8, 34, 78, 0.08);
+}
+
+.shell-notice--info {
+  border-left: 4px solid var(--season-blue-600);
+}
+
+.shell-notice--warning {
+  border-left: 4px solid #bd7410;
+}
+
+.shell-notice__copy {
+  min-width: 220px;
+  display: grid;
+  gap: 5px;
+}
+
+.shell-notice__copy strong {
+  color: var(--season-ink);
+  font-size: 15px;
+}
+
+.shell-notice__copy > span:last-child {
+  color: var(--season-muted);
+  font-size: 13px;
+}
+
+.shell-notice__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.season-shell-footer {
+  margin-top: auto;
+  border-top: 1px solid var(--season-line);
+  background: #ffffff;
+  color: var(--season-muted);
+}
+
+.season-shell-footer__inner {
+  width: 100%;
+  max-width: var(--page-max-width);
+  min-height: 112px;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin: 0 auto;
+  padding: 24px;
+  font-size: 12px;
+}
+
+.season-shell-footer__legal {
+  display: flex;
+  gap: 16px;
+  margin-left: auto;
+  color: #415674;
+  font-weight: 700;
+}
+
+.shell-mobile-nav,
+.mobile-sheet,
+.mobile-sheet-backdrop {
+  display: none;
+}
+
+@media (max-width: 1160px) {
+  :root {
+    --nav-font-size: 13px;
+  }
+
+  .season-shell-header__inner {
+    gap: 10px;
+  }
+
+  .shell-nav__item {
+    padding-right: 7px;
+    padding-left: 7px;
+  }
+
+  .shell-account-copy {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  :root {
+    --header-height: 60px;
+    --header-padding: 0 16px;
+    --page-padding: 20px 16px calc(98px + env(safe-area-inset-bottom));
+    --hero-padding: 34px;
+    --hero-radius: 24px;
+  }
+
+  .season-shell-header__inner {
+    height: var(--header-height);
+    justify-content: flex-start;
+    padding: var(--header-padding);
+  }
+
+  .season-shell-brand {
+    width: 82px;
+    min-width: 82px;
+    height: var(--header-height);
+  }
+
+  .season-page-hero {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 34px 22px;
+  }
+
+  .season-shell-brand__logo {
+    width: 78px;
+    height: auto;
+  }
+
+  .shell-theme-button--mobile {
+    display: inline-grid;
+    margin-left: auto;
+  }
+
+  .season-wordmark__league {
+    font-size: 22px;
+  }
+
+  .season-wordmark__season {
+    margin-top: 6px;
+    font-size: 8px;
+  }
+
+  .shell-desktop-nav,
+  .shell-account-area {
+    display: none;
+  }
+
+  .app-shell--with-mobile-nav .app-main {
+    padding-bottom: calc(98px + env(safe-area-inset-bottom));
+  }
+
+  .app-shell--with-mobile-nav .season-shell-footer {
+    margin-bottom: calc(66px + env(safe-area-inset-bottom));
+  }
+
+  .shell-mobile-nav {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 140;
+    min-height: calc(66px + env(safe-area-inset-bottom));
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    padding: 5px max(6px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(6px, env(safe-area-inset-left));
+    border-top: 1px solid var(--season-line);
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 -8px 28px rgba(8, 34, 78, 0.12);
+  }
+
+  .shell-mobile-nav a,
+  .shell-mobile-nav button {
+    min-width: 0;
+    min-height: 56px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 5px 2px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    box-shadow: none;
+    color: #758197;
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1;
+    cursor: pointer;
+    transform: none;
+  }
+
+  .shell-mobile-nav a:hover,
+  .shell-mobile-nav button:hover,
+  .shell-mobile-nav a.is-active,
+  .shell-mobile-nav button.is-active {
+    background: #eef4fc;
+    box-shadow: none;
+    color: var(--season-navy-900);
+    transform: none;
+  }
+
+  .shell-mobile-nav .is-active svg {
+    stroke-width: 2.4;
+  }
+
+  .mobile-sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 150;
+    display: block;
+    background: rgba(6, 22, 56, 0.48);
+    animation: season-fade-in 180ms ease-out both;
+  }
+
+  .mobile-sheet {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 160;
+    max-height: min(86vh, 760px);
+    display: flex;
+    flex-direction: column;
+    padding: 16px 16px calc(20px + env(safe-area-inset-bottom));
+    border: 1px solid var(--season-line);
+    border-bottom: 0;
+    border-radius: 18px 18px 0 0;
+    background: #ffffff;
+    box-shadow: 0 -22px 60px rgba(6, 22, 56, 0.24);
+    color: var(--season-ink);
+    animation: season-sheet-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .mobile-sheet__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--season-line);
+  }
+
+  .mobile-sheet__header h2 {
+    margin: 8px 0 0;
+    color: var(--season-navy-950);
+    font-size: 24px;
+    line-height: 1.1;
+  }
+
+  .mobile-sheet__close {
+    width: 44px;
+    height: 44px;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 44px;
+    padding: 0;
+    border: 1px solid var(--season-line);
+    border-radius: 50%;
+    background: #ffffff;
+    color: var(--season-navy-900);
+    box-shadow: none;
+  }
+
+  .mobile-sheet__account {
+    display: grid;
+    gap: 12px;
+    margin-top: 12px;
+    padding: 14px;
+    border: 1px solid var(--season-line);
+    border-radius: 12px;
+    background: #f5f8fc;
+  }
+
+  .mobile-sheet__identity {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .mobile-sheet__identity > span:last-child {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+
+  .mobile-sheet__identity strong {
+    overflow: hidden;
+    color: var(--season-ink);
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-sheet__identity small {
+    overflow: hidden;
+    color: var(--season-muted);
+    font-size: 11px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-sheet__account-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .mobile-sheet__groups {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    margin-top: 16px;
+    padding: 0 2px 8px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .mobile-sheet__group {
+    min-width: 0;
+  }
+
+  .mobile-sheet__group h3 {
+    margin: 0 0 6px;
+    color: #738198;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .mobile-sheet__group > div {
+    display: grid;
+    gap: 2px;
+  }
+
+  .mobile-sheet__link {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 9px;
+    border-radius: 7px;
+    color: #304664;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .mobile-sheet__link:hover,
+  .mobile-sheet__link.is-active {
+    background: #edf3fb;
+    color: var(--season-navy-900);
+  }
+
+  .mobile-sheet__link.is-disabled {
+    color: #8c98aa;
+  }
+
+  .mobile-sheet__link small {
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .shell-notice {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .shell-notice__actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 520px) {
+  :root {
+    --page-padding: 16px 12px calc(94px + env(safe-area-inset-bottom));
+    --hero-padding: 24px;
+    --hero-radius: 18px;
+    --section-padding: 14px;
+    --card-padding: 14px;
+    --cta-padding: 18px 15px;
+  }
+
+  .landing-stack {
+    gap: 20px;
+  }
+
+  .mobile-sheet {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .mobile-sheet__groups {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .shell-context-nav {
+    width: 100%;
+  }
+
+  .shell-context-nav a,
+  .shell-context-nav span {
+    flex: 1;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .shell-notice__actions .season-action {
+    flex: 1 1 120px;
+  }
+
+  .season-shell-footer__inner {
+    min-height: 150px;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+    padding: 22px 16px;
+  }
+
+  .season-shell-footer__legal {
+    margin-left: 0;
+  }
+
+  .season-section-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .season-match-card__teams {
+    gap: 8px;
+  }
+}
+
+@keyframes season-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes season-sheet-in {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .hero-animate,
+  .snapshot-card,
+  .prediction-chunk,
+  .team-hub-section,
+  .team-card,
+  .record-hub-section {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* ---------- 2026 detail-page bridge ----------
+ * Legacy detail screens still contain inline presentation values. This scope
+ * translates only the retired dark/glow palette into the season tokens while
+ * deliberately excluding scorekeeper, scoreboard, overlay and admin game-
+ * record routes in Layout.tsx. Functional layout and status colours remain
+ * page-owned.
+ */
+.season-detail-scope {
+  position: relative;
+  isolation: isolate;
+  color: var(--season-ink);
+  min-width: 0;
+}
+
+.season-detail-scope::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: 5px;
+  right: clamp(18px, 5vw, 74px);
+  left: clamp(18px, 5vw, 74px);
+  height: 2px;
+  background: linear-gradient(90deg, var(--season-navy-900) 0 72%, var(--season-blue-600) 72% 88%, transparent 88%);
+  opacity: 0.9;
+}
+
+.season-detail-scope > * {
+  min-width: 0;
+}
+
+.season-detail-scope h1,
+.season-detail-scope h2,
+.season-detail-scope h3 {
+  color: var(--season-navy-950) !important;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+.season-detail-scope h1 {
+  font-size: clamp(28px, 4vw, 44px) !important;
+  line-height: 1.08;
+}
+
+.season-detail-scope h2 {
+  line-height: 1.18;
+}
+
+.season-detail-scope input:not([type='checkbox']):not([type='radio']),
+.season-detail-scope select,
+.season-detail-scope textarea {
+  min-height: 44px;
+  max-width: 100%;
+  border: 1px solid var(--season-line-strong) !important;
+  border-radius: 8px !important;
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+  box-shadow: none !important;
+}
+
+.season-detail-scope textarea {
+  min-height: 132px;
+}
+
+.season-detail-scope input::placeholder,
+.season-detail-scope textarea::placeholder {
+  color: var(--season-muted);
+  opacity: 0.78;
+}
+
+.season-detail-scope button,
+.season-detail-scope a[role='button'] {
+  min-height: 44px;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+.season-detail-scope table {
+  width: 100%;
+  border-collapse: collapse;
+  border-color: var(--season-line) !important;
+  background: var(--season-surface);
+  color: var(--season-ink);
+}
+
+.season-detail-scope th {
+  background: var(--season-surface-muted) !important;
+  color: var(--season-navy-900) !important;
+}
+
+.season-detail-scope th,
+.season-detail-scope td {
+  border-color: var(--season-line) !important;
+}
+
+/* Retired navy panels and glow surfaces. */
+.season-detail-scope [style*='background: rgba(15, 23, 42'],
+.season-detail-scope [style*='background: rgba(2, 6, 23'],
+.season-detail-scope [style*='background: rgb(15, 23, 42)'],
+.season-detail-scope [style*='background: rgb(11, 15, 26)'],
+.season-detail-scope [style*='linear-gradient(135deg, rgb(15, 23, 42)'],
+.season-detail-scope [style*='linear-gradient(135deg, rgb(13, 31, 58)'],
+.season-detail-scope [style*='linear-gradient(140deg, rgb(10, 26, 63)'],
+.season-detail-scope [style*='linear-gradient(140deg, rgba(8, 47, 73'],
+.season-detail-scope [style*='linear-gradient(130deg, rgb(15, 23, 42)'] {
+  border-color: var(--season-line) !important;
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+  box-shadow: 0 14px 34px rgba(10, 36, 87, 0.08) !important;
+}
+
+.season-detail-scope [style*='background: rgba(255, 255, 255, 0.0'] {
+  border-color: var(--season-line) !important;
+  background: var(--season-surface-muted) !important;
+}
+
+.season-detail-scope [style*='border: 1px solid rgba(148, 163, 184'],
+.season-detail-scope [style*='border: 1.5px solid rgba(148, 163, 184'],
+.season-detail-scope [style*='border-bottom: 1px solid rgba(148, 163, 184'],
+.season-detail-scope [style*='border-top: 1px solid rgba(148, 163, 184'] {
+  border-color: var(--season-line) !important;
+}
+
+/* Retired light-on-dark copy becomes token-driven in both themes. */
+.season-detail-scope [style*='color: rgb(248, 250, 252)'],
+.season-detail-scope [style*='color: rgb(241, 245, 249)'],
+.season-detail-scope [style*='color: rgb(226, 232, 240)'] {
+  color: var(--season-ink) !important;
+}
+
+.season-detail-scope [style*='color: rgb(203, 213, 225)'],
+.season-detail-scope [style*='color: rgb(148, 163, 184)'],
+.season-detail-scope [style*='color: rgb(100, 116, 139)'] {
+  color: var(--season-muted) !important;
+}
+
+.season-detail-scope [style*='color: rgb(147, 197, 253)'],
+.season-detail-scope [style*='color: rgb(96, 165, 250)'],
+.season-detail-scope [style*='color: rgb(103, 232, 249)'],
+.season-detail-scope [style*='color: rgb(186, 230, 253)'],
+.season-detail-scope [style*='color: rgb(191, 219, 254)'],
+.season-detail-scope [style*='color: rgb(249, 115, 22)'],
+.season-detail-scope [style*='color: rgb(253, 186, 116)'] {
+  color: var(--season-blue-700) !important;
+}
+
+.season-detail-scope [style*='linear-gradient(120deg, rgb(249, 115, 22)'],
+.season-detail-scope [style*='linear-gradient(90deg, rgb(249, 115, 22)'] {
+  border-color: var(--season-navy-900) !important;
+  background: var(--season-navy-900) !important;
+  color: #ffffff !important;
+}
+
+.season-detail-scope [style*='background: rgba(249, 115, 22'] {
+  border-color: color-mix(in srgb, var(--season-blue-600) 44%, var(--season-line)) !important;
+  background: var(--season-blue-100) !important;
+  color: var(--season-blue-700) !important;
+}
+
+.season-detail-scope [style*='radial-gradient'][style*='rgba(249, 115, 22'] {
+  background: radial-gradient(circle at 14% 18%, color-mix(in srgb, var(--season-blue-100) 74%, transparent), transparent 38%) !important;
+}
+
+.season-detail-scope [style*='url("'] :where(h2, h3, strong),
+.season-detail-scope [style*="url('"] :where(h2, h3, strong) {
+  color: #ffffff !important;
+}
+
+.season-detail-scope .auth-shell {
+  padding-top: clamp(18px, 4vw, 56px);
+}
+
+.season-detail-scope .auth-hero,
+.season-detail-scope .auth-card {
+  border: 1px solid var(--season-line);
+  background: var(--season-surface);
+  color: var(--season-ink);
+  box-shadow: 0 14px 34px rgba(10, 36, 87, 0.08);
+}
+
+.season-detail-scope .auth-tab,
+.season-detail-scope .auth-google,
+.season-detail-scope .auth-apple,
+.season-detail-scope .auth-tips > div {
+  border-color: var(--season-line);
+  background: var(--season-surface-muted);
+  color: var(--season-ink);
+}
+
+.season-detail-scope .auth-tab.is-active,
+.season-detail-scope .auth-submit {
+  border-color: var(--season-navy-900);
+  background: var(--season-navy-900);
+  color: #ffffff;
+}
+
+.season-detail-scope .auth-label,
+.season-detail-scope .auth-tips strong {
+  color: var(--season-ink);
+}
+
+.season-detail-scope .auth-footer,
+.season-detail-scope .auth-divider,
+.season-detail-scope .lede {
+  color: var(--season-muted);
+}
+
+.season-detail-scope .auth-link,
+.season-detail-scope .eyebrow {
+  color: var(--season-blue-700);
+}
+
+.community-dashboard__grid {
+  align-items: stretch;
+}
+
+.community-dashboard__panel {
+  min-width: 0;
+  box-shadow: 0 14px 34px rgba(10, 36, 87, 0.08);
+}
+
+/* ---------- Home-aligned detail boards ---------- */
+.season-detail-scope :where(section, article, form)[style*='border'] {
+  border-color: var(--season-line) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  box-shadow: none !important;
+}
+
+.season-detail-scope div[style*='border-radius: 12px'][style*='padding'],
+.season-detail-scope div[style*='border-radius: 14px'][style*='padding'],
+.season-detail-scope div[style*='border-radius: 16px'][style*='padding'],
+.season-detail-scope div[style*='border-radius: 18px'][style*='padding'] {
+  border-color: var(--season-line) !important;
+  border-radius: 4px !important;
+  background-color: var(--season-surface) !important;
+  box-shadow: none !important;
+}
+
+.season-detail-scope div[style*='box-shadow'] {
+  box-shadow: none !important;
+}
+
+.season-detail-scope :where(a, button)[style*='border'] {
+  border-radius: 2px !important;
+  box-shadow: none !important;
+}
+
+.season-detail-scope thead th {
+  border-color: var(--season-navy-900) !important;
+  background: var(--season-navy-900) !important;
+  color: #ffffff !important;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.025em;
+  white-space: nowrap;
+}
+
+.season-detail-scope tbody th {
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+}
+
+.season-detail-scope th,
+.season-detail-scope td {
+  min-height: 44px;
+  padding: 12px 14px !important;
+  text-align: left;
+}
+
+.season-detail-scope tbody tr {
+  border-bottom: 1px solid var(--season-line);
+}
+
+.season-detail-scope tbody tr:hover {
+  background: var(--season-surface-muted) !important;
+}
+
+.schedule-page {
+  --schedule-accent: var(--season-blue-600);
+  gap: 20px !important;
+  min-width: 0;
+}
+
+.schedule-page__hero {
+  align-items: flex-end !important;
+  border-bottom: 2px solid var(--season-navy-900);
+  padding: 14px 0 20px;
+}
+
+.schedule-page__hero h1 {
+  margin: 5px 0 0 !important;
+  font-size: clamp(30px, 4.2vw, 48px) !important;
+  font-weight: 950 !important;
+  letter-spacing: -0.055em;
+}
+
+.schedule-page__hero p {
+  color: var(--season-muted) !important;
+  line-height: 1.55;
+}
+
+.schedule-page__eyebrow {
+  color: var(--season-blue-700);
+  display: block;
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 11px;
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+}
+
+.schedule-page__nav {
+  border: 1px solid var(--season-line) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  gap: 0 !important;
+  padding: 0 !important;
+}
+
+.schedule-page__nav-card {
+  min-height: 78px !important;
+  border: 0 !important;
+  border-right: 1px solid var(--season-line) !important;
+  border-radius: 0 !important;
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+  padding: 16px !important;
+}
+
+.schedule-page__nav-card:last-child {
+  border-right: 0 !important;
+}
+
+.schedule-page__nav-card:hover,
+.schedule-page__nav-card:focus-visible {
+  background: var(--season-surface-muted) !important;
+  color: var(--season-navy-900) !important;
+}
+
+.schedule-page__form,
+.schedule-page__toolbar,
+.schedule-calendar,
+.schedule-board {
+  border: 1px solid var(--season-line) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  box-shadow: none !important;
+  padding: clamp(16px, 2.4vw, 24px) !important;
+}
+
+.schedule-page__toolbar {
+  border-left: 4px solid var(--season-blue-600) !important;
+}
+
+.schedule-board__heading,
+.schedule-board > div:first-child,
+.schedule-results-board > div:first-child,
+.schedule-manage-board > div:first-child {
+  border-bottom: 2px solid var(--season-navy-900);
+  padding-bottom: 14px;
+}
+
+.schedule-page__sections,
+.schedule-practice-list {
+  gap: 20px !important;
+}
+
+.schedule-match-row,
+.schedule-result-row,
+.schedule-group-match,
+.schedule-practice-match {
+  border: 0 !important;
+  border-top: 1px solid var(--season-line) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 16px 0 !important;
+}
+
+.schedule-board__heading + div > .schedule-match-row:first-child,
+.schedule-practice-list > .schedule-match-row:first-child {
+  border-top: 0 !important;
+}
+
+.schedule-summary {
+  border: 1px solid var(--season-line);
+  border-radius: 4px;
+  background: var(--season-surface);
+  gap: 0 !important;
+}
+
+.schedule-summary__card {
+  min-height: 118px;
+  border: 0 !important;
+  border-right: 1px solid var(--season-line) !important;
+  border-radius: 0 !important;
+  background: var(--season-surface) !important;
+  box-shadow: none !important;
+  padding: 20px !important;
+}
+
+.schedule-summary__card:last-child {
+  border-right: 0 !important;
+}
+
+.schedule-summary__card > span:first-child {
+  color: var(--season-blue-700) !important;
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  letter-spacing: 0.1em;
+}
+
+.schedule-group-tabs {
+  border: 1px solid var(--season-line);
+  border-radius: 4px;
+  background: var(--season-surface);
+  padding: 12px;
+}
+
+.schedule-group-tabs button {
+  border-radius: 2px !important;
+}
+
+.schedule-group-grid {
+  align-items: start;
+}
+
+.schedule-group-board {
+  border-top: 4px solid var(--schedule-accent) !important;
+  background: var(--season-surface) !important;
+}
+
+.schedule-empty {
+  border: 1px dashed var(--season-line-strong) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  color: var(--season-muted) !important;
+  box-shadow: none !important;
+}
+
+.schedule-calendar__day {
+  border-color: var(--season-line) !important;
+  border-radius: 2px !important;
+  background: var(--season-surface) !important;
+}
+
+.schedule-calendar__match {
+  border: 0 !important;
+  border-left: 3px solid var(--season-blue-600) !important;
+  border-radius: 0 !important;
+  background: var(--season-surface-muted) !important;
+  color: var(--season-ink) !important;
+}
+
+.schedule-live-grid {
+  gap: 16px !important;
+}
+
+.schedule-live-card {
+  border: 1px solid var(--season-line) !important;
+  border-top: 4px solid var(--season-blue-600) !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
+
+.schedule-live-card__heading {
+  border-bottom: 1px solid var(--season-line) !important;
+  background: var(--season-surface) !important;
+}
+
+.schedule-manage-row {
+  border-bottom: 1px solid var(--season-line);
+  padding: 4px 0 16px;
+}
+
+.schedule-manage-row > div:first-child,
+.schedule-manage-board [style*='grid-template-columns: 130px'] {
+  border-color: var(--season-line) !important;
+  border-radius: 2px !important;
+  background: var(--season-surface-muted) !important;
+}
+
+/* ---------- Remaining public and CMS pages ---------- */
+.season-content-page {
+  min-width: 0;
+  color: var(--season-ink) !important;
+}
+
+.season-content-page > :where(section, article) {
+  border-color: var(--season-line) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  box-shadow: none !important;
+}
+
+.season-content-page > :where(section, article) > div:first-child:has(h2),
+.season-content-page > :where(section, article) > header:first-child {
+  border-bottom-color: var(--season-line) !important;
+}
+
+.intro-page,
+.rules-page,
+.teams-page,
+.manual-page {
+  gap: 22px !important;
+}
+
+.intro-page > section,
+.rules-page > section,
+.teams-page > section,
+.manual-page > section,
+.legal-page > section {
+  padding: clamp(18px, 2.8vw, 28px) !important;
+}
+
+.intro-page > section:first-child,
+.rules-page > section:first-child,
+.teams-page > section:first-child,
+.manual-page > section:first-child,
+.legal-page > section:first-child,
+.team-profile-hero {
+  position: relative;
+  overflow: hidden;
+  border: 2px solid var(--season-navy-900) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  box-shadow: none !important;
+  padding: clamp(28px, 5vw, 52px) !important;
+}
+
+.intro-page > section:first-child::before,
+.rules-page > section:first-child::before,
+.teams-page > section:first-child::before,
+.manual-page > section:first-child::before,
+.legal-page > section:first-child::before,
+.team-profile-hero::before {
+  content: '';
+  position: absolute;
+  top: 16px;
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: var(--season-navy-900);
+}
+
+.intro-page > section:first-child h2,
+.rules-page > section:first-child h2,
+.teams-page > section:first-child h2,
+.manual-page > section:first-child h1,
+.manual-page > section:first-child h2,
+.legal-page > section:first-child h1,
+.legal-page > section:first-child h2,
+.team-profile-hero h1 {
+  max-width: 900px;
+  color: var(--season-navy-950) !important;
+  font-size: clamp(30px, 5vw, 52px) !important;
+  font-weight: 950 !important;
+  letter-spacing: -0.055em;
+  line-height: 1.08 !important;
+}
+
+.intro-page > section:not(:first-child),
+.rules-page > section:not(:first-child),
+.teams-page > section:not(:first-child),
+.manual-page > section:not(:first-child),
+.legal-page > section:not(:first-child),
+.team-profile-page > section:not(:first-child) {
+  border: 1px solid var(--season-line) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  box-shadow: none !important;
+}
+
+.intro-page > section:not(:first-child) h2,
+.rules-page > section:not(:first-child) h2,
+.teams-page > section:not(:first-child) h2,
+.manual-page > section:not(:first-child) h2,
+.team-profile-page > section:not(:first-child) h2 {
+  border-bottom: 2px solid var(--season-navy-900);
+  padding-bottom: 12px;
+}
+
+.intro-page [style*='grid-template-columns: repeat(auto-fit'],
+.teams-page [style*='grid-template-columns: repeat(auto-fit'] {
+  gap: 0 !important;
+  border: 1px solid var(--season-line);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.intro-page [style*='grid-template-columns: repeat(auto-fit'] > div,
+.teams-page [style*='grid-template-columns: repeat(auto-fit'] > div,
+.teams-page [style*='grid-template-columns: repeat(auto-fit'] > section {
+  border: 0 !important;
+  border-right: 1px solid var(--season-line) !important;
+  border-radius: 0 !important;
+  background: var(--season-surface) !important;
+  box-shadow: none !important;
+}
+
+.rules-page .rule-chunk:nth-child(2) > div,
+.manual-page .manual-section > div {
+  overflow: hidden;
+  border: 1px solid var(--season-line) !important;
+  border-radius: 2px !important;
+  background: var(--season-surface) !important;
+  box-shadow: none !important;
+}
+
+.rules-page .rule-chunk:nth-child(2) > div + div,
+.manual-page .manual-section + .manual-section {
+  margin-top: 8px;
+}
+
+.rules-page .rule-chunk:nth-child(2) button,
+.manual-page .manual-section button {
+  min-height: 54px;
+  border-radius: 0 !important;
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+}
+
+.legal-page {
+  width: 100%;
+}
+
+.legal-page > section:not(:first-child) {
+  border-left: 4px solid var(--season-blue-600) !important;
+}
+
+.team-profile-page {
+  --team-profile-accent: var(--season-blue-600);
+  gap: 20px !important;
+}
+
+.team-profile-hero {
+  border-top: 5px solid var(--season-blue-600) !important;
+}
+
+.team-profile-page > section:not(:first-child) {
+  padding: clamp(18px, 2.4vw, 24px) !important;
+}
+
+.team-profile-page > section:not(:first-child) > div:first-child:has(h2) {
+  border-bottom: 2px solid var(--season-navy-900);
+  padding-bottom: 14px;
+}
+
+.detail-board-page {
+  color: var(--season-ink) !important;
+}
+
+.detail-board-page > article {
+  border: 1px solid var(--season-line) !important;
+  border-top: 4px solid var(--season-navy-900) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  box-shadow: none !important;
+}
+
+.detail-board-page > section,
+.detail-board-page > div[style*='background'] {
+  border-color: var(--season-line) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  box-shadow: none !important;
+}
+
+.board-list-page > div:first-child,
+.board-write-page > h2:first-child {
+  border-bottom: 2px solid var(--season-navy-900);
+  color: var(--season-navy-950) !important;
+  padding-bottom: 16px;
+}
+
+.board-list-page > div:first-child h2,
+.board-write-page > h2:first-child {
+  font-size: clamp(26px, 3.4vw, 38px) !important;
+  font-weight: 950 !important;
+  letter-spacing: -0.045em;
+}
+
+.board-list-page > div[style*='display: grid'] > :where(div, article, a),
+.board-list-page > article,
+.board-write-page > form {
+  border-color: var(--season-line) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  box-shadow: none !important;
+}
+
+.board-list-page > div[style*='display: grid'] {
+  gap: 0 !important;
+  overflow: hidden;
+  border: 1px solid var(--season-line);
+  border-radius: 4px;
+  background: var(--season-surface);
+}
+
+.board-list-page > div[style*='display: grid'] > :where(div, article, a) {
+  border: 0 !important;
+  border-bottom: 1px solid var(--season-line) !important;
+  border-radius: 0 !important;
+}
+
+.board-write-page {
+  border: 1px solid var(--season-line);
+  border-top: 4px solid var(--season-navy-900);
+  border-radius: 4px;
+  background: var(--season-surface);
+  padding: clamp(18px, 3vw, 30px) !important;
+}
+
+.board-write-page > form {
+  padding-top: 4px;
+}
+
+.community-dashboard__panel {
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
+
+.community-dashboard__panel > h2,
+.community-dashboard__panel > div:first-child:has(h2) {
+  border-bottom: 2px solid var(--season-navy-900);
+  padding-bottom: 12px;
+}
+
+.gallery-page > section {
+  border-top: 4px solid var(--season-navy-900) !important;
+}
+
+.gallery-page > section > div:first-child {
+  border-bottom: 2px solid var(--season-navy-900);
+  padding-bottom: 14px;
+}
+
+.account-page > div {
+  border: 1px solid var(--season-line) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  box-shadow: none !important;
+  padding: clamp(18px, 2.5vw, 24px) !important;
+}
+
+.account-page > div:first-child {
+  border-top: 4px solid var(--season-navy-900) !important;
+}
+
+.player-detail-page {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.player-detail-page > section {
+  border: 1px solid var(--season-line) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  box-shadow: none !important;
+  padding: clamp(16px, 2.3vw, 24px) !important;
+}
+
+.admin-cms-page {
+  padding-top: 8px !important;
+}
+
+.admin-cms-page__header {
+  align-items: flex-end !important;
+  border-bottom: 2px solid var(--season-navy-900);
+  padding: 14px 0 20px;
+}
+
+.admin-cms-page__header h1 {
+  margin-top: 4px !important;
+  font-size: clamp(30px, 4vw, 46px) !important;
+}
+
+.admin-cms-page__nav {
+  gap: 0 !important;
+  overflow-x: auto;
+  border: 1px solid var(--season-line);
+  border-radius: 2px;
+  background: var(--season-surface);
+  flex-wrap: nowrap !important;
+  scrollbar-width: thin;
+}
+
+.admin-cms-page__nav a {
+  flex: 0 0 auto;
+  min-height: 44px;
+  border: 0 !important;
+  border-right: 1px solid var(--season-line) !important;
+  border-radius: 0 !important;
+  background: var(--season-surface) !important;
+  color: var(--season-muted) !important;
+}
+
+.admin-cms-page__nav a[aria-current='page'] {
+  background: var(--season-navy-900) !important;
+  color: #ffffff !important;
+}
+
+.admin-cms-page > :where(div, section):not(.admin-cms-page__header):not(.admin-cms-page__nav) section {
+  border-color: var(--season-line) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  box-shadow: none !important;
+}
+
+@media (max-width: 720px) {
+  .season-detail-scope {
+    overflow-x: clip;
+  }
+
+  .season-detail-scope::before {
+    right: 16px;
+    left: 16px;
+  }
+
+  .season-detail-scope table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .season-detail-scope :where(section, article, form) {
+    min-width: 0;
+  }
+
+  .community-dashboard__grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 14px !important;
+  }
+
+  .community-dashboard__panel {
+    min-height: 0 !important;
+    padding: 18px !important;
+  }
+
+  .community-dashboard__panel--gallery {
+    min-height: 500px !important;
+  }
+
+  .schedule-page__hero {
+    align-items: flex-start !important;
+  }
+
+  .schedule-page__hero > div:last-child {
+    width: 100%;
+  }
+
+  .schedule-page__hero > div:last-child > button {
+    flex: 1 1 140px;
+  }
+
+  .schedule-page__nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .schedule-page__nav-card {
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--season-line) !important;
+  }
+
+  .schedule-page__nav-card:nth-child(odd) {
+    border-right: 1px solid var(--season-line) !important;
+  }
+
+  .schedule-page__nav-card:nth-last-child(-n + 2) {
+    border-bottom: 0 !important;
+  }
+
+  .schedule-summary {
+    grid-template-columns: 1fr !important;
+  }
+
+  .schedule-summary__card {
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--season-line) !important;
+  }
+
+  .schedule-summary__card:last-child {
+    border-bottom: 0 !important;
+  }
+
+  .schedule-result-row {
+    grid-template-columns: 1fr auto !important;
+  }
+
+  .schedule-result-row > div:first-child {
+    display: none !important;
+  }
+
+  .schedule-group-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .schedule-calendar {
+    padding: 10px !important;
+  }
+
+  .schedule-calendar__day {
+    min-height: 76px !important;
+    padding: 5px !important;
+  }
+
+  .schedule-calendar__match {
+    min-height: 34px !important;
+    overflow: hidden;
+    padding: 5px !important;
+  }
+
+  .schedule-calendar__match > div:first-child span:not(:first-child),
+  .schedule-calendar__match > div:last-child {
+    display: none !important;
+  }
+
+  .schedule-live-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .schedule-manage-row > div:first-child {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .schedule-manage-board [style*='grid-template-columns: 130px'] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+/* ---------- Dark season theme ---------- */
+:root[data-theme='dark'] body {
+  background: var(--season-canvas);
+  color: var(--season-ink);
+}
+
+:root[data-theme='dark'] .app-header,
+:root[data-theme='dark'] .season-shell-footer,
+:root[data-theme='dark'] .shell-menu,
+:root[data-theme='dark'] .shell-account-popover,
+:root[data-theme='dark'] .shell-context-nav,
+:root[data-theme='dark'] .shell-notice,
+:root[data-theme='dark'] .mobile-sheet {
+  background: var(--season-surface);
+  color: var(--season-ink);
+}
+
+:root[data-theme='dark'] .season-shell-brand__logo {
+  filter: grayscale(1) brightness(0) invert(1);
+}
+
+:root[data-theme='dark'] .shell-nav__item,
+:root[data-theme='dark'] .shell-menu__link,
+:root[data-theme='dark'] .shell-account-link,
+:root[data-theme='dark'] .mobile-sheet__link,
+:root[data-theme='dark'] .season-shell-footer__legal {
+  color: #c7d5e9;
+}
+
+:root[data-theme='dark'] .shell-nav__item:hover,
+:root[data-theme='dark'] .shell-nav__item.is-active,
+:root[data-theme='dark'] .shell-nav-menu[open] > .shell-nav__item,
+:root[data-theme='dark'] .shell-menu__link:hover,
+:root[data-theme='dark'] .shell-menu__link.is-active,
+:root[data-theme='dark'] .shell-account-link:hover,
+:root[data-theme='dark'] .mobile-sheet__link:hover,
+:root[data-theme='dark'] .mobile-sheet__link.is-active {
+  background: var(--season-surface-muted);
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .shell-account-summary,
+:root[data-theme='dark'] .mobile-sheet__close,
+:root[data-theme='dark'] .season-action--secondary {
+  background: var(--season-surface);
+  color: var(--season-ink);
+}
+
+:root[data-theme='dark'] .shell-account-menu[open] .shell-account-summary,
+:root[data-theme='dark'] .shell-account-summary:hover,
+:root[data-theme='dark'] .mobile-sheet__account,
+:root[data-theme='dark'] .season-action--secondary:hover {
+  background: var(--season-surface-muted);
+}
+
+:root[data-theme='dark'] .shell-account-avatar,
+:root[data-theme='dark'] .season-action,
+:root[data-theme='dark'] .shell-context-nav a.is-active {
+  border-color: #3978cf;
+  background: #285fa9;
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .season-action--ghost {
+  border-color: transparent;
+  background: transparent;
+  color: #b9d4fb;
+}
+
+:root[data-theme='dark'] .season-action--danger {
+  border-color: #87485a;
+  background: transparent;
+  color: #ff9baa;
+}
+
+:root[data-theme='dark'] .season-badge--navy,
+:root[data-theme='dark'] .season-badge--blue,
+:root[data-theme='dark'] .season-badge--muted {
+  border-color: var(--season-line-strong);
+  background: var(--season-surface-muted);
+  color: #dce9fb;
+}
+
+:root[data-theme='dark'] .shell-mobile-nav {
+  border-color: var(--season-line);
+  background: rgba(13, 32, 61, 0.98);
+}
+
+:root[data-theme='dark'] .shell-mobile-nav a,
+:root[data-theme='dark'] .shell-mobile-nav button {
+  color: #9eb0c9;
+}
+
+:root[data-theme='dark'] .shell-mobile-nav a:hover,
+:root[data-theme='dark'] .shell-mobile-nav button:hover,
+:root[data-theme='dark'] .shell-mobile-nav a.is-active,
+:root[data-theme='dark'] .shell-mobile-nav button.is-active {
+  background: var(--season-surface-muted);
+  color: #ffffff;
 }

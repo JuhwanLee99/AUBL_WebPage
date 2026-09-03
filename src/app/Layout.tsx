@@ -1,33 +1,186 @@
-// **`src/app/Layout.tsx`**
-
-import { Outlet, Link, useLocation } from 'react-router-dom';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from 'react';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../shared/auth/AuthProvider';
 import { useAdmin } from '../shared/auth/useAdmin';
-import { useDemoStore } from '../shared/state/demoStore';
-import { ContentProvider } from '../shared/state/contentProvider';
 import { useFeatureFlags } from '../shared/config/FeatureFlagsProvider';
+import { ContentProvider } from '../shared/state/contentProvider';
+import { useDemoStore } from '../shared/state/demoStore';
+import { SeasonBadge, SeasonButton, SeasonLinkButton, SeasonWordmark } from '../shared/components/season';
 
 const NOTIFICATION_PROMPT_KEY = 'aubl:notificationPrompt:v1';
-const NOTIFICATION_PROMPT_SNOOZE_MS = 1000 * 60 * 60 * 24; // 24시간 동안 재등장 방지
-const NOTIFICATION_PROMPT_SNOOZE_WEEK_MS = NOTIFICATION_PROMPT_SNOOZE_MS * 7; // 1주일 동안 재등장 방지
-const MOBILE_NOTICE_KEY = 'aubl:mobileNotice:v1';
-const MOBILE_NOTICE_SNOOZE_MS = 1000 * 60 * 60 * 24; // 모바일 팝업 24시간 스누즈
+const THEME_STORAGE_KEY = 'aubl:theme:v1';
+const NOTIFICATION_PROMPT_SNOOZE_MS = 1000 * 60 * 60 * 24;
 
-type NavigationChild = {
+type NavigationLink = {
   path: string;
   label: string;
-  requiresAdmin?: boolean;
-};
-
-type NavigationItem = {
-  path: string;
-  label: string;
-  children?: NavigationChild[];
   requiresAdmin?: boolean;
   requiresScorekeeper?: boolean;
-  showWhenBlocked?: boolean;
 };
+
+type NavigationItem = NavigationLink & {
+  children?: NavigationLink[];
+};
+
+type ShellIconName = 'home' | 'calendar' | 'groups' | 'records' | 'more' | 'chevron' | 'close' | 'sun' | 'moon' | 'bell';
+
+function ShellIcon({ name, size = 20 }: { name: ShellIconName; size?: number }) {
+  const paths: Record<Exclude<ShellIconName, 'close'>, ReactNode> = {
+    home: <path d="M3 11.25 12 4l9 7.25V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1v-9.75Z" />,
+    calendar: (
+      <>
+        <rect x="3" y="5" width="18" height="16" rx="2" />
+        <path d="M7 3v4M17 3v4M3 10h18M7 14h3M14 14h3M7 18h3" />
+      </>
+    ),
+    groups: (
+      <>
+        <circle cx="8" cy="8" r="3" />
+        <circle cx="17" cy="9" r="2.5" />
+        <path d="M2.5 20c.4-4 2.2-6 5.5-6s5.1 2 5.5 6M14 15c3.9-.8 6.4.9 7 4" />
+      </>
+    ),
+    records: (
+      <>
+        <path d="M5 21V10M12 21V3M19 21v-6" />
+        <path d="M2 21h20" />
+      </>
+    ),
+    more: (
+      <>
+        <circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+        <circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      </>
+    ),
+    chevron: <path d="m8 10 4 4 4-4" />,
+    sun: (
+      <>
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41" />
+      </>
+    ),
+    moon: <path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z" />,
+    bell: (
+      <>
+        <path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+        <path d="M10 22h4" />
+      </>
+    ),
+  };
+
+  if (name === 'close') {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <path d="m6 6 12 12M18 6 6 18" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {paths[name]}
+    </svg>
+  );
+}
+
+function isRouteActive(pathname: string, search: string, path: string, includeChildren = false) {
+  const [normalized, expectedQuery = ''] = path.split('?');
+  if (normalized === '/') return pathname === '/';
+  if (includeChildren) return pathname === normalized || pathname.startsWith(`${normalized}/`);
+  if (pathname !== normalized) return false;
+  if (!expectedQuery) return true;
+
+  const expected = new URLSearchParams(expectedQuery);
+  const current = new URLSearchParams(search);
+  for (const [key, value] of expected.entries()) {
+    if (current.get(key) !== value) return false;
+  }
+  return true;
+}
+
+function DesktopMenuLink({
+  item,
+  canUseScorekeeper,
+  isAdmin,
+  pathname,
+  search,
+}: {
+  item: NavigationLink;
+  canUseScorekeeper: boolean;
+  isAdmin: boolean;
+  pathname: string;
+  search: string;
+}) {
+  if (item.requiresAdmin && !isAdmin) return null;
+  const blocked = item.requiresScorekeeper && !canUseScorekeeper;
+
+  if (blocked) {
+    return (
+      <span
+        className="shell-menu__link shell-menu__link--disabled"
+        role="menuitem"
+        aria-disabled="true"
+        title="관리자 또는 기록원 권한이 필요합니다"
+      >
+        {item.label}
+      </span>
+    );
+  }
+
+  return (
+    <Link
+      to={item.path}
+      role="menuitem"
+      className={`shell-menu__link${isRouteActive(pathname, search, item.path) ? ' is-active' : ''}`}
+    >
+      {item.label}
+    </Link>
+  );
+}
+
+function MobileMenuLink({
+  item,
+  canUseScorekeeper,
+  isAdmin,
+  pathname,
+  search,
+}: {
+  item: NavigationLink;
+  canUseScorekeeper: boolean;
+  isAdmin: boolean;
+  pathname: string;
+  search: string;
+}) {
+  if (item.requiresAdmin && !isAdmin) return null;
+  const blocked = item.requiresScorekeeper && !canUseScorekeeper;
+
+  if (blocked) {
+    return (
+      <span className="mobile-sheet__link is-disabled" aria-disabled="true" title="관리자 또는 기록원 권한이 필요합니다">
+        <span>{item.label}</span>
+        <small>권한 필요</small>
+      </span>
+    );
+  }
+
+  return (
+    <Link to={item.path} className={`mobile-sheet__link${isRouteActive(pathname, search, item.path) ? ' is-active' : ''}`}>
+      <span>{item.label}</span>
+      <span aria-hidden="true">→</span>
+    </Link>
+  );
+}
 
 export default function Layout() {
   const location = useLocation();
@@ -35,94 +188,190 @@ export default function Layout() {
   const { isAdmin, canUseScorekeeper, canEditGameRecords, roleLabel, roleDetail } = useAdmin();
   const { state } = useDemoStore();
   const { allstarEnabled } = useFeatureFlags();
+  const headerRef = useRef<HTMLElement>(null);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
+  const mobileMenuCloseRef = useRef<HTMLButtonElement>(null);
+  const mobileSheetRef = useRef<HTMLElement>(null);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
+  const [notificationRequesting, setNotificationRequesting] = useState(false);
+  const [notificationBlocked, setNotificationBlocked] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() =>
+    document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
+  );
+
   const isLiveOverlay = location.pathname.startsWith('/live-overlay');
   const isScoreboardText = location.pathname.startsWith('/scoreboard-text');
+  const preservesScoreOperations = [
+    '/scorekeeper',
+    '/scoreboard',
+    '/scoreboard-text',
+    '/live-overlay',
+    '/admin/games',
+  ].some((path) => location.pathname.startsWith(path));
   const isEmbeddedParam = new URLSearchParams(location.search).get('embedded') === 'flutter';
   const embeddedRef = useRef(false);
   if (isEmbeddedParam) embeddedRef.current = true;
   const isEmbedded = embeddedRef.current;
   const hideChrome = isLiveOverlay || isEmbedded;
   const isDrawPage = location.pathname === '/draw';
-  const isLanding = location.pathname === '/';
+  const showPublicNavigation = !hideChrome && !isDrawPage;
+  const showSeasonDetailTheme =
+    !hideChrome &&
+    location.pathname !== '/' &&
+    !isDrawPage &&
+    !preservesScoreOperations;
+
+  const activeMatch = useMemo(
+    () => state.matches.find((match) => match.id === state.activeMatchId),
+    [state.activeMatchId, state.matches],
+  );
+  const hasLiveOverlay = Boolean((activeMatch?.liveVideoUrl || '').trim());
+  const scorekeeperPath = state.activeMatchId ? `/scorekeeper/${state.activeMatchId}` : '/scorekeeper';
   const scoreboardTextPath = state.activeMatchId ? `/scoreboard-text/${state.activeMatchId}` : '/scoreboard-text';
   const liveOverlayPath = state.activeMatchId ? `/live-overlay/${state.activeMatchId}` : '/live-overlay';
-  const headerInnerRef = useRef<HTMLDivElement>(null);
-  const linkRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
-  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>(() =>
-    typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'mobile' : 'desktop',
+
+  const navigationItems = useMemo<NavigationItem[]>(
+    () => [
+      {
+        path: '/intro',
+        label: '리그',
+        children: [
+          { path: '/intro', label: '리그 소개' },
+          { path: '/rules', label: '회칙' },
+          { path: '/intro/teams', label: '참가팀 · 조편성' },
+        ],
+      },
+      { path: '/teams', label: '팀' },
+      {
+        path: '/schedule',
+        label: '경기',
+        children: [
+          { path: '/schedule', label: '경기 일정' },
+          { path: '/schedule/live', label: '실시간 경기' },
+          { path: '/schedule/results', label: '경기 결과' },
+          { path: '/schedule/groups', label: '조별 일정' },
+          { path: '/schedule/practice', label: '연습경기' },
+          { path: '/schedule/manage', label: '일정 관리', requiresAdmin: true },
+        ],
+      },
+      ...(allstarEnabled ? [{ path: '/allstar', label: '올스타전' }] : []),
+      {
+        path: '/records',
+        label: '기록',
+        children: [
+          { path: '/records?tab=overview', label: '기록 개요' },
+          { path: '/records?tab=standings', label: '팀 순위' },
+          { path: '/records?tab=pitchers', label: '투수 기록' },
+          { path: '/records?tab=batters', label: '타자 기록' },
+          { path: '/records/player', label: '선수 상세' },
+          { path: '/records?tab=power', label: '파워랭킹' },
+        ],
+      },
+      { path: '/community', label: '커뮤니티' },
+      {
+        path: '/more',
+        label: '더보기',
+        children: [
+          { path: '/prediction', label: '승부예측' },
+          { path: scorekeeperPath, label: '기록원', requiresScorekeeper: true },
+          { path: '/manual', label: '사용설명서' },
+        ],
+      },
+    ],
+    [allstarEnabled, scorekeeperPath],
   );
-  const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
-  const [notificationRequesting, setNotificationRequesting] = useState(false);
-  const [notificationBlocked, setNotificationBlocked] = useState(false);
-  const [showMobileNotice, setShowMobileNotice] = useState(false);
+
+  const mobileMenuGroups = useMemo(
+    () => [
+      {
+        title: '리그',
+        items: [
+          { path: '/intro', label: '리그 소개' },
+          { path: '/rules', label: '회칙' },
+          { path: '/teams', label: '참가팀' },
+        ],
+      },
+      {
+        title: '경기 · 기록',
+        items: [
+          { path: '/schedule/live', label: '실시간 경기' },
+          { path: '/schedule/results', label: '경기 결과' },
+          { path: '/schedule/practice', label: '연습경기' },
+          { path: '/records/player', label: '선수 상세' },
+          { path: scorekeeperPath, label: '기록원', requiresScorekeeper: true },
+          { path: '/schedule/manage', label: '일정 관리', requiresAdmin: true },
+        ] satisfies NavigationLink[],
+      },
+      {
+        title: 'AUBL',
+        items: [
+          ...(allstarEnabled ? [{ path: '/allstar', label: '올스타전' }] : []),
+          { path: '/community', label: '커뮤니티' },
+          { path: '/prediction', label: '승부예측' },
+          { path: '/manual', label: '사용설명서' },
+        ],
+      },
+    ],
+    [allstarEnabled, scorekeeperPath],
+  );
+
+  const displayName = user?.displayName?.trim() || user?.email?.split('@')[0] || '내 계정';
+  const accountInitial = displayName.slice(0, 1).toUpperCase();
+
+  const mobileSection = useMemo(() => {
+    if (location.pathname === '/') return 'home';
+    if (location.pathname === '/schedule/groups') return 'groups';
+    if (location.pathname === '/schedule' || location.pathname.startsWith('/schedule/')) return 'calendar';
+    if (location.pathname === '/records' || location.pathname.startsWith('/records/')) return 'records';
+    return 'more';
+  }, [location.pathname]);
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-preview-mode', previewMode);
-  }, [previewMode]);
+    setShowMobileMenu(false);
+    headerRef.current?.querySelectorAll<HTMLDetailsElement>('details[open]').forEach((details) => details.removeAttribute('open'));
+    window.scrollTo({ top: 0, left: 0 });
+  }, [location.pathname, location.search]);
 
-  // 초기 진입 시(SSR 포함) 모바일 폭이면 모바일 모드로 강제 전환 (테블릿 이상은 데스크톱 유지)
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const isNarrowMobile = window.matchMedia('(max-width: 640px)').matches;
-    setPreviewMode(isNarrowMobile ? 'mobile' : 'desktop');
-  }, []);
+    if (!showMobileMenu) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.requestAnimationFrame(() => mobileMenuCloseRef.current?.focus());
 
-  // 첫 방문 모바일 사용자에게 PC 최적화 안내
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (isLiveOverlay) return;
-    const isMobileViewport = window.matchMedia('(max-width: 768px)').matches;
-    if (!isMobileViewport) return;
-    const stored = window.localStorage.getItem(MOBILE_NOTICE_KEY);
-    let snoozedUntil = 0;
-    let dismissedPermanently = false;
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as { snoozedUntil?: number; dismissedPermanently?: boolean; updatedAt?: number };
-        snoozedUntil = parsed.snoozedUntil ?? 0;
-        dismissedPermanently = Boolean(parsed.dismissedPermanently);
-      } catch {
-        // 기존 ISO 문자열 등은 무시하고 다시 표시
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowMobileMenu(false);
+        window.requestAnimationFrame(() => moreButtonRef.current?.focus());
+        return;
       }
-    }
-    const now = Date.now();
-    if (dismissedPermanently) return;
-    if (now < snoozedUntil) return;
-    setShowMobileNotice(true);
-  }, [isLiveOverlay]);
+      if (event.key !== 'Tab') return;
 
-  const handleMobileNoticeConfirm = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(MOBILE_NOTICE_KEY, JSON.stringify({ updatedAt: Date.now(), lastAction: 'confirm' }));
-    }
-    setShowMobileNotice(false);
-  }, []);
+      const focusable = Array.from(
+        mobileSheetRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), summary, input:not([disabled]), select:not([disabled]), textarea:not([disabled])',
+        ) ?? [],
+      ).filter((element) => element.getClientRects().length > 0);
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showMobileMenu]);
 
-  const handleMobileNoticeSnoozeDay = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      const now = Date.now();
-      window.localStorage.setItem(
-        MOBILE_NOTICE_KEY,
-        JSON.stringify({ updatedAt: now, lastAction: 'snooze', snoozedUntil: now + MOBILE_NOTICE_SNOOZE_MS }),
-      );
-    }
-    setShowMobileNotice(false);
-  }, []);
-
-  const handleMobileNoticeNever = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(
-        MOBILE_NOTICE_KEY,
-        JSON.stringify({ updatedAt: Date.now(), lastAction: 'never', dismissedPermanently: true }),
-      );
-    }
-    setShowMobileNotice(false);
-  }, []);
-
-  // 첫 방문 시에만 노출되는 경기 시작 알림 CTA (사용자 제스처로 권한 요청)
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof Notification === 'undefined') return;
-    if (isLiveOverlay) return; // 오버레이 뷰에서는 불필요
+    if (typeof window === 'undefined' || typeof Notification === 'undefined' || isLiveOverlay) return;
 
     const now = Date.now();
     const stored = window.localStorage.getItem(NOTIFICATION_PROMPT_KEY);
@@ -136,994 +385,373 @@ export default function Layout() {
           blockedSnoozedUntil?: number;
           permission?: NotificationPermission;
         };
-        if (parsed.permission === 'granted') {
-          setShowNotificationPrompt(false);
-          setNotificationBlocked(false);
-          return;
-        }
-        if (typeof parsed.snoozedUntil === 'number') {
-          snoozedUntil = parsed.snoozedUntil;
-        } else if (typeof parsed.snoozedAt === 'number') {
-          // backward compatibility with previous single-day snooze
-          snoozedUntil = parsed.snoozedAt + NOTIFICATION_PROMPT_SNOOZE_MS;
-        }
-        if (typeof parsed.blockedSnoozedUntil === 'number') {
-          blockedSnoozedUntil = parsed.blockedSnoozedUntil;
-        }
+        if (parsed.permission === 'granted') return;
+        snoozedUntil = parsed.snoozedUntil ?? ((parsed.snoozedAt ?? 0) + NOTIFICATION_PROMPT_SNOOZE_MS);
+        blockedSnoozedUntil = parsed.blockedSnoozedUntil ?? 0;
       } catch {
-        // ignore malformed cache
+        // Ignore an invalid legacy cache value.
       }
     }
 
     if (Notification.permission === 'granted') {
       window.localStorage.setItem(NOTIFICATION_PROMPT_KEY, JSON.stringify({ permission: 'granted', updatedAt: now }));
-      setShowNotificationPrompt(false);
-      setNotificationBlocked(false);
       return;
     }
-
     if (Notification.permission === 'denied') {
-      if (now < blockedSnoozedUntil) {
-        setNotificationBlocked(false);
-        setShowNotificationPrompt(false);
-        return;
-      }
-      window.localStorage.setItem(NOTIFICATION_PROMPT_KEY, JSON.stringify({ permission: 'denied', updatedAt: now }));
+      if (now < blockedSnoozedUntil) return;
       setNotificationBlocked(true);
-      setShowNotificationPrompt(false);
       return;
     }
-
-    if (now < snoozedUntil) {
-      setShowNotificationPrompt(false);
-      return;
-    }
-
-    setShowNotificationPrompt(true);
-    setNotificationBlocked(false);
+    if (now >= snoozedUntil) setShowNotificationPrompt(true);
   }, [isLiveOverlay]);
 
   useEffect(() => {
-    window.scrollTo({ top: 0, left: 0 });
-  }, [location.pathname]);
-
-  const handleRequestNotification = useCallback(async () => {
-    if (typeof window === 'undefined' || typeof Notification === 'undefined') return;
-    setNotificationRequesting(true);
-    try {
-      const result = await Notification.requestPermission();
-      const now = Date.now();
-      const payload: { permission: NotificationPermission; updatedAt: number; snoozedUntil?: number } = {
-        permission: result,
-        updatedAt: now,
-      };
-      if (result === 'default') payload.snoozedUntil = now + NOTIFICATION_PROMPT_SNOOZE_MS; // 사용자가 닫은 경우 24시간 백오프
-      window.localStorage.setItem(NOTIFICATION_PROMPT_KEY, JSON.stringify(payload));
-      setNotificationBlocked(result === 'denied');
-      setShowNotificationPrompt(false);
-    } catch {
-      // ignore
-    } finally {
-      setNotificationRequesting(false);
-    }
-  }, []);
-
-  const handleSnoozeNotification = useCallback((durationMs: number = NOTIFICATION_PROMPT_SNOOZE_MS) => {
-    if (typeof window === 'undefined') return;
-    const now = Date.now();
-    window.localStorage.setItem(
-      NOTIFICATION_PROMPT_KEY,
-      JSON.stringify({ permission: 'default', updatedAt: now, snoozedUntil: now + durationMs }),
-    );
-    setShowNotificationPrompt(false);
-  }, []);
-
-  const handleSnoozeBlocked = useCallback((durationMs: number = NOTIFICATION_PROMPT_SNOOZE_WEEK_MS) => {
-    if (typeof window === 'undefined') return;
-    const now = Date.now();
-    window.localStorage.setItem(
-      NOTIFICATION_PROMPT_KEY,
-      JSON.stringify({ permission: 'denied', updatedAt: now, blockedSnoozedUntil: now + durationMs }),
-    );
-    setNotificationBlocked(false);
-    setShowNotificationPrompt(false);
-  }, []);
-
-  useEffect(() => {
     const syncPermission = () => {
-      if (typeof window === 'undefined' || typeof Notification === 'undefined') return;
-      if (Notification.permission === 'granted') {
-        const now = Date.now();
-        window.localStorage.setItem(NOTIFICATION_PROMPT_KEY, JSON.stringify({ permission: 'granted', updatedAt: now }));
-        setNotificationBlocked(false);
-        setShowNotificationPrompt(false);
-      }
+      if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+      window.localStorage.setItem(
+        NOTIFICATION_PROMPT_KEY,
+        JSON.stringify({ permission: 'granted', updatedAt: Date.now() }),
+      );
+      setNotificationBlocked(false);
+      setShowNotificationPrompt(false);
     };
     window.addEventListener('focus', syncPermission);
     return () => window.removeEventListener('focus', syncPermission);
   }, []);
 
-  const activeMatch = useMemo(() => state.matches.find((m) => m.id === state.activeMatchId), [state.matches, state.activeMatchId]);
-  const hasLiveOverlay = Boolean((activeMatch?.liveVideoUrl || '').trim());
-  const isMobileHeader = previewMode === 'mobile';
-  const scorekeeperPath = state.activeMatchId ? `/scorekeeper/${state.activeMatchId}` : '/scorekeeper';
-
-  const navItems = useMemo<NavigationItem[]>(
-    () => [
-      {
-        path: '/intro',
-        label: '리그 소개',
-        children: [
-          { path: '/rules', label: '회칙' },
-          { path: '/intro/teams', label: '참가팀 · 조편성' },
-        ],
-      },
-      {
-        path: '/teams',
-        label: '팀',
-      },
-      {
-        path: '/schedule',
-        label: '경기 일정',
-        children: [
-          { path: '/schedule/results', label: '경기 결과' },
-          { path: '/schedule/groups', label: '조별 일정' },
-          { path: '/schedule/practice', label: '연습경기' },
-          { path: '/schedule/manage', label: '일정 관리', requiresAdmin: true },
-        ],
-      },
-      ...(allstarEnabled ? [{ path: '/allstar', label: '올스타전' }] : []),
-      {
-        path: '/records',
-        label: '기록',
-        children: [
-          { path: '/records?tab=overview', label: '개요' },
-          { path: '/records?tab=standings', label: '팀 순위' },
-          { path: '/records?tab=pitchers', label: '투수 기록' },
-          { path: '/records?tab=batters', label: '타자 기록' },
-          { path: '/records/player', label: '선수 상세' },
-          { path: '/records?tab=power', label: '파워랭킹' },
-        ],
-      },
-      { path: '/community', label: '커뮤니티' },
-      { path: '/prediction', label: '승부예측' },
-      // 기록원: 항상 보이지만 비권한 사용자는 클릭 시 안내 버블만 노출
-      { path: scorekeeperPath, label: '기록원', requiresScorekeeper: true, showWhenBlocked: true },
-      // 사용설명서: 네이티브 페이지
-      { path: '/manual', label: '사용설명서' },
-    ],
-    [allstarEnabled, scorekeeperPath],
-  );
-  const [hoveredMenu, setHoveredMenu] = useState<string | null>(null);
-  const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
-
-  const filteredNavItems = useMemo(
-    () =>
-      navItems.filter((item) => {
-        if (item.requiresAdmin && !isAdmin) {
-          return item.showWhenBlocked === true;
-        }
-        if (item.requiresScorekeeper && !canUseScorekeeper) {
-          return item.showWhenBlocked === true;
-        }
-        return true;
-      }),
-    [navItems, isAdmin, canUseScorekeeper],
-  );
-
-  const activeParentPath = useMemo(() => {
-    const normalizePath = (path: string) => path.split('?')[0];
-
-    if (hoveredMenu) {
-      const hoveredHasChildren = filteredNavItems.some((item) => item.path === hoveredMenu && item.children);
-      if (hoveredHasChildren) return hoveredMenu;
+  const handleRequestNotification = useCallback(async () => {
+    if (typeof Notification === 'undefined') return;
+    setNotificationRequesting(true);
+    try {
+      const result = await Notification.requestPermission();
+      const now = Date.now();
+      window.localStorage.setItem(
+        NOTIFICATION_PROMPT_KEY,
+        JSON.stringify({
+          permission: result,
+          updatedAt: now,
+          ...(result === 'default' ? { snoozedUntil: now + NOTIFICATION_PROMPT_SNOOZE_MS } : {}),
+        }),
+      );
+      setNotificationBlocked(result === 'denied');
+      setShowNotificationPrompt(false);
+    } finally {
+      setNotificationRequesting(false);
     }
+  }, []);
 
-    const matched = filteredNavItems.find((item) => {
-      // External link check
-      if ((item as { isExternal?: boolean }).isExternal) return false;
+  const handleLogout = useCallback(() => {
+    setShowMobileMenu(false);
+    void logout();
+  }, [logout]);
 
-      if (
-        item.children?.some((child) => {
-          const childPath = normalizePath(child.path);
-          return location.pathname === childPath || location.pathname.startsWith(childPath);
-        })
-      ) {
-        return true;
-      }
-      if (item.children && location.pathname === normalizePath(item.path)) return true; // 부모 경로 자체를 방문했을 때도 유지
-      return false;
-    });
-
-    return matched?.path ?? null;
-  }, [hoveredMenu, location.pathname, filteredNavItems]);
-
-  const activeChildren = useMemo(() => {
-    const parent = filteredNavItems.find((item) => item.path === activeParentPath);
-    return parent?.children?.filter((child) => !child.requiresAdmin || isAdmin) ?? [];
-  }, [activeParentPath, filteredNavItems, isAdmin]);
-  const showSubnav = activeChildren.length > 0;
-  const [subnavAnchor, setSubnavAnchor] = useState<number | null>(null);
+  const toggleTheme = useCallback(() => {
+    setTheme((current) => (current === 'dark' ? 'light' : 'dark'));
+  }, []);
 
   useEffect(() => {
-    if (!showSubnav || !activeParentPath) {
-      setSubnavAnchor(null);
-      return;
-    }
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    document
+      .querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+      ?.setAttribute('content', theme === 'dark' ? '#07142b' : '#ffffff');
+  }, [theme]);
 
-    const recalcAnchor = () => {
-      const parentEl = linkRefs.current[activeParentPath];
-      const headerEl = headerInnerRef.current;
-      if (!parentEl || !headerEl) return;
+  const handleShellMenuToggle = useCallback((event: SyntheticEvent<HTMLDetailsElement>) => {
+    if (!event.currentTarget.open) return;
+    headerRef.current?.querySelectorAll<HTMLDetailsElement>('details[open]').forEach((details) => {
+      if (details !== event.currentTarget) details.removeAttribute('open');
+    });
+  }, []);
 
-      const parentRect = parentEl.getBoundingClientRect();
-      const headerRect = headerEl.getBoundingClientRect();
-      setSubnavAnchor(parentRect.left + parentRect.width / 2 - headerRect.left);
+  useEffect(() => {
+    const closeDesktopMenus = (event: PointerEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent && event.key !== 'Escape') return;
+      if (event instanceof PointerEvent && headerRef.current?.contains(event.target as Node)) return;
+      headerRef.current?.querySelectorAll<HTMLDetailsElement>('details[open]').forEach((details) => details.removeAttribute('open'));
     };
-
-    recalcAnchor();
-    window.addEventListener('resize', recalcAnchor);
-    return () => window.removeEventListener('resize', recalcAnchor);
-  }, [showSubnav, activeParentPath, location.pathname]);
+    document.addEventListener('pointerdown', closeDesktopMenus);
+    document.addEventListener('keydown', closeDesktopMenus);
+    return () => {
+      document.removeEventListener('pointerdown', closeDesktopMenus);
+      document.removeEventListener('keydown', closeDesktopMenus);
+    };
+  }, []);
 
   return (
     <ContentProvider>
-      <div className="app-shell">
-      {!hideChrome && !isDrawPage && (
-        <header className="app-header">
-          <div
-            className="app-header__inner"
-            ref={headerInnerRef}
-            onMouseLeave={() => setHoveredMenu(null)}
-            style={{
-              position: 'relative',
-              alignItems: 'center',
-              height: isMobileHeader
-                ? showSubnav
-                  ? 'calc(var(--header-height) + 64px)'
-                  : 'calc(var(--header-height) + 32px)'
-                : showSubnav
-                  ? 'calc(var(--header-height) + 32px)'
-                  : 'var(--header-height)',
-              transition: 'height 180ms ease',
-              padding: 0,
-            }}
-          >
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                height: 'var(--header-height)',
-                display: 'flex',
-                flexDirection: 'row',
-                alignItems: 'center',
-                flexWrap: isMobileHeader ? 'wrap' : 'nowrap',
-                rowGap: isMobileHeader ? '8px' : '0px',
-                padding: 'var(--header-padding)',
-                paddingTop: isMobileHeader ? '8px' : '10px',
-                boxSizing: 'border-box',
-                gap: '12px',
-              }}
-            >
-              <Link
-                to="/"
-                style={{
-                  fontSize: 'clamp(20px, 4vw, 24px)',
-                  fontWeight: 900,
-                  letterSpacing: '-0.03em',
-                  color: isLanding ? '#c084fc' : '#60a5fa',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                AUBL
-                <span
-                  style={{
-                    color: isLanding ? '#f97316' : '#3b82f6',
-                    transition: 'color 140ms ease',
-                  }}
-                >
-                  .
-                </span>
+      <div className={`app-shell${showPublicNavigation ? ' app-shell--with-mobile-nav' : ''}`}>
+        {showPublicNavigation && (
+          <header ref={headerRef} className="app-header season-shell-header">
+            <div className="app-header__inner season-shell-header__inner">
+              <Link to="/" className="season-shell-brand" aria-label="AUBL 홈">
+                <img className="season-shell-brand__logo" src="/assets/aubl_clean.png" alt="AUBL" />
               </Link>
-              <nav
-                className="nav-scroll"
-                style={{
-                  marginLeft: isMobileHeader ? 0 : 'auto',
-                  flex: isMobileHeader ? '0 0 100%' : 1,
-                  width: isMobileHeader ? '100%' : undefined,
-                  minWidth: 0,
-                  paddingLeft: isMobileHeader ? '14px' : '18px',
-                  paddingRight: isMobileHeader ? '8px' : 0,
-                  marginRight: isMobileHeader ? '-6px' : 0,
-                  position: 'relative',
-                  order: isMobileHeader ? 3 : undefined,
-                  marginTop: isMobileHeader ? '4px' : 0,
-                }}
+
+              <button
+                type="button"
+                className="shell-theme-button shell-theme-button--mobile"
+                onClick={toggleTheme}
+                aria-label={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
+                title={theme === 'dark' ? '라이트 모드' : '다크 모드'}
               >
-                <div className="nav-scroll__rail">
-                  {filteredNavItems.map((item) => {
-                    const isActive = location.pathname === item.path || activeParentPath === item.path;
-                    const isHovering = hoveredMenu === item.path;
-                    const blockedByAdmin = item.requiresAdmin && !isAdmin;
-                    const blockedByScorekeeper = item.requiresScorekeeper && !canUseScorekeeper;
-                    const blocked = blockedByAdmin || blockedByScorekeeper;
-                    const isExternal = (item as { isExternal?: boolean }).isExternal;
+                <ShellIcon name={theme === 'dark' ? 'sun' : 'moon'} />
+              </button>
 
-                    const handleBlockedHover = (el: HTMLAnchorElement | null) => {
-                      if (!blocked || !el) return;
-                      const rect = el.getBoundingClientRect();
-                      setTooltip({
-                        text: blockedByScorekeeper
-                          ? '관리자 또는 기록원 권한이 필요합니다'
-                          : '관리자 로그인이 필요합니다',
-                        x: rect.left + rect.width / 2,
-                        y: rect.bottom,
-                      });
-                    };
+              <nav className="shell-desktop-nav" aria-label="주요 메뉴">
+                {navigationItems.map((item) => {
+                  const visibleChildren = item.children?.filter((child) => !child.requiresAdmin || isAdmin);
+                  const active = item.children
+                    ? isRouteActive(location.pathname, location.search, item.path, true) ||
+                      item.children.some((child) => isRouteActive(location.pathname, location.search, child.path))
+                    : isRouteActive(location.pathname, location.search, item.path, true);
 
-                    const style = {
-                      fontSize: 'var(--nav-font-size)',
-                      fontWeight: 700,
-                      color: blocked ? 'rgba(203,213,225,0.55)' : isActive || isHovering ? '#f97316' : '#cbd5e1',
-                      transition: 'color 120ms ease',
-                      whiteSpace: 'nowrap',
-                      scrollSnapAlign: 'start',
-                      padding: '10px 0',
-                      cursor: blocked ? 'not-allowed' : 'pointer',
-                      textDecoration: 'none',
-                    };
-
-                    if (isExternal) {
-                      return (
-                        <a
-                          key={item.path}
-                          href={item.path}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={style}
-                          ref={(el) => {
-                            linkRefs.current[item.path] = el;
-                          }}
-                          onMouseEnter={() => {
-                            setHoveredMenu(item.path);
-                          }}
-                          onMouseLeave={() => {
-                            setHoveredMenu(null);
-                            setTooltip(null);
-                          }}
-                          onFocus={() => {
-                            setHoveredMenu(item.path);
-                          }}
-                          onBlur={() => setTooltip(null)}
-                        >
-                          {item.label}
-                        </a>
-                      );
-                    }
-
+                  if (visibleChildren?.length) {
                     return (
-                      <Link
-                        key={item.path}
-                        to={blocked ? location.pathname : item.path}
-                        style={style}
-                        ref={(el) => {
-                          linkRefs.current[item.path] = el;
-                        }}
-                        onMouseEnter={() => {
-                          setHoveredMenu(item.path);
-                          handleBlockedHover(linkRefs.current[item.path]);
-                        }}
-                        onMouseLeave={() => {
-                          setHoveredMenu(null);
-                          setTooltip(null);
-                        }}
-                        onFocus={() => {
-                          setHoveredMenu(item.path);
-                          handleBlockedHover(linkRefs.current[item.path]);
-                        }}
-                        onBlur={() => setTooltip(null)}
-                        onClick={(e) => {
-                          if (blocked) {
-                            e.preventDefault();
-                            handleBlockedHover(linkRefs.current[item.path]);
-                            return;
-                          }
-                          if (item.children) setHoveredMenu(item.path);
-                        }}
-                      >
-                        {item.label}
-                      </Link>
+                      <details key={item.label} className="shell-nav-menu" data-shell-menu onToggle={handleShellMenuToggle}>
+                        <summary className={`shell-nav__item${active ? ' is-active' : ''}`}>
+                          {item.label}
+                          <ShellIcon name="chevron" size={16} />
+                        </summary>
+                        <div className="shell-menu" role="menu" aria-label={`${item.label} 하위 메뉴`}>
+                          {visibleChildren.map((child) => (
+                            <DesktopMenuLink
+                              key={child.path}
+                              item={child}
+                              pathname={location.pathname}
+                              search={location.search}
+                              canUseScorekeeper={canUseScorekeeper}
+                              isAdmin={isAdmin}
+                            />
+                          ))}
+                        </div>
+                      </details>
                     );
-                  })}
-                </div>
-              </nav>
+                  }
 
-              {tooltip && (
-                <div
-                  style={{
-                    position: 'fixed',
-                    left: tooltip.x,
-                    top: tooltip.y + 10,
-                    transform: 'translate(-50%, 0)',
-                    background: 'rgba(15,23,42,0.95)',
-                    color: '#f97316',
-                    padding: '8px 12px',
-                    borderRadius: '10px',
-                    border: '1px solid rgba(148,163,184,0.35)',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    whiteSpace: 'nowrap',
-                    boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
-                    zIndex: 2000,
-                  }}
-                >
-                  {tooltip.text}
-                </div>
-              )}
-
-              {isScoreboardText && (
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: '8px',
-                    alignItems: 'center',
-                    marginLeft: isMobileHeader ? 0 : '12px',
-                    background: 'rgba(148,163,184,0.12)',
-                    borderRadius: '999px',
-                    padding: '6px 8px',
-                    flexShrink: 0,
-                    order: isMobileHeader ? 2 : undefined,
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <Link
-                    to={scoreboardTextPath}
-                    aria-current="page"
-                    style={{
-                      border: 'none',
-                      background: '#f97316',
-                      color: '#0b0f1a',
-                      fontWeight: 800,
-                      fontSize: '13px',
-                      borderRadius: '999px',
-                      padding: '6px 12px',
-                      textDecoration: 'none',
-                      boxShadow: '0 8px 18px rgba(249,115,22,0.35)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    문자중계
-                  </Link>
-                  {hasLiveOverlay ? (
-                    <Link
-                      to={liveOverlayPath}
-                      style={{
-                        border: 'none',
-                        background: 'rgba(148,163,184,0.25)',
-                        color: '#e2e8f0',
-                        fontWeight: 800,
-                        fontSize: '13px',
-                        borderRadius: '999px',
-                        padding: '6px 12px',
-                        textDecoration: 'none',
-                        whiteSpace: 'nowrap',
-                        cursor: 'pointer',
-                      }}
-                      title="라이브 오버레이"
-                    >
-                      라이브 오버레이
-                    </Link>
-                  ) : (
-                    <span
-                      style={{
-                        border: '1px dashed rgba(248,113,113,0.6)',
-                        background: 'rgba(248,113,113,0.08)',
-                        color: '#fca5a5',
-                        fontWeight: 800,
-                        fontSize: '13px',
-                        borderRadius: '999px',
-                        padding: '6px 12px',
-                        whiteSpace: 'nowrap',
-                      }}
-                      title="이 경기에는 라이브 링크가 없습니다"
-                    >
-                      라이브 없음
-                    </span>
-                  )}
-                </div>
-              )}
-
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: isMobileHeader ? '6px' : '10px',
-                  marginLeft: isMobileHeader ? 'auto' : isScoreboardText ? '8px' : '12px',
-                  order: isMobileHeader ? 2 : undefined,
-                  flexWrap: 'nowrap',
-                  justifyContent: isMobileHeader ? 'flex-end' : 'flex-start',
-                  width: 'auto',
-                  flexShrink: isMobileHeader ? 0 : undefined,
-                }}
-              >
-                {initializing ? (
-                  <span style={{ color: '#cbd5e1', fontSize: '13px' }}>로그인 확인 중...</span>
-                ) : user ? (
-                  <>
-                    {isAdmin ? (
-                      <Link to="/admin" style={{ textDecoration: 'none' }}>
-                        <span
-                          className="badge-hoverable"
-                          style={{
-                            padding: '6px 10px',
-                            borderRadius: '10px',
-                            background: 'linear-gradient(120deg, rgba(249,115,22,0.3), rgba(253,186,116,0.35))',
-                            color: '#f97316',
-                            fontWeight: 800,
-                            fontSize: '12px',
-                            border: '1px solid rgba(249,115,22,0.6)',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.02em',
-                            display: 'inline-block',
-                          }}
-                          title={`권한: ${roleLabel} (${roleDetail}) · 클릭하면 관리자 페이지로 이동`}
-                        >
-                          {roleLabel}
-                        </span>
-                      </Link>
-                    ) : canEditGameRecords ? (
-                      <Link to="/admin/games" style={{ textDecoration: 'none' }}>
-                        <span
-                          className="badge-hoverable"
-                          style={{
-                            padding: '6px 10px',
-                            borderRadius: '10px',
-                            background: 'rgba(249,115,22,0.18)',
-                            color: '#fdba74',
-                            fontWeight: 800,
-                            fontSize: '12px',
-                            border: '1px solid rgba(249,115,22,0.45)',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.02em',
-                            display: 'inline-block',
-                          }}
-                          title={`권한: ${roleLabel} (${roleDetail}) · 클릭하면 경기 기록 수정으로 이동`}
-                        >
-                          {roleLabel}
-                        </span>
-                      </Link>
-                    ) : roleLabel === '선수' ? (
-                      <span className="player-badge-wrap">
-                        <span className="player-badge" title={`권한: ${roleLabel} (${roleDetail})`}>
-                          {roleLabel}
-                        </span>
-                        <span className="player-badge-team">{roleDetail}</span>
-                      </span>
-                    ) : (
-                      <span
-                        className="badge-hoverable"
-                        style={{
-                          padding: '6px 10px',
-                          borderRadius: '10px',
-                          background: 'rgba(148,163,184,0.18)',
-                          color: '#e2e8f0',
-                          fontWeight: 800,
-                          fontSize: '12px',
-                          border: '1px solid rgba(148,163,184,0.35)',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.02em',
-                        }}
-                        title={`권한: ${roleLabel} (${roleDetail})`}
-                      >
-                        {roleLabel}
-                      </span>
-                    )}
-                    <Link
-                      to="/account"
-                      className="badge-hoverable"
-                      style={{
-                        padding: isMobileHeader ? '6px 10px' : '8px 12px',
-                        borderRadius: '999px',
-                        background: 'rgba(148,163,184,0.16)',
-                        color: '#e2e8f0',
-                        fontWeight: 700,
-                        fontSize: isMobileHeader ? '12px' : '13px',
-                        maxWidth: isMobileHeader ? '120px' : '180px',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        textDecoration: 'none',
-                        border: '1px solid rgba(148,163,184,0.3)',
-                        display: 'inline-block',
-                      }}
-                      title="계정 페이지로 이동"
-                    >
-                      {user.email ?? user.uid}
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={logout}
-                      style={{
-                        background: 'rgba(148,163,184,0.25)',
-                        color: '#e2e8f0',
-                        padding: isMobileHeader ? '6px 10px' : '8px 12px',
-                        borderRadius: '12px',
-                        fontSize: isMobileHeader ? '12px' : '13px',
-                        fontWeight: 800,
-                        flexShrink: 0,
-                      }}
-                    >
-                      로그아웃
-                    </button>
-                  </>
-                ) : (
-                  <Link
-                    to="/login"
-                    style={{
-                      background: 'linear-gradient(120deg, #f97316, #f59e0b)',
-                      color: '#0b0f1a',
-                      padding: '10px 14px',
-                      borderRadius: '12px',
-                      fontWeight: 900,
-                      fontSize: '13px',
-                      boxShadow: '0 10px 24px rgba(249,115,22,0.35)',
-                    }}
-                  >
-                    로그인
-                  </Link>
-                )}
-              </div>
-            </div>
-
-            <div
-              onMouseEnter={() => activeParentPath && setHoveredMenu(activeParentPath)}
-              onMouseLeave={() => setHoveredMenu(null)}
-              style={{
-                position: 'absolute',
-                top: isMobileHeader ? 'calc(var(--header-height) + 24px)' : 'calc(var(--header-height) - 6px)',
-                left: 0,
-                width: '100%',
-                height: showSubnav ? '32px' : '0px',
-                overflow: 'visible',
-                pointerEvents: showSubnav ? 'auto' : 'none',
-                opacity: showSubnav ? 1 : 0,
-                transform: showSubnav ? 'translateY(0px)' : 'translateY(-4px)',
-                transition: 'opacity 140ms ease, transform 160ms ease',
-                zIndex: 20,
-              }}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  left: subnavAnchor !== null ? `${subnavAnchor}px` : '50%',
-                  transform: 'translateX(-50%)',
-                  display: 'flex',
-                  gap: '3px',
-                  padding: '1px 4px',
-                  background: 'transparent',
-                  border: 'none',
-                  borderRadius: 0,
-                  boxShadow: 'none',
-                  backdropFilter: 'none',
-                  alignItems: 'center',
-                  minHeight: '10px',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {activeChildren.map((child) => {
-                  const [childPath, childQuery = ''] = child.path.split('?');
-                  const isPathMatch = location.pathname === childPath;
-                  const isQueryMatch = (() => {
-                    if (!childQuery) return true;
-                    const expected = new URLSearchParams(childQuery);
-                    const current = new URLSearchParams(location.search);
-                    for (const [key, value] of expected.entries()) {
-                      if (current.get(key) !== value) return false;
-                    }
-                    return true;
-                  })();
-                  const isActiveChild = isPathMatch && isQueryMatch;
-                  const isHoveringChild = hoveredMenu === child.path;
                   return (
-                    <Link
-                      key={child.path}
-                      to={child.path}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        fontWeight: 800,
-                        fontSize: '13px',
-                        color: isActiveChild || isHoveringChild ? '#f97316' : '#e2e8f0',
-                        padding: '6px 6px',
-                        borderBottom: isActiveChild ? '2px solid #f97316' : '2px solid transparent',
-                        transition: 'color 120ms ease, border-color 120ms ease, transform 120ms ease',
-                        whiteSpace: 'nowrap',
-                        transform: isActiveChild ? 'translateY(-1px)' : 'translateY(0)',
-                      }}
-                      onMouseEnter={() => setHoveredMenu(child.path)}
-                      onMouseLeave={() => setHoveredMenu(null)}
-                      onFocus={() => setHoveredMenu(child.path)}
-                    >
-                      {child.label}
+                    <Link key={item.path} to={item.path} className={`shell-nav__item${active ? ' is-active' : ''}`}>
+                      {item.label}
                     </Link>
                   );
                 })}
+              </nav>
+
+              <div className="shell-account-area">
+                {showNotificationPrompt && !notificationBlocked ? (
+                  <button
+                    type="button"
+                    className="shell-theme-button"
+                    onClick={handleRequestNotification}
+                    disabled={notificationRequesting}
+                    aria-label={notificationRequesting ? '경기 알림 권한 요청 중' : '경기 알림 켜기'}
+                    title="경기 알림 켜기"
+                  >
+                    <ShellIcon name="bell" />
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="shell-theme-button"
+                  onClick={toggleTheme}
+                  aria-label={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
+                  title={theme === 'dark' ? '라이트 모드' : '다크 모드'}
+                >
+                  <ShellIcon name={theme === 'dark' ? 'sun' : 'moon'} />
+                </button>
+                {initializing ? (
+                  <span className="shell-account-loading" role="status">로그인 확인 중</span>
+                ) : user ? (
+                  <details className="shell-account-menu" data-shell-menu onToggle={handleShellMenuToggle}>
+                    <summary className="shell-account-summary" aria-label="계정 메뉴 열기">
+                      <span className="shell-account-avatar" aria-hidden="true">{accountInitial}</span>
+                      <span className="shell-account-copy">
+                        <strong>{displayName}</strong>
+                        <small>내 계정</small>
+                      </span>
+                      <ShellIcon name="chevron" size={16} />
+                    </summary>
+                    <div className="shell-account-popover">
+                      <div className="shell-account-popover__identity">
+                        <SeasonBadge tone={isAdmin ? 'blue' : 'navy'}>{roleLabel}</SeasonBadge>
+                        <strong>{displayName}</strong>
+                        <span>{roleDetail}</span>
+                      </div>
+                      <Link to="/account" className="shell-account-link">계정 설정</Link>
+                      {isAdmin && <Link to="/admin" className="shell-account-link">관리자 센터</Link>}
+                      {!isAdmin && canEditGameRecords && (
+                        <Link to="/admin/games" className="shell-account-link">경기 기록 관리</Link>
+                      )}
+                      {canUseScorekeeper && <Link to={scorekeeperPath} className="shell-account-link">기록원 열기</Link>}
+                      <SeasonButton variant="ghost" fullWidth onClick={handleLogout}>로그아웃</SeasonButton>
+                    </div>
+                  </details>
+                ) : (
+                  <SeasonLinkButton to="/login" size="compact">로그인</SeasonLinkButton>
+                )}
               </div>
             </div>
-          </div>
-        </header>
-      )}
+          </header>
+        )}
 
-      <main className="app-main" style={hideChrome ? { maxWidth: '100%', margin: 0, padding: 0 } : undefined}>
-        {!hideChrome && showMobileNotice && (
-          <div
-            role="alertdialog"
-            aria-live="polite"
-            style={{
-              position: 'relative',
-              display: 'flex',
-              gap: '14px',
-              alignItems: 'flex-start',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              padding: '18px 20px',
-              marginBottom: '18px',
-              borderRadius: '18px',
-              border: '1px solid rgba(248,184,12,0.4)',
-              background: 'linear-gradient(120deg, rgba(30,41,59,0.92), rgba(15,23,42,0.92))',
-              boxShadow: '0 18px 46px rgba(0,0,0,0.4)',
-            }}
-          >
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', minWidth: '220px' }}>
-              <span style={{ fontSize: '24px', lineHeight: 1 }}>💻</span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <div style={{ fontSize: '15px', fontWeight: 900, color: '#fde68a' }}>PC 화면에 최적화된 사이트입니다.</div>
-                <div style={{ fontSize: '13px', color: '#e2e8f0', lineHeight: 1.55 }}>
-                  모바일 버전은 아직 최적화 중이라 일부 레이아웃이 깨질 수 있어요. 모바일에서는 <strong style={{ color: '#facc15' }}>AUBL 앱 사용</strong>을 권장하며,
-                  웹 이용 시에는 PC 브라우저에서 더 안정적으로 이용할 수 있습니다.
+        <main
+          className={`app-main${showSeasonDetailTheme ? ' season-detail-scope' : ''}`}
+          style={hideChrome ? { maxWidth: '100%', margin: 0, padding: 0 } : undefined}
+        >
+          {!hideChrome && isScoreboardText && (
+            <nav className="shell-context-nav" aria-label="중계 화면 전환">
+              <Link to={scoreboardTextPath} className="is-active" aria-current="page">문자중계</Link>
+              {hasLiveOverlay ? (
+                <Link to={liveOverlayPath}>라이브 오버레이</Link>
+              ) : (
+                <span aria-disabled="true">라이브 없음</span>
+              )}
+            </nav>
+          )}
+
+          <Outlet />
+        </main>
+
+        {!hideChrome && (
+          <footer className="season-shell-footer">
+            <div className="season-shell-footer__inner">
+              <SeasonWordmark compact />
+              <div className="season-shell-footer__legal">
+                <Link to="/privacy">개인정보 처리방침</Link>
+                <Link to="/terms">이용약관</Link>
+              </div>
+              <span>© 2026 Amateur University Baseball League</span>
+            </div>
+          </footer>
+        )}
+
+        {showPublicNavigation && (
+          <nav className="shell-mobile-nav" aria-label="모바일 주요 메뉴">
+            <Link to="/" className={mobileSection === 'home' ? 'is-active' : ''} aria-current={mobileSection === 'home' ? 'page' : undefined}>
+              <ShellIcon name="home" />
+              <span>홈</span>
+            </Link>
+            <Link to="/schedule" className={mobileSection === 'calendar' ? 'is-active' : ''} aria-current={mobileSection === 'calendar' ? 'page' : undefined}>
+              <ShellIcon name="calendar" />
+              <span>경기</span>
+            </Link>
+            <Link to="/schedule/groups" className={mobileSection === 'groups' ? 'is-active' : ''} aria-current={mobileSection === 'groups' ? 'page' : undefined}>
+              <ShellIcon name="groups" />
+              <span>조별</span>
+            </Link>
+            <Link to="/records" className={mobileSection === 'records' ? 'is-active' : ''} aria-current={mobileSection === 'records' ? 'page' : undefined}>
+              <ShellIcon name="records" />
+              <span>기록</span>
+            </Link>
+            <button
+              ref={moreButtonRef}
+              type="button"
+              className={mobileSection === 'more' || showMobileMenu ? 'is-active' : ''}
+              aria-expanded={showMobileMenu}
+              aria-controls="mobile-more-menu"
+              onClick={() => setShowMobileMenu(true)}
+            >
+              <ShellIcon name="more" />
+              <span>더보기</span>
+            </button>
+          </nav>
+        )}
+
+        {showPublicNavigation && showMobileMenu && (
+          <>
+            <div className="mobile-sheet-backdrop" aria-hidden="true" onClick={() => setShowMobileMenu(false)} />
+            <aside ref={mobileSheetRef} id="mobile-more-menu" className="mobile-sheet" role="dialog" aria-modal="true" aria-labelledby="mobile-sheet-title">
+              <div className="mobile-sheet__header">
+                <div>
+                  <SeasonBadge tone="blue">2026 SEASON</SeasonBadge>
+                  <h2 id="mobile-sheet-title">더보기</h2>
+                </div>
+                <div className="mobile-sheet__header-actions">
+                  {showNotificationPrompt && !notificationBlocked ? (
+                    <button
+                      type="button"
+                      className="mobile-sheet__close"
+                      onClick={handleRequestNotification}
+                      disabled={notificationRequesting}
+                      aria-label={notificationRequesting ? '경기 알림 권한 요청 중' : '경기 알림 켜기'}
+                      title="경기 알림 켜기"
+                    >
+                      <ShellIcon name="bell" />
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="mobile-sheet__close"
+                    aria-label={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
+                    title={theme === 'dark' ? '라이트 모드' : '다크 모드'}
+                    onClick={toggleTheme}
+                  >
+                    <ShellIcon name={theme === 'dark' ? 'sun' : 'moon'} />
+                  </button>
+                  <button
+                    ref={mobileMenuCloseRef}
+                    type="button"
+                    className="mobile-sheet__close"
+                    aria-label="더보기 메뉴 닫기"
+                    onClick={() => {
+                      setShowMobileMenu(false);
+                      window.requestAnimationFrame(() => moreButtonRef.current?.focus());
+                    }}
+                  >
+                    <ShellIcon name="close" />
+                  </button>
                 </div>
               </div>
-            </div>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={handleMobileNoticeConfirm}
-                style={{
-                  background: 'linear-gradient(120deg, #f59e0b, #f97316)',
-                  color: '#0b0f1a',
-                  padding: '11px 14px',
-                  fontWeight: 900,
-                  fontSize: '13px',
-                  borderRadius: '12px',
-                  boxShadow: '0 10px 24px rgba(249,115,22,0.35)',
-                }}
-              >
-                확인
-              </button>
-              <button
-                type="button"
-                onClick={handleMobileNoticeSnoozeDay}
-                style={{
-                  background: 'rgba(15,23,42,0.7)',
-                  color: '#e2e8f0',
-                  border: '1px solid rgba(148,163,184,0.45)',
-                  padding: '10px 12px',
-                  fontWeight: 800,
-                  fontSize: '12px',
-                  borderRadius: '10px',
-                }}
-              >
-                하루 동안 보지 않기
-              </button>
-              <button
-                type="button"
-                onClick={handleMobileNoticeNever}
-                style={{
-                  background: 'rgba(239,68,68,0.12)',
-                  color: '#fecdd3',
-                  border: '1px solid rgba(248,113,113,0.45)',
-                  padding: '10px 12px',
-                  fontWeight: 800,
-                  fontSize: '12px',
-                  borderRadius: '10px',
-                }}
-              >
-                다시 보지 않기
-              </button>
-            </div>
-          </div>
-        )}
 
-        {!hideChrome && showNotificationPrompt && typeof Notification !== 'undefined' && (
-          <div
-            style={{
-              display: 'flex',
-              gap: '14px',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              padding: '16px 18px',
-              marginBottom: '18px',
-              borderRadius: '18px',
-              border: '1px solid rgba(96,165,250,0.28)',
-              background: 'linear-gradient(120deg, rgba(59,130,246,0.16), rgba(249,115,22,0.16))',
-              boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
-            }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: '220px' }}>
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontSize: '13px',
-                  fontWeight: 800,
-                  letterSpacing: '0.04em',
-                  color: '#cbd5e1',
-                  textTransform: 'uppercase',
-                }}
-              >
-                <span style={{ fontSize: '18px' }}>🔔</span>
-                경기 시작 알림
-              </span>
-              <div style={{ fontSize: '15px', fontWeight: 800, color: '#e2e8f0' }}>
-                첫 방문이라면 &ldquo;알림 허용&rdquo;을 눌러 경기 시작 푸시를 받아보세요.
+              <section className="mobile-sheet__account" aria-label="계정">
+                {initializing ? (
+                  <span role="status">로그인 확인 중…</span>
+                ) : user ? (
+                  <>
+                    <div className="mobile-sheet__identity">
+                      <span className="shell-account-avatar" aria-hidden="true">{accountInitial}</span>
+                      <span>
+                        <strong>{displayName}</strong>
+                        <small>{roleLabel} · {roleDetail}</small>
+                      </span>
+                    </div>
+                    <div className="mobile-sheet__account-actions">
+                      <SeasonLinkButton to="/account" variant="secondary" size="compact">계정 설정</SeasonLinkButton>
+                      {isAdmin && <SeasonLinkButton to="/admin" variant="secondary" size="compact">관리자</SeasonLinkButton>}
+                      {!isAdmin && canEditGameRecords && (
+                        <SeasonLinkButton to="/admin/games" variant="secondary" size="compact">기록 관리</SeasonLinkButton>
+                      )}
+                      <SeasonButton variant="ghost" size="compact" onClick={handleLogout}>로그아웃</SeasonButton>
+                    </div>
+                  </>
+                ) : (
+                  <SeasonLinkButton to="/login" fullWidth>로그인</SeasonLinkButton>
+                )}
+              </section>
+
+              <div className="mobile-sheet__groups">
+                {mobileMenuGroups.map((group) => (
+                  <section key={group.title} className="mobile-sheet__group">
+                    <h3>{group.title}</h3>
+                    <div>
+                      {group.items.map((item) => (
+                        <MobileMenuLink
+                          key={item.path}
+                          item={item}
+                          pathname={location.pathname}
+                          search={location.search}
+                          canUseScorekeeper={canUseScorekeeper}
+                          isAdmin={isAdmin}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                ))}
               </div>
-              <div style={{ fontSize: '13px', color: '#cbd5e1', lineHeight: 1.5 }}>
-                버튼을 누르는 사용자 제스처가 있어야 크롬의 조용한 알림 모드에서도 권한 팝업이 바로 뜹니다. 거부하거나 닫으면 24시간,
-                &ldquo;일주일 뒤 묻기&rdquo;를 누르면 7일 동안 다시 묻지 않아요.
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={handleRequestNotification}
-                disabled={notificationRequesting}
-                style={{
-                  background: 'linear-gradient(120deg, #f97316, #f59e0b)',
-                  color: '#0b0f1a',
-                  padding: '12px 16px',
-                  fontWeight: 900,
-                  fontSize: '14px',
-                  minWidth: '140px',
-                  opacity: notificationRequesting ? 0.75 : 1,
-                  cursor: notificationRequesting ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {notificationRequesting ? '요청 중...' : '알림 허용'}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSnoozeNotification(NOTIFICATION_PROMPT_SNOOZE_MS)}
-                style={{
-                  background: 'rgba(15,23,42,0.65)',
-                  color: '#cbd5e1',
-                  border: '1px solid rgba(148,163,184,0.45)',
-                  padding: '12px 14px',
-                  fontWeight: 800,
-                  fontSize: '13px',
-                }}
-              >
-                하루 뒤 묻기
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSnoozeNotification(NOTIFICATION_PROMPT_SNOOZE_WEEK_MS)}
-                style={{
-                  background: 'rgba(15,23,42,0.65)',
-                  color: '#cbd5e1',
-                  border: '1px solid rgba(148,163,184,0.45)',
-                  padding: '12px 14px',
-                  fontWeight: 800,
-                  fontSize: '13px',
-                }}
-              >
-                일주일 뒤 묻기
-              </button>
-            </div>
-          </div>
+            </aside>
+          </>
         )}
-
-        {!hideChrome && notificationBlocked && (
-          <div
-            style={{
-              display: 'flex',
-              gap: '12px',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              padding: '14px 16px',
-              marginBottom: '18px',
-              borderRadius: '14px',
-              border: '1px solid rgba(248,113,113,0.5)',
-              background: 'linear-gradient(120deg, rgba(248,113,113,0.12), rgba(248,113,113,0.22))',
-              color: '#fecdd3',
-            }}
-          >
-            <div style={{ flex: 1, minWidth: '220px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <div style={{ fontWeight: 800, fontSize: '14px' }}>알림이 브라우저에서 차단되어 있어 경기 시작 알림을 보낼 수 없습니다.</div>
-              <div style={{ fontSize: '13px', color: '#ffe4e6' }}>
-                주소창 왼쪽의 자물쇠(🔒) 또는 종(🔔) 아이콘 → 알림 → &ldquo;허용&rdquo;으로 변경한 뒤 새로고침 해주세요.
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setNotificationBlocked(false);
-                  if (typeof Notification !== 'undefined' && Notification.permission === 'default') setShowNotificationPrompt(true);
-                }}
-                style={{
-                  background: 'rgba(255,255,255,0.12)',
-                  color: '#0b1220',
-                  fontWeight: 900,
-                  fontSize: '13px',
-                  padding: '10px 14px',
-                }}
-              >
-                설정 완료
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSnoozeBlocked(NOTIFICATION_PROMPT_SNOOZE_WEEK_MS)}
-                style={{
-                  background: 'rgba(15,23,42,0.7)',
-                  color: '#ffe4e6',
-                  border: '1px solid rgba(252,165,165,0.55)',
-                  fontWeight: 800,
-                  fontSize: '13px',
-                  padding: '10px 14px',
-                }}
-              >
-                일주일 동안 보지 않기
-              </button>
-            </div>
-          </div>
-        )}
-
-        <Outlet />
-      </main>
-
-      {!hideChrome && (
-        <footer
-          style={{
-            marginTop: 'auto',
-            borderTop: '1px solid rgba(148, 163, 184, 0.2)',
-            padding: '32px 0',
-            color: '#94a3b8',
-            fontSize: '14px',
-            textAlign: 'center',
-          }}
-        >
-          <div style={{ maxWidth: '1600px', margin: '0 auto', padding: '0 24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginBottom: '12px', fontSize: '13px' }}>
-              <Link to="/privacy" style={{ color: '#94a3b8', textDecoration: 'none' }}>개인정보 처리방침</Link>
-              <span style={{ color: '#475569' }}>|</span>
-              <Link to="/terms" style={{ color: '#94a3b8', textDecoration: 'none' }}>이용약관</Link>
-            </div>
-            &copy; 2026 Amateur University Baseball League. All rights reserved.
-          </div>
-          <div className="preview-toggle-inline">
-            <span className="preview-toggle-inline__label">보기 전환</span>
-            {(['desktop', 'mobile'] as const).map((mode) => {
-              const isActive = previewMode === mode;
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setPreviewMode(mode)}
-                  className={`preview-toggle-inline__button${isActive ? ' is-active' : ''}`}
-                >
-                  {mode === 'desktop' ? 'PC 보기' : '모바일 보기'}
-                </button>
-              );
-            })}
-          </div>
-        </footer>
-      )}
       </div>
     </ContentProvider>
   );
