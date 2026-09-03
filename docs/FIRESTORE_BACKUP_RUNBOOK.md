@@ -4,7 +4,7 @@
 
 `scripts/firestore_backup_dr.py`는 특정 기능이나 컬렉션에 의존하지 않고 Firestore 데이터베이스의 일일 예약 백업을 점검한다. PITR 설정은 조회하거나 변경하지 않으며, 생성 명령은 기본적으로 dry-run이다.
 
-현재 저장소의 `.firebaserc`와 Hosting workflow에 서로 다른 프로젝트 ID가 기록된 적이 있으므로, 아래 예시의 `PROJECT_ID`를 그대로 추측해서 바꾸지 않는다. Firebase Console의 운영 앱 설정, 실제 배포 workflow와 `VITE_FIREBASE_PROJECT_ID`를 대조해 담당자 두 명이 같은 프로젝트·데이터베이스임을 확인한 뒤 기록한다.
+이 저장소는 Hosting 배포 프로젝트와 앱이 데이터를 읽고 Functions를 호출하는 Firebase 프로젝트를 분리할 수 있다. 따라서 Hosting workflow의 `projectId`를 백업 대상으로 사용하지 않는다. Firebase Console의 운영 앱 설정, 빌드 환경의 `VITE_FIREBASE_PROJECT_ID`, `.firebaserc`의 Functions/Rules 대상을 대조해 담당자 두 명이 같은 데이터 프로젝트·데이터베이스를 확인한 뒤 기록한다.
 
 ## 1. 변경 없는 계획 확인
 
