@@ -32,6 +32,7 @@ publicFeatureFlags/allstar
 ## 첫 배포
 
 1. 운영 환경의 `VITE_FIREBASE_PROJECT_ID`와 Functions/Rules 배포 프로젝트가 같은 데이터 프로젝트를 가리키는지 확인한다. Hosting 전용 프로젝트는 다를 수 있으므로 별도로 기록한다.
+   GitHub Hosting workflow는 `aubl-backup.web.app/__/firebase/init.json`의 공개 웹 설정을 검증한 뒤 Vite 환경으로 전달하며, 예상 project ID가 다르면 빌드를 중단한다.
 2. Rules와 Functions를 먼저 배포한다.
 3. `/admin/allstar-voting`에서 `기본 OFF 상태 저장`을 실행하거나 Firebase Console에서 위 문서를 `enabled=false`, `revision=1`로 만든다.
 4. 익명 상태에서 `/allstar`, 공유 로스터 URL, 후보·결과 callable이 차단되는지 확인한다.

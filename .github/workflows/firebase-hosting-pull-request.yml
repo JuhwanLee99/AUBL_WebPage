@@ -13,6 +13,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Load public Firebase web config
+        env:
+          FIREBASE_WEB_CONFIG_URL: https://aubl-backup.web.app/__/firebase/init.json
+          EXPECTED_FIREBASE_PROJECT_ID: aubl-backup
+        run: node scripts/load-firebase-build-env.mjs
       - run: npm ci && npm run check:ci
       - uses: actions/setup-python@v5
         with:
