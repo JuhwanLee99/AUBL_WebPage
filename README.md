@@ -10,6 +10,8 @@
 * 올스타·루키 투표 운영: [`functions/ALLSTAR_VOTING.md`](functions/ALLSTAR_VOTING.md)
 * 올스타 투표 안정성·Google Forms 비교·장애 대응: [`docs/ALLSTAR_VOTING_RELIABILITY.md`](docs/ALLSTAR_VOTING_RELIABILITY.md)
 * 올스타 투표 실행 체크리스트·백업/복원 절차: [`docs/ALLSTAR_VOTING_OPERATIONS_CHECKLIST.md`](docs/ALLSTAR_VOTING_OPERATIONS_CHECKLIST.md)
+* 서비스 공통 Firestore 예약 백업 점검: [`docs/FIRESTORE_BACKUP_RUNBOOK.md`](docs/FIRESTORE_BACKUP_RUNBOOK.md)
+* 팀 소속 UID 데이터 점검·보정: [`docs/MEMBERSHIP_UID_MIGRATION.md`](docs/MEMBERSHIP_UID_MIGRATION.md)
 
 ## 📊 승부 예측 모델
 
@@ -41,6 +43,7 @@
 
 4. **⭐ 올스타·루키 팬 투표**
 
+   * 전체 구현은 운영 기본 OFF이며 `/admin/allstar-voting`의 감사되는 전역 토글과 이벤트 접수 상태를 모두 통과해야 공개·제출 가능
    * 모바일 우선 `/allstar` 전용 랜딩에서 위로 스와이프해 후보 확인·투표·현황 허브로 진입하며, 올스타 허브를 새로 불러오면 랜딩을 다시 표시
    * 일정 안내는 압축형 hero, 세 기능은 대형 메뉴 카드로 구성하고 올스타 번들은 지연 로딩
    * 후보 확인과 결과는 비로그인 공개, 실제 제출만 Google 계정 인증 및 중복 투표 방지 적용
@@ -52,7 +55,7 @@
    * `/admin/allstar-voting`에서 원장 수량·후보 버전/hash·비식별 최근 로그를 경량 관제하고, 종료 후 전체 원장·후보별 공개 집계를 수동 대조
    * 제출 전 `submissionId`와 선택 fingerprint를 브라우저 세션에 보존해 응답·상태 조회가 유실된 재시도도 같은 요청으로 복구하고, 서버 원장이 일치할 때만 완료 처리
    * 루키 78명은 읽기 전용 카드로 공개하며 투표 단위·선발 규칙 확정 후 별도 연결
-   * 운영 절차는 [`docs/ALLSTAR_VOTING_OPERATIONS_CHECKLIST.md`](docs/ALLSTAR_VOTING_OPERATIONS_CHECKLIST.md), 안정성 구현·측정·한계의 평가 근거는 [`docs/ALLSTAR_VOTING_RESILIENCE_ENGINEERING_REVIEW.md`](docs/ALLSTAR_VOTING_RESILIENCE_ENGINEERING_REVIEW.md)에 정리
+   * 공개 토글 운영은 [`docs/ALLSTAR_FEATURE_FLAG_RUNBOOK.md`](docs/ALLSTAR_FEATURE_FLAG_RUNBOOK.md), 투표 운영은 [`docs/ALLSTAR_VOTING_OPERATIONS_CHECKLIST.md`](docs/ALLSTAR_VOTING_OPERATIONS_CHECKLIST.md), 안정성 구현·측정·한계의 평가 근거는 [`docs/ALLSTAR_VOTING_RESILIENCE_ENGINEERING_REVIEW.md`](docs/ALLSTAR_VOTING_RESILIENCE_ENGINEERING_REVIEW.md)에 정리
    * 사용 라이브러리와 라이선스는 [`public/third-party-notices.txt`](public/third-party-notices.txt)에 기록
 
 ## 🧑‍✈️ 감독 권한 (Coach Role)

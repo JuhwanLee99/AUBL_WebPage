@@ -21,6 +21,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
+try:
+    from scripts import firestore_backup_dr
+except ModuleNotFoundError:  # direct execution: python scripts/allstar_voting_dr.py
+    import firestore_backup_dr  # type: ignore[no-redef]
+
 
 ROOT = Path(__file__).resolve().parents[1]
 FUNCTIONS_DIR = ROOT / "functions"
@@ -62,7 +67,6 @@ EXPORT_COLLECTION_GROUPS = (
 )
 MANIFEST_SCHEMA_VERSION = 1
 _HASH_ID = re.compile(r"^[0-9a-f]{64}$")
-_RETENTION = re.compile(r"^[1-9][0-9]*(?:d|w)$")
 _FORBIDDEN_FIELDS = {
     "uid",
     "email",
@@ -469,52 +473,17 @@ def _managed_export_command(args: argparse.Namespace) -> list[str]:
 
 
 def _daily_backup_schedule_command(args: argparse.Namespace) -> list[str]:
-    match = _RETENTION.fullmatch(args.retention)
-    if not match:
-        _fail("--retention must use a positive day/week duration such as 14d or 8w.")
-    value = int(args.retention[:-1])
-    unit = args.retention[-1]
-    if (unit == "d" and value > 98) or (unit == "w" and value > 14):
-        _fail("Firestore scheduled backup retention cannot exceed 14 weeks (98 days).")
-    return [
-        "gcloud",
-        "firestore",
-        "backups",
-        "schedules",
-        "create",
-        f"--project={args.project}",
-        f"--database={args.database}",
-        "--recurrence=daily",
-        f"--retention={args.retention}",
-        "--format=json",
-    ]
+    try:
+        return firestore_backup_dr.daily_backup_schedule_command(args)
+    except firestore_backup_dr.BackupError as error:
+        _fail(str(error))
 
 
 def _backup_status_commands(args: argparse.Namespace) -> list[list[str]]:
-    location = str(getattr(args, "location", "asia-northeast3"))
-    if not re.fullmatch(r"[a-z0-9-]+", location):
-        _fail("--location must be a valid Google Cloud location ID.")
-    return [
-        [
-            "gcloud",
-            "firestore",
-            "backups",
-            "schedules",
-            "list",
-            f"--project={args.project}",
-            f"--database={args.database}",
-            "--format=json",
-        ],
-        [
-            "gcloud",
-            "firestore",
-            "backups",
-            "list",
-            f"--project={args.project}",
-            f"--location={location}",
-            "--format=json",
-        ],
-    ]
+    try:
+        return firestore_backup_dr.backup_status_commands(args)
+    except firestore_backup_dr.BackupError as error:
+        _fail(str(error))
 
 
 def _run_gcloud_json(command: list[str]) -> Any:
@@ -686,88 +655,11 @@ def _wait_for_managed_export(
             _fail("Managed export operation status was not a JSON object.")
 
 
-def _database_resource(project: str, database: str) -> str:
-    return f"projects/{project}/databases/{database}"
-
-
 def _backup_status(args: argparse.Namespace) -> dict[str, Any]:
-    max_ready_age_hours = float(getattr(args, "max_ready_age_hours", 48.0))
-    if max_ready_age_hours <= 0:
-        _fail("--max-ready-age-hours must be positive.")
-    schedule_command, backup_command = _backup_status_commands(args)
-    schedules_payload = _run_gcloud_json(schedule_command)
-    backups_payload = _run_gcloud_json(backup_command)
-    if not isinstance(schedules_payload, list) or not isinstance(backups_payload, list):
-        _fail("gcloud backup status output must be a JSON list.")
-
-    database_resource = _database_resource(args.project, args.database)
-    schedules = [
-        item
-        for item in schedules_payload
-        if isinstance(item, Mapping)
-        and (
-            item.get("database") == database_resource
-            or database_resource in str(item.get("name", ""))
-        )
-    ]
-    backups = [
-        item
-        for item in backups_payload
-        if isinstance(item, Mapping) and item.get("database") == database_resource
-    ]
-    ready_backups = [item for item in backups if item.get("state") == "READY"]
-    ready_backups.sort(key=lambda item: str(item.get("snapshotTime", "")), reverse=True)
-    latest_ready = ready_backups[0] if ready_backups else None
-    latest_ready_age_hours: float | None = None
-    latest_ready_stale = True
-    if latest_ready and isinstance(latest_ready.get("snapshotTime"), str):
-        try:
-            snapshot_time = datetime.fromisoformat(
-                str(latest_ready["snapshotTime"]).replace("Z", "+00:00")
-            )
-            if snapshot_time.tzinfo is None:
-                snapshot_time = snapshot_time.replace(tzinfo=timezone.utc)
-            latest_ready_age_hours = round(
-                (datetime.now(timezone.utc) - snapshot_time.astimezone(timezone.utc)).total_seconds()
-                / 3600,
-                2,
-            )
-            latest_ready_stale = latest_ready_age_hours > float(
-                max_ready_age_hours
-            )
-        except ValueError:
-            latest_ready_stale = True
-    daily_schedules = [item for item in schedules if "dailyRecurrence" in item]
-    unhealthy_backups = [
-        {
-            "name": item.get("name"),
-            "state": item.get("state"),
-            "snapshotTime": item.get("snapshotTime"),
-        }
-        for item in backups
-        if item.get("state") not in {"READY", "CREATING"}
-    ]
-    return {
-        "checkedAt": datetime.now(timezone.utc).isoformat(),
-        "project": args.project,
-        "database": args.database,
-        "location": str(getattr(args, "location", "asia-northeast3")),
-        "pitrChanged": False,
-        "dailySchedulePresent": bool(daily_schedules),
-        "dailySchedules": daily_schedules,
-        "backupCount": len(backups),
-        "readyBackupCount": len(ready_backups),
-        "latestReadyBackup": latest_ready,
-        "latestReadyAgeHours": latest_ready_age_hours,
-        "latestReadyStale": latest_ready_stale,
-        "unhealthyBackups": unhealthy_backups,
-        "ready": (
-            bool(daily_schedules)
-            and latest_ready is not None
-            and not latest_ready_stale
-            and not unhealthy_backups
-        ),
-    }
+    try:
+        return firestore_backup_dr.backup_status(args, runner=_run_gcloud_json)
+    except firestore_backup_dr.BackupError as error:
+        _fail(str(error))
 
 
 def main() -> int:
