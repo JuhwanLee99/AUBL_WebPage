@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { collectUntilStable } from '../src/adapter.mjs';
+import { collectLazyList, collectUntilStable, statusFromKorean } from '../src/adapter.mjs';
 
 test('virtual table collection keeps scrolling until three unchanged samples', async () => {
   const pages = [
@@ -32,4 +32,35 @@ test('virtual table collection fails closed when the provider headers change', a
     }),
     /table changed/,
   );
+});
+
+test('lazy game list does not stop while the scroll container can still advance', async () => {
+  const pages = [
+    ['A'],
+    ['A'],
+    ['A'],
+    ['A'],
+    ['A', 'B'],
+    ['A', 'B'],
+    ['A', 'B'],
+    ['A', 'B'],
+  ];
+  let index = 0;
+  const result = await collectLazyList({
+    read: async () => pages[Math.min(index, pages.length - 1)],
+    advance: async () => {
+      index += 1;
+      return index < pages.length - 3;
+    },
+    identify: (row) => row,
+  });
+
+  assert.deepEqual(result, ['A', 'B']);
+  assert.ok(index >= pages.length - 1);
+});
+
+test('normalizes UniquePlay mercy-rule and forfeited results as completed', () => {
+  assert.equal(statusFromKorean('콜드승'), 'COMPLETED');
+  assert.equal(statusFromKorean('몰수게임'), 'COMPLETED');
+  assert.equal(statusFromKorean('경기전'), 'SCHEDULED');
 });

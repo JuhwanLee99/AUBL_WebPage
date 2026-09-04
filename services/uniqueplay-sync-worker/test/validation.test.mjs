@@ -38,3 +38,34 @@ test('warns when a tie crosses a qualification boundary', () => {
   const result = validateCandidate(candidate);
   assert.ok(result.warnings.some((entry) => entry.code === 'BOUNDARY_TIE'));
 });
+
+test('blocks an incomplete completed-game collection', () => {
+  const candidate = completeCandidate();
+  for (const group of Object.values(candidate.groups)) {
+    group.standings = group.standings.map((row) => ({ ...row, games: 0, wins: 0, losses: 0, draws: 0 }));
+  }
+  candidate.groups.A.standings = candidate.groups.A.standings.map((row, index) => ({
+    ...row,
+    games: index < 2 ? 1 : 0,
+    wins: index === 0 ? 1 : 0,
+    losses: index === 1 ? 1 : 0,
+    draws: 0,
+  }));
+  candidate.games = [{
+    sourceGameId: 'a-1',
+    groupCode: 'A',
+    homeTeamName: 'A-1',
+    awayTeamName: 'A-2',
+    homeScore: 3,
+    awayScore: 1,
+    status: 'COMPLETED',
+  }];
+
+  assert.equal(validateCandidate(candidate).valid, true);
+
+  candidate.groups.A.standings[0].games = 2;
+  candidate.groups.A.standings[0].wins = 2;
+  const result = validateCandidate(candidate);
+  assert.equal(result.valid, false);
+  assert.ok(result.blockingErrors.some((entry) => entry.code === 'GAME_COUNT_MISMATCH' && entry.details.actual === 1));
+});

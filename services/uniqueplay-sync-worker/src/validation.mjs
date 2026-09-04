@@ -47,12 +47,27 @@ export function validateCandidate(candidate) {
         allTeams.set(normalizedTeam, groupCode);
       }
     }
+    const groupTeams = new Set(rows.map((row) => normalizeText(row.teamName).toLocaleLowerCase('ko-KR')));
+    for (const kind of ['batters', 'pitchers']) {
+      for (const regulation of ['IN', 'OUT']) {
+        const players = candidate.groups?.[groupCode]?.[kind]?.[regulation] || [];
+        for (let index = 0; index < players.length; index += 1) {
+          const player = players[index];
+          const path = `$.groups.${groupCode}.${kind}.${regulation}[${index}]`;
+          if (!normalizeText(player.playerName)) blockingErrors.push(issue('PLAYER_NAME', '선수명이 비어 있습니다.', path));
+          if (!groupTeams.has(normalizeText(player.teamName).toLocaleLowerCase('ko-KR'))) {
+            blockingErrors.push(issue('PLAYER_TEAM', '선수의 팀이 해당 조 순위표에 없습니다.', path));
+          }
+        }
+      }
+    }
     if (detectBoundaryTie(rows, 2) || detectBoundaryTie(rows, 4)) {
       warnings.push(issue('BOUNDARY_TIE', `${groupCode}조 진출 경계에 동률이 있어 관리자 판정이 필요합니다.`, `$.groups.${groupCode}.standings`));
     }
   }
 
   const gameIds = new Set();
+  const completedAppearances = new Map();
   for (let index = 0; index < (candidate.games || []).length; index += 1) {
     const game = candidate.games[index];
     const path = `$.games[${index}]`;
@@ -69,6 +84,31 @@ export function validateCandidate(candidate) {
     }
     if (game.homeScore !== null && (game.homeScore < 0 || game.awayScore < 0)) {
       blockingErrors.push(issue('SCORE_RANGE', '점수는 음수일 수 없습니다.', path));
+    }
+    if (game.status === 'COMPLETED') {
+      for (const teamName of [game.homeTeamName, game.awayTeamName]) {
+        const appearanceKey = `${game.groupCode}|${normalizeText(teamName).toLocaleLowerCase('ko-KR')}`;
+        completedAppearances.set(appearanceKey, (completedAppearances.get(appearanceKey) || 0) + 1);
+      }
+    }
+  }
+
+  if ((candidate.games || []).length > 0) {
+    for (const groupCode of EXPECTED_GROUPS) {
+      const rows = candidate.groups?.[groupCode]?.standings || [];
+      for (let index = 0; index < rows.length; index += 1) {
+        const row = rows[index];
+        const appearanceKey = `${groupCode}|${normalizeText(row.teamName).toLocaleLowerCase('ko-KR')}`;
+        const actual = completedAppearances.get(appearanceKey) || 0;
+        if (actual !== row.games) {
+          blockingErrors.push(issue(
+            'GAME_COUNT_MISMATCH',
+            `${groupCode}조 ${row.teamName}: 순위표 ${row.games}경기, 수집된 종료 경기 ${actual}경기입니다.`,
+            `$.groups.${groupCode}.standings[${index}]`,
+            { groupCode, teamName: row.teamName, expected: row.games, actual },
+          ));
+        }
+      }
     }
   }
 
