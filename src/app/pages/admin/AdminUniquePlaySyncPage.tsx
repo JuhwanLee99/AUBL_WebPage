@@ -144,7 +144,7 @@ function syncErrorMessage(error: unknown): string {
 
 function isRunOpen(run: UniquePlaySyncRun | null): boolean {
   if (!run) return false;
-  return !['ACTIVE', 'FAILED', 'CANCELED'].includes(run.status);
+  return ['QUEUED', 'RUNNING', 'VALIDATING', 'PUBLISHING', 'ACTIVATING'].includes(run.status);
 }
 
 function actionCount(summary: UniquePlaySyncSummary, action: UniquePlaySyncDiffAction | 'ALL'): number {
