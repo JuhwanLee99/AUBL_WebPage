@@ -148,7 +148,7 @@ const DEFAULT_INTRO: IntroContent = {
   heroTitle: '순수 아마추어 대학 야구의 46년 — 2026년, 중앙대학교(서울)와 함께 새로운 도약을 준비합니다.',
   heroSubtitle: '46th Amateur University Baseball League · 2026 연합회교 중앙대학교(서울)',
   heroDescription:
-    '1981년 출범한 전국대학아마추어야구연합회(AUBL)는 엘리트 선수 중심이 아닌 일반 대학생들의 땀방울로 성장했습니다. 2026 시즌은 중앙대학교(서울)가 주최를 맡아 조별 예선과 으뜸·버금 토너먼트를 통해 리그의 전통과 혁신을 모두 보여줄 예정입니다.',
+    '1981년 출범한 전국대학아마추어야구연합회(AUBL)는 엘리트 선수 중심이 아닌 일반 대학생들의 땀방울로 성장했습니다. 2026 시즌은 중앙대학교(서울)가 연합회교로서 조별 예선과 으뜸·버금 토너먼트를 통해 리그의 전통과 혁신을 모두 보여줄 예정입니다.',
   historyHighlights: [
     {
       title: 'Since 1981',
@@ -194,17 +194,13 @@ const DEFAULT_INTRO: IntroContent = {
     },
     {
       title: '순위 · 포스트시즌',
-      points: ['A~H조, 조당 4~5팀 풀리그', '순위: 승률 → 승자승 → TQB → 최소 실점 → 최다 득점 → 추첨', '각 조 상위 2팀 으뜸 토너먼트 16강, 하위권 팀은 버금 16강으로 진출'],
+      points: ['A~H조, 조당 4~5팀 풀리그', '순위: 승률 → 승자승 → TQB → 최소 실점 → 최다 득점 → 추첨', '각 조 1·2위는 으뜸 16강, 3·4위는 버금 16강 진출, 5위는 예선 탈락'],
     },
   ],
   postseasonMatches: [
     {
-      title: '으뜸 4강 (2026.01.25 예정)',
-      matchups: ['세종대 Kings vs 경희대 국제 Lions', '연세대 Eagles vs 서울시립대 Falcons'],
-    },
-    {
-      title: '버금 4강 (2026.01.24 예정)',
-      matchups: ['한국공학대 Winners vs 한국외대 글로벌 Union', '경희대 서울 Braves vs 인하대 Biryong'],
+      title: '대진 확정 전',
+      matchups: ['대진은 조별리그 종료 및 운영진 확정 후 공개됩니다.'],
     },
   ],
   heroMetrics: [

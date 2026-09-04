@@ -7,7 +7,24 @@ const DEFAULT_TAGLINE = 'AUBL · LEAGUE INTRO';
 const DEFAULT_HERO_SUBTITLE = '46th Amateur University Baseball League · 2026 연합회교 중앙대학교(서울)';
 const DEFAULT_HERO_TITLE = '순수 아마추어 대학 야구의 46년 — 2026년, 중앙대학교(서울)와 함께 새로운 도약을 준비합니다.';
 const DEFAULT_HERO_DESCRIPTION =
-  '1981년 출범한 전국대학아마추어야구연합회(AUBL)는 엘리트 선수 중심이 아닌 일반 대학생들의 땀방울로 성장했습니다. 2026 시즌은 중앙대학교(서울)가 주최를 맡아 조별 예선과 으뜸·버금 토너먼트를 통해 리그의 전통과 혁신을 모두 보여줄 예정입니다.';
+  '1981년 출범한 전국대학아마추어야구연합회(AUBL)는 엘리트 선수 중심이 아닌 일반 대학생들의 땀방울로 성장했습니다. 2026 시즌은 중앙대학교(서울)가 연합회교로서 조별 예선과 으뜸·버금 토너먼트를 통해 리그의 전통과 혁신을 모두 보여줄 예정입니다.';
+
+const QUALIFICATION_RULE_COPY = '각 조 1·2위는 으뜸 16강, 3·4위는 버금 16강 진출, 5위는 예선 탈락';
+
+const normalizeIntroCopy = (value: string) =>
+  value
+    .replace(/(?:2026\s*[·|/-]?\s*)?HOSTED\s+BY/giu, '2026 연합회교')
+    .replace(/2026\s+HOST\b/giu, '2026 연합회교')
+    .replace(/주최\s*\(\s*2026\s*\)/gu, '연합회교 (2026)')
+    .replace(/호스트\s*대학/gu, '연합회교')
+    .replace(/호스트/gu, '연합회교')
+    .replace(/(중앙대학교(?:\(서울\))?)[가이]\s*주최(?:를)?\s*맡아/gu, '$1가 연합회교로서')
+    .replace(/(중앙대학교(?:\(서울\))?)[가이]\s*주최하는/gu, '$1가 연합회교로 운영하는')
+    .replace(/(중앙대학교(?:\(서울\))?)\s*주최/gu, '연합회교 $1')
+    .replace(/(20\d{2}년\s+\S+)\s+주최\s+시즌/gu, '$1 연합회교 시즌')
+    .replace(/(중앙대학교(?:\(서울\))?)[가이]\s*연합회교를 맡아/gu, '$1가 연합회교로서')
+    .replace(/46주년 시즌 운영 전권(?:을)?\s*(?:맡은|위임받은) 연합회교/gu, '46주년 시즌 운영을 담당하는 연합회교')
+    .replace(/각 조 상위 2팀 으뜸 토너먼트 16강,\s*하위권 팀은 버금 16강으로 진출/gu, QUALIFICATION_RULE_COPY);
 
 const DEFAULT_HISTORY_HIGHLIGHTS = [
   {
@@ -68,22 +85,20 @@ const DEFAULT_STRUCTURE_CARDS = [
     points: [
       'A~H조, 조당 4~5팀 풀리그',
       '순위: 승률 → 승자승 → TQB → 최소 실점 → 최다 득점 → 추첨',
-      '각 조 상위 2팀 으뜸 토너먼트 16강, 하위권 팀은 버금 16강으로 진출',
+      QUALIFICATION_RULE_COPY,
     ],
   },
 ];
 
 const DEFAULT_POSTSEASON_MATCHES = [
   {
-    title: '으뜸 4강 (2026.01.25 예정)',
-    matchups: ['세종대 Kings vs 경희대 국제 Lions', '연세대 Eagles vs 서울시립대 Falcons'],
-  },
-  {
-    title: '버금 4강 (2026.01.24 예정)',
-    matchups: ['한국공학대 Winners vs 한국외대 글로벌 Union', '경희대 서울 Braves vs 인하대 Biryong'],
+    title: '대진 확정 전',
+    matchups: ['대진은 조별리그 종료 및 운영진 확정 후 공개됩니다.'],
   },
 ];
 
+const hasStalePostseasonPlaceholder = (items: typeof DEFAULT_POSTSEASON_MATCHES) =>
+  items.some((item) => /2026\.0?1\.(?:24|25)\s*예정/u.test(item.title));
 
 const DEFAULT_HERO_METRICS = [
   { label: '2026 연합회교', value: '중앙대학교(서울)', note: '제46회 AUBL 운영' },
@@ -112,15 +127,33 @@ export default function IntroPage() {
     return () => ctx.revert();
   }, []);
 
-  const tagline = intro.tagline || DEFAULT_TAGLINE;
-  const heroSubtitle = intro.heroSubtitle || DEFAULT_HERO_SUBTITLE;
-  const heroTitle = intro.heroTitle || DEFAULT_HERO_TITLE;
-  const heroDescription = intro.heroDescription || DEFAULT_HERO_DESCRIPTION;
-  const historyHighlights = intro.historyHighlights?.length ? intro.historyHighlights : DEFAULT_HISTORY_HIGHLIGHTS;
-  const governance = intro.governance?.length ? intro.governance : DEFAULT_GOVERNANCE;
-  const structureCards = intro.structureCards?.length ? intro.structureCards : DEFAULT_STRUCTURE_CARDS;
-  const postseasonMatches = intro.postseasonMatches?.length ? intro.postseasonMatches : DEFAULT_POSTSEASON_MATCHES;
-  const heroMetrics = intro.heroMetrics?.length ? intro.heroMetrics : DEFAULT_HERO_METRICS;
+  const tagline = normalizeIntroCopy(intro.tagline || DEFAULT_TAGLINE);
+  const heroSubtitle = normalizeIntroCopy(intro.heroSubtitle || DEFAULT_HERO_SUBTITLE);
+  const heroTitle = normalizeIntroCopy(intro.heroTitle || DEFAULT_HERO_TITLE);
+  const heroDescription = normalizeIntroCopy(intro.heroDescription || DEFAULT_HERO_DESCRIPTION);
+  const historyHighlights = (intro.historyHighlights?.length ? intro.historyHighlights : DEFAULT_HISTORY_HIGHLIGHTS).map((item) => ({
+    ...item,
+    title: normalizeIntroCopy(item.title),
+    desc: normalizeIntroCopy(item.desc),
+  }));
+  const governance = (intro.governance?.length ? intro.governance : DEFAULT_GOVERNANCE).map((item) => ({
+    label: normalizeIntroCopy(item.label),
+    value: normalizeIntroCopy(item.value),
+    detail: normalizeIntroCopy(item.detail),
+  }));
+  const structureCards = (intro.structureCards?.length ? intro.structureCards : DEFAULT_STRUCTURE_CARDS).map((item) => ({
+    title: normalizeIntroCopy(item.title),
+    points: item.points.map(normalizeIntroCopy),
+  }));
+  const configuredPostseasonMatches = intro.postseasonMatches?.length ? intro.postseasonMatches : DEFAULT_POSTSEASON_MATCHES;
+  const postseasonMatches = hasStalePostseasonPlaceholder(configuredPostseasonMatches)
+    ? DEFAULT_POSTSEASON_MATCHES
+    : configuredPostseasonMatches;
+  const heroMetrics = (intro.heroMetrics?.length ? intro.heroMetrics : DEFAULT_HERO_METRICS).map((item) => ({
+    label: normalizeIntroCopy(item.label),
+    value: normalizeIntroCopy(item.value),
+    note: normalizeIntroCopy(item.note),
+  }));
 
   return (
     <div className="season-content-page intro-page" style={{ display: 'grid', gap: '32px' }} ref={pageRef}>
@@ -374,7 +407,7 @@ export default function IntroPage() {
               boxShadow: '0 0 0 6px rgba(168, 85, 247, 0.18)',
             }}
           />
-          <p style={{ margin: 0, fontWeight: 800, letterSpacing: '0.05em', fontSize: '13px' }}>2026 포스트시즌 스냅샷</p>
+          <p style={{ margin: 0, fontWeight: 800, letterSpacing: '0.05em', fontSize: '13px' }}>2026 포스트시즌 안내</p>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px' }}>
           {postseasonMatches.map((block) => (

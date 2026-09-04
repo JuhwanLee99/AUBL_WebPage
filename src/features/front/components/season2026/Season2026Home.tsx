@@ -29,11 +29,17 @@ type FeedPhase = 'loading' | 'ready' | 'error';
 
 const associationSchoolCopy = (value: string) =>
   value
-    .replace(/2026\s+HOST/giu, '2026 연합회교')
-    .replace(/HOSTED BY/giu, '2026 연합회교')
+    .replace(/(?:2026\s*[·|/-]?\s*)?HOSTED\s+BY/giu, '2026 연합회교')
+    .replace(/2026\s+HOST\b/giu, '2026 연합회교')
+    .replace(/주최\s*\(\s*2026\s*\)/gu, '연합회교 (2026)')
     .replace(/호스트\s*대학/gu, '연합회교')
     .replace(/호스트/gu, '연합회교')
-    .replace(/46주년 시즌 운영 전권을 맡은 연합회교/gu, '46주년 시즌 운영을 담당하는 연합회교');
+    .replace(/(중앙대학교(?:\(서울\))?)[가이]\s*주최(?:를)?\s*맡아/gu, '$1가 연합회교로서')
+    .replace(/(중앙대학교(?:\(서울\))?)[가이]\s*주최하는/gu, '$1가 연합회교로 운영하는')
+    .replace(/(중앙대학교(?:\(서울\))?)\s*주최/gu, '연합회교 $1')
+    .replace(/(20\d{2}년\s+\S+)\s+주최\s+시즌/gu, '$1 연합회교 시즌')
+    .replace(/(중앙대학교(?:\(서울\))?)[가이]\s*연합회교를 맡아/gu, '$1가 연합회교로서')
+    .replace(/46주년 시즌 운영 전권(?:을)?\s*(?:맡은|위임받은) 연합회교/gu, '46주년 시즌 운영을 담당하는 연합회교');
 
 interface Season2026HomeProps {
   landing: LandingContent;
@@ -302,13 +308,13 @@ function CampaignHero({ landing }: { landing: LandingContent }) {
       <div className="s26-hero__copy">
         <div className="s26-hero__topline">
           <span>2026 SEASON AUBL</span>
-          <span>{landing.heroBadgeText}</span>
+          <span>{associationSchoolCopy(landing.heroBadgeText)}</span>
         </div>
         <h1 id="season-campaign-title">
           <span>{campaignLead}</span>
           <strong>PLAY BALL</strong>
         </h1>
-        <p className="s26-hero__description">{landing.heroDescription}</p>
+        <p className="s26-hero__description">{associationSchoolCopy(landing.heroDescription)}</p>
         <p className="s26-hero__subcopy">{associationSchoolCopy(landing.heroSubDescription)}</p>
         <div className="s26-actions">
           <Link className="s26-button s26-button--primary" to="/schedule">
@@ -324,7 +330,7 @@ function CampaignHero({ landing }: { landing: LandingContent }) {
         {landing.snapshotCards.slice(0, 3).map((item, index) => (
           <div key={`${item.label}-${index}`}>
             <span>{associationSchoolCopy(item.label)}</span>
-            <strong>{item.value}</strong>
+            <strong>{associationSchoolCopy(item.value)}</strong>
             <p>{associationSchoolCopy(item.desc)}</p>
           </div>
         ))}
@@ -373,7 +379,9 @@ function FreshnessBar({
         </div>
         <div>
           <dt><span className={`s26-status-square is-${recordPhase}`} />조별 · 개인 기록</dt>
-          <dd>{recordStateLabel} · 게시 {formatSourceDateTime(freshness?.publishedAt)}</dd>
+          <dd>
+            {recordStateLabel} · {freshness?.publishedAt ? `게시 ${formatSourceDateTime(freshness.publishedAt)}` : '게시 전'}
+          </dd>
         </div>
         <div>
           <dt><span className="s26-status-square is-manual" />원본 대조</dt>
@@ -590,7 +598,7 @@ function GroupStandings({
             </div>
             <div>
               <span>조별리그 진행</span>
-              <strong>{selected.completedGames} / {selected.expectedGames}경기</strong>
+              <strong>{selected.completedGames}경기 기록 반영</strong>
             </div>
           </div>
 
