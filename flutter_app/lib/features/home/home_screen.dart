@@ -1,29 +1,27 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:timeago/timeago.dart' as timeago;
+import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/data/team_groups.dart';
+import '../../app/shell_controller.dart';
 import '../../core/contracts/web_contracts.dart';
 import '../../core/models/match.dart';
-import '../../core/models/match_state.dart';
-import '../../core/navigation/app_destination.dart';
+import '../../core/models/match_view_mode.dart';
+import '../../core/models/notice.dart';
+import '../../core/models/public_season_models.dart';
 import '../../core/models/team_notice.dart';
+import '../../core/navigation/app_destination.dart';
+import '../../core/services/backend_api_service.dart';
 import '../../core/services/cache_service.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/utils/match_time.dart';
-import '../../app/shell_controller.dart';
-import '../../core/webview/app_webview_screen.dart';
-import '../../core/widgets/background_logo.dart';
-import '../../core/widgets/match_status_badge.dart';
-import '../intro/intro_screen.dart';
-import '../teams/team_detail_screen.dart';
-import '../standings/standings_screen.dart';
+import '../../core/widgets/season_components.dart';
+import '../community/notice_detail_screen.dart';
+import '../teams/team_notice_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -33,885 +31,1113 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  static const String _uniquePlayUrl =
-      'https://unique-play.com/league/57?item=%5Bobject%20Object%5D';
-  final _fs = FirestoreService();
-  final PageController _noticeController =
-      PageController(viewportFraction: 0.92);
-  int _noticePage = 0;
-  StreamSubscription<User?>? _authSub;
-  List<Match> _todayMatches = [];
-  List<Match> _tomorrowMatches = [];
-  List<Match> _completedMatches = [];
-  bool _loadingSchedule = true;
+  static const _viewModeKey = 'aubl_home_match_view_v1';
+  static const _announcementKeyPrefix = 'aubl_announcement_hidden_until_v1:';
+  static const _uniquePlayUrl = 'https://unique-play.com/league/57';
+  static const _goldballParkUrl = 'https://www.goldballpark.co.kr/';
+  static const _majorUrl = 'https://www.baseballm.com/';
+  static const _instagramUrl = 'https://www.instagram.com/aubl_1981/';
 
-  // 사용자 팀 정보
+  final BackendApiService _api = BackendApiService();
+  final FirestoreService _firestore = FirestoreService();
+
+  StreamSubscription<User?>? _authSubscription;
+  StreamSubscription<Map<String, dynamic>?>? _liveInfoSubscription;
+  ValueNotifier<int>? _refreshNotifier;
+
+  SeasonOverview? _overview;
+  List<PublicGame> _monthGames = const [];
+  List<Notice> _leagueNotices = const [];
+  List<TeamNotice> _teamNotices = const [];
   String? _userTeamId;
   String? _userTeamName;
-  List<TeamNotice> _teamNotices = [];
-  bool _loadingNotices = true;
-  ValueNotifier<int>? _refreshNotifier;
+  String _selectedGroup = 'A';
+  String? _error;
+  bool _loading = true;
+  bool _calendarLoading = false;
+  MatchViewMode _viewMode = MatchViewMode.list;
+  DateTime _visibleMonth = _monthStart(_kstNow());
+  DateTime _selectedDate = _kstToday();
+  _SiteAnnouncement? _announcement;
+  bool _announcementCollapsed = false;
+  bool _announcementHidden = false;
 
   @override
   void initState() {
     super.initState();
-    _loadSchedule();
-    _loadUserTeam();
-    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
-      if (user == null) {
-        NotificationService.instance.updateTeamSubscriptions(null);
-        if (mounted) {
-          setState(() {
-            _userTeamId = null;
-            _userTeamName = null;
-            _teamNotices = [];
-            _loadingNotices = false;
-          });
-        }
-        return;
-      }
-      _loadUserTeam();
-    });
+    _restoreViewMode();
+    _listenForAnnouncement();
+    _loadAll();
+    _authSubscription =
+        FirebaseAuth.instance.authStateChanges().listen((_) => _loadUserTeam());
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final notifier = ShellController.of(context)?.refreshNotifier;
-    if (notifier != _refreshNotifier) {
-      _refreshNotifier?.removeListener(_onAppResume);
-      _refreshNotifier = notifier;
-      _refreshNotifier?.addListener(_onAppResume);
-    }
-  }
-
-  void _onAppResume() {
-    _loadSchedule();
-    _loadUserTeam();
+    if (notifier == _refreshNotifier) return;
+    _refreshNotifier?.removeListener(_onAppResume);
+    _refreshNotifier = notifier;
+    _refreshNotifier?.addListener(_onAppResume);
   }
 
   @override
   void dispose() {
     _refreshNotifier?.removeListener(_onAppResume);
-    _authSub?.cancel();
-    _noticeController.dispose();
+    _authSubscription?.cancel();
+    _liveInfoSubscription?.cancel();
     super.dispose();
   }
 
-  void _applyMatches(List<Match> all) {
-    final now = DateTime.now();
-    final todayStr =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    final tomorrow = now.add(const Duration(days: 1));
-    final tomorrowStr =
-        '${tomorrow.year}-${tomorrow.month.toString().padLeft(2, '0')}-${tomorrow.day.toString().padLeft(2, '0')}';
+  void _onAppResume() => _loadAll(showLoading: false);
 
-    final today = <Match>[];
-    final tmrw = <Match>[];
-    final completed = <Match>[];
-
-    for (final m in all) {
-      if (m.isCompleted) completed.add(m);
-      final dateStr = matchStartDateKey(m.startTime);
-      if (dateStr != null) {
-        if (dateStr == todayStr && m.status == 'scheduled') {
-          today.add(m);
-        } else if (dateStr == tomorrowStr && m.status == 'scheduled') {
-          tmrw.add(m);
-        }
-      }
-    }
-
-    completed.sort((a, b) => (b.startTime ?? '').compareTo(a.startTime ?? ''));
-
-    if (mounted) {
-      setState(() {
-        _todayMatches = today;
-        _tomorrowMatches = tmrw;
-        _completedMatches = completed.take(5).toList();
-        _loadingSchedule = false;
-      });
+  Future<void> _restoreViewMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_viewModeKey);
+    if (!mounted) return;
+    setState(() {
+      _viewMode = saved == MatchViewMode.calendar.name
+          ? MatchViewMode.calendar
+          : MatchViewMode.list;
+    });
+    if (_viewMode == MatchViewMode.calendar) {
+      unawaited(_loadMonthGames());
     }
   }
 
-  Future<void> _loadSchedule() async {
-    // 캐시에서 즉시 로드
-    final cached = await CacheService.instance.getCachedMatches();
-    if (cached != null && _loadingSchedule) {
-      _applyMatches(cached);
+  void _listenForAnnouncement() {
+    _liveInfoSubscription = _firestore.watchLiveInfo().listen((payload) async {
+      final raw = payload?['announcement'];
+      final next =
+          raw is Map<String, dynamic> ? _SiteAnnouncement.fromJson(raw) : null;
+      var hidden = false;
+      if (next != null) {
+        final prefs = await SharedPreferences.getInstance();
+        final hiddenUntil =
+            prefs.getInt('$_announcementKeyPrefix${next.revision}') ?? 0;
+        hidden = hiddenUntil > DateTime.now().millisecondsSinceEpoch;
+      }
+      if (!mounted) return;
+      setState(() {
+        if (_announcement?.revision != next?.revision) {
+          _announcementCollapsed = false;
+        }
+        _announcement = next;
+        _announcementHidden = hidden;
+      });
+    });
+  }
+
+  Future<void> _loadAll({bool showLoading = true}) async {
+    if (showLoading && mounted) setState(() => _loading = true);
+    String? nextError;
+    SeasonOverview? nextOverview;
+    try {
+      final seasons = await _api.getSeasons();
+      if (seasons.isEmpty) throw StateError('공개된 시즌이 없습니다.');
+      final season = seasons.firstWhere(
+        (item) => item.year == 2026,
+        orElse: () => seasons.first,
+      );
+      nextOverview = await _api.getSeasonOverview(season.id);
+    } catch (_) {
+      nextError = '공식 시즌 데이터를 불러오지 못했습니다.';
     }
 
-    // 네트워크에서 최신 데이터
-    try {
-      final all = await _fs.getAllMatches();
-      _applyMatches(all);
-      unawaited(CacheService.instance.cacheMatches(all));
-    } catch (_) {
-      if (mounted && _loadingSchedule) setState(() => _loadingSchedule = false);
+    await Future.wait([
+      _loadNotices(),
+      _loadUserTeam(),
+    ]);
+
+    if (!mounted) return;
+    setState(() {
+      _overview = nextOverview ?? _overview;
+      _error = nextError;
+      _loading = false;
+      _applyPreferredGroup();
+    });
+    if (_viewMode == MatchViewMode.calendar) {
+      unawaited(_loadMonthGames());
     }
+  }
+
+  Future<void> _loadNotices() async {
+    final cached = await CacheService.instance.getCachedNotices();
+    if (cached != null && mounted && _leagueNotices.isEmpty) {
+      setState(() => _leagueNotices = cached.take(4).toList());
+    }
+    try {
+      final notices = await _firestore.getNotices(limit: 4);
+      if (!mounted) return;
+      setState(() => _leagueNotices = notices);
+      unawaited(CacheService.instance.cacheNotices(notices));
+    } catch (_) {}
   }
 
   Future<void> _loadUserTeam() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      if (mounted) setState(() => _loadingNotices = false);
+      await NotificationService.instance.updateTeamSubscriptions(null);
+      if (!mounted) return;
+      setState(() {
+        _userTeamId = null;
+        _userTeamName = null;
+        _teamNotices = const [];
+        _selectedGroup = 'A';
+      });
       return;
     }
 
     try {
-      final roleDoc = await _fs.watchUserRole(user.uid).first;
-      String? teamId;
-      String? teamName;
-      if (roleDoc != null && roleDoc['teamId'] != null) {
-        teamId = roleDoc['teamId'] as String;
-        teamName = roleDoc['teamName'] as String? ?? teamId;
-      } else {
-        final membership = await _fs.findUserTeamMembership(user.uid);
-        if (membership != null) {
-          teamId = membership['teamId'] as String?;
-          if (teamId != null) {
-            final team = await _fs.getTeam(teamId);
-            teamName = team?.name ?? teamId;
-          }
-        }
+      final role = await _firestore.watchUserRole(user.uid).first;
+      String? teamId = role?['teamId']?.toString();
+      String? teamName = role?['teamName']?.toString();
+      if (teamId == null || teamId.isEmpty) {
+        final membership = await _firestore.findUserTeamMembership(user.uid);
+        teamId = membership?['teamId']?.toString();
       }
-
-      if (teamId != null) {
+      if (teamId != null && teamId.isNotEmpty) {
+        final team = await _firestore.getTeam(teamId);
+        teamName = team?.name ?? teamName ?? teamId;
+        final notices = await _firestore.watchTeamNotices(teamId).first;
         await NotificationService.instance.updateTeamSubscriptions(teamId);
-        final notices = await _fs.watchTeamNotices(teamId).first;
-        if (mounted) {
-          setState(() {
-            _userTeamId = teamId;
-            _userTeamName = teamName ?? teamId!;
-            _teamNotices = [
-              ...notices.where((n) => n.pinned),
-              ...notices.where((n) => !n.pinned),
-            ].take(5).toList();
-            _noticePage = 0;
-            _loadingNotices = false;
-          });
-        }
-        if (_noticeController.hasClients) {
-          _noticeController.jumpToPage(0);
-        }
-      } else {
-        await NotificationService.instance.updateTeamSubscriptions(null);
-        if (mounted) setState(() => _loadingNotices = false);
+        if (!mounted) return;
+        setState(() {
+          _userTeamId = teamId;
+          _userTeamName = teamName;
+          _teamNotices = [
+            ...notices.where((notice) => notice.pinned),
+            ...notices.where((notice) => !notice.pinned),
+          ].take(4).toList();
+          _applyPreferredGroup();
+        });
       }
-    } catch (_) {
-      if (mounted) setState(() => _loadingNotices = false);
+    } catch (_) {}
+  }
+
+  void _applyPreferredGroup() {
+    final teamName = _normalizeTeamName(_userTeamName);
+    final overview = _overview;
+    if (teamName == null || overview == null) return;
+    for (final group in overview.groups) {
+      if (group.standings.any(
+        (row) => _normalizeTeamName(row.teamName) == teamName,
+      )) {
+        _selectedGroup = group.groupCode;
+        return;
+      }
     }
   }
 
-  Future<void> _onRefresh() async {
-    await Future.wait([_loadSchedule(), _loadUserTeam()]);
+  Future<void> _loadMonthGames() async {
+    final overview = _overview;
+    if (overview == null || _calendarLoading) return;
+    setState(() => _calendarLoading = true);
+    final first = _monthStart(_visibleMonth);
+    final last = DateTime(first.year, first.month + 1, 0);
+    try {
+      final games = await _api.getPublicGames(
+        seasonId: overview.seasonId,
+        dateFrom: first,
+        dateTo: last,
+      );
+      if (!mounted) return;
+      setState(() => _monthGames = games);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _monthGames = const []);
+    } finally {
+      if (mounted) setState(() => _calendarLoading = false);
+    }
+  }
+
+  Future<void> _setViewMode(MatchViewMode mode) async {
+    if (_viewMode == mode) return;
+    setState(() => _viewMode = mode);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_viewModeKey, mode.name);
+    if (mode == MatchViewMode.calendar) {
+      await _loadMonthGames();
+    }
+  }
+
+  Future<void> _hideAnnouncementForDay() async {
+    final announcement = _announcement;
+    if (announcement == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(
+      '$_announcementKeyPrefix${announcement.revision}',
+      DateTime.now().add(const Duration(hours: 24)).millisecondsSinceEpoch,
+    );
+    if (mounted) setState(() => _announcementHidden = true);
+  }
+
+  void _openGame(PublicGame game) {
+    final shell = ShellController.of(context);
+    final path = WebRouteContracts.scoreboardText(game.detailId);
+    if (shell != null) {
+      shell.openEmbeddedWebView(path, '경기 상세');
+    }
+  }
+
+  void _openLegacyGame(Match match) {
+    final shell = ShellController.of(context);
+    if (shell != null) {
+      shell.openEmbeddedWebView(
+        WebRouteContracts.scoreboardText(match.detailId),
+        '경기 상세',
+      );
+    }
+  }
+
+  Future<void> _openExternal(String rawUrl) async {
+    final uri = Uri.tryParse(rawUrl);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        children: [
-          // 화면 중앙 배경 로고
-          const BackgroundLogo(verticalOffset: kToolbarHeight / 2 + 25),
-          // 메인 콘텐츠
-          RefreshIndicator(
-            onRefresh: _onRefresh,
-            child: CustomScrollView(
-              slivers: [
-                SliverPersistentHeader(
-                  pinned: true,
-                  delegate: _StickyHeroDelegate(
-                    statusBarHeight: MediaQuery.of(context).padding.top,
-                    onIntroTap: () {
-                      Navigator.of(context).push(MaterialPageRoute<void>(
-                        builder: (_) => const IntroScreen(),
-                      ));
-                    },
-                  ),
+      appBar: AppBar(
+        title: Row(
+          children: [
+            Image.asset(
+              'assets/images/aubl_clean.png',
+              height: 32,
+              width: 42,
+              fit: BoxFit.contain,
+              semanticLabel: 'AUBL',
+            ),
+            const SizedBox(width: 8),
+            const Text('AUBL'),
+          ],
+        ),
+      ),
+      body: RefreshIndicator(
+        onRefresh: () => _loadAll(showLoading: false),
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+          children: [
+            if (_announcement != null &&
+                _announcement!.enabled &&
+                !_announcementHidden) ...[
+              _buildAnnouncement(_announcement!),
+              const SizedBox(height: 12),
+            ],
+            _buildHero(),
+            const SizedBox(height: 14),
+            if (_overview != null)
+              DataFreshnessCard(freshness: _overview!.sourceFreshness)
+            else if (_loading)
+              const _HomeLoadingCard()
+            else
+              SeasonStatePanel(
+                icon: Icons.cloud_off_outlined,
+                title: '공식 데이터를 확인할 수 없습니다',
+                message: _error ?? '잠시 후 아래로 당겨 다시 시도해 주세요.',
+                action: SeasonActionButton(
+                  label: '다시 시도',
+                  onPressed: _loadAll,
+                  style: SeasonActionStyle.secondary,
                 ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // ── 홈팀 공지 (라이브 경기 위) ──
-                        if (_userTeamId != null) ...[
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildSectionTitle(
-                                  '$_userTeamName 공지',
-                                  Icons.campaign,
-                                  AppTheme.blue400,
-                                ),
-                              ),
-                              GestureDetector(
-                                onTap: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute<void>(
-                                      builder: (_) => TeamDetailScreen(
-                                        teamId: _userTeamId!,
-                                        teamName: _userTeamName ?? _userTeamId!,
-                                      ),
-                                    ),
-                                  );
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 5),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                        color: AppTheme.blue400
-                                            .withValues(alpha: 0.4)),
-                                    borderRadius: BorderRadius.circular(8),
-                                    color:
-                                        AppTheme.blue400.withValues(alpha: 0.1),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.groups,
-                                          size: 13, color: AppTheme.blue400),
-                                      SizedBox(width: 4),
-                                      Text('팀 페이지',
-                                          style: TextStyle(
-                                              color: AppTheme.blue400,
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600)),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
+              ),
+            const SizedBox(height: 28),
+            _buildMatches(),
+            const SizedBox(height: 30),
+            _buildGroups(),
+            const SizedBox(height: 30),
+            _buildLeaders(),
+            const SizedBox(height: 30),
+            _buildNotices(),
+            const SizedBox(height: 30),
+            _buildPartners(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAnnouncement(_SiteAnnouncement announcement) {
+    final colors = context.aublColors;
+    final warning = announcement.tone == 'warning';
+    final accent = warning ? colors.warning : colors.cobalt;
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      label: '중요 공지 ${announcement.title}',
+      child: Container(
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: accent.withValues(alpha: 0.48)),
+        ),
+        child: Column(
+          children: [
+            ListTile(
+              minTileHeight: 56,
+              leading: Icon(
+                warning ? Icons.campaign_outlined : Icons.info_outline,
+                color: accent,
+              ),
+              title: Text(
+                announcement.title,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              trailing: IconButton(
+                tooltip: _announcementCollapsed ? '공지 펼치기' : '공지 접기',
+                onPressed: () => setState(
+                  () => _announcementCollapsed = !_announcementCollapsed,
+                ),
+                icon: Icon(
+                  _announcementCollapsed
+                      ? Icons.expand_more
+                      : Icons.expand_less,
+                ),
+              ),
+            ),
+            if (!_announcementCollapsed) ...[
+              Divider(height: 1, color: colors.line),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 13, 16, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      announcement.message,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            height: 1.5,
                           ),
-                          const SizedBox(height: 8),
-                          _buildTeamNotices(),
-                          const SizedBox(height: 24),
-                        ],
-
-                        // ── 라이브 경기 ──
-                        _buildSectionTitle(
-                            '라이브 경기', Icons.circle, AppTheme.red500),
-                        const SizedBox(height: 8),
-                        _buildLiveMatches(),
-                        const SizedBox(height: 24),
-
-                        // ── 오늘 일정 ──
-                        _buildSectionTitle(
-                            '오늘 일정', Icons.calendar_today, AppTheme.slate300),
-                        const SizedBox(height: 8),
-                        _buildHorizontalSchedule(
-                            _todayMatches, '오늘 예정된 경기가 없습니다.'),
-                        const SizedBox(height: 24),
-
-                        // ── 내일 일정 ──
-                        _buildSectionTitle(
-                            '내일 일정', Icons.event, AppTheme.slate300),
-                        const SizedBox(height: 8),
-                        _buildHorizontalSchedule(
-                            _tomorrowMatches, '내일 예정된 경기가 없습니다.'),
-                        const SizedBox(height: 24),
-
-                        // ── 최근 경기 결과 ──
-                        _buildSectionTitle(
-                            '최근 경기 결과', Icons.scoreboard, AppTheme.slate300),
-                        const SizedBox(height: 8),
-                        _buildRecentResults(),
-                        const SizedBox(height: 24),
-
-                        // ── KEY VALUES ──
-                        _buildKeyValues(),
-                        const SizedBox(height: 16),
-
-                        // ── 시즌 요약 ──
-                        _buildSectionTitle('2026 시즌', Icons.sports_baseball,
-                            AppTheme.slate300),
-                        const SizedBox(height: 8),
-                        _buildSeasonSnapshot(),
-                        const SizedBox(height: 24),
-
-                        // ── 바로가기 ──
-                        _buildSeasonHighlights(),
-                        const SizedBox(height: 24),
-
-                        // ── 소셜 CTA ──
-                        _buildUniquePlayCta(),
-                        const SizedBox(height: 12),
-                        _buildSocialCta(),
-                        const SizedBox(height: 16),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (announcement.safeLink != null)
+                          SeasonActionButton(
+                            label: announcement.linkLabel ?? '자세히 보기',
+                            icon: Icons.open_in_new,
+                            style: SeasonActionStyle.text,
+                            onPressed: () =>
+                                _openExternal(announcement.safeLink!),
+                          ),
+                        SeasonActionButton(
+                          label: '하루 동안 보지 않기',
+                          style: SeasonActionStyle.text,
+                          onPressed: _hideAnnouncementForDay,
+                        ),
                       ],
                     ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHero() {
+    return SeasonPageHero(
+      eyebrow: '46TH AUBL · 2026 연합회교 중앙대학교(서울)',
+      leading: Image.asset(
+        'assets/images/aubl_clean.png',
+        width: 40,
+        height: 40,
+        fit: BoxFit.contain,
+      ),
+      title: const SeasonWordmark(
+        lead: '우리의 청춘은 이번에도',
+        emphasis: 'PLAY BALL',
+      ),
+      description:
+          '40개 대학이 함께 만드는 순수 대학 아마추어 야구 리그. 일정과 결과, 조별 현황과 시즌 기록을 한곳에서 확인하세요.',
+    );
+  }
+
+  Widget _buildMatches() {
+    final overview = _overview;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SeasonSectionHeader(
+          title: '일정과 결과를 한눈에',
+          description: '공식 게시된 경기만 표시합니다.',
+          action: IconButton(
+            tooltip: '전체 경기 보기',
+            onPressed: () =>
+                ShellController.of(context)?.switchTab(AppDestination.games),
+            icon: const Icon(Icons.arrow_forward),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<MatchViewMode>(
+            segments: const [
+              ButtonSegment(
+                value: MatchViewMode.list,
+                icon: Icon(Icons.view_agenda_outlined),
+                label: Text('목록'),
+              ),
+              ButtonSegment(
+                value: MatchViewMode.calendar,
+                icon: Icon(Icons.calendar_month_outlined),
+                label: Text('달력'),
+              ),
+            ],
+            selected: {_viewMode},
+            onSelectionChanged: (selection) => _setViewMode(selection.first),
+          ),
+        ),
+        const SizedBox(height: 12),
+        StreamBuilder<List<Match>>(
+          stream: _firestore.watchLiveMatches(),
+          builder: (context, snapshot) {
+            final live = snapshot.data ?? const <Match>[];
+            if (live.isEmpty) return const SizedBox.shrink();
+            return Column(
+              children: [
+                for (final match in live) ...[
+                  _LiveMatchCard(match: match, onTap: _openLegacyGame),
+                  const SizedBox(height: 10),
+                ],
+              ],
+            );
+          },
+        ),
+        if (_viewMode == MatchViewMode.calendar)
+          _buildCalendar()
+        else if (overview == null && _loading)
+          const _HomeLoadingCard()
+        else if (overview == null)
+          const SeasonStatePanel(
+            icon: Icons.event_busy_outlined,
+            title: '경기 정보를 표시할 수 없습니다',
+            message: '공식 데이터 연결을 확인하고 다시 시도해 주세요.',
+          )
+        else
+          _buildMatchList(overview),
+      ],
+    );
+  }
+
+  Widget _buildMatchList(SeasonOverview overview) {
+    final games = <PublicGame>[
+      ...overview.upcomingGames.take(4),
+      ...overview.recentGames.take(4),
+    ];
+    if (games.isEmpty) {
+      return const SeasonStatePanel(
+        icon: Icons.event_available_outlined,
+        title: '게시된 경기가 없습니다',
+        message: '새 일정이나 결과가 게시되면 이곳에 표시됩니다.',
+      );
+    }
+    return Column(
+      children: [
+        for (var index = 0; index < games.length; index++) ...[
+          PublicMatchCard(
+              game: games[index], onTap: () => _openGame(games[index])),
+          if (index != games.length - 1) const SizedBox(height: 10),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildCalendar() {
+    final colors = context.aublColors;
+    final first = _monthStart(_visibleMonth);
+    final days = DateTime(first.year, first.month + 1, 0).day;
+    final leading = first.weekday - DateTime.monday;
+    final cells = ((leading + days + 6) ~/ 7) * 7;
+    final selectedGames = _gamesOn(_selectedDate);
+    return Column(
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    IconButton(
+                      tooltip: '이전 달',
+                      onPressed: () => _changeMonth(-1),
+                      icon: const Icon(Icons.chevron_left),
+                    ),
+                    Expanded(
+                      child: Text(
+                        DateFormat('yyyy년 M월').format(_visibleMonth),
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _visibleMonth = _monthStart(_kstNow());
+                          _selectedDate = _kstToday();
+                        });
+                        _loadMonthGames();
+                      },
+                      child: const Text('오늘'),
+                    ),
+                    IconButton(
+                      tooltip: '다음 달',
+                      onPressed: () => _changeMonth(1),
+                      icon: const Icon(Icons.chevron_right),
+                    ),
+                  ],
+                ),
+                if (_calendarLoading) const LinearProgressIndicator(),
+                const SizedBox(height: 8),
+                Row(
+                  children: ['월', '화', '수', '목', '금', '토', '일']
+                      .map(
+                        (day) => Expanded(
+                          child: Text(
+                            day,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: colors.muted,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 4),
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: cells,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 7,
+                    childAspectRatio: 0.82,
                   ),
+                  itemBuilder: (context, index) {
+                    final day = index - leading + 1;
+                    if (day < 1 || day > days) {
+                      return const SizedBox.shrink();
+                    }
+                    final date = DateTime(first.year, first.month, day);
+                    final games = _gamesOn(date);
+                    final selected = _sameDay(date, _selectedDate);
+                    return Semantics(
+                      button: true,
+                      selected: selected,
+                      label: '$day일, 경기 ${games.length}개',
+                      child: InkWell(
+                        onTap: () => setState(() => _selectedDate = date),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          margin: const EdgeInsets.all(2),
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? colors.cobalt.withValues(alpha: 0.13)
+                                : null,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: selected ? colors.cobalt : colors.line,
+                            ),
+                          ),
+                          child: Column(
+                            children: [
+                              Text(
+                                '$day',
+                                style: TextStyle(
+                                  color: selected ? colors.navy : colors.ink,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const Spacer(),
+                              if (games.isNotEmpty) ...[
+                                Text(
+                                  '${games.length}경기',
+                                  style: TextStyle(
+                                    color: colors.cobalt,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSectionTitle(String title, IconData icon, Color color) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: color),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            DateFormat('M월 d일 EEEE', 'ko').format(_selectedDate),
+            style: Theme.of(context).textTheme.titleMedium,
           ),
         ),
+        const SizedBox(height: 8),
+        if (selectedGames.isEmpty)
+          const SeasonStatePanel(
+            icon: Icons.event_outlined,
+            title: '이 날짜에는 경기가 없습니다',
+            message: '다른 날짜를 선택해 주세요.',
+          )
+        else
+          for (var index = 0; index < selectedGames.length; index++) ...[
+            PublicMatchCard(
+              game: selectedGames[index],
+              onTap: () => _openGame(selectedGames[index]),
+            ),
+            if (index != selectedGames.length - 1) const SizedBox(height: 8),
+          ],
       ],
     );
   }
 
-  // ── 라이브 경기 (실시간, 좌우 스크롤 + 도트 인디케이터) ──
-  Widget _buildLiveMatches() {
-    return StreamBuilder<List<Match>>(
-      stream: _fs.watchLiveMatches(),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const _PlaceholderCard(text: '라이브 경기를 확인하는 중...');
-        }
-        final matches = snap.data ?? [];
-        if (matches.isEmpty) {
-          return const _PlaceholderCard(text: '현재 진행 중인 경기가 없습니다.');
-        }
-        if (matches.length == 1) {
-          return _LiveMatchCard(match: matches.first, fs: _fs);
-        }
-        return _LiveMatchCarousel(matches: matches, fs: _fs);
-      },
-    );
+  void _changeMonth(int delta) {
+    final next = DateTime(_visibleMonth.year, _visibleMonth.month + delta, 1);
+    setState(() {
+      _visibleMonth = next;
+      _selectedDate = next;
+    });
+    _loadMonthGames();
   }
 
-  // ── 일정 가로 스크롤 ──
-  Widget _buildHorizontalSchedule(List<Match> matches, String emptyText) {
-    if (_loadingSchedule) {
-      return const _PlaceholderCard(text: '일정을 불러오는 중...');
-    }
-    if (matches.isEmpty) {
-      return _PlaceholderCard(text: emptyText);
-    }
-
-    return SizedBox(
-      height: 120,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: matches.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 10),
-        itemBuilder: (context, i) => _SchedulePreviewCard(match: matches[i]),
-      ),
-    );
+  List<PublicGame> _gamesOn(DateTime date) {
+    return _monthGames.where((game) {
+      final gameDate = game.gameDate ?? game.startTime;
+      return gameDate != null && _sameDay(gameDate, date);
+    }).toList();
   }
 
-  // ── 최근 경기 결과 ──
-  Widget _buildRecentResults() {
-    if (_loadingSchedule) {
-      return const _PlaceholderCard(text: '결과를 불러오는 중...');
-    }
-    if (_completedMatches.isEmpty) {
-      return const _PlaceholderCard(text: '완료된 경기가 없습니다.');
-    }
-
+  Widget _buildGroups() {
+    final groups = _overview?.groups ?? const <GroupOverview>[];
+    final selected = groups.where((group) => group.groupCode == _selectedGroup);
+    final group = selected.isEmpty ? null : selected.first;
     return Column(
-      children: List.generate(_completedMatches.length, (idx) {
-        final m = _completedMatches[idx];
-        final dateLabel =
-            formatMatchStartTime(m.startTime, pattern: 'M/d (E)') ?? '';
-
-        return Container(
-          width: double.infinity,
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: AppTheme.slate800.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppTheme.slate700.withValues(alpha: 0.5)),
-          ),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SeasonSectionHeader(
+          title: 'A~H 조별 현황',
+          description: '진출 상태는 관리자가 확정한 공식 판정을 따릅니다.',
+        ),
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: AppTheme.blue500.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  '${idx + 1}',
-                  style: const TextStyle(
-                    color: AppTheme.blue400,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
+              for (final code in const ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'])
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text('$code조'),
+                    selected: _selectedGroup == code,
+                    onSelected: (_) => setState(() => _selectedGroup = code),
                   ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${m.awayTeamName}  vs  ${m.homeTeamName}',
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      dateLabel,
-                      style: const TextStyle(
-                          color: AppTheme.slate500, fontSize: 11),
-                    ),
-                  ],
-                ),
-              ),
-              Text(
-                '${m.awayScore ?? 0} : ${m.homeScore ?? 0}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  fontFeatures: [FontFeature.tabularFigures()],
-                ),
-              ),
             ],
           ),
-        );
-      }),
-    );
-  }
-
-  // ── 팀 공지 ──
-  Widget _buildNoticeCard(TeamNotice n, {EdgeInsets? margin}) {
-    final ago = timeago.format(
-      DateTime.fromMillisecondsSinceEpoch(n.createdAt),
-      locale: 'ko',
-    );
-    return Container(
-      width: double.infinity,
-      margin: margin ?? const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.slate800.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: n.pinned
-              ? AppTheme.amber400.withValues(alpha: 0.3)
-              : AppTheme.slate700.withValues(alpha: 0.5),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              if (n.pinned) ...[
-                const Icon(Icons.push_pin, size: 13, color: AppTheme.amber400),
-                const SizedBox(width: 4),
-              ],
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                  color: AppTheme.blue500.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  n.category,
-                  style: const TextStyle(
-                    color: AppTheme.blue400,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const Spacer(),
-              Text(ago,
-                  style:
-                      const TextStyle(color: AppTheme.slate500, fontSize: 11)),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            n.title,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTeamNotices() {
-    if (_loadingNotices) {
-      return const _PlaceholderCard(text: '공지를 불러오는 중...');
-    }
-    if (_teamNotices.isEmpty) {
-      return const _PlaceholderCard(text: '등록된 팀 공지가 없습니다.');
-    }
-    if (_teamNotices.length == 1) {
-      return _buildNoticeCard(_teamNotices.first);
-    }
-    final maxIndex = _teamNotices.length - 1;
-    final current = math.min(_noticePage, maxIndex);
-    return Column(
-      children: [
-        SizedBox(
-          height: 96,
-          child: PageView.builder(
-            controller: _noticeController,
-            itemCount: _teamNotices.length,
-            onPageChanged: (idx) {
-              if (!mounted) return;
-              setState(() => _noticePage = idx);
-            },
-            itemBuilder: (context, index) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: _buildNoticeCard(
-                  _teamNotices[index],
-                  margin: EdgeInsets.zero,
-                ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(
-            _teamNotices.length,
-            (index) {
-              final active = index == current;
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                margin: const EdgeInsets.symmetric(horizontal: 3),
-                width: active ? 10 : 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: active ? AppTheme.blue400 : AppTheme.slate600,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ── 시즌 요약 ──
-  Widget _buildSeasonSnapshot() {
-    return Row(
-      children: [
-        _StatCard(
-          label: 'TEAMS',
-          value: '${teamGroups.length}',
-          description: '참가 팀',
-        ),
-        const SizedBox(width: 8),
-        _StatCard(
-          label: 'GROUPS',
-          value: '${groupLetters.length}',
-          description: '조 편성',
-        ),
-        const SizedBox(width: 8),
-        _StatCard(
-          label: 'GAMES',
-          value: _loadingSchedule ? '-' : '${_completedMatches.length}',
-          description: '완료된 경기',
-        ),
-      ],
-    );
-  }
-
-  // ── KEY VALUES ──
-  Widget _buildKeyValues() {
-    const values = [
-      (Icons.school, 'UNIVERSITY', '대학생 중심의 리그 운영'),
-      (Icons.sports_baseball, 'FAIR PLAY', '공정한 경쟁과 스포츠맨십'),
-      (Icons.people, 'COMMUNITY', '야구를 사랑하는 커뮤니티'),
-      (Icons.trending_up, 'GROWTH', '선수 개개인의 성장 지원'),
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitle('AUBL KEY VALUES', Icons.star, AppTheme.blue400),
-        const SizedBox(height: 8),
-        LayoutBuilder(builder: (context, constraints) {
-          // 태블릿(넓은 화면)에서 카드 높이가 과도하게 커지지 않도록 비율 조정
-          final ratio = constraints.maxWidth > 600 ? 2.4 : 2.0;
-          return GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            padding: EdgeInsets.zero,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            childAspectRatio: ratio,
-            children: values.map((v) {
-              final (icon, title, desc) = v;
-              return Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppTheme.slate800.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: AppTheme.slate700.withValues(alpha: 0.5)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(icon, color: AppTheme.blue400, size: 20),
-                    const SizedBox(height: 4),
-                    Text(title,
-                        style: const TextStyle(
-                          color: AppTheme.slate300,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.5,
-                        )),
-                    const SizedBox(height: 2),
-                    Text(desc,
-                        style: const TextStyle(
-                            color: AppTheme.slate500, fontSize: 11)),
-                  ],
-                ),
-              );
-            }).toList(),
-          );
-        }),
-      ],
-    );
-  }
-
-  // ── 시즌 하이라이트 ──
-  Widget _buildSeasonHighlights() {
-    const highlights = [
-      (Icons.groups, '팀', '참가 팀 목록 및 상세 정보'),
-      (Icons.calendar_month, '일정', '전체 경기 일정 확인'),
-      (Icons.leaderboard, '기록', '타자·투수 시즌 기록'),
-      (Icons.emoji_events, '순위', 'Elo 기반 팀 순위'),
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitle('바로가기', Icons.bolt, AppTheme.slate300),
         const SizedBox(height: 10),
-        Row(
-          children: highlights.map((h) {
-            final (icon, label, _) = h;
-            return Expanded(
-              child: GestureDetector(
-                onTap: () {
-                  final shell = ShellController.of(context);
-                  if (shell == null) return;
-                  const tabMap = {
-                    '팀': AppDestination.teams,
-                    '일정': AppDestination.games,
-                    '기록': AppDestination.records,
-                  };
-                  final destination = tabMap[label];
-                  if (destination != null) {
-                    shell.switchTab(destination);
-                  } else if (label == '순위') {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const StandingsScreen(),
-                      ),
-                    );
-                  }
-                },
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    color: AppTheme.slate800.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color: AppTheme.slate700.withValues(alpha: 0.5)),
-                  ),
-                  child: Column(
+        if (_loading && group == null)
+          const _HomeLoadingCard()
+        else if (group == null || group.standings.isEmpty)
+          const SeasonStatePanel(
+            icon: Icons.table_rows_outlined,
+            title: '조별 순위가 아직 게시되지 않았습니다',
+            message: '공식 순위가 게시되면 승패와 진출 상태를 확인할 수 있습니다.',
+          )
+        else
+          Card(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+                  child: Row(
                     children: [
-                      Icon(icon, color: AppTheme.blue400, size: 22),
-                      const SizedBox(height: 6),
-                      Text(label,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600)),
+                      Text('${group.groupCode}조',
+                          style: Theme.of(context).textTheme.titleMedium),
+                      const Spacer(),
+                      Text(
+                        '${group.completedGameCount}경기 완료 · ${group.teamCount}팀',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: context.aublColors.muted,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+                for (var index = 0;
+                    index < group.standings.length;
+                    index++) ...[
+                  if (index > 0)
+                    Divider(height: 1, color: context.aublColors.line),
+                  _StandingRow(row: group.standings[index]),
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildLeaders() {
+    final batters = _overview?.batterLeaders ?? const <SeasonBatterLeader>[];
+    final pitchers = _overview?.pitcherLeaders ?? const <SeasonPitcherLeader>[];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SeasonSectionHeader(
+          title: '시즌 기록 리더',
+          description: '검증이 완료된 공개 기록만 표시합니다.',
+          action: IconButton(
+            tooltip: '전체 기록 보기',
+            onPressed: () =>
+                ShellController.of(context)?.switchTab(AppDestination.records),
+            icon: const Icon(Icons.arrow_forward),
+          ),
+        ),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final wide = constraints.maxWidth >= 640;
+            final batterCard = _LeaderCard(
+              title: '타자',
+              rows: batters.take(3).map((row) {
+                final value = row.battingAverage == null
+                    ? '${row.hits ?? '-'} H'
+                    : row.battingAverage!.toStringAsFixed(3);
+                return _LeaderRowData(
+                  rank: row.rank,
+                  playerName: row.playerName,
+                  teamName: row.teamName,
+                  value: value,
+                );
+              }).toList(),
+            );
+            final pitcherCard = _LeaderCard(
+              title: '투수',
+              rows: pitchers.take(3).map((row) {
+                final value = row.era == null
+                    ? '${row.wins ?? '-'} W'
+                    : 'ERA ${row.era!.toStringAsFixed(2)}';
+                return _LeaderRowData(
+                  rank: row.rank,
+                  playerName: row.playerName,
+                  teamName: row.teamName,
+                  value: value,
+                );
+              }).toList(),
+            );
+            return wide
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: batterCard),
+                      const SizedBox(width: 12),
+                      Expanded(child: pitcherCard),
+                    ],
+                  )
+                : Column(
+                    children: [
+                      batterCard,
+                      const SizedBox(height: 12),
+                      pitcherCard,
+                    ],
+                  );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNotices() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SeasonSectionHeader(
+          title: '공지와 커뮤니티',
+          description: _userTeamName == null
+              ? '리그의 최신 소식을 확인하세요.'
+              : '$_userTeamName 소식과 리그 공지입니다.',
+          action: IconButton(
+            tooltip: '커뮤니티 보기',
+            onPressed: () => ShellController.of(context)
+                ?.switchTab(AppDestination.community),
+            icon: const Icon(Icons.arrow_forward),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (_leagueNotices.isEmpty && _teamNotices.isEmpty)
+          const SeasonStatePanel(
+            icon: Icons.notifications_none_outlined,
+            title: '새 공지가 없습니다',
+            message: '새 소식이 등록되면 이곳에 표시됩니다.',
+          )
+        else
+          Card(
+            child: Column(
+              children: [
+                for (final notice in _teamNotices)
+                  _NoticeTile(
+                    label: '팀 공지',
+                    title: notice.title,
+                    pinned: notice.pinned,
+                    onTap: _userTeamId == null || _userTeamName == null
+                        ? null
+                        : () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => TeamNoticeDetailScreen(
+                                  teamId: _userTeamId!,
+                                  teamName: _userTeamName!,
+                                  notice: notice,
+                                  canManage: false,
+                                ),
+                              ),
+                            ),
+                  ),
+                for (final notice in _leagueNotices)
+                  _NoticeTile(
+                    label: notice.category,
+                    title: notice.title,
+                    pinned: notice.isImportant,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => NoticeDetailScreen(notice: notice),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildPartners() {
+    const partners = [
+      ('UniquePlay', '공식 경기·기록 데이터', _uniquePlayUrl),
+      ('골드볼파크', '공인구', _goldballParkUrl),
+      ('메이저', '배트', _majorUrl),
+      ('Instagram', '@aubl_1981', _instagramUrl),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SeasonSectionHeader(
+          title: '오피셜 파트너',
+          description: 'AUBL과 함께하는 공식 파트너와 채널입니다.',
+        ),
+        const SizedBox(height: 12),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: partners.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 1.55,
+          ),
+          itemBuilder: (context, index) {
+            final (name, role, url) = partners[index];
+            return Card(
+              child: InkWell(
+                onTap: () => _openExternal(url),
+                borderRadius: BorderRadius.circular(14),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.north_east,
+                          size: 18, color: context.aublColors.cobalt),
+                      const Spacer(),
+                      Text(name, style: Theme.of(context).textTheme.titleSmall),
+                      const SizedBox(height: 3),
+                      Text(
+                        role,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: context.aublColors.muted,
+                            ),
+                      ),
                     ],
                   ),
                 ),
               ),
             );
-          }).toList(),
+          },
         ),
       ],
     );
   }
+}
 
-  // ── Unique Play CTA ──
-  Widget _buildUniquePlayCta() {
-    return GestureDetector(
-      onTap: _openUniquePlay,
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0x992563EB), Color(0x991D4ED8), Color(0x9910B981)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: const Padding(
-          padding: EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Icon(Icons.sports_baseball, color: Colors.white, size: 24),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('유니크 플레이',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600)),
-                    SizedBox(height: 2),
-                    Text('리그 페이지 바로가기',
-                        style: TextStyle(color: Colors.white70, fontSize: 12)),
-                  ],
-                ),
+class _StandingRow extends StatelessWidget {
+  const _StandingRow({required this.row});
+
+  final GroupStanding row;
+
+  @override
+  Widget build(BuildContext context) {
+    final tone = switch (row.qualificationState) {
+      QualificationState.currentEutteum ||
+      QualificationState.confirmedEutteum =>
+        SeasonBadgeTone.navy,
+      QualificationState.currentBeogeum ||
+      QualificationState.confirmedBeogeum =>
+        SeasonBadgeTone.blue,
+      QualificationState.tiePending => SeasonBadgeTone.warning,
+      QualificationState.currentOut ||
+      QualificationState.confirmedOut =>
+        SeasonBadgeTone.muted,
+      QualificationState.unknown => SeasonBadgeTone.muted,
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 26,
+            child: Text(
+              '${row.rank}',
+              style: TextStyle(
+                color: context.aublColors.navy,
+                fontFamily: 'BarlowCondensed',
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
               ),
-              Icon(Icons.open_in_new, color: Colors.white70, size: 18),
-            ],
+            ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openUniquePlay() async {
-    final webUri = Uri.parse(_uniquePlayUrl);
-    try {
-      final openedApp = await launchUrl(
-        webUri,
-        mode: LaunchMode.externalNonBrowserApplication,
-      );
-      if (openedApp) return;
-    } catch (_) {
-      // fall through to browser fallback
-    }
-
-    if (await canLaunchUrl(webUri)) {
-      await launchUrl(webUri, mode: LaunchMode.externalApplication);
-    }
-  }
-
-  // ── 소셜 CTA ──
-  Widget _buildSocialCta() {
-    return GestureDetector(
-      onTap: () async {
-        final uri = Uri.parse('https://instagram.com/aubl_1981');
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        }
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0x99833AB4), Color(0x99E1306C), Color(0x99F77737)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: const Padding(
-          padding: EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Icon(Icons.camera_alt, color: Colors.white, size: 24),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('AUBL 인스타그램',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600)),
-                    SizedBox(height: 2),
-                    Text('@aubl_1981 · 소식과 하이라이트',
-                        style: TextStyle(color: Colors.white70, fontSize: 12)),
-                  ],
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(row.teamName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 2),
+                Text(
+                  '${row.wins}승 ${row.ties}무 ${row.losses}패 · ${row.winPct.toStringAsFixed(3)}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: context.aublColors.muted,
+                      ),
                 ),
-              ),
-              Icon(Icons.open_in_new, color: Colors.white70, size: 18),
-            ],
+              ],
+            ),
           ),
-        ),
+          const SizedBox(width: 8),
+          SeasonStatusBadge(
+            label: row.qualificationState.label,
+            tone: tone,
+          ),
+        ],
       ),
     );
   }
 }
 
-// ────────────────────────────────────────────
-// 시즌 통계 카드
-// ────────────────────────────────────────────
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.label,
+class _LeaderRowData {
+  const _LeaderRowData({
+    required this.rank,
+    required this.playerName,
+    required this.teamName,
     required this.value,
-    required this.description,
   });
 
-  final String label, value, description;
+  final int rank;
+  final String playerName;
+  final String teamName;
+  final String value;
+}
+
+class _LeaderCard extends StatelessWidget {
+  const _LeaderCard({required this.title, required this.rows});
+
+  final String title;
+  final List<_LeaderRowData> rows;
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
+    return Card(
+      child: Padding(
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppTheme.slate800.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.slate700.withValues(alpha: 0.5)),
-        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label,
-                style: const TextStyle(
-                    color: AppTheme.slate400,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5)),
-            const SizedBox(height: 4),
-            Text(value,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800)),
-            const SizedBox(height: 2),
-            Text(description,
-                style: const TextStyle(color: AppTheme.slate500, fontSize: 11)),
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 10),
+            if (rows.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                child: Text(
+                  '검증된 공개 기록이 없습니다.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: context.aublColors.muted,
+                      ),
+                ),
+              )
+            else
+              for (var index = 0; index < rows.length; index++) ...[
+                if (index > 0)
+                  Divider(height: 17, color: context.aublColors.line),
+                Row(
+                  children: [
+                    Text(
+                      '${rows[index].rank}',
+                      style: TextStyle(
+                        color: context.aublColors.navy,
+                        fontFamily: 'BarlowCondensed',
+                        fontSize: 19,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(rows[index].playerName,
+                              style: Theme.of(context).textTheme.titleSmall),
+                          Text(
+                            rows[index].teamName,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: context.aublColors.muted),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      rows[index].value,
+                      style: TextStyle(
+                        color: context.aublColors.cobalt,
+                        fontFamily: 'BarlowCondensed',
+                        fontSize: 19,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
           ],
         ),
       ),
@@ -919,647 +1145,185 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-// ────────────────────────────────────────────
-// 라이브 경기 캐러셀 (좌우 스크롤 + 도트 인디케이터)
-// ────────────────────────────────────────────
-class _LiveMatchCarousel extends StatefulWidget {
-  const _LiveMatchCarousel({required this.matches, required this.fs});
-
-  final List<Match> matches;
-  final FirestoreService fs;
-
-  @override
-  State<_LiveMatchCarousel> createState() => _LiveMatchCarouselState();
-}
-
-class _LiveMatchCarouselState extends State<_LiveMatchCarousel> {
-  final PageController _pageCtrl = PageController();
-  int _currentPage = 0;
-
-  @override
-  void dispose() {
-    _pageCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        SizedBox(
-          // 카드 높이를 충분히 확보 (BSO + 투수/타자 + 버튼 포함)
-          height: 280,
-          child: PageView.builder(
-            controller: _pageCtrl,
-            itemCount: widget.matches.length,
-            onPageChanged: (i) => setState(() => _currentPage = i),
-            itemBuilder: (context, i) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: _LiveMatchCard(
-                  match: widget.matches[i],
-                  fs: widget.fs,
-                ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 8),
-        // 도트 인디케이터
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(widget.matches.length, (i) {
-            final isActive = i == _currentPage;
-            return Container(
-              width: 8,
-              height: 8,
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isActive
-                    ? AppTheme.red500
-                    : AppTheme.slate600.withValues(alpha: 0.4),
-              ),
-            );
-          }),
-        ),
-      ],
-    );
-  }
-}
-
-// ────────────────────────────────────────────
-// 라이브 경기 카드 (실시간 MatchState 구독)
-// ────────────────────────────────────────────
-class _LiveMatchCard extends StatelessWidget {
-  const _LiveMatchCard({required this.match, required this.fs});
-
-  final Match match;
-  final FirestoreService fs;
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<MatchState?>(
-      stream: fs.watchMatchState(match.id),
-      builder: (context, stateSnap) {
-        final ms = stateSnap.data;
-
-        return GestureDetector(
-          onTap: () {
-            final shell = ShellController.of(context);
-            if (shell != null) {
-              shell.openEmbeddedWebView(
-                  WebRouteContracts.scoreboardText(match.id), '문자중계');
-            } else {
-              Navigator.of(context).push(MaterialPageRoute<void>(
-                builder: (_) => AppWebViewScreen(
-                  path: WebRouteContracts.scoreboardText(match.id),
-                  title: '문자중계',
-                ),
-              ));
-            }
-          },
-          child: Container(
-            width: double.infinity,
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.slate800.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.red500.withValues(alpha: 0.3)),
-            ),
-            child: Column(
-              children: [
-                // 상태 배지 + 이닝
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const MatchStatusBadge(status: 'inProgress'),
-                    if (ms != null) ...[
-                      const SizedBox(width: 8),
-                      Text(ms.inningLabel,
-                          style: const TextStyle(
-                              color: AppTheme.slate300, fontSize: 13)),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 12),
-                // 팀명 + 스코어 (원정 왼쪽 - 홈 오른쪽)
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        match.awayTeamName,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600),
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: AppTheme.slate700,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '${ms?.awayScore ?? match.awayScore ?? 0}'
-                        '  :  '
-                        '${ms?.homeScore ?? match.homeScore ?? 0}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          fontFeatures: [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: Text(
-                        match.homeTeamName,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600),
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                // BSO + 베이스
-                if (ms != null) ...[
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Column(
-                        children: [
-                          _bsoRow('B', ms.balls, 3, AppTheme.green500),
-                          const SizedBox(height: 3),
-                          _bsoRow('S', ms.strikes, 2, AppTheme.yellow500),
-                          const SizedBox(height: 3),
-                          _bsoRow('O', ms.outs, 3, AppTheme.red500),
-                        ],
-                      ),
-                      const SizedBox(width: 20),
-                      _BaseDiamond(bases: ms.bases),
-                    ],
-                  ),
-                  // 투수 / 타자 정보
-                  if (ms.currentPitcher != null ||
-                      ms.currentBatter != null) ...[
-                    const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (ms.currentPitcher != null) ...[
-                          const Icon(Icons.sports_baseball,
-                              size: 12, color: AppTheme.slate400),
-                          const SizedBox(width: 4),
-                          Text('투수 ${ms.currentPitcher}',
-                              style: const TextStyle(
-                                  color: AppTheme.slate300, fontSize: 11)),
-                        ],
-                        if (ms.currentPitcher != null &&
-                            ms.currentBatter != null)
-                          const SizedBox(width: 14),
-                        if (ms.currentBatter != null) ...[
-                          const Icon(Icons.person,
-                              size: 12, color: AppTheme.slate400),
-                          const SizedBox(width: 4),
-                          Text('타석 ${ms.currentBatter}',
-                              style: const TextStyle(
-                                  color: AppTheme.slate300, fontSize: 11)),
-                        ],
-                      ],
-                    ),
-                  ],
-                ],
-                // 경기 일시 + 장소
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (match.startTime != null) ...[
-                      Text(_formatDateTime(match.startTime!),
-                          style: const TextStyle(
-                              color: AppTheme.slate500, fontSize: 11)),
-                      if (match.venue != null) const SizedBox(width: 8),
-                    ],
-                    if (match.venue != null)
-                      Text(match.venue!,
-                          style: const TextStyle(
-                              color: AppTheme.slate500, fontSize: 11)),
-                  ],
-                ),
-                // 문자중계 + 라이브 오버레이 버튼
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.of(context).push(MaterialPageRoute<void>(
-                          builder: (_) => AppWebViewScreen(
-                            path: WebRouteContracts.liveOverlay(match.id),
-                            title: '라이브 오버레이',
-                            minimalHeader: true,
-                          ),
-                        ));
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                              color: AppTheme.red500.withValues(alpha: 0.4)),
-                          borderRadius: BorderRadius.circular(8),
-                          color: AppTheme.red500.withValues(alpha: 0.1),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.live_tv,
-                                size: 13, color: AppTheme.red500),
-                            SizedBox(width: 4),
-                            Text('라이브',
-                                style: TextStyle(
-                                    color: AppTheme.red500,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600)),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: AppTheme.slate600),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.article_outlined,
-                              size: 13, color: AppTheme.slate400),
-                          SizedBox(width: 4),
-                          Text('문자중계',
-                              style: TextStyle(
-                                  color: AppTheme.slate400,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  String _formatDateTime(String startTime) {
-    return formatMatchStartTime(startTime, pattern: 'M/d (E) HH:mm') ??
-        startTime;
-  }
-
-  Widget _bsoRow(String label, int value, int max, Color color) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          width: 14,
-          child: Text(label,
-              style: const TextStyle(color: AppTheme.slate400, fontSize: 11)),
-        ),
-        ...List.generate(max, (i) {
-          return Container(
-            width: 8,
-            height: 8,
-            margin: const EdgeInsets.only(right: 2),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: i < value ? color : AppTheme.slate700,
-            ),
-          );
-        }),
-      ],
-    );
-  }
-}
-
-// ────────────────────────────────────────────
-// 베이스 다이아몬드 위젯
-// ────────────────────────────────────────────
-class _BaseDiamond extends StatelessWidget {
-  const _BaseDiamond({required this.bases});
-
-  final List<String?> bases;
-
-  @override
-  Widget build(BuildContext context) {
-    final first = bases.isNotEmpty && bases[0] != null;
-    final second = bases.length > 1 && bases[1] != null;
-    final third = bases.length > 2 && bases[2] != null;
-
-    return SizedBox(
-      width: 36,
-      height: 36,
-      child: Stack(
-        children: [
-          Positioned(left: 12, top: 0, child: _baseMarker(second)),
-          Positioned(left: 0, top: 12, child: _baseMarker(third)),
-          Positioned(right: 0, top: 12, child: _baseMarker(first)),
-        ],
-      ),
-    );
-  }
-
-  Widget _baseMarker(bool occupied) {
-    return Transform.rotate(
-      angle: 0.785398, // 45 degrees
-      child: Container(
-        width: 12,
-        height: 12,
-        decoration: BoxDecoration(
-          color: occupied ? AppTheme.yellow500 : AppTheme.slate700,
-          border: Border.all(
-            color: occupied ? AppTheme.yellow500 : AppTheme.slate600,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ────────────────────────────────────────────
-// 예정 경기 미리보기 카드
-// ────────────────────────────────────────────
-class _SchedulePreviewCard extends StatelessWidget {
-  const _SchedulePreviewCard({required this.match});
-
-  final Match match;
-
-  @override
-  Widget build(BuildContext context) {
-    final dateLabel =
-        formatMatchStartTime(match.startTime, pattern: 'M/d (E)') ??
-            (match.startTime ?? '');
-    final timeLabel =
-        formatMatchStartTime(match.startTime, pattern: 'HH:mm') ?? '';
-
-    return Container(
-      width: 200,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.slate800.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.slate700.withValues(alpha: 0.5)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Text(dateLabel,
-                  style: const TextStyle(
-                      color: AppTheme.blue400,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500)),
-              const Spacer(),
-              Text(timeLabel,
-                  style:
-                      const TextStyle(color: AppTheme.slate400, fontSize: 12)),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            match.awayTeamName,
-            style: const TextStyle(
-                color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          Row(
-            children: [
-              const Text('vs ',
-                  style: TextStyle(color: AppTheme.slate500, fontSize: 13)),
-              Expanded(
-                child: Text(
-                  match.homeTeamName,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          if (match.venue != null)
-            Text(match.venue!,
-                style: const TextStyle(color: AppTheme.slate500, fontSize: 11),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-        ],
-      ),
-    );
-  }
-}
-
-// ────────────────────────────────────────────
-// 플레이스홀더 카드
-// ────────────────────────────────────────────
-class _PlaceholderCard extends StatelessWidget {
-  const _PlaceholderCard({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppTheme.slate800.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.slate700.withValues(alpha: 0.5)),
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(color: AppTheme.slate500, fontSize: 14),
-        textAlign: TextAlign.center,
-      ),
-    );
-  }
-}
-
-// ────────────────────────────────────────────
-// 스티키 히어로 헤더 (스크롤 시 AUBL 영역 고정)
-// ────────────────────────────────────────────
-class _StickyHeroDelegate extends SliverPersistentHeaderDelegate {
-  _StickyHeroDelegate({
-    required this.statusBarHeight,
-    required this.onIntroTap,
+class _NoticeTile extends StatelessWidget {
+  const _NoticeTile({
+    required this.label,
+    required this.title,
+    required this.pinned,
+    required this.onTap,
   });
 
-  final double statusBarHeight;
-  final VoidCallback onIntroTap;
-
-  static const double _badgeArea = 32.0;
-  static const double _pinnedRow = 62.0;
-  static const double _topPad = 14.0;
-  static const double _bottomPad = 10.0;
+  final String label;
+  final String title;
+  final bool pinned;
+  final VoidCallback? onTap;
 
   @override
-  double get maxExtent =>
-      statusBarHeight + _topPad + _badgeArea + _pinnedRow + _bottomPad;
+  Widget build(BuildContext context) {
+    return ListTile(
+      minTileHeight: 56,
+      onTap: onTap,
+      leading: SeasonStatusBadge(
+        label: label,
+        tone: pinned ? SeasonBadgeTone.warning : SeasonBadgeTone.muted,
+      ),
+      title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
+      trailing: const Icon(Icons.chevron_right),
+    );
+  }
+}
+
+class _LiveMatchCard extends StatelessWidget {
+  const _LiveMatchCard({required this.match, required this.onTap});
+
+  final Match match;
+  final ValueChanged<Match> onTap;
 
   @override
-  double get minExtent => statusBarHeight + _topPad + _pinnedRow + _bottomPad;
-
-  @override
-  bool shouldRebuild(covariant _StickyHeroDelegate old) =>
-      statusBarHeight != old.statusBarHeight;
-
-  @override
-  Widget build(
-      BuildContext context, double shrinkOffset, bool overlapsContent) {
-    final t = (shrinkOffset / _badgeArea).clamp(0.0, 1.0);
-
-    return Stack(
-      children: [
-        // 배경 그라데이션
-        Positioned.fill(
-          child: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF0a1a3f),
-                  Color(0xFF0f2f8f),
-                  Color(0xFF0a1a3f),
-                ],
-              ),
-            ),
-          ),
-        ),
-        // 콘텐츠
-        Padding(
-          padding: EdgeInsets.fromLTRB(
-              20, statusBarHeight + _topPad, 20, _bottomPad),
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        onTap: () => onTap(match),
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.all(15),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 뱃지 — 스크롤 시 접히며 페이드아웃
-              ClipRect(
-                child: Align(
-                  alignment: Alignment.topLeft,
-                  heightFactor: 1.0 - t,
-                  child: Opacity(
-                    opacity: 1.0 - t,
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 3),
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                              color: AppTheme.slate500.withValues(alpha: 0.4)),
-                          borderRadius: BorderRadius.circular(20),
-                          color: Colors.white.withValues(alpha: 0.06),
-                        ),
-                        child: const Text(
-                          '46TH AUBL · HOSTED BY CHUNG-ANG UNIVERSITY (SEOUL)',
-                          style: TextStyle(
-                            color: AppTheme.slate300,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+              const SeasonStatusBadge(
+                label: 'LIVE',
+                tone: SeasonBadgeTone.danger,
               ),
-              // AUBL 타이틀 + 부제 + 리그소개 — 항상 고정
+              const SizedBox(height: 12),
               Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'AUBL',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 28,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.5,
-                            height: 1.1,
-                          ),
-                        ),
-                        SizedBox(height: 3),
-                        Text(
-                          '전국대학아마추어야구연합회 · SINCE 1981',
-                          style: TextStyle(
-                            color: AppTheme.slate400,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
+                  Expanded(
+                    child: Text(match.homeTeamName,
+                        style: Theme.of(context).textTheme.titleMedium),
                   ),
-                  GestureDetector(
-                    onTap: onIntroTap,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 7),
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                            color: AppTheme.slate500.withValues(alpha: 0.4)),
-                        borderRadius: BorderRadius.circular(8),
-                        color: Colors.white.withValues(alpha: 0.06),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.info_outline,
-                              size: 13, color: AppTheme.slate300),
-                          SizedBox(width: 5),
-                          Text('리그 소개',
-                              style: TextStyle(
-                                  color: AppTheme.slate300,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    ),
-                  ),
+                  Text('${match.homeScore ?? '-'}',
+                      style: Theme.of(context).textTheme.titleLarge),
                 ],
               ),
+              const SizedBox(height: 7),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(match.awayTeamName,
+                        style: Theme.of(context).textTheme.titleMedium),
+                  ),
+                  Text('${match.awayScore ?? '-'}',
+                      style: Theme.of(context).textTheme.titleLarge),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text('경기 상세',
+                  style: TextStyle(
+                    color: context.aublColors.cobalt,
+                    fontWeight: FontWeight.w800,
+                  )),
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 }
+
+class _HomeLoadingCard extends StatelessWidget {
+  const _HomeLoadingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 12),
+            Text('공식 시즌 데이터를 불러오는 중입니다.',
+                style: Theme.of(context).textTheme.bodyMedium),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SiteAnnouncement {
+  const _SiteAnnouncement({
+    required this.enabled,
+    required this.revision,
+    required this.tone,
+    required this.title,
+    required this.message,
+    required this.linkLabel,
+    required this.safeLink,
+  });
+
+  final bool enabled;
+  final String revision;
+  final String tone;
+  final String title;
+  final String message;
+  final String? linkLabel;
+  final String? safeLink;
+
+  factory _SiteAnnouncement.fromJson(Map<String, dynamic> json) {
+    final revision = json['revision']?.toString().trim();
+    final link = json['linkHref']?.toString().trim();
+    return _SiteAnnouncement(
+      enabled: json['enabled'] == true,
+      revision: revision == null || revision.isEmpty ? 'default' : revision,
+      tone: json['tone'] == 'warning' ? 'warning' : 'info',
+      title: _clip(json['title'], 100, fallback: 'AUBL 중요 공지'),
+      message: _clip(json['message'], 500, fallback: ''),
+      linkLabel: _nullableClip(json['linkLabel'], 60),
+      safeLink: _safeAnnouncementLink(link),
+    );
+  }
+}
+
+String _clip(dynamic value, int maxLength, {required String fallback}) {
+  final text = value?.toString().trim() ?? '';
+  if (text.isEmpty) return fallback;
+  return text.length <= maxLength ? text : text.substring(0, maxLength);
+}
+
+String? _nullableClip(dynamic value, int maxLength) {
+  final text = value?.toString().trim();
+  if (text == null || text.isEmpty) return null;
+  return text.length <= maxLength ? text : text.substring(0, maxLength);
+}
+
+String? _safeAnnouncementLink(String? raw) {
+  if (raw == null || raw.isEmpty) return null;
+  if (raw.startsWith('/')) return 'https://aubl.club$raw';
+  final uri = Uri.tryParse(raw);
+  if (uri == null || uri.scheme != 'https' || uri.userInfo.isNotEmpty) {
+    return null;
+  }
+  return uri.toString();
+}
+
+String? _normalizeTeamName(String? value) {
+  final normalized = value?.replaceAll(RegExp(r'\s+'), '').toLowerCase();
+  return normalized == null || normalized.isEmpty ? null : normalized;
+}
+
+DateTime _kstNow() => DateTime.now().toUtc().add(const Duration(hours: 9));
+
+DateTime _kstToday() {
+  final now = _kstNow();
+  return DateTime(now.year, now.month, now.day);
+}
+
+DateTime _monthStart(DateTime date) => DateTime(date.year, date.month);
+
+bool _sameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
