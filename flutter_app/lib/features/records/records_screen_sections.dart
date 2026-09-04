@@ -1,16 +1,14 @@
 part of 'records_screen.dart';
 
-// 정렬 활성 컬럼 강조색 (web: #34d399 emerald-400)
-const _sortActiveColor = Color(0xFF34D399);
 const _sortHint = '↕ 컬럼 탭하여 정렬';
 
 // 정렬 활성 여부에 따른 셀 스타일 반환
 TextStyle _cs(int cellIdx, int? sortColIdx) => sortColIdx == cellIdx
-    ? _cellStyle.copyWith(color: _sortActiveColor, fontWeight: FontWeight.w700)
+    ? _cellStyle.copyWith(fontWeight: FontWeight.w900)
     : _cellStyle;
 
 TextStyle _ns(int cellIdx, int? sortColIdx) => sortColIdx == cellIdx
-    ? _numStyle.copyWith(color: _sortActiveColor, fontWeight: FontWeight.w700)
+    ? _numStyle.copyWith(fontWeight: FontWeight.w900)
     : _numStyle;
 
 String _tierLabel(String? value) {
@@ -31,6 +29,7 @@ String _roundLabel(String? value) {
 
 extension _RecordsScreenSections on RecordsScreenState {
   Widget _buildFilterBar() {
+    final colors = context.aublColors;
     final selectedSeason = _seasons.where((e) => e.id == _seasonId).firstOrNull;
     final rankingYearOptions = _seasons.map((e) => e.year + 1).toSet().toList()
       ..sort((a, b) => b.compareTo(a));
@@ -38,16 +37,20 @@ extension _RecordsScreenSections on RecordsScreenState {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: AppTheme.slate900,
-        border: Border(
-            bottom:
-                BorderSide(color: AppTheme.slate800.withValues(alpha: 0.8))),
+        color: colors.canvas,
+        border: Border(bottom: BorderSide(color: colors.line)),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
           const horizontalPadding = 12.0;
           const spacing = 8.0;
           final usableWidth = constraints.maxWidth - horizontalPadding * 2;
+
+          final primaryControlWidth = usableWidth < 540
+              ? usableWidth
+              : usableWidth < 980
+                  ? (usableWidth - spacing) / 2
+                  : (usableWidth - spacing * 2) / 3;
 
           final secondaryControlWidth = usableWidth < 540
               ? usableWidth
@@ -65,72 +68,66 @@ extension _RecordsScreenSections on RecordsScreenState {
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
             child: Column(
               children: [
-                Row(
+                Wrap(
+                  spacing: spacing,
+                  runSpacing: spacing,
                   children: [
-                    Expanded(
-                      child: _FilterDropdown<int>(
-                        label: 'SEASON',
-                        width: double.infinity,
-                        value: _seasonId,
-                        items: _seasons
-                            .map((season) => DropdownMenuItem<int>(
-                                  value: season.id,
-                                  child: Text(
-                                      '${season.year} 시즌 (ID:${season.id})'),
-                                ))
-                            .toList(),
-                        onChanged: (value) {
-                          if (value == null || value == _seasonId) return;
-                          _changeSeason(value, _seasons.first);
-                        },
-                      ),
+                    _FilterDropdown<int>(
+                      label: 'SEASON',
+                      width: primaryControlWidth,
+                      value: _seasonId,
+                      items: _seasons
+                          .map((season) => DropdownMenuItem<int>(
+                                value: season.id,
+                                child:
+                                    Text('${season.year} 시즌 (ID:${season.id})'),
+                              ))
+                          .toList(),
+                      onChanged: (value) {
+                        if (value == null || value == _seasonId) return;
+                        _changeSeason(value, _seasons.first);
+                      },
                     ),
-                    const SizedBox(width: spacing),
-                    Expanded(
-                      child: _FilterDropdown<RecordScope>(
-                        label: '리그/플레이오프',
-                        width: double.infinity,
-                        value: _filters.scope,
-                        items: _scopeOptions
-                            .map((scope) => DropdownMenuItem<RecordScope>(
-                                  value: scope,
-                                  child: Text(_scopeText(scope)),
-                                ))
-                            .toList(),
-                        onChanged: (value) {
-                          if (value == null || value == _filters.scope) return;
-                          _setState(() {
-                            _filters = _filters.copyWith(
-                              scope: value,
-                              playoffDivision: value != RecordScope.playoff
-                                  ? RecordPlayoffDivision.all
-                                  : _filters.playoffDivision,
-                            );
-                          });
-                          _reloadRecords();
-                        },
-                      ),
+                    _FilterDropdown<RecordScope>(
+                      label: '리그/플레이오프',
+                      width: primaryControlWidth,
+                      value: _filters.scope,
+                      items: _scopeOptions
+                          .map((scope) => DropdownMenuItem<RecordScope>(
+                                value: scope,
+                                child: Text(_scopeText(scope)),
+                              ))
+                          .toList(),
+                      onChanged: (value) {
+                        if (value == null || value == _filters.scope) return;
+                        _setState(() {
+                          _filters = _filters.copyWith(
+                            scope: value,
+                            playoffDivision: value != RecordScope.playoff
+                                ? RecordPlayoffDivision.all
+                                : _filters.playoffDivision,
+                          );
+                        });
+                        _reloadRecords();
+                      },
                     ),
-                    const SizedBox(width: spacing),
-                    Expanded(
-                      child: _FilterDropdown<RecordGroup>(
-                        label: '조',
-                        width: double.infinity,
-                        value: _filters.group,
-                        items: _groupOptions
-                            .map((group) => DropdownMenuItem<RecordGroup>(
-                                  value: group,
-                                  child: Text(_groupText(group)),
-                                ))
-                            .toList(),
-                        onChanged: (value) {
-                          if (value == null || value == _filters.group) return;
-                          _setState(() {
-                            _filters = _filters.copyWith(group: value);
-                          });
-                          _reloadRecords();
-                        },
-                      ),
+                    _FilterDropdown<RecordGroup>(
+                      label: '조',
+                      width: primaryControlWidth,
+                      value: _filters.group,
+                      items: _groupOptions
+                          .map((group) => DropdownMenuItem<RecordGroup>(
+                                value: group,
+                                child: Text(_groupText(group)),
+                              ))
+                          .toList(),
+                      onChanged: (value) {
+                        if (value == null || value == _filters.group) return;
+                        _setState(() {
+                          _filters = _filters.copyWith(group: value);
+                        });
+                        _reloadRecords();
+                      },
                     ),
                   ],
                 ),
@@ -174,8 +171,7 @@ extension _RecordsScreenSections on RecordsScreenState {
                         onChanged: (value) => _setState(() {
                           _filters = _filters.copyWith(searchQuery: value);
                         }),
-                        style:
-                            const TextStyle(fontSize: 13, color: Colors.white),
+                        style: const TextStyle(fontSize: 13),
                         decoration: InputDecoration(
                           isDense: true,
                           labelText: 'SEARCH',
@@ -471,69 +467,87 @@ class _RecordsOverviewSection extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _MetricCard(
-                  label: '총 경기', value: '${overview?.totalGames ?? 0} G'),
-              _MetricCard(
-                  label: '참여 팀',
-                  value: '${overview?.totalTeams ?? teamStandings.length} 팀'),
-              _MetricCard(
-                  label: '평균 승률',
-                  value: '${(avgWinPct * 100).toStringAsFixed(1)}%'),
-              _MetricCard(
-                  label: '타자/투수 행 수',
-                  value: '${batters.length}/${pitchers.length}'),
-            ],
-          ),
+          LayoutBuilder(builder: (context, constraints) {
+            final width = constraints.maxWidth < 520
+                ? (constraints.maxWidth - 10) / 2
+                : (constraints.maxWidth - 30) / 4;
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                SizedBox(
+                    width: width,
+                    child: _MetricCard(
+                        label: '총 경기',
+                        value: '${overview?.totalGames ?? 0} G')),
+                SizedBox(
+                    width: width,
+                    child: _MetricCard(
+                        label: '참여 팀',
+                        value:
+                            '${overview?.totalTeams ?? teamStandings.length} 팀')),
+                SizedBox(
+                    width: width,
+                    child: _MetricCard(
+                        label: '평균 승률',
+                        value: '${(avgWinPct * 100).toStringAsFixed(1)}%')),
+                SizedBox(
+                    width: width,
+                    child: _MetricCard(
+                        label: '타자/투수',
+                        value: '${batters.length}/${pitchers.length}')),
+              ],
+            );
+          }),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _TopFivePanel<BatterRanking>(
-                  title: '타자 TOP 5 (규정 IN)',
-                  accent: AppTheme.purple500,
-                  rows: topInBatters,
-                  emptyText: '타자 데이터가 없습니다.',
-                  sortWidget: _SortDropdown<BatterRankingSort>(
-                    value: filters.topBatterSort,
-                    items: batterSortItems,
-                    onChanged: onBatterSortChanged,
-                  ),
-                  itemBuilder: (row) => _TopPlayerTile(
-                    rank: row.rank,
-                    name: row.playerName,
-                    team: row.teamName,
-                    value: formatTopBatterValue(row),
-                    onTap: () => onOpenPlayerDetail(row.playerId),
-                  ),
-                ),
+          LayoutBuilder(builder: (context, constraints) {
+            final batterPanel = _TopFivePanel<BatterRanking>(
+              title: '타자 TOP 5 (규정 IN)',
+              rows: topInBatters,
+              emptyText: '타자 데이터가 없습니다.',
+              sortWidget: _SortDropdown<BatterRankingSort>(
+                value: filters.topBatterSort,
+                items: batterSortItems,
+                onChanged: onBatterSortChanged,
               ),
+              itemBuilder: (row) => _TopPlayerTile(
+                rank: row.rank,
+                name: row.playerName,
+                team: row.teamName,
+                value: formatTopBatterValue(row),
+                onTap: () => onOpenPlayerDetail(row.playerId),
+              ),
+            );
+            final pitcherPanel = _TopFivePanel<PitcherRanking>(
+              title: '투수 TOP 5 (규정 IN)',
+              rows: topInPitchers,
+              emptyText: '투수 데이터가 없습니다.',
+              sortWidget: _SortDropdown<PitcherRankingSort>(
+                value: filters.topPitcherSort,
+                items: pitcherSortItems,
+                onChanged: onPitcherSortChanged,
+              ),
+              itemBuilder: (row) => _TopPlayerTile(
+                rank: row.rank,
+                name: row.playerName,
+                team: row.teamName,
+                value: formatTopPitcherValue(row),
+                onTap: () => onOpenPlayerDetail(row.playerId),
+              ),
+            );
+            if (constraints.maxWidth < 720) {
+              return Column(children: [
+                batterPanel,
+                const SizedBox(height: 10),
+                pitcherPanel,
+              ]);
+            }
+            return Row(children: [
+              Expanded(child: batterPanel),
               const SizedBox(width: 10),
-              Expanded(
-                child: _TopFivePanel<PitcherRanking>(
-                  title: '투수 TOP 5 (규정 IN)',
-                  accent: AppTheme.blue400,
-                  rows: topInPitchers,
-                  emptyText: '투수 데이터가 없습니다.',
-                  sortWidget: _SortDropdown<PitcherRankingSort>(
-                    value: filters.topPitcherSort,
-                    items: pitcherSortItems,
-                    onChanged: onPitcherSortChanged,
-                  ),
-                  itemBuilder: (row) => _TopPlayerTile(
-                    rank: row.rank,
-                    name: row.playerName,
-                    team: row.teamName,
-                    value: formatTopPitcherValue(row),
-                    onTap: () => onOpenPlayerDetail(row.playerId),
-                  ),
-                ),
-              ),
-            ],
-          ),
+              Expanded(child: pitcherPanel),
+            ]);
+          }),
         ],
       ),
     );
@@ -644,7 +658,6 @@ class _RecordsBattersSectionState extends State<_RecordsBattersSection> {
         children: [
           _TopFivePanel<BatterRanking>(
             title: '타자 TOP 5 (규정 IN)',
-            accent: AppTheme.purple500,
             rows: widget.topInBatters,
             emptyText: '타자 데이터가 없습니다.',
             sortWidget: _SortDropdown<BatterRankingSort>(
@@ -721,8 +734,8 @@ class _RecordsBattersSectionState extends State<_RecordsBattersSection> {
                               DataCell(Text(row.ops.toStringAsFixed(3),
                                   style: _numStyle.copyWith(
                                       color: _sortColIdx == 12
-                                          ? _sortActiveColor
-                                          : AppTheme.purple500,
+                                          ? null
+                                          : context.aublColors.cobalt,
                                       fontWeight: _sortColIdx == 12
                                           ? FontWeight.w700
                                           : null))),
@@ -853,7 +866,6 @@ class _RecordsPitchersSectionState extends State<_RecordsPitchersSection> {
         children: [
           _TopFivePanel<PitcherRanking>(
             title: '투수 TOP 5 (규정 IN)',
-            accent: AppTheme.blue400,
             rows: widget.topInPitchers,
             emptyText: '투수 데이터가 없습니다.',
             sortWidget: _SortDropdown<PitcherRankingSort>(
@@ -972,15 +984,21 @@ Widget _buildHorizontalDataTable({
   int? sortColumnIndex,
   bool sortAscending = true,
 }) {
-  return SingleChildScrollView(
-    scrollDirection: Axis.horizontal,
-    child: DataTable(
-      headingRowColor: WidgetStateProperty.all(AppTheme.slate800),
-      columnSpacing: 14,
-      sortColumnIndex: sortColumnIndex,
-      sortAscending: sortAscending,
-      columns: columns,
-      rows: rows,
+  return Builder(
+    builder: (context) => SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        headingRowColor:
+            WidgetStateProperty.all(context.aublColors.surfaceMuted),
+        border: TableBorder(
+          horizontalInside: BorderSide(color: context.aublColors.line),
+        ),
+        columnSpacing: 16,
+        sortColumnIndex: sortColumnIndex,
+        sortAscending: sortAscending,
+        columns: columns,
+        rows: rows,
+      ),
     ),
   );
 }
@@ -1010,7 +1028,7 @@ List<DataCell> _buildPlayerBaseCells({
         child: Text(
           playerName,
           style: sortColIdx == 1
-              ? _linkCellStyle.copyWith(color: _sortActiveColor)
+              ? _linkCellStyle.copyWith(fontWeight: FontWeight.w900)
               : _linkCellStyle,
         ),
       ),
@@ -1170,9 +1188,7 @@ class _RecordsStandingsSectionState extends State<_RecordsStandingsSection> {
                     DataCell(Text('${index + 1}', style: _ns(0, _sortColIdx))),
                     DataCell(Text(row.teamName,
                         style: _sortColIdx == 1
-                            ? _cellStyle.copyWith(
-                                color: _sortActiveColor,
-                                fontWeight: FontWeight.w700)
+                            ? _cellStyle.copyWith(fontWeight: FontWeight.w900)
                             : _cellStyle.copyWith(
                                 fontWeight: FontWeight.w600))),
                     DataCell(Text(widget.scopeLabel(row.scope),
@@ -1257,7 +1273,7 @@ class _RecordsPowerSection extends StatelessWidget {
           if (powerError != null)
             _Banner(
               icon: Icons.error_outline,
-              color: AppTheme.red500,
+              tone: SeasonBadgeTone.danger,
               text: powerError!,
             ),
           _Card(

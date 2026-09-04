@@ -514,6 +514,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   }
 
   Widget _buildSearchCard() {
+    final colors = context.aublColors;
     final teamFilterValues = <String>['ALL', ..._teamOptions];
     final teamFilterItems = teamFilterValues
         .map(
@@ -546,152 +547,186 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<int>(
-                  key: ValueKey<Object?>('search-season-$_searchSeasonId'),
-                  initialValue: _searchSeasonId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: '검색 기준 시즌'),
-                  items: _seasons
-                      .map((season) => DropdownMenuItem<int>(
-                            value: season.id,
-                            child: Text(
-                              '${season.year} 시즌',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ))
-                      .toList(),
-                  onChanged: (value) {
-                    if (value == null || value == _searchSeasonId) return;
-                    setState(() {
-                      _searchSeasonId = value;
-                      _searchCandidates = [];
-                      _selectedTeamName = 'ALL';
-                    });
-                    _loadSeasonTeams().then((_) => _schedulePlayerSearch());
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  key: ValueKey<String>('team-filter-$_selectedTeamName'),
-                  initialValue: _selectedTeamName,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: '팀 필터'),
-                  items: teamFilterItems,
-                  selectedItemBuilder: (context) {
-                    return teamFilterValues
-                        .map(
-                          (team) => Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              team == 'ALL' ? '전체 팀' : team,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        )
-                        .toList();
-                  },
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() => _selectedTeamName = value);
-                    _schedulePlayerSearch();
-                  },
-                ),
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final fieldWidth = constraints.maxWidth < 520
+                  ? constraints.maxWidth
+                  : (constraints.maxWidth - 8) / 2;
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  SizedBox(
+                    width: fieldWidth,
+                    child: DropdownButtonFormField<int>(
+                      key: ValueKey<Object?>('search-season-$_searchSeasonId'),
+                      initialValue: _searchSeasonId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: '검색 기준 시즌'),
+                      items: _seasons
+                          .map((season) => DropdownMenuItem<int>(
+                                value: season.id,
+                                child: Text(
+                                  '${season.year} 시즌',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (value) {
+                        if (value == null || value == _searchSeasonId) return;
+                        setState(() {
+                          _searchSeasonId = value;
+                          _searchCandidates = [];
+                          _selectedTeamName = 'ALL';
+                        });
+                        _loadSeasonTeams().then((_) => _schedulePlayerSearch());
+                      },
+                    ),
+                  ),
+                  SizedBox(
+                    width: fieldWidth,
+                    child: DropdownButtonFormField<String>(
+                      key: ValueKey<String>('team-filter-$_selectedTeamName'),
+                      initialValue: _selectedTeamName,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: '팀 필터'),
+                      items: teamFilterItems,
+                      selectedItemBuilder: (context) {
+                        return teamFilterValues
+                            .map(
+                              (team) => Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  team == 'ALL' ? '전체 팀' : team,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            )
+                            .toList();
+                      },
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _selectedTeamName = value);
+                        _schedulePlayerSearch();
+                      },
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  onChanged: (value) {
-                    setState(() => _searchInput = value);
-                    _schedulePlayerSearch();
-                  },
-                  decoration: const InputDecoration(
-                    labelText: '선수 이름 검색',
-                    hintText: '예: 홍길동',
-                    prefixIcon: Icon(Icons.search),
+          LayoutBuilder(
+            builder: (context, constraints) => Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                SizedBox(
+                  width: constraints.maxWidth < 480
+                      ? constraints.maxWidth
+                      : constraints.maxWidth - 116,
+                  child: TextField(
+                    onChanged: (value) {
+                      setState(() => _searchInput = value);
+                      _schedulePlayerSearch();
+                    },
+                    decoration: const InputDecoration(
+                      labelText: '선수 이름 검색',
+                      hintText: '예: 홍길동',
+                      prefixIcon: Icon(Icons.search),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(
-                onPressed: _handleNameSearch,
-                child: const Text('이름 조회'),
-              ),
-            ],
+                SizedBox(
+                  width:
+                      constraints.maxWidth < 480 ? constraints.maxWidth : 108,
+                  child: FilledButton(
+                    onPressed: _handleNameSearch,
+                    child: const Text('이름 조회'),
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<int>(
-                  key: ValueKey<String>(
-                      'team-roster-${_searchSeasonId ?? 0}-$_selectedTeamName-${_teamFilteredCandidates.length}'),
-                  initialValue: null,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: '팀 선수 목록'),
-                  hint: Text(
-                    _teamFilteredCandidates.isEmpty ? '선수 목록 없음' : '선수 선택',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  items: rosterItems,
-                  selectedItemBuilder: (context) {
-                    return _teamFilteredCandidates
-                        .map(
-                          (item) => Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              '${item.playerName} (${item.teamName} #${item.jerseyNumber})',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+          LayoutBuilder(
+            builder: (context, constraints) => Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                SizedBox(
+                  width: constraints.maxWidth < 620
+                      ? constraints.maxWidth
+                      : constraints.maxWidth - 250,
+                  child: DropdownButtonFormField<int>(
+                    key: ValueKey<String>(
+                        'team-roster-${_searchSeasonId ?? 0}-$_selectedTeamName-${_teamFilteredCandidates.length}'),
+                    initialValue: null,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: '팀 선수 목록'),
+                    hint: Text(
+                      _teamFilteredCandidates.isEmpty ? '선수 목록 없음' : '선수 선택',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    items: rosterItems,
+                    selectedItemBuilder: (context) {
+                      return _teamFilteredCandidates
+                          .map(
+                            (item) => Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                '${item.playerName} (${item.teamName} #${item.jerseyNumber})',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                          ),
-                        )
-                        .toList();
-                  },
-                  onChanged: (value) {
-                    if (value == null) return;
-                    _navigateToPlayer(value);
-                  },
+                          )
+                          .toList();
+                    },
+                    onChanged: (value) {
+                      if (value == null) return;
+                      _navigateToPlayer(value);
+                    },
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 120,
-                child: TextField(
-                  onChanged: (value) => _selectedPlayerInput = value,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: '선수 ID'),
+                SizedBox(
+                  width: constraints.maxWidth < 620
+                      ? (constraints.maxWidth - 8) / 2
+                      : 116,
+                  child: TextField(
+                    onChanged: (value) => _selectedPlayerInput = value,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: '선수 ID'),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton(
-                onPressed: _handleIdSearch,
-                child: const Text('ID 조회'),
-              ),
-            ],
+                SizedBox(
+                  width: constraints.maxWidth < 620
+                      ? (constraints.maxWidth - 8) / 2
+                      : 118,
+                  child: OutlinedButton(
+                    onPressed: _handleIdSearch,
+                    child: const Text('ID 조회'),
+                  ),
+                ),
+              ],
+            ),
           ),
           if (_searchIndexLoading)
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
               child: Text('선수 검색 결과를 불러오는 중...',
-                  style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
+                  style: TextStyle(color: colors.muted, fontSize: 12)),
             ),
           if (_searchIndexError != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text('검색 오류: $_searchIndexError',
-                  style: const TextStyle(color: AppTheme.red500, fontSize: 12)),
+                  style: TextStyle(color: colors.danger, fontSize: 12)),
             ),
           if (_nameFilteredCandidates.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -709,8 +744,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
           ],
           if (_visitedPlayers.isNotEmpty) ...[
             const SizedBox(height: 10),
-            const Text('최근 조회',
-                style: TextStyle(color: AppTheme.slate400, fontSize: 12)),
+            Text('최근 조회', style: TextStyle(color: colors.muted, fontSize: 12)),
             const SizedBox(height: 6),
             Wrap(
               spacing: 6,
@@ -730,6 +764,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   }
 
   Widget _buildPlayerSummaryCard() {
+    final colors = context.aublColors;
     if (_loading) {
       return const _Card(
           title: '선수 요약', child: Center(child: CircularProgressIndicator()));
@@ -738,16 +773,15 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     if (_error != null) {
       return _Card(
         title: '선수 요약',
-        child:
-            Text('오류: $_error', style: const TextStyle(color: AppTheme.red500)),
+        child: Text('오류: $_error', style: TextStyle(color: colors.danger)),
       );
     }
 
     if (_currentPlayerId == null || _stats == null) {
-      return const _Card(
+      return _Card(
         title: '선수 요약',
         child: Text('팀/이름/ID로 조회할 선수를 먼저 선택해 주세요.',
-            style: TextStyle(color: AppTheme.slate500)),
+            style: TextStyle(color: colors.muted)),
       );
     }
 
@@ -770,25 +804,25 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.person, color: AppTheme.blue400),
+              Icon(Icons.person_outline_rounded, color: colors.cobalt),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   '${stats.playerName} ${stats.jerseyNumber.isEmpty ? '' : '#${stats.jerseyNumber}'}',
-                  style: const TextStyle(
-                      color: Colors.white,
+                  style: TextStyle(
+                      color: colors.ink,
                       fontSize: 18,
                       fontWeight: FontWeight.w800),
                 ),
               ),
               Text('ID ${stats.playerId}',
-                  style: const TextStyle(color: AppTheme.slate400)),
+                  style: TextStyle(color: colors.muted)),
             ],
           ),
           const SizedBox(height: 4),
           Text(
             stats.teamName.isEmpty ? '-' : stats.teamName,
-            style: const TextStyle(color: AppTheme.slate300),
+            style: TextStyle(color: colors.muted),
           ),
           const SizedBox(height: 10),
           Row(
@@ -893,10 +927,10 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
             ),
           ],
           if (_selectedBatterStat == null && _selectedPitcherStat == null)
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
               child: Text('해당 선수의 시즌 기록이 없습니다.',
-                  style: TextStyle(color: AppTheme.slate500)),
+                  style: TextStyle(color: colors.muted)),
             ),
         ],
       ),
@@ -904,6 +938,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   }
 
   Widget _buildGameLogCard() {
+    final colors = context.aublColors;
     return _Card(
       title: '경기별 기록 (Player Logs)',
       child: Column(
@@ -948,8 +983,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                       '현재 필터: ${_selectedGameId != null ? 'Game #$_selectedGameId' : '전체'}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          color: AppTheme.slate400, fontSize: 12),
+                      style: TextStyle(color: colors.muted, fontSize: 12),
                     ),
                   ),
                 ],
@@ -962,7 +996,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text('오류: $_gameLogsError',
-                  style: const TextStyle(color: AppTheme.red500, fontSize: 12)),
+                  style: TextStyle(color: colors.danger, fontSize: 12)),
             ),
           const SizedBox(height: 8),
           Wrap(
@@ -985,6 +1019,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   }
 
   Widget _buildBatterLogsTable() {
+    final colors = context.aublColors;
     if (_batterGameLogs.isEmpty) {
       return const _SubSection(
           title: '타자 경기 로그', child: _EmptyText('타자 경기 로그가 없습니다.'));
@@ -995,7 +1030,8 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: DataTable(
-          headingRowColor: WidgetStateProperty.all(AppTheme.slate800),
+          headingRowColor: WidgetStateProperty.all(colors.surfaceMuted),
+          border: TableBorder(horizontalInside: BorderSide(color: colors.line)),
           columns: const [
             DataColumn(label: Text('Game', style: _thStyle)),
             DataColumn(label: Text('팀', style: _thStyle)),
@@ -1030,6 +1066,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   }
 
   Widget _buildPitcherLogsTable() {
+    final colors = context.aublColors;
     if (_pitcherGameLogs.isEmpty) {
       return const _SubSection(
           title: '투수 경기 로그', child: _EmptyText('투수 경기 로그가 없습니다.'));
@@ -1040,7 +1077,8 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: DataTable(
-          headingRowColor: WidgetStateProperty.all(AppTheme.slate800),
+          headingRowColor: WidgetStateProperty.all(colors.surfaceMuted),
+          border: TableBorder(horizontalInside: BorderSide(color: colors.line)),
           columns: const [
             DataColumn(label: Text('Game', style: _thStyle)),
             DataColumn(label: Text('팀', style: _thStyle)),
@@ -1076,24 +1114,23 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   }
 
   Widget _smallMetric(String label, String value) {
-    return Container(
+    final colors = context.aublColors;
+    return SizedBox(
       width: 100,
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.slate700),
-        color: AppTheme.slate800.withValues(alpha: 0.4),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label,
-              style: const TextStyle(color: AppTheme.slate500, fontSize: 11)),
-          const SizedBox(height: 2),
-          Text(value,
-              style: const TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.w700)),
-        ],
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: TextStyle(color: colors.muted, fontSize: 11)),
+              const SizedBox(height: 2),
+              Text(value,
+                  style: TextStyle(
+                      color: colors.navyStrong, fontWeight: FontWeight.w900)),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1121,24 +1158,17 @@ class _Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.slate700.withValues(alpha: 0.8)),
-        color: AppTheme.slate800.withValues(alpha: 0.35),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700)),
-          const SizedBox(height: 10),
-          child,
-        ],
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 10),
+            child,
+          ],
+        ),
       ),
     );
   }
@@ -1162,20 +1192,20 @@ class _StatsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.aublColors;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.slate700),
-        color: AppTheme.slate900.withValues(alpha: 0.4),
+        border: Border.all(color: colors.line),
+        color: colors.surfaceMuted,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title,
-              style: const TextStyle(
-                  color: AppTheme.slate300, fontWeight: FontWeight.w700)),
+              style: TextStyle(color: colors.ink, fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -1188,20 +1218,19 @@ class _StatsPanel extends StatelessWidget {
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(8),
-                      color: AppTheme.slate800.withValues(alpha: 0.7),
-                      border: Border.all(
-                          color: AppTheme.slate700.withValues(alpha: 0.8)),
+                      color: colors.surface,
+                      border: Border.all(color: colors.line),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(s.label,
-                            style: const TextStyle(
-                                color: AppTheme.slate500, fontSize: 11)),
+                            style:
+                                TextStyle(color: colors.muted, fontSize: 11)),
                         const SizedBox(height: 2),
                         Text(s.value,
-                            style: const TextStyle(
-                                color: Colors.white,
+                            style: TextStyle(
+                                color: colors.navyStrong,
                                 fontWeight: FontWeight.w700)),
                       ],
                     ),
@@ -1223,20 +1252,21 @@ class _SubSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.aublColors;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.slate700.withValues(alpha: 0.8)),
-        color: AppTheme.slate900.withValues(alpha: 0.3),
+        border: Border.all(color: colors.line),
+        color: colors.surfaceMuted,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title,
-              style: const TextStyle(
-                  color: AppTheme.slate300,
+              style: TextStyle(
+                  color: colors.ink,
                   fontSize: 13,
                   fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
@@ -1254,16 +1284,15 @@ class _EmptyText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.aublColors;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Text(text,
-          style: const TextStyle(color: AppTheme.slate500, fontSize: 12)),
+      child: Text(text, style: TextStyle(color: colors.muted, fontSize: 12)),
     );
   }
 }
 
-const _thStyle = TextStyle(
-    color: AppTheme.slate300, fontSize: 12, fontWeight: FontWeight.w700);
-const _cellStyle = TextStyle(color: Colors.white, fontSize: 12);
+const _thStyle = TextStyle(fontSize: 12, fontWeight: FontWeight.w800);
+const _cellStyle = TextStyle(fontSize: 12);
 final _numStyle =
     _cellStyle.copyWith(fontFeatures: const [FontFeature.tabularFigures()]);

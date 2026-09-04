@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/services/backend_api_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/season_components.dart';
 import 'player_detail_screen.dart';
 import 'records_filter_state.dart';
 import 'records_view_model.dart';
@@ -574,8 +575,9 @@ class RecordsScreenState extends State<RecordsScreen>
           preferredSize: const Size.fromHeight(kTextTabBarHeight),
           child: TabBar(
             controller: _tabCtrl,
-            isScrollable: false,
-            labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            labelPadding: const EdgeInsets.symmetric(horizontal: 14),
             tabs: RecordsHubTab.values
                 .map((tab) => Tab(text: tab.label))
                 .toList(),
@@ -592,13 +594,13 @@ class RecordsScreenState extends State<RecordsScreen>
                 if (_error != null)
                   _Banner(
                     icon: Icons.error_outline,
-                    color: AppTheme.red500,
+                    tone: SeasonBadgeTone.danger,
                     text: _error!,
                   ),
                 if (_warning != null)
                   _Banner(
                     icon: Icons.warning_amber_rounded,
-                    color: AppTheme.orange500,
+                    tone: SeasonBadgeTone.warning,
                     text: _warning!,
                   ),
                 Expanded(
@@ -628,22 +630,29 @@ class RecordsScreenState extends State<RecordsScreen>
 class _Banner extends StatelessWidget {
   const _Banner({
     required this.icon,
-    required this.color,
+    required this.tone,
     required this.text,
   });
 
   final IconData icon;
-  final Color color;
+  final SeasonBadgeTone tone;
   final String text;
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.aublColors;
+    final color = switch (tone) {
+      SeasonBadgeTone.danger => colors.danger,
+      SeasonBadgeTone.warning => colors.warning,
+      SeasonBadgeTone.success => colors.success,
+      _ => colors.cobalt,
+    };
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: color.withValues(alpha: 0.45)),
       ),
       child: Row(
@@ -714,14 +723,16 @@ class _RegulationFilter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.aublColors;
     final options = available.isEmpty
         ? const [RecordRegulation.inRule, RecordRegulation.out]
         : available;
     return Container(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppTheme.slate700),
+        color: colors.surfaceMuted,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: colors.line),
       ),
       child: Row(
         children: options
@@ -729,6 +740,7 @@ class _RegulationFilter extends StatelessWidget {
               (item) => Padding(
                 padding: const EdgeInsets.only(right: 6),
                 child: _regButton(
+                  context,
                   label: item == RecordRegulation.out ? 'OUT' : 'IN',
                   active: value == item,
                   onTap: () => onChanged(item),
@@ -740,28 +752,32 @@ class _RegulationFilter extends StatelessWidget {
     );
   }
 
-  Widget _regButton(
+  Widget _regButton(BuildContext context,
       {required String label,
       required bool active,
       required VoidCallback onTap}) {
-    return GestureDetector(
+    final colors = context.aublColors;
+    return InkWell(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(999),
-          color: active
-              ? AppTheme.blue500.withValues(alpha: 0.22)
-              : Colors.transparent,
-          border:
-              Border.all(color: active ? AppTheme.blue400 : AppTheme.slate700),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: active ? AppTheme.blue400 : AppTheme.slate300,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
+      borderRadius: BorderRadius.circular(8),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 38, minWidth: 48),
+        child: Container(
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            color: active ? colors.surface : Colors.transparent,
+            border: Border.all(
+                color: active ? colors.lineStrong : Colors.transparent),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: active ? colors.navy : colors.muted,
+              fontSize: 12,
+              fontWeight: active ? FontWeight.w900 : FontWeight.w700,
+            ),
           ),
         ),
       ),
@@ -777,29 +793,26 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 168,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.slate700),
-        color: AppTheme.slate800.withValues(alpha: 0.35),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label,
-              style: const TextStyle(
-                  color: AppTheme.slate400,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
-          Text(value,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800)),
-        ],
+    final colors = context.aublColors;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(label,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colors.muted, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 6),
+            Text(value,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: colors.navyStrong,
+                      fontFamily: 'BarlowCondensed',
+                      fontWeight: FontWeight.w900,
+                    )),
+          ],
+        ),
       ),
     );
   }
@@ -814,38 +827,32 @@ class _Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.slate700.withValues(alpha: 0.7)),
-        color: AppTheme.slate800.withValues(alpha: 0.35),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700),
-              ),
-              if (hint != null) ...[
-                const Spacer(),
+    final colors = context.aublColors;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
                 Text(
-                  hint!,
-                  style:
-                      const TextStyle(color: AppTheme.slate500, fontSize: 10),
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
+                if (hint != null) ...[
+                  const Spacer(),
+                  Text(
+                    hint!,
+                    style: TextStyle(color: colors.muted, fontSize: 11),
+                  ),
+                ],
               ],
-            ],
-          ),
-          const SizedBox(height: 10),
-          child,
-        ],
+            ),
+            const SizedBox(height: 10),
+            child,
+          ],
+        ),
       ),
     );
   }
@@ -854,7 +861,6 @@ class _Card extends StatelessWidget {
 class _TopFivePanel<T> extends StatelessWidget {
   const _TopFivePanel({
     required this.title,
-    required this.accent,
     required this.rows,
     required this.emptyText,
     required this.sortWidget,
@@ -862,7 +868,6 @@ class _TopFivePanel<T> extends StatelessWidget {
   });
 
   final String title;
-  final Color accent;
   final List<T> rows;
   final String emptyText;
   final Widget sortWidget;
@@ -903,6 +908,7 @@ class _TopPlayerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.aublColors;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -913,27 +919,25 @@ class _TopPlayerTile extends StatelessWidget {
             SizedBox(
               width: 28,
               child: Text('$rank',
-                  style: const TextStyle(
-                      color: AppTheme.slate300, fontWeight: FontWeight.w700)),
+                  style: TextStyle(
+                      color: colors.navy, fontWeight: FontWeight.w900)),
             ),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(name,
-                      style: const TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.w700)),
+                      style: const TextStyle(fontWeight: FontWeight.w800)),
                   Text(team,
-                      style: const TextStyle(
-                          color: AppTheme.slate500, fontSize: 12)),
+                      style: TextStyle(color: colors.muted, fontSize: 12)),
                 ],
               ),
             ),
             Text(value,
-                style: const TextStyle(
-                    color: AppTheme.slate200,
+                style: TextStyle(
+                    color: colors.cobalt,
                     fontSize: 13,
-                    fontWeight: FontWeight.w700)),
+                    fontWeight: FontWeight.w900)),
           ],
         ),
       ),
@@ -995,23 +999,25 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.aublColors;
     return Padding(
       padding: const EdgeInsets.all(18),
       child: Center(
         child: Text(
           text,
-          style: const TextStyle(color: AppTheme.slate500, fontSize: 13),
+          style: TextStyle(color: colors.muted, fontSize: 13),
         ),
       ),
     );
   }
 }
 
-const _thStyle = TextStyle(
-    color: AppTheme.slate300, fontSize: 12, fontWeight: FontWeight.w700);
-const _cellStyle = TextStyle(color: Colors.white, fontSize: 12);
+const _thStyle = TextStyle(fontSize: 12, fontWeight: FontWeight.w800);
+const _cellStyle = TextStyle(fontSize: 12);
 const _linkCellStyle = TextStyle(
-    color: AppTheme.blue400, fontSize: 12, fontWeight: FontWeight.w700);
+    fontSize: 12,
+    fontWeight: FontWeight.w800,
+    decoration: TextDecoration.underline);
 final _numStyle =
     _cellStyle.copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
 

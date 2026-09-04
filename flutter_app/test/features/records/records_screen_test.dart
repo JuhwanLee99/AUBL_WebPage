@@ -56,6 +56,23 @@ void main() {
       expect(find.text('선수 검색'), findsOneWidget);
       expect(find.text('경기별 기록 (Player Logs)'), findsOneWidget);
     });
+
+    testWidgets('renders the record hub with the light season theme',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: RecordsScreen(apiService: fakeApi),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('기록'), findsOneWidget);
+      expect(find.text('타자 TOP 5 (규정 IN)'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
   });
 }
 
