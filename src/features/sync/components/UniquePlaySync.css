@@ -1,0 +1,488 @@
+.unique-play-sync-page,
+.unique-play-diff {
+  --sync-primary-bg: #0a326a;
+  --sync-primary-hover: #123f75;
+  --sync-primary-fg: #ffffff;
+  --sync-info: var(--season-blue-700);
+  --sync-info-soft: color-mix(in srgb, var(--season-blue-600) 10%, var(--season-surface));
+  --sync-positive-soft: color-mix(in srgb, var(--season-success) 10%, var(--season-surface));
+  --sync-warning-soft: color-mix(in srgb, var(--season-warning) 10%, var(--season-surface));
+  --sync-negative-soft: color-mix(in srgb, var(--season-danger) 9%, var(--season-surface));
+}
+
+:root[data-theme='dark'] .unique-play-sync-page,
+:root[data-theme='dark'] .unique-play-diff {
+  --sync-primary-bg: #285fa9;
+  --sync-primary-hover: #3978cf;
+}
+
+.unique-play-sync-page {
+  min-width: 0;
+  max-width: 100%;
+  color: var(--season-ink) !important;
+}
+
+.unique-play-sync-page > section,
+.unique-play-sync-page section,
+.unique-play-sync-page fieldset {
+  border-color: var(--season-line) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+  box-shadow: none !important;
+}
+
+.unique-play-sync-page .unique-play-sync-hero {
+  position: relative;
+  overflow: hidden;
+  border-top: 4px solid var(--sync-primary-bg) !important;
+  background: var(--season-surface) !important;
+}
+
+.unique-play-sync-page .unique-play-sync-hero::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: clamp(20px, 7vw, 90px);
+  width: clamp(52px, 9vw, 118px);
+  height: 4px;
+  background: var(--season-blue-600);
+}
+
+.unique-play-sync-page .unique-play-sync-hero > div > div:first-child > div:first-child {
+  color: var(--season-blue-700) !important;
+}
+
+.unique-play-sync-page :where(h2, h3, h4, legend, dt, label),
+.unique-play-sync-page :where(h2, h3, h4, legend, dt, label)[style],
+.unique-play-sync-page strong:not(.sync-summary-card__value) {
+  color: var(--season-ink) !important;
+}
+
+.unique-play-sync-page :where(p, dd, small, code),
+.unique-play-sync-page :where(p, dd, small, code)[style],
+.unique-play-sync-page dl,
+.unique-play-sync-page ul {
+  color: var(--season-muted);
+}
+
+.unique-play-sync-page a {
+  color: var(--season-blue-700) !important;
+  text-underline-offset: 3px;
+}
+
+.unique-play-sync-page code {
+  border: 1px solid var(--season-line);
+  background: var(--season-surface-muted) !important;
+}
+
+.unique-play-sync-page :where(input:not([type='checkbox']), select, textarea),
+.sync-control {
+  min-height: 44px !important;
+  max-width: 100%;
+  border: 1px solid var(--season-line-strong) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+  box-shadow: none !important;
+}
+
+.unique-play-sync-page input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  accent-color: var(--season-blue-600);
+}
+
+.unique-play-sync-page label:has(input[type='checkbox']) {
+  min-height: 44px;
+  align-items: center !important;
+}
+
+.unique-play-sync-page button,
+.sync-button {
+  min-height: 44px !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
+
+.unique-play-sync-page button:not(:disabled):hover,
+.sync-button:not(:disabled):hover {
+  border-color: var(--season-blue-600) !important;
+}
+
+.unique-play-sync-page button:disabled,
+.sync-button:disabled,
+.sync-control:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.58 !important;
+}
+
+.unique-play-sync-page progress {
+  overflow: hidden;
+  border-radius: 2px !important;
+  accent-color: var(--season-blue-600) !important;
+}
+
+.unique-play-sync-page .sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.unique-play-sync-page [role='alert'] {
+  border-color: color-mix(in srgb, var(--season-danger) 42%, var(--season-line)) !important;
+  background: var(--sync-negative-soft) !important;
+  color: var(--season-danger) !important;
+}
+
+.unique-play-sync-page [role='alert'] :where(strong, li),
+.unique-play-sync-page [role='alert'][style] {
+  color: var(--season-danger) !important;
+}
+
+.unique-play-sync-page [role='status'] {
+  color: var(--season-muted) !important;
+}
+
+.unique-play-sync-page .sync-callout.is-success {
+  border-color: color-mix(in srgb, var(--season-success) 42%, var(--season-line)) !important;
+  background: var(--sync-positive-soft) !important;
+  color: var(--season-success) !important;
+}
+
+.unique-play-sync-page .sync-callout.is-info {
+  border-color: color-mix(in srgb, var(--season-blue-600) 42%, var(--season-line)) !important;
+  background: var(--sync-info-soft) !important;
+  color: var(--season-blue-700) !important;
+}
+
+.unique-play-sync-page .sync-callout.is-warning,
+.unique-play-sync-page .sync-callout.is-warning :where(strong, li) {
+  border-color: color-mix(in srgb, var(--season-warning) 42%, var(--season-line)) !important;
+  background: var(--sync-warning-soft) !important;
+  color: var(--season-warning) !important;
+}
+
+.unique-play-sync-page .sync-callout.is-danger {
+  border-color: color-mix(in srgb, var(--season-danger) 42%, var(--season-line)) !important;
+  background: var(--sync-negative-soft) !important;
+  color: var(--season-danger) !important;
+}
+
+.sync-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+  gap: 9px;
+}
+
+.sync-summary-card {
+  padding: 11px 12px;
+  border: 1px solid var(--season-line);
+  border-radius: 2px;
+  background: var(--season-surface-muted);
+}
+
+.sync-summary-card__label {
+  color: var(--season-muted) !important;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.sync-summary-card__value {
+  margin-top: 2px;
+  color: var(--season-ink) !important;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.sync-summary-card[data-tone='positive'] .sync-summary-card__value {
+  color: var(--season-success) !important;
+}
+
+.sync-summary-card[data-tone='progress'] .sync-summary-card__value {
+  color: var(--season-blue-700) !important;
+}
+
+.sync-summary-card[data-tone='warning'] .sync-summary-card__value {
+  color: var(--season-warning) !important;
+}
+
+.sync-summary-card[data-tone='negative'] .sync-summary-card__value {
+  color: var(--season-danger) !important;
+}
+
+.sync-status-badge,
+.sync-action-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 26px;
+  padding: 3px 8px;
+  border: 1px solid var(--season-line);
+  border-radius: 2px !important;
+  background: var(--season-surface-muted);
+  color: var(--season-muted) !important;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.sync-status-badge[data-tone='positive'],
+.sync-action-badge[data-tone='positive'] {
+  border-color: color-mix(in srgb, var(--season-success) 44%, var(--season-line));
+  background: var(--sync-positive-soft);
+  color: var(--season-success) !important;
+}
+
+.sync-status-badge[data-tone='progress'],
+.sync-action-badge[data-tone='progress'] {
+  border-color: color-mix(in srgb, var(--season-blue-600) 44%, var(--season-line));
+  background: var(--sync-info-soft);
+  color: var(--season-blue-700) !important;
+}
+
+.sync-status-badge[data-tone='warning'] {
+  border-color: color-mix(in srgb, var(--season-warning) 44%, var(--season-line));
+  background: var(--sync-warning-soft);
+  color: var(--season-warning) !important;
+}
+
+.sync-status-badge[data-tone='negative'],
+.sync-action-badge[data-tone='negative'] {
+  border-color: color-mix(in srgb, var(--season-danger) 44%, var(--season-line));
+  background: var(--sync-negative-soft);
+  color: var(--season-danger) !important;
+}
+
+.unique-play-diff {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--season-line);
+  border-radius: 4px;
+  background: var(--season-surface);
+  color: var(--season-ink);
+  scrollbar-width: thin;
+}
+
+.unique-play-diff__table {
+  width: 100%;
+  min-width: 940px;
+  border-collapse: collapse;
+  background: var(--season-surface) !important;
+  color: var(--season-ink);
+}
+
+.unique-play-diff__table :where(th, td) {
+  padding: 13px 12px !important;
+  border-bottom: 1px solid var(--season-line) !important;
+  color: var(--season-ink) !important;
+  font-size: 13px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.unique-play-diff__table thead th {
+  padding-block: 11px !important;
+  background: var(--sync-primary-bg) !important;
+  color: var(--sync-primary-fg) !important;
+  font-size: 12px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.unique-play-diff__changes-heading {
+  min-width: 390px;
+}
+
+.unique-play-diff__kind,
+.unique-play-diff__meta-list {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.unique-play-diff__kind > span:last-child,
+.unique-play-diff__meta,
+.unique-play-diff__meta-list,
+.sync-muted {
+  color: var(--season-muted) !important;
+}
+
+.unique-play-diff__name {
+  color: var(--season-ink);
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.unique-play-diff__meta,
+.unique-play-diff__meta-list {
+  font-size: 12px;
+}
+
+.unique-play-diff .is-success {
+  color: var(--season-success) !important;
+}
+
+.unique-play-diff__resolution-row > td {
+  padding: 0 12px 14px !important;
+}
+
+.sync-resolution {
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--season-line-strong);
+  border-radius: 2px;
+  background: var(--season-surface-muted);
+}
+
+.sync-resolution legend {
+  padding-inline: 6px;
+  color: var(--season-navy-900);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.sync-resolution__fields {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.7fr) minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.sync-resolution__fields label {
+  display: grid;
+  gap: 5px;
+  color: var(--season-ink);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.sync-control {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.sync-button {
+  padding: 9px 14px;
+  border: 1px solid var(--season-line-strong);
+  background: var(--season-surface);
+  color: var(--season-navy-900);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sync-button--primary {
+  border-color: var(--sync-primary-bg);
+  background: var(--sync-primary-bg);
+  color: var(--sync-primary-fg);
+}
+
+.sync-message {
+  margin: 8px 0 0;
+  color: var(--season-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.sync-message.is-danger {
+  color: var(--season-danger);
+  font-weight: 700;
+}
+
+.sync-change-list {
+  display: grid;
+  min-width: 330px;
+  gap: 7px;
+}
+
+.sync-change-list__row {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.65fr) minmax(100px, 1fr) 18px minmax(100px, 1fr);
+  gap: 6px;
+  align-items: start;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--season-line);
+}
+
+.sync-change-list__row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.sync-change-list__row > * {
+  overflow-wrap: anywhere;
+}
+
+.sync-change-list__row strong {
+  color: var(--season-ink);
+}
+
+.sync-change-list__row > span {
+  color: var(--season-muted);
+}
+
+.sync-change-list__arrow {
+  text-align: center;
+}
+
+.sync-change-list__source {
+  color: var(--season-blue-700) !important;
+  font-weight: 750;
+}
+
+.unique-play-diff__empty {
+  padding: 32px 18px;
+  border: 1px dashed var(--season-line-strong);
+  border-radius: 4px;
+  background: var(--season-surface-muted);
+  color: var(--season-muted);
+  font-size: 14px;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .unique-play-sync-page {
+    gap: 12px !important;
+    padding: 0 !important;
+  }
+
+  .unique-play-sync-page > section {
+    padding: 16px !important;
+  }
+
+  .sync-resolution__fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sync-filter-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .sync-resolution__fields .sync-button {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .unique-play-sync-page *,
+  .unique-play-sync-page *::before,
+  .unique-play-sync-page *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

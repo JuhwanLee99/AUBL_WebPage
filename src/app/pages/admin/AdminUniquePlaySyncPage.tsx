@@ -39,6 +39,7 @@ import {
   syncActionLabel,
   syncEntityLabel,
 } from '@features/sync';
+import '@features/sync/components/UniquePlaySync.css';
 
 const RUN_STORAGE_KEY = 'aubl.uniquePlaySync.currentRunId';
 const PAGE_SIZE = 25;
@@ -51,50 +52,50 @@ const qualificationResolutionOptions: Array<{ value: SeasonQualificationResoluti
 ];
 
 const cardStyle: CSSProperties = {
-  borderRadius: '16px',
-  border: '1px solid #cbd5e1',
-  background: '#ffffff',
+  borderRadius: '4px',
+  border: '1px solid var(--season-line)',
+  background: 'var(--season-surface)',
   padding: '20px',
-  boxShadow: '0 10px 30px rgba(15, 39, 79, 0.10)',
-  color: '#0f274f',
+  boxShadow: 'none',
+  color: 'var(--season-ink)',
 };
 
 const sectionTitleStyle: CSSProperties = {
   margin: 0,
-  color: '#0b2f63',
+  color: 'var(--season-navy-900)',
   fontSize: '18px',
   fontWeight: 900,
 };
 
 const inputStyle: CSSProperties = {
-  minHeight: '42px',
+  minHeight: '44px',
   width: '100%',
   boxSizing: 'border-box',
-  borderRadius: '10px',
-  border: '1px solid #94a3b8',
-  background: '#fff',
-  color: '#0f274f',
+  borderRadius: '4px',
+  border: '1px solid var(--season-line-strong)',
+  background: 'var(--season-surface)',
+  color: 'var(--season-ink)',
   padding: '8px 11px',
   fontSize: '14px',
 };
 
 const primaryButtonStyle: CSSProperties = {
-  minHeight: '42px',
-  borderRadius: '10px',
-  border: '1px solid #082b5e',
-  background: '#0a326a',
-  color: '#fff',
+  minHeight: '44px',
+  borderRadius: '4px',
+  border: '1px solid var(--sync-primary-bg)',
+  background: 'var(--sync-primary-bg)',
+  color: 'var(--sync-primary-fg)',
   padding: '9px 16px',
   fontSize: '13px',
   fontWeight: 850,
 };
 
 const secondaryButtonStyle: CSSProperties = {
-  minHeight: '40px',
-  borderRadius: '10px',
-  border: '1px solid #94a3b8',
-  background: '#fff',
-  color: '#0f3b76',
+  minHeight: '44px',
+  borderRadius: '4px',
+  border: '1px solid var(--season-line-strong)',
+  background: 'var(--season-surface)',
+  color: 'var(--season-navy-900)',
   padding: '8px 14px',
   fontSize: '13px',
   fontWeight: 800,
@@ -172,19 +173,19 @@ function summaryHasValues(summary: UniquePlaySyncSummary | null | undefined): su
 
 function SummaryGrid({ summary }: { summary: UniquePlaySyncSummary }) {
   const items = [
-    { label: '전체', value: summary.total, color: '#0f3b76' },
-    { label: '추가', value: summary.created, color: '#166534' },
-    { label: '변경', value: summary.updated, color: '#1d4ed8' },
-    { label: '삭제 후보', value: summary.deleted, color: '#991b1b' },
-    { label: '충돌', value: summary.conflicts, color: '#9a3412' },
-    { label: '미해결', value: summary.unresolved, color: '#b91c1c' },
+    { label: '전체', value: summary.total, tone: 'neutral' },
+    { label: '추가', value: summary.created, tone: 'positive' },
+    { label: '변경', value: summary.updated, tone: 'progress' },
+    { label: '삭제 후보', value: summary.deleted, tone: 'negative' },
+    { label: '충돌', value: summary.conflicts, tone: 'warning' },
+    { label: '미해결', value: summary.unresolved, tone: 'negative' },
   ];
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))', gap: '9px' }}>
+    <div className="sync-summary-grid">
       {items.map((item) => (
-        <div key={item.label} style={{ border: '1px solid #e2e8f0', borderRadius: '11px', background: '#f8fafc', padding: '11px 12px' }}>
-          <div style={{ color: '#64748b', fontSize: '11px', fontWeight: 750 }}>{item.label}</div>
-          <div style={{ marginTop: '2px', color: item.color, fontSize: '22px', fontWeight: 900 }}>{item.value.toLocaleString('ko-KR')}</div>
+        <div key={item.label} className="sync-summary-card" data-tone={item.tone}>
+          <div className="sync-summary-card__label">{item.label}</div>
+          <div className="sync-summary-card__value">{item.value.toLocaleString('ko-KR')}</div>
         </div>
       ))}
     </div>
@@ -203,12 +204,12 @@ function qualificationStateLabel(stateValue: string | null | undefined): string 
   return state || '상태 없음';
 }
 
-function qualificationStatePalette(stateValue: string | null | undefined) {
+function qualificationStateTone(stateValue: string | null | undefined) {
   const state = stateValue?.trim().toUpperCase();
-  if (state?.includes('EUTTEUM')) return { color: '#0b4a8b', background: '#eff6ff', border: '#93c5fd' };
-  if (state?.includes('BEOGEUM')) return { color: '#5b21b6', background: '#f5f3ff', border: '#c4b5fd' };
-  if (state === 'TIE_PENDING') return { color: '#9a3412', background: '#fff7ed', border: '#fdba74' };
-  return { color: '#475569', background: '#f8fafc', border: '#cbd5e1' };
+  if (state?.includes('EUTTEUM')) return 'progress';
+  if (state?.includes('BEOGEUM')) return 'neutral';
+  if (state === 'TIE_PENDING') return 'warning';
+  return 'neutral';
 }
 
 function qualificationBucket(stateValue: string | null | undefined): 'EUTTEUM' | 'BEOGEUM' | 'OUT' | null {
@@ -802,45 +803,47 @@ export default function AdminUniquePlaySyncPage() {
   return (
     <main
       aria-labelledby="unique-play-sync-title"
+      className="unique-play-sync-page"
       style={{
         display: 'grid',
         gap: '16px',
         padding: '2px',
-        color: '#0f274f',
+        color: 'var(--season-ink)',
       }}
     >
       <section
+        className="unique-play-sync-hero"
         style={{
           borderRadius: '18px',
-          border: '1px solid #b8c7dc',
-          background: 'linear-gradient(120deg, #ffffff 0%, #eef5ff 100%)',
+          border: '1px solid var(--season-line-strong)',
+          background: 'var(--season-surface)',
           padding: '22px',
           boxShadow: '0 14px 34px rgba(9, 42, 88, 0.12)',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <div style={{ maxWidth: '760px' }}>
-            <div style={{ color: '#315c91', fontSize: '12px', fontWeight: 900, letterSpacing: '0.1em' }}>AUBL DATA OPERATIONS</div>
-            <h2 id="unique-play-sync-title" style={{ margin: '5px 0 7px', color: '#082b5e', fontSize: '27px', fontWeight: 950 }}>
+            <div style={{ color: 'var(--season-blue-700)', fontSize: '12px', fontWeight: 900, letterSpacing: '0.1em' }}>AUBL DATA OPERATIONS</div>
+            <h2 id="unique-play-sync-title" style={{ margin: '5px 0 7px', color: 'var(--season-navy-900)', fontSize: '27px', fontWeight: 950 }}>
               UniquePlay 수동 동기화
             </h2>
-            <p style={{ margin: 0, color: '#475569', fontSize: '14px', lineHeight: 1.7 }}>
+            <p style={{ margin: 0, color: 'var(--season-muted)', fontSize: '14px', lineHeight: 1.7 }}>
               수집 결과를 바로 공개하지 않습니다. 변경 비교, 충돌 처리, 검증, 리비전 생성, 활성화를 순서대로 완료해야 서비스에 반영됩니다.
             </p>
           </div>
-          <div style={{ border: '1px solid #bfdbfe', borderRadius: '12px', background: '#fff', padding: '10px 13px', color: '#334155', fontSize: '12px', lineHeight: 1.6 }}>
-            <strong style={{ color: '#0f3b76' }}>보안 원칙</strong><br />원본 사용자 정보는 이 화면에 표시하지 않습니다.
+          <div style={{ border: '1px solid var(--season-line)', borderRadius: '12px', background: 'var(--season-surface)', padding: '10px 13px', color: 'var(--season-ink)', fontSize: '12px', lineHeight: 1.6 }}>
+            <strong style={{ color: 'var(--season-blue-700)' }}>보안 원칙</strong><br />원본 사용자 정보는 이 화면에 표시하지 않습니다.
           </div>
         </div>
       </section>
 
       {error && (
-        <div role="alert" style={{ border: '1px solid #fca5a5', borderRadius: '12px', background: '#fff1f2', color: '#991b1b', padding: '12px 14px', fontSize: '13px', fontWeight: 750 }}>
+        <div role="alert" className="sync-callout is-danger" style={{ border: '1px solid color-mix(in srgb, var(--season-danger) 44%, var(--season-line))', borderRadius: '12px', background: 'color-mix(in srgb, var(--season-danger) 9%, var(--season-surface))', color: 'var(--season-danger)', padding: '12px 14px', fontSize: '13px', fontWeight: 750 }}>
           {error}
         </div>
       )}
       {notice && (
-        <div role="status" aria-live="polite" style={{ border: '1px solid #86efac', borderRadius: '12px', background: '#f0fdf4', color: '#166534', padding: '12px 14px', fontSize: '13px', fontWeight: 750 }}>
+        <div role="status" aria-live="polite" className="sync-callout is-success" style={{ border: '1px solid color-mix(in srgb, var(--season-success) 44%, var(--season-line))', borderRadius: '12px', background: 'color-mix(in srgb, var(--season-success) 10%, var(--season-surface))', color: 'var(--season-success)', padding: '12px 14px', fontSize: '13px', fontWeight: 750 }}>
           {notice}
         </div>
       )}
@@ -849,7 +852,7 @@ export default function AdminUniquePlaySyncPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
             <h3 id="unique-play-session-heading" style={sectionTitleStyle}>1. 연결 세션 확인</h3>
-            <p style={{ margin: '5px 0 0', color: '#64748b', fontSize: '13px' }}>AUBL 관리자 인증과 서버의 UniquePlay 수집 세션을 함께 확인합니다.</p>
+            <p style={{ margin: '5px 0 0', color: 'var(--season-muted)', fontSize: '13px' }}>AUBL 관리자 인증과 서버의 UniquePlay 수집 세션을 함께 확인합니다.</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
             {session && <SyncStatusBadge kind="session" status={session.status} />}
@@ -860,38 +863,38 @@ export default function AdminUniquePlaySyncPage() {
         </div>
 
         {sessionLoading && !session ? (
-          <p role="status" style={{ margin: '16px 0 0', color: '#64748b' }}>연결 상태를 확인하고 있습니다.</p>
+          <p role="status" style={{ margin: '16px 0 0', color: 'var(--season-muted)' }}>연결 상태를 확인하고 있습니다.</p>
         ) : session ? (
           <div style={{ marginTop: '15px', display: 'grid', gap: '10px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '9px', color: '#475569', fontSize: '13px' }}>
-              <div><strong style={{ color: '#334155' }}>인증:</strong> {session.authenticated ? '확인됨' : '확인 필요'}</div>
-              <div><strong style={{ color: '#334155' }}>만료:</strong> {formatSyncDateTime(session.expiresAt)}</div>
-              <div><strong style={{ color: '#334155' }}>활성 실행:</strong> {session.activeRunId ?? '없음'}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '9px', color: 'var(--season-muted)', fontSize: '13px' }}>
+              <div><strong style={{ color: 'var(--season-ink)' }}>인증:</strong> {session.authenticated ? '확인됨' : '확인 필요'}</div>
+              <div><strong style={{ color: 'var(--season-ink)' }}>만료:</strong> {formatSyncDateTime(session.expiresAt)}</div>
+              <div><strong style={{ color: 'var(--season-ink)' }}>활성 실행:</strong> {session.activeRunId ?? '없음'}</div>
             </div>
-            {session.message && <p style={{ margin: 0, color: session.status === 'REAUTH_REQUIRED' ? '#991b1b' : '#475569', fontSize: '13px' }}>{session.message}</p>}
+            {session.message && <p style={{ margin: 0, color: session.status === 'REAUTH_REQUIRED' ? 'var(--season-danger)' : 'var(--season-muted)', fontSize: '13px' }}>{session.message}</p>}
             {session.status === 'REAUTH_REQUIRED' && (
-              <div style={{ border: '1px solid #fdba74', background: '#fff7ed', borderRadius: '11px', padding: '12px', color: '#9a3412', fontSize: '13px', lineHeight: 1.6 }}>
+              <div className="sync-callout is-warning" style={{ border: '1px solid color-mix(in srgb, var(--season-warning) 44%, var(--season-line))', background: 'color-mix(in srgb, var(--season-warning) 10%, var(--season-surface))', borderRadius: '11px', padding: '12px', color: 'var(--season-warning)', fontSize: '13px', lineHeight: 1.6 }}>
                 세션이 만료되어 새 수집·검증·게시 작업을 진행할 수 없습니다. 재인증을 마친 뒤 세션 상태를 다시 확인하세요.
                 {safeReauthUrl && (
                   <div style={{ marginTop: '9px' }}>
-                    <a href={safeReauthUrl} target="_blank" rel="noreferrer" style={{ color: '#0b4a8b', fontWeight: 850 }}>재인증 페이지 열기 (새 창)</a>
+                    <a href={safeReauthUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--season-blue-700)', fontWeight: 850 }}>재인증 페이지 열기 (새 창)</a>
                   </div>
                 )}
               </div>
             )}
           </div>
         ) : (
-          <p role="status" style={{ margin: '16px 0 0', color: '#64748b' }}>세션 정보를 불러오지 못했습니다. 오류를 확인한 뒤 다시 시도하세요.</p>
+          <p role="status" style={{ margin: '16px 0 0', color: 'var(--season-muted)' }}>세션 정보를 불러오지 못했습니다. 오류를 확인한 뒤 다시 시도하세요.</p>
         )}
       </section>
 
       <section style={cardStyle} aria-labelledby="unique-play-start-heading">
         <h3 id="unique-play-start-heading" style={sectionTitleStyle}>2. 수집 실행</h3>
-        <p style={{ margin: '5px 0 15px', color: '#64748b', fontSize: '13px', lineHeight: 1.6 }}>
+        <p style={{ margin: '5px 0 15px', color: 'var(--season-muted)', fontSize: '13px', lineHeight: 1.6 }}>
           시작 버튼은 데이터 수집과 비교 스냅샷 생성만 요청합니다. 게시나 활성화는 자동으로 수행하지 않습니다.
         </p>
         <form onSubmit={(event) => { void handleStartRun(event); }} style={{ display: 'flex', alignItems: 'end', gap: '10px', flexWrap: 'wrap' }}>
-          <label style={{ display: 'grid', gap: '5px', width: '180px', color: '#334155', fontSize: '12px', fontWeight: 800 }}>
+          <label style={{ display: 'grid', gap: '5px', width: '180px', color: 'var(--season-ink)', fontSize: '12px', fontWeight: 800 }}>
             시즌 연도
             <input type="number" min={2000} max={2100} step={1} value={seasonYear} onChange={(event) => setSeasonYear(Number(event.target.value))} style={inputStyle} />
           </label>
@@ -906,12 +909,12 @@ export default function AdminUniquePlaySyncPage() {
           >
             {busyAction === 'start' ? '실행 생성 중…' : `${seasonYear} 시즌 수집 시작`}
           </button>
-          {!sessionReady && <span style={{ color: '#9a3412', fontSize: '12px', fontWeight: 700 }}>세션 연결 확인이 필요합니다.</span>}
-          {isRunOpen(run) && <span style={{ color: '#9a3412', fontSize: '12px', fontWeight: 700 }}>현재 실행을 먼저 완료해야 합니다.</span>}
+          {!sessionReady && <span style={{ color: 'var(--season-warning)', fontSize: '12px', fontWeight: 700 }}>세션 연결 확인이 필요합니다.</span>}
+          {isRunOpen(run) && <span style={{ color: 'var(--season-warning)', fontSize: '12px', fontWeight: 700 }}>현재 실행을 먼저 완료해야 합니다.</span>}
         </form>
 
-        <form onSubmit={(event) => { void handleLoadRun(event); }} style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'end', gap: '9px', flexWrap: 'wrap' }}>
-          <label style={{ display: 'grid', gap: '5px', minWidth: '260px', flex: '1 1 340px', color: '#334155', fontSize: '12px', fontWeight: 800 }}>
+        <form onSubmit={(event) => { void handleLoadRun(event); }} style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid var(--season-line)', display: 'flex', alignItems: 'end', gap: '9px', flexWrap: 'wrap' }}>
+          <label style={{ display: 'grid', gap: '5px', minWidth: '260px', flex: '1 1 340px', color: 'var(--season-ink)', fontSize: '12px', fontWeight: 800 }}>
             기존 실행 ID 불러오기
             <input value={runIdInput} onChange={(event) => setRunIdInput(event.target.value)} placeholder="서버가 발급한 runId" autoComplete="off" style={inputStyle} />
           </label>
@@ -924,7 +927,7 @@ export default function AdminUniquePlaySyncPage() {
       {!run ? (
         <section style={cardStyle} aria-labelledby="unique-play-empty-heading">
           <h3 id="unique-play-empty-heading" style={sectionTitleStyle}>실행 대기</h3>
-          <p style={{ margin: '8px 0 0', color: '#64748b', fontSize: '14px' }}>수집을 시작하거나 기존 실행 ID를 불러오면 진행 상태와 변경 비교가 표시됩니다.</p>
+          <p style={{ margin: '8px 0 0', color: 'var(--season-muted)', fontSize: '14px' }}>수집을 시작하거나 기존 실행 ID를 불러오면 진행 상태와 변경 비교가 표시됩니다.</p>
         </section>
       ) : (
         <>
@@ -934,7 +937,7 @@ export default function AdminUniquePlaySyncPage() {
                 <h3 id="unique-play-run-heading" style={sectionTitleStyle}>3. 실행 상태</h3>
                 <div style={{ marginTop: '7px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   <SyncStatusBadge kind="run" status={run.status} rawStatus={run.rawStatus} />
-                  <code style={{ color: '#475569', background: '#f1f5f9', borderRadius: '6px', padding: '3px 6px', fontSize: '12px' }}>{run.runId}</code>
+                  <code style={{ color: 'var(--season-muted)', background: 'var(--season-surface-muted)', borderRadius: '6px', padding: '3px 6px', fontSize: '12px' }}>{run.runId}</code>
                 </div>
               </div>
               <button type="button" onClick={() => { void refreshRun(run.runId, 'manual'); }} disabled={runLoading || busyAction !== null} style={{ ...secondaryButtonStyle, cursor: runLoading || busyAction !== null ? 'wait' : 'pointer', opacity: runLoading || busyAction !== null ? 0.6 : 1 }}>
@@ -947,27 +950,27 @@ export default function AdminUniquePlaySyncPage() {
                 <progress
                   aria-label="동기화 실행 진행률"
                   {...(progressPercent === null || progressPercent === undefined ? {} : { value: progressPercent, max: 100 })}
-                  style={{ width: '100%', height: '10px', accentColor: '#1d4ed8' }}
+                  style={{ width: '100%', height: '10px', accentColor: 'var(--season-blue-700)' }}
                 />
-                <div style={{ marginTop: '5px', display: 'flex', justifyContent: 'space-between', gap: '12px', color: '#64748b', fontSize: '12px' }}>
+                <div style={{ marginTop: '5px', display: 'flex', justifyContent: 'space-between', gap: '12px', color: 'var(--season-muted)', fontSize: '12px' }}>
                   <span>{run.progress.message ?? run.progress.phase ?? '처리 중'}</span>
                   <span>{progressPercent == null ? '진행률 계산 중' : `${Math.round(progressPercent)}%`}</span>
                 </div>
               </div>
             )}
             {pollingSuspended && (
-              <p role="alert" style={{ margin: '12px 0 0', color: '#991b1b', fontSize: '13px', fontWeight: 750 }}>
+              <p role="alert" style={{ margin: '12px 0 0', color: 'var(--season-danger)', fontSize: '13px', fontWeight: 750 }}>
                 자동 상태 확인 중 오류가 발생해 폴링을 멈췄습니다. 상태 새로고침을 눌러 재개하세요.
               </p>
             )}
             {run.status === 'REPAIR_REQUIRED' && (
-              <div role="alert" style={{ marginTop: '12px', border: '1px solid #fca5a5', borderRadius: '10px', background: '#fff1f2', color: '#991b1b', padding: '11px 12px', fontSize: '13px', fontWeight: 750, lineHeight: 1.6 }}>
+              <div role="alert" style={{ marginTop: '12px', border: '1px solid color-mix(in srgb, var(--season-danger) 44%, var(--season-line))', borderRadius: '10px', background: 'color-mix(in srgb, var(--season-danger) 9%, var(--season-surface))', color: 'var(--season-danger)', padding: '11px 12px', fontSize: '13px', fontWeight: 750, lineHeight: 1.6 }}>
                 MariaDB와 Firestore의 게시 상태를 자동으로 되돌리지 못했습니다. 새 수집이나 확정을 진행하지 말고, 활성 리비전과 Firestore 동기화 메타데이터를 운영 절차에 따라 복구하세요.
               </div>
             )}
-            {run.message && <p style={{ margin: '12px 0 0', color: run.status === 'FAILED' || run.status === 'REPAIR_REQUIRED' ? '#991b1b' : '#475569', fontSize: '13px' }}>{run.message}</p>}
+            {run.message && <p style={{ margin: '12px 0 0', color: run.status === 'FAILED' || run.status === 'REPAIR_REQUIRED' ? 'var(--season-danger)' : 'var(--season-muted)', fontSize: '13px' }}>{run.message}</p>}
             <div style={{ marginTop: '15px' }}><SummaryGrid summary={summary} /></div>
-            <dl style={{ margin: '15px 0 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '9px', color: '#475569', fontSize: '12px' }}>
+            <dl style={{ margin: '15px 0 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '9px', color: 'var(--season-muted)', fontSize: '12px' }}>
               <div><dt style={{ fontWeight: 800 }}>시즌</dt><dd style={{ margin: '3px 0 0' }}>{run.seasonYear ?? '—'}</dd></div>
               <div><dt style={{ fontWeight: 800 }}>시작</dt><dd style={{ margin: '3px 0 0' }}>{formatSyncDateTime(run.startedAt)}</dd></div>
               <div><dt style={{ fontWeight: 800 }}>마지막 갱신</dt><dd style={{ margin: '3px 0 0' }}>{formatSyncDateTime(run.updatedAt)}</dd></div>
@@ -981,7 +984,7 @@ export default function AdminUniquePlaySyncPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <div>
                   <h3 id="unique-play-diff-heading" style={sectionTitleStyle}>4. 변경 비교와 충돌 처리</h3>
-                  <p style={{ margin: '5px 0 0', color: '#64748b', fontSize: '13px' }}>삭제 후보와 충돌을 먼저 검토하세요. 화살표 왼쪽은 AUBL 현재값, 오른쪽은 UniquePlay 값입니다.</p>
+                  <p style={{ margin: '5px 0 0', color: 'var(--season-muted)', fontSize: '13px' }}>삭제 후보와 충돌을 먼저 검토하세요. 화살표 왼쪽은 AUBL 현재값, 오른쪽은 UniquePlay 값입니다.</p>
                 </div>
                 <button type="button" onClick={() => { void loadDiff(); }} disabled={diffLoading} style={{ ...secondaryButtonStyle, cursor: diffLoading ? 'wait' : 'pointer', opacity: diffLoading ? 0.6 : 1 }}>
                   {diffLoading ? '목록 갱신 중…' : '변경 목록 새로고침'}
@@ -998,10 +1001,10 @@ export default function AdminUniquePlaySyncPage() {
                       aria-pressed={selected}
                       onClick={() => { setActionFilter(action); setPage(0); }}
                       style={{
-                        borderRadius: '999px',
-                        border: selected ? '1px solid #0b3b77' : '1px solid #cbd5e1',
-                        background: selected ? '#0b3b77' : '#fff',
-                        color: selected ? '#fff' : '#334155',
+                        borderRadius: '4px',
+                        border: selected ? '1px solid var(--sync-primary-bg)' : '1px solid var(--season-line)',
+                        background: selected ? 'var(--sync-primary-bg)' : 'var(--season-surface)',
+                        color: selected ? '#fff' : 'var(--season-ink)',
                         padding: '7px 11px',
                         fontSize: '12px',
                         fontWeight: 800,
@@ -1014,47 +1017,47 @@ export default function AdminUniquePlaySyncPage() {
                 })}
               </div>
 
-              <div style={{ margin: '12px 0', display: 'grid', gridTemplateColumns: 'minmax(170px, 0.45fr) minmax(220px, 1fr)', gap: '10px' }}>
-                <label style={{ display: 'grid', gap: '5px', color: '#334155', fontSize: '12px', fontWeight: 800 }}>
+              <div className="sync-filter-grid" style={{ margin: '12px 0', display: 'grid', gridTemplateColumns: 'minmax(170px, 0.45fr) minmax(220px, 1fr)', gap: '10px' }}>
+                <label style={{ display: 'grid', gap: '5px', color: 'var(--season-ink)', fontSize: '12px', fontWeight: 800 }}>
                   데이터 종류
                   <select value={entityFilter} onChange={(event) => { setEntityFilter(event.target.value as Exclude<UniquePlaySyncEntityType, 'UNKNOWN'> | 'ALL'); setPage(0); }} style={inputStyle}>
                     <option value="ALL">전체 종류</option>
                     {SYNC_ENTITIES.map((entity) => <option key={entity} value={entity}>{syncEntityLabel(entity)}</option>)}
                   </select>
                 </label>
-                <label style={{ display: 'grid', gap: '5px', color: '#334155', fontSize: '12px', fontWeight: 800 }}>
+                <label style={{ display: 'grid', gap: '5px', color: 'var(--season-ink)', fontSize: '12px', fontWeight: 800 }}>
                   현재 페이지에서 찾기
                   <input type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="이름, 외부 ID, AUBL ID, 조" style={inputStyle} />
                 </label>
               </div>
 
-              {diffError && <div role="alert" style={{ marginBottom: '12px', border: '1px solid #fca5a5', borderRadius: '10px', background: '#fff1f2', color: '#991b1b', padding: '11px 12px', fontSize: '13px' }}>{diffError}</div>}
+              {diffError && <div role="alert" style={{ marginBottom: '12px', border: '1px solid color-mix(in srgb, var(--season-danger) 44%, var(--season-line))', borderRadius: '10px', background: 'color-mix(in srgb, var(--season-danger) 9%, var(--season-surface))', color: 'var(--season-danger)', padding: '11px 12px', fontSize: '13px' }}>{diffError}</div>}
               {diffLoading && !diff ? (
-                <div role="status" style={{ padding: '30px', textAlign: 'center', color: '#64748b' }}>변경 목록을 불러오는 중입니다.</div>
+                <div role="status" style={{ padding: '30px', textAlign: 'center', color: 'var(--season-muted)' }}>변경 목록을 불러오는 중입니다.</div>
               ) : diff ? (
                 <>
                   <UniquePlayDiffTable items={displayedItems} resolvingItemId={resolvingItemId} onResolve={handleResolve} />
                   {searchQuery.trim() && displayedItems.length !== diff.items.length && (
-                    <p role="status" style={{ margin: '8px 0 0', color: '#64748b', fontSize: '12px' }}>
+                    <p role="status" style={{ margin: '8px 0 0', color: 'var(--season-muted)', fontSize: '12px' }}>
                       현재 페이지 {diff.items.length}건 중 {displayedItems.length}건이 검색어와 일치합니다.
                     </p>
                   )}
                   <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span style={{ color: '#64748b', fontSize: '12px' }}>전체 {diff.totalElements.toLocaleString('ko-KR')}건 · {diff.totalPages === 0 ? 0 : diff.page + 1}/{diff.totalPages} 페이지</span>
+                    <span style={{ color: 'var(--season-muted)', fontSize: '12px' }}>전체 {diff.totalElements.toLocaleString('ko-KR')}건 · {diff.totalPages === 0 ? 0 : diff.page + 1}/{diff.totalPages} 페이지</span>
                     <div style={{ display: 'flex', gap: '7px' }}>
-                      <button type="button" onClick={() => setPage((value) => Math.max(0, value - 1))} disabled={diff.page <= 0 || diffLoading} style={{ ...secondaryButtonStyle, minHeight: '36px', cursor: diff.page <= 0 || diffLoading ? 'not-allowed' : 'pointer', opacity: diff.page <= 0 || diffLoading ? 0.5 : 1 }}>이전</button>
-                      <button type="button" onClick={() => setPage((value) => value + 1)} disabled={!diff.hasNext || diffLoading} style={{ ...secondaryButtonStyle, minHeight: '36px', cursor: !diff.hasNext || diffLoading ? 'not-allowed' : 'pointer', opacity: !diff.hasNext || diffLoading ? 0.5 : 1 }}>다음</button>
+                      <button type="button" onClick={() => setPage((value) => Math.max(0, value - 1))} disabled={diff.page <= 0 || diffLoading} style={{ ...secondaryButtonStyle, minHeight: '44px', cursor: diff.page <= 0 || diffLoading ? 'not-allowed' : 'pointer', opacity: diff.page <= 0 || diffLoading ? 0.5 : 1 }}>이전</button>
+                      <button type="button" onClick={() => setPage((value) => value + 1)} disabled={!diff.hasNext || diffLoading} style={{ ...secondaryButtonStyle, minHeight: '44px', cursor: !diff.hasNext || diffLoading ? 'not-allowed' : 'pointer', opacity: !diff.hasNext || diffLoading ? 0.5 : 1 }}>다음</button>
                     </div>
                   </div>
                 </>
               ) : (
-                <div role="status" style={{ padding: '30px', textAlign: 'center', color: '#64748b' }}>변경 목록 응답이 없습니다. 새로고침을 시도하세요.</div>
+                <div role="status" style={{ padding: '30px', textAlign: 'center', color: 'var(--season-muted)' }}>변경 목록 응답이 없습니다. 새로고침을 시도하세요.</div>
               )}
             </section>
           ) : (
             <section style={cardStyle} aria-labelledby="unique-play-diff-pending-heading">
               <h3 id="unique-play-diff-pending-heading" style={sectionTitleStyle}>4. 변경 비교 준비 중</h3>
-              <p style={{ margin: '8px 0 0', color: '#64748b', fontSize: '13px' }}>서버가 수집과 정규화를 마치면 변경 비교 화면이 열립니다.</p>
+              <p style={{ margin: '8px 0 0', color: 'var(--season-muted)', fontSize: '13px' }}>서버가 수집과 정규화를 마치면 변경 비교 화면이 열립니다.</p>
             </section>
           )}
 
@@ -1073,13 +1076,13 @@ export default function AdminUniquePlaySyncPage() {
                 {busyAction === 'validate' ? '검증 요청 중…' : '서버 검증 실행'}
               </button>
             </div>
-            {summary.unresolved > 0 && <p role="alert" style={{ margin: '12px 0 0', color: '#991b1b', fontSize: '13px', fontWeight: 750 }}>미해결 항목 {summary.unresolved}건을 모두 처리해야 검증할 수 있습니다.</p>}
+            {summary.unresolved > 0 && <p role="alert" style={{ margin: '12px 0 0', color: 'var(--season-danger)', fontSize: '13px', fontWeight: 750 }}>미해결 항목 {summary.unresolved}건을 모두 처리해야 검증할 수 있습니다.</p>}
             {run.validation.issues.length === 0 ? (
-              <p style={{ margin: '13px 0 0', color: '#64748b', fontSize: '13px' }}>서버가 반환한 검증 이슈가 없습니다.</p>
+              <p style={{ margin: '13px 0 0', color: 'var(--season-muted)', fontSize: '13px' }}>서버가 반환한 검증 이슈가 없습니다.</p>
             ) : (
-              <ul style={{ margin: '13px 0 0', paddingLeft: '20px', display: 'grid', gap: '7px', color: '#475569', fontSize: '13px' }}>
+              <ul style={{ margin: '13px 0 0', paddingLeft: '20px', display: 'grid', gap: '7px', color: 'var(--season-muted)', fontSize: '13px' }}>
                 {run.validation.issues.map((issue) => (
-                  <li key={issue.id} style={{ color: issue.severity === 'ERROR' ? '#991b1b' : issue.severity === 'WARNING' ? '#92400e' : '#475569' }}>
+                  <li key={issue.id} style={{ color: issue.severity === 'ERROR' ? 'var(--season-danger)' : issue.severity === 'WARNING' ? 'var(--season-warning)' : 'var(--season-muted)' }}>
                     <strong>{issue.severity}</strong>{issue.code ? ` · ${issue.code}` : ''}: {issue.message}
                   </li>
                 ))}
@@ -1087,51 +1090,51 @@ export default function AdminUniquePlaySyncPage() {
             )}
           </section>
 
-          <section style={{ ...cardStyle, borderColor: canPublish ? '#93c5fd' : '#cbd5e1' }} aria-labelledby="unique-play-publish-heading">
+          <section style={{ ...cardStyle, borderColor: canPublish ? 'color-mix(in srgb, var(--season-blue-600) 44%, var(--season-line))' : 'var(--season-line)' }} aria-labelledby="unique-play-publish-heading">
             <h3 id="unique-play-publish-heading" style={sectionTitleStyle}>6. 검증 스냅샷 게시</h3>
-            <p style={{ margin: '6px 0 13px', color: '#64748b', fontSize: '13px', lineHeight: 1.6 }}>
+            <p style={{ margin: '6px 0 13px', color: 'var(--season-muted)', fontSize: '13px', lineHeight: 1.6 }}>
               게시 시 현재 체크섬과 기준 리비전을 함께 보내 동시 변경을 차단합니다. 이 단계는 서비스 활성화와 분리되어 있습니다.
             </p>
-            <div style={{ border: '1px solid #dbe4f0', borderRadius: '10px', background: '#f8fafc', padding: '11px 12px', display: 'grid', gap: '5px', color: '#475569', fontSize: '12px' }}>
+            <div style={{ border: '1px solid var(--season-line)', borderRadius: '10px', background: 'var(--season-surface-muted)', padding: '11px 12px', display: 'grid', gap: '5px', color: 'var(--season-muted)', fontSize: '12px' }}>
               <span><strong>체크섬:</strong> {run.checksum ?? '서버 값 없음'}</span>
               <span><strong>예상 게시 리비전:</strong> {run.expectedPublishedRevision ?? '서버 값 없음'}</span>
             </div>
-            <label style={{ marginTop: '12px', display: 'flex', alignItems: 'flex-start', gap: '8px', color: '#334155', fontSize: '13px', lineHeight: 1.5 }}>
+            <label style={{ marginTop: '12px', display: 'flex', alignItems: 'flex-start', gap: '8px', color: 'var(--season-ink)', fontSize: '13px', lineHeight: 1.5 }}>
               <input type="checkbox" checked={publishConfirmed} onChange={(event) => setPublishConfirmed(event.target.checked)} disabled={!canPublish || busyAction !== null} style={{ marginTop: '3px' }} />
               변경 비교와 검증 결과를 확인했으며, 표시된 체크섬의 스냅샷으로 새 리비전을 생성합니다.
             </label>
             <button type="button" onClick={() => { void handlePublish(); }} disabled={!canPublish || !publishConfirmed || busyAction !== null || !sessionReady} style={{ ...primaryButtonStyle, marginTop: '12px', cursor: !canPublish || !publishConfirmed || busyAction !== null || !sessionReady ? 'not-allowed' : 'pointer', opacity: !canPublish || !publishConfirmed || busyAction !== null || !sessionReady ? 0.55 : 1 }}>
               {busyAction === 'publish' ? '리비전 생성 중…' : '검증된 리비전 생성'}
             </button>
-            {!canPublish && <p style={{ margin: '9px 0 0', color: '#64748b', fontSize: '12px' }}>검증 통과, 미해결 0건, 서버 체크섬과 기준 리비전이 모두 필요합니다.</p>}
+            {!canPublish && <p style={{ margin: '9px 0 0', color: 'var(--season-muted)', fontSize: '12px' }}>검증 통과, 미해결 0건, 서버 체크섬과 기준 리비전이 모두 필요합니다.</p>}
           </section>
 
-          <section style={{ ...cardStyle, borderColor: publication ? '#86efac' : '#cbd5e1' }} aria-labelledby="unique-play-activate-heading">
+          <section style={{ ...cardStyle, borderColor: publication ? 'color-mix(in srgb, var(--season-success) 44%, var(--season-line))' : 'var(--season-line)' }} aria-labelledby="unique-play-activate-heading">
             <h3 id="unique-play-activate-heading" style={sectionTitleStyle}>7. 리비전 활성화</h3>
             {!revisionIdForActivation ? (
-              <p style={{ margin: '8px 0 0', color: '#64748b', fontSize: '13px' }}>게시 단계에서 리비전이 정상 생성되면 활성화 제어가 열립니다.</p>
+              <p style={{ margin: '8px 0 0', color: 'var(--season-muted)', fontSize: '13px' }}>게시 단계에서 리비전이 정상 생성되면 활성화 제어가 열립니다.</p>
             ) : (
               <>
-                <dl style={{ margin: '12px 0 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '9px', color: '#475569', fontSize: '12px' }}>
+                <dl style={{ margin: '12px 0 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '9px', color: 'var(--season-muted)', fontSize: '12px' }}>
                   <div><dt style={{ fontWeight: 800 }}>리비전 ID</dt><dd style={{ margin: '3px 0 0', overflowWrap: 'anywhere' }}>{revisionIdForActivation}</dd></div>
                   <div><dt style={{ fontWeight: 800 }}>게시 상태</dt><dd style={{ margin: '3px 0 0' }}>{publication?.status ?? run?.rawStatus ?? 'PUBLISHED'}</dd></div>
                   <div><dt style={{ fontWeight: 800 }}>활성화 기준 리비전</dt><dd style={{ margin: '3px 0 0' }}>{activationExpectedRevision ?? '서버 값 없음'}</dd></div>
                 </dl>
                 {revisionIsActive ? (
-                  <div role="status" style={{ marginTop: '12px', border: '1px solid #86efac', borderRadius: '10px', background: '#f0fdf4', color: '#166534', padding: '12px', fontSize: '13px', fontWeight: 750 }}>
+                  <div role="status" className="sync-callout is-success" style={{ marginTop: '12px', border: '1px solid color-mix(in srgb, var(--season-success) 44%, var(--season-line))', borderRadius: '10px', background: 'color-mix(in srgb, var(--season-success) 10%, var(--season-surface))', color: 'var(--season-success)', padding: '12px', fontSize: '13px', fontWeight: 750 }}>
                     활성화 상태: {revisionIsActive ? run?.rawStatus || activation?.status || 'ACTIVE' : activation?.status ?? '확인 필요'} · 활성 리비전: {activation?.activeRevision ?? activation?.publishedRevision ?? run?.publishedRevision ?? '확인 필요'} · 처리 시각: {formatSyncDateTime(activation?.activatedAt ?? run?.completedAt ?? run?.updatedAt ?? null)}
                   </div>
                 ) : revisionIsActivating ? (
-                  <div role="status" style={{ marginTop: '12px', border: '1px solid #93c5fd', borderRadius: '10px', background: '#eff6ff', color: '#1d4ed8', padding: '12px', fontSize: '13px', fontWeight: 750 }}>
+                  <div role="status" className="sync-callout is-info" style={{ marginTop: '12px', border: '1px solid color-mix(in srgb, var(--season-blue-600) 44%, var(--season-line))', borderRadius: '10px', background: 'color-mix(in srgb, var(--season-blue-600) 10%, var(--season-surface))', color: 'var(--season-blue-700)', padding: '12px', fontSize: '13px', fontWeight: 750 }}>
                     리비전을 활성화하고 있습니다. 완료될 때까지 상태를 자동 확인합니다.
                   </div>
                 ) : (
                   <>
-                    <label style={{ marginTop: '12px', display: 'flex', alignItems: 'flex-start', gap: '8px', color: '#334155', fontSize: '13px', lineHeight: 1.5 }}>
+                    <label style={{ marginTop: '12px', display: 'flex', alignItems: 'flex-start', gap: '8px', color: 'var(--season-ink)', fontSize: '13px', lineHeight: 1.5 }}>
                       <input type="checkbox" checked={activationConfirmed} onChange={(event) => setActivationConfirmed(event.target.checked)} disabled={activationExpectedRevision === null || busyAction !== null} style={{ marginTop: '3px' }} />
                       위 리비전을 실제 AUBL 서비스의 활성 데이터로 전환합니다.
                     </label>
-                    <button type="button" onClick={() => { void handleActivate(); }} disabled={!activationConfirmed || activationExpectedRevision === null || busyAction !== null || !sessionReady} style={{ ...primaryButtonStyle, marginTop: '12px', background: '#123f75', cursor: !activationConfirmed || activationExpectedRevision === null || busyAction !== null || !sessionReady ? 'not-allowed' : 'pointer', opacity: !activationConfirmed || activationExpectedRevision === null || busyAction !== null || !sessionReady ? 0.55 : 1 }}>
+                    <button type="button" onClick={() => { void handleActivate(); }} disabled={!activationConfirmed || activationExpectedRevision === null || busyAction !== null || !sessionReady} style={{ ...primaryButtonStyle, marginTop: '12px', background: 'var(--sync-primary-bg)', cursor: !activationConfirmed || activationExpectedRevision === null || busyAction !== null || !sessionReady ? 'not-allowed' : 'pointer', opacity: !activationConfirmed || activationExpectedRevision === null || busyAction !== null || !sessionReady ? 0.55 : 1 }}>
                       {busyAction === 'activate' ? '서비스 반영 중…' : '이 리비전 활성화'}
                     </button>
                   </>
@@ -1139,9 +1142,9 @@ export default function AdminUniquePlaySyncPage() {
               </>
             )}
             {run.revisions.length > 0 ? (
-              <div style={{ marginTop: '18px', borderTop: '1px solid #dbe4f0', paddingTop: '14px' }}>
-                <div style={{ color: '#334155', fontSize: '13px', fontWeight: 850 }}>게시 리비전 · 복구</div>
-                <p style={{ margin: '5px 0 10px', color: '#64748b', fontSize: '12px' }}>
+              <div style={{ marginTop: '18px', borderTop: '1px solid var(--season-line)', paddingTop: '14px' }}>
+                <div style={{ color: 'var(--season-ink)', fontSize: '13px', fontWeight: 850 }}>게시 리비전 · 복구</div>
+                <p style={{ margin: '5px 0 10px', color: 'var(--season-muted)', fontSize: '12px' }}>
                   이전 리비전을 선택하면 위 활성화 확인 절차로 되돌릴 수 있습니다. 현재 공개 리비전은 별도로 표시됩니다.
                 </p>
                 <div style={{ display: 'grid', gap: '7px' }}>
@@ -1162,15 +1165,15 @@ export default function AdminUniquePlaySyncPage() {
                         gap: '10px',
                         alignItems: 'center',
                         textAlign: 'left',
-                        borderColor: selectedRevisionId === revision.revisionId ? '#2563eb' : '#cbd5e1',
+                        borderColor: selectedRevisionId === revision.revisionId ? 'var(--season-blue-600)' : 'var(--season-line)',
                         cursor: 'pointer',
                       }}
                     >
                       <span style={{ minWidth: 0 }}>
                         <strong style={{ display: 'block', overflowWrap: 'anywhere' }}>{revision.revisionId}</strong>
-                        <small style={{ color: '#64748b' }}>{formatSyncDateTime(revision.createdAt)} · {revision.checksum?.slice(0, 12) ?? '체크섬 없음'}</small>
+                        <small style={{ color: 'var(--season-muted)' }}>{formatSyncDateTime(revision.createdAt)} · {revision.checksum?.slice(0, 12) ?? '체크섬 없음'}</small>
                       </span>
-                      <span style={{ color: revision.active ? '#166534' : '#475569', fontWeight: 850 }}>{revision.active ? '현재 공개' : '복구 가능'}</span>
+                      <span style={{ color: revision.active ? 'var(--season-success)' : 'var(--season-muted)', fontWeight: 850 }}>{revision.active ? '현재 공개' : '복구 가능'}</span>
                     </button>
                   ))}
                 </div>
@@ -1180,14 +1183,14 @@ export default function AdminUniquePlaySyncPage() {
 
           {activeQualificationRevisionId ? (
             <section
-              style={{ ...cardStyle, borderColor: qualificationAlreadyFinalized ? '#86efac' : '#cbd5e1' }}
+              style={{ ...cardStyle, borderColor: qualificationAlreadyFinalized ? 'color-mix(in srgb, var(--season-success) 44%, var(--season-line))' : 'var(--season-line)' }}
               aria-labelledby="unique-play-qualification-heading"
               aria-busy={qualificationLoading}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <div>
                   <h3 id="unique-play-qualification-heading" style={sectionTitleStyle}>8. 으뜸권 · 버금권 확정</h3>
-                  <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: '13px', lineHeight: 1.6 }}>
+                  <p style={{ margin: '6px 0 0', color: 'var(--season-muted)', fontSize: '13px', lineHeight: 1.6 }}>
                     활성 리비전의 A~H조 현황을 확인합니다. 경계 동률은 팀별로 명시한 뒤 서버 검증을 거쳐 확정합니다.
                   </p>
                 </div>
@@ -1206,7 +1209,7 @@ export default function AdminUniquePlaySyncPage() {
                 </button>
               </div>
 
-              <dl style={{ margin: '14px 0 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '9px', color: '#475569', fontSize: '12px' }}>
+              <dl style={{ margin: '14px 0 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '9px', color: 'var(--season-muted)', fontSize: '12px' }}>
                 <div><dt style={{ fontWeight: 800 }}>시즌</dt><dd style={{ margin: '3px 0 0' }}>{run.seasonYear ?? '—'} · seasonId {qualificationSeasonId ?? '확인 중'}</dd></div>
                 <div><dt style={{ fontWeight: 800 }}>활성 리비전</dt><dd style={{ margin: '3px 0 0', overflowWrap: 'anywhere' }}>{activeQualificationRevisionId}</dd></div>
                 <div><dt style={{ fontWeight: 800 }}>현황 리비전</dt><dd style={{ margin: '3px 0 0', overflowWrap: 'anywhere' }}>{qualificationOverview?.sourceFreshness.publishedRevision ?? '확인 중'}</dd></div>
@@ -1214,16 +1217,16 @@ export default function AdminUniquePlaySyncPage() {
               </dl>
 
               {qualificationError && (
-                <div role="alert" style={{ marginTop: '12px', border: '1px solid #fca5a5', borderRadius: '10px', background: '#fff1f2', color: '#991b1b', padding: '11px 12px', fontSize: '13px' }}>
+                <div role="alert" style={{ marginTop: '12px', border: '1px solid color-mix(in srgb, var(--season-danger) 44%, var(--season-line))', borderRadius: '10px', background: 'color-mix(in srgb, var(--season-danger) 9%, var(--season-surface))', color: 'var(--season-danger)', padding: '11px 12px', fontSize: '13px' }}>
                   {qualificationError}
                 </div>
               )}
               {qualificationLoading && !qualificationOverview ? (
-                <p role="status" style={{ margin: '16px 0 0', color: '#64748b', fontSize: '13px' }}>활성 리비전의 조별 현황을 불러오고 있습니다.</p>
+                <p role="status" style={{ margin: '16px 0 0', color: 'var(--season-muted)', fontSize: '13px' }}>활성 리비전의 조별 현황을 불러오고 있습니다.</p>
               ) : qualificationOverview ? (
                 <>
                   {!qualificationRevisionMatches && (
-                    <div role="alert" style={{ marginTop: '12px', border: '1px solid #fca5a5', borderRadius: '10px', background: '#fff1f2', color: '#991b1b', padding: '11px 12px', fontSize: '13px', fontWeight: 750 }}>
+                    <div role="alert" style={{ marginTop: '12px', border: '1px solid color-mix(in srgb, var(--season-danger) 44%, var(--season-line))', borderRadius: '10px', background: 'color-mix(in srgb, var(--season-danger) 9%, var(--season-surface))', color: 'var(--season-danger)', padding: '11px 12px', fontSize: '13px', fontWeight: 750 }}>
                       활성 리비전과 현황 리비전이 다릅니다. 확정하지 말고 현황을 다시 불러와 주세요.
                     </div>
                   )}
@@ -1234,35 +1237,35 @@ export default function AdminUniquePlaySyncPage() {
                       const rows = group?.standings ?? [];
                       const groupTieCount = rows.filter((row) => row.qualificationState?.toUpperCase() === 'TIE_PENDING').length;
                       return (
-                        <section key={groupCode} aria-labelledby={`qualification-group-${groupCode}`} style={{ border: '1px solid #dbe4f0', borderRadius: '12px', background: '#fbfdff', padding: '12px' }}>
+                        <section key={groupCode} aria-labelledby={`qualification-group-${groupCode}`} style={{ border: '1px solid var(--season-line)', borderRadius: '12px', background: 'var(--season-surface-muted)', padding: '12px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
-                            <h4 id={`qualification-group-${groupCode}`} style={{ margin: 0, color: '#0b2f63', fontSize: '15px', fontWeight: 900 }}>{groupCode}조</h4>
-                            <span style={{ color: groupTieCount ? '#9a3412' : '#64748b', fontSize: '11px', fontWeight: 800 }}>
+                            <h4 id={`qualification-group-${groupCode}`} style={{ margin: 0, color: 'var(--season-navy-900)', fontSize: '15px', fontWeight: 900 }}>{groupCode}조</h4>
+                            <span style={{ color: groupTieCount ? 'var(--season-warning)' : 'var(--season-muted)', fontSize: '11px', fontWeight: 800 }}>
                               {rows.length}/5팀{groupTieCount ? ` · 동률 ${groupTieCount}` : ''}
                             </span>
                           </div>
                           {rows.length === 0 ? (
-                            <p style={{ margin: '11px 0 0', color: '#64748b', fontSize: '12px' }}>게시된 팀 현황이 없습니다.</p>
+                            <p style={{ margin: '11px 0 0', color: 'var(--season-muted)', fontSize: '12px' }}>게시된 팀 현황이 없습니다.</p>
                           ) : (
                             <ol style={{ margin: '10px 0 0', padding: 0, display: 'grid', gap: '7px', listStyle: 'none' }}>
                               {rows.map((row, index) => {
                                 const state = row.qualificationState?.toUpperCase() ?? null;
-                                const palette = qualificationStatePalette(state);
+                                const tone = qualificationStateTone(state);
                                 const tieResolution = tieResolutions[String(row.teamId)] ?? '';
                                 return (
-                                  <li key={row.teamId} style={{ borderTop: index === 0 ? 'none' : '1px solid #e2e8f0', paddingTop: index === 0 ? 0 : '7px', display: 'grid', gap: '6px' }}>
+                                  <li key={row.teamId} style={{ borderTop: index === 0 ? 'none' : '1px solid var(--season-line)', paddingTop: index === 0 ? 0 : '7px', display: 'grid', gap: '6px' }}>
                                     <div style={{ display: 'grid', gridTemplateColumns: '24px minmax(0, 1fr) auto', gap: '7px', alignItems: 'center' }}>
-                                      <strong style={{ color: '#64748b', fontSize: '12px', textAlign: 'center' }}>{row.rank ?? index + 1}</strong>
+                                      <strong style={{ color: 'var(--season-muted)', fontSize: '12px', textAlign: 'center' }}>{row.rank ?? index + 1}</strong>
                                       <span style={{ minWidth: 0 }}>
-                                        <strong style={{ display: 'block', color: '#1e293b', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.teamName}</strong>
-                                        <small style={{ color: '#64748b' }}>{row.wins}승 {row.ties}무 {row.losses}패</small>
+                                        <strong style={{ display: 'block', color: 'var(--season-ink)', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.teamName}</strong>
+                                        <small style={{ color: 'var(--season-muted)' }}>{row.wins}승 {row.ties}무 {row.losses}패</small>
                                       </span>
-                                      <span style={{ border: `1px solid ${palette.border}`, borderRadius: '999px', background: palette.background, color: palette.color, padding: '4px 7px', fontSize: '10px', fontWeight: 850, whiteSpace: 'nowrap' }}>
+                                      <span className="sync-status-badge" data-tone={tone}>
                                         {qualificationStateLabel(state)}
                                       </span>
                                     </div>
                                     {state === 'TIE_PENDING' && (
-                                      <label style={{ display: 'grid', gap: '4px', color: '#9a3412', fontSize: '11px', fontWeight: 800 }}>
+                                      <label style={{ display: 'grid', gap: '4px', color: 'var(--season-warning)', fontSize: '11px', fontWeight: 800 }}>
                                         {row.teamName} 동률 결정
                                         <select
                                           value={tieResolution}
@@ -1295,19 +1298,19 @@ export default function AdminUniquePlaySyncPage() {
                   </div>
 
                   {qualificationFinalization || qualificationAlreadyFinalized ? (
-                    <div role="status" style={{ marginTop: '15px', border: '1px solid #86efac', borderRadius: '10px', background: '#f0fdf4', color: '#166534', padding: '12px', fontSize: '13px', fontWeight: 750 }}>
+                    <div role="status" className="sync-callout is-success" style={{ marginTop: '15px', border: '1px solid color-mix(in srgb, var(--season-success) 44%, var(--season-line))', borderRadius: '10px', background: 'color-mix(in srgb, var(--season-success) 10%, var(--season-surface))', color: 'var(--season-success)', padding: '12px', fontSize: '13px', fontWeight: 750 }}>
                       진출권 확정 완료 · 리비전 {qualificationFinalization?.revisionId ?? activeQualificationRevisionId}
                       {qualificationFinalization?.finalizedAt ? ` · ${formatSyncDateTime(qualificationFinalization.finalizedAt)}` : ''}
                     </div>
                   ) : (
                     <>
                       {qualificationIssues.length > 0 && (
-                        <div role="alert" style={{ marginTop: '15px', border: '1px solid #fdba74', borderRadius: '10px', background: '#fff7ed', color: '#9a3412', padding: '11px 12px', fontSize: '12px' }}>
+                        <div role="alert" className="sync-callout is-warning" style={{ marginTop: '15px', border: '1px solid color-mix(in srgb, var(--season-warning) 44%, var(--season-line))', borderRadius: '10px', background: 'color-mix(in srgb, var(--season-warning) 10%, var(--season-surface))', color: 'var(--season-warning)', padding: '11px 12px', fontSize: '12px' }}>
                           <strong>확정 전 확인</strong>
                           <ul style={{ margin: '6px 0 0', paddingLeft: '18px' }}>{qualificationIssues.map((issue) => <li key={issue}>{issue}</li>)}</ul>
                         </div>
                       )}
-                      <label style={{ marginTop: '14px', display: 'flex', alignItems: 'flex-start', gap: '8px', color: '#334155', fontSize: '13px', lineHeight: 1.5 }}>
+                      <label style={{ marginTop: '14px', display: 'flex', alignItems: 'flex-start', gap: '8px', color: 'var(--season-ink)', fontSize: '13px', lineHeight: 1.5 }}>
                         <input
                           type="checkbox"
                           checked={qualificationConfirmed}
@@ -1325,19 +1328,19 @@ export default function AdminUniquePlaySyncPage() {
                           ...primaryButtonStyle,
                           minHeight: '44px',
                           marginTop: '12px',
-                          background: '#123f75',
+                          background: 'var(--sync-primary-bg)',
                           cursor: !qualificationReadyToConfirm || !qualificationConfirmed || busyAction !== null ? 'not-allowed' : 'pointer',
                           opacity: !qualificationReadyToConfirm || !qualificationConfirmed || busyAction !== null ? 0.55 : 1,
                         }}
                       >
                         {busyAction === 'qualification' ? '진출권 확정 중…' : '으뜸권 · 버금권 최종 확정'}
                       </button>
-                      <p style={{ margin: '8px 0 0', color: '#64748b', fontSize: '11px' }}>서버가 40팀 구성과 모든 예선 경기의 완료·취소 상태를 다시 검증합니다.</p>
+                      <p style={{ margin: '8px 0 0', color: 'var(--season-muted)', fontSize: '11px' }}>서버가 40팀 구성과 모든 예선 경기의 완료·취소 상태를 다시 검증합니다.</p>
                     </>
                   )}
                 </>
               ) : !qualificationLoading && !qualificationError ? (
-                <p style={{ margin: '16px 0 0', color: '#64748b', fontSize: '13px' }}>조별 현황을 불러오지 못했습니다. 새로고침을 시도하세요.</p>
+                <p style={{ margin: '16px 0 0', color: 'var(--season-muted)', fontSize: '13px' }}>조별 현황을 불러오지 못했습니다. 새로고침을 시도하세요.</p>
               ) : null}
             </section>
           ) : null}

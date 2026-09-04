@@ -1,4 +1,4 @@
-import { Fragment, useId, useState, type CSSProperties } from 'react';
+import { Fragment, useId, useState } from 'react';
 import type {
   ResolveUniquePlaySyncItemRequest,
   UniquePlaySyncDiffItem,
@@ -9,6 +9,7 @@ import {
   syncActionLabel,
   syncEntityLabel,
 } from '../model';
+import './UniquePlaySync.css';
 
 interface Props {
   items: UniquePlaySyncDiffItem[];
@@ -16,61 +17,18 @@ interface Props {
   onResolve: (itemId: string, request: ResolveUniquePlaySyncItemRequest) => Promise<void>;
 }
 
-const headerCellStyle: CSSProperties = {
-  padding: '11px 12px',
-  textAlign: 'left',
-  color: '#475569',
-  background: '#f8fafc',
-  borderBottom: '1px solid #cbd5e1',
-  fontSize: '12px',
-  fontWeight: 850,
-  whiteSpace: 'nowrap',
-};
+type ActionTone = 'positive' | 'progress' | 'negative' | 'neutral';
 
-const cellStyle: CSSProperties = {
-  padding: '13px 12px',
-  color: '#1e293b',
-  borderBottom: '1px solid #e2e8f0',
-  fontSize: '13px',
-  verticalAlign: 'top',
-};
-
-const selectStyle: CSSProperties = {
-  minHeight: '40px',
-  width: '100%',
-  borderRadius: '9px',
-  border: '1px solid #94a3b8',
-  background: '#fff',
-  color: '#0f274f',
-  padding: '7px 9px',
-  fontSize: '13px',
-};
-
-function actionPalette(action: UniquePlaySyncDiffItem['action']) {
-  if (action === 'CREATE') return { color: '#166534', background: '#dcfce7', border: '#86efac' };
-  if (action === 'UPDATE') return { color: '#1d4ed8', background: '#dbeafe', border: '#93c5fd' };
-  if (action === 'DELETE' || action === 'CONFLICT') {
-    return { color: '#991b1b', background: '#fee2e2', border: '#fca5a5' };
-  }
-  return { color: '#475569', background: '#f1f5f9', border: '#cbd5e1' };
+function actionTone(action: UniquePlaySyncDiffItem['action']): ActionTone {
+  if (action === 'CREATE') return 'positive';
+  if (action === 'UPDATE') return 'progress';
+  if (action === 'DELETE' || action === 'CONFLICT') return 'negative';
+  return 'neutral';
 }
 
 function ActionBadge({ item }: { item: UniquePlaySyncDiffItem }) {
-  const palette = actionPalette(item.action);
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        padding: '3px 8px',
-        borderRadius: '999px',
-        border: `1px solid ${palette.border}`,
-        color: palette.color,
-        background: palette.background,
-        fontSize: '11px',
-        lineHeight: 1.4,
-        fontWeight: 850,
-      }}
-    >
+    <span className="sync-action-badge" data-tone={actionTone(item.action)}>
       {syncActionLabel(item.action)}
     </span>
   );
@@ -94,37 +52,16 @@ function ResolutionEditor({
   const disabled = saving || !item.itemId || !resolution || invalidMapping;
 
   return (
-    <fieldset
-      style={{
-        margin: 0,
-        padding: '14px',
-        borderRadius: '11px',
-        border: '1px solid #bfdbfe',
-        background: '#f8fbff',
-      }}
-    >
-      <legend style={{ padding: '0 6px', color: '#0f3b76', fontSize: '13px', fontWeight: 850 }}>
-        매핑·충돌 처리 {item.resolved ? '(처리됨)' : '(필수)'}
-      </legend>
-      {item.conflictReason && (
-        <p style={{ margin: '0 0 11px', color: '#991b1b', fontSize: '13px', fontWeight: 700 }}>
-          {item.conflictReason}
-        </p>
-      )}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(150px, 0.7fr) minmax(180px, 1fr) minmax(180px, 1fr) auto',
-          gap: '10px',
-          alignItems: 'end',
-        }}
-      >
-        <label style={{ display: 'grid', gap: '5px', color: '#334155', fontSize: '12px', fontWeight: 750 }}>
+    <fieldset className="sync-resolution">
+      <legend>매핑·충돌 처리 {item.resolved ? '(처리됨)' : '(필수)'}</legend>
+      {item.conflictReason && <p className="sync-message is-danger">{item.conflictReason}</p>}
+      <div className="sync-resolution__fields">
+        <label>
           처리 방식
           <select
             value={resolution}
             onChange={(event) => setResolution(event.target.value as UniquePlaySyncResolution | '')}
-            style={selectStyle}
+            className="sync-control"
             disabled={saving}
           >
             <option value="">선택하세요</option>
@@ -134,7 +71,7 @@ function ResolutionEditor({
           </select>
         </label>
 
-        <label style={{ display: 'grid', gap: '5px', color: '#334155', fontSize: '12px', fontWeight: 750 }}>
+        <label>
           AUBL 항목 ID
           <input
             value={localEntityId}
@@ -142,7 +79,7 @@ function ResolutionEditor({
             list={candidateListId}
             placeholder={resolution === 'MAP_ENTITY' ? '필수 입력' : '매핑할 때만 입력'}
             disabled={saving || resolution !== 'MAP_ENTITY'}
-            style={selectStyle}
+            className="sync-control"
           />
           <datalist id={candidateListId}>
             {item.mappingCandidates.map((candidate) => (
@@ -153,7 +90,7 @@ function ResolutionEditor({
           </datalist>
         </label>
 
-        <label style={{ display: 'grid', gap: '5px', color: '#334155', fontSize: '12px', fontWeight: 750 }}>
+        <label>
           처리 메모
           <input
             value={note}
@@ -161,13 +98,14 @@ function ResolutionEditor({
             placeholder="선택 근거를 남겨 주세요"
             maxLength={500}
             disabled={saving}
-            style={selectStyle}
+            className="sync-control"
           />
         </label>
 
         <button
           type="button"
           disabled={disabled}
+          className="sync-button sync-button--primary"
           onClick={() => {
             if (!resolution) return;
             void onResolve(item.itemId, {
@@ -176,33 +114,22 @@ function ResolutionEditor({
               ...(note.trim() ? { note: note.trim() } : {}),
             });
           }}
-          style={{
-            minHeight: '40px',
-            border: '1px solid #123d75',
-            borderRadius: '9px',
-            background: disabled ? '#cbd5e1' : '#0b3268',
-            color: disabled ? '#64748b' : '#fff',
-            padding: '8px 14px',
-            fontWeight: 850,
-            cursor: disabled ? 'not-allowed' : 'pointer',
-            whiteSpace: 'nowrap',
-          }}
         >
           {saving ? '저장 중…' : item.resolved ? '결정 변경' : '결정 저장'}
         </button>
       </div>
       {invalidMapping && (
-        <p role="alert" style={{ margin: '8px 0 0', color: '#b91c1c', fontSize: '12px', fontWeight: 700 }}>
+        <p role="alert" className="sync-message is-danger">
           AUBL 항목에 연결하려면 실제 항목 ID가 필요합니다.
         </p>
       )}
       {item.mappingCandidates.length > 0 && (
-        <p style={{ margin: '8px 0 0', color: '#64748b', fontSize: '12px' }}>
+        <p className="sync-message">
           서버가 제안한 후보 {item.mappingCandidates.length}개가 입력 목록에 포함되어 있습니다. 이름만으로 확정하지 말고 팀·등번호를 함께 확인하세요.
         </p>
       )}
       {!item.itemId && (
-        <p role="alert" style={{ margin: '8px 0 0', color: '#b91c1c', fontSize: '12px', fontWeight: 700 }}>
+        <p role="alert" className="sync-message is-danger">
           서버 응답에 itemId가 없어 이 항목은 처리할 수 없습니다.
         </p>
       )}
@@ -212,28 +139,18 @@ function ResolutionEditor({
 
 function ChangeList({ item }: { item: UniquePlaySyncDiffItem }) {
   if (item.changes.length === 0) {
-    return <span style={{ color: '#64748b' }}>세부 필드 변경 없음</span>;
+    return <span className="sync-muted">세부 필드 변경 없음</span>;
   }
   return (
-    <div style={{ display: 'grid', gap: '7px', minWidth: '330px' }}>
+    <div className="sync-change-list">
       {item.changes.map((change, index) => (
-        <div
-          key={`${change.field}-${index}`}
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(90px, 0.65fr) minmax(100px, 1fr) 18px minmax(100px, 1fr)',
-            gap: '6px',
-            alignItems: 'start',
-            paddingBottom: '6px',
-            borderBottom: index === item.changes.length - 1 ? 'none' : '1px dashed #e2e8f0',
-          }}
-        >
-          <strong style={{ color: '#334155', overflowWrap: 'anywhere' }}>{change.label ?? change.field}</strong>
-          <span title="현재 AUBL 값" style={{ color: '#475569', overflowWrap: 'anywhere' }}>
+        <div key={`${change.field}-${index}`} className="sync-change-list__row">
+          <strong>{change.label ?? change.field}</strong>
+          <span title="현재 AUBL 값">
             {formatSyncDiffValue(change.aublValue, change.field)}
           </span>
-          <span aria-hidden="true" style={{ color: '#94a3b8', textAlign: 'center' }}>→</span>
-          <span title="UniquePlay 원본 값" style={{ color: '#0f3b76', fontWeight: 750, overflowWrap: 'anywhere' }}>
+          <span aria-hidden="true" className="sync-change-list__arrow">→</span>
+          <span title="UniquePlay 원본 값" className="sync-change-list__source">
             {formatSyncDiffValue(change.sourceValue, change.field)}
           </span>
         </div>
@@ -245,35 +162,22 @@ function ChangeList({ item }: { item: UniquePlaySyncDiffItem }) {
 export default function UniquePlayDiffTable({ items, resolvingItemId, onResolve }: Props) {
   if (items.length === 0) {
     return (
-      <div
-        role="status"
-        style={{
-          padding: '32px 18px',
-          textAlign: 'center',
-          color: '#64748b',
-          border: '1px dashed #cbd5e1',
-          borderRadius: '12px',
-          background: '#f8fafc',
-          fontSize: '14px',
-        }}
-      >
+      <div role="status" className="unique-play-diff__empty">
         이 조건에 해당하는 변경 항목이 없습니다.
       </div>
     );
   }
 
   return (
-    <div style={{ overflowX: 'auto', border: '1px solid #cbd5e1', borderRadius: '12px' }}>
-      <table style={{ width: '100%', minWidth: '940px', borderCollapse: 'collapse', background: '#fff' }}>
-        <caption style={{ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0, 0, 0, 0)' }}>
-          UniquePlay와 AUBL 데이터 변경 비교
-        </caption>
+    <div className="unique-play-diff" tabIndex={0} aria-label="UniquePlay 데이터 변경 비교 표, 가로로 스크롤할 수 있습니다">
+      <table className="unique-play-diff__table">
+        <caption className="sr-only">UniquePlay와 AUBL 데이터 변경 비교</caption>
         <thead>
           <tr>
-            <th scope="col" style={headerCellStyle}>구분</th>
-            <th scope="col" style={headerCellStyle}>대상</th>
-            <th scope="col" style={headerCellStyle}>식별 정보</th>
-            <th scope="col" style={{ ...headerCellStyle, minWidth: '390px' }}>AUBL 현재값 → UniquePlay 값</th>
+            <th scope="col">구분</th>
+            <th scope="col">대상</th>
+            <th scope="col">식별 정보</th>
+            <th scope="col" className="unique-play-diff__changes-heading">AUBL 현재값 → UniquePlay 값</th>
           </tr>
         </thead>
         <tbody>
@@ -285,28 +189,28 @@ export default function UniquePlayDiffTable({ items, resolvingItemId, onResolve 
             return (
               <Fragment key={rowKey}>
                 <tr>
-                  <td style={cellStyle}>
-                    <div style={{ display: 'grid', gap: '7px', justifyItems: 'start' }}>
+                  <td>
+                    <div className="unique-play-diff__kind">
                       <ActionBadge item={item} />
-                      <span style={{ color: '#475569', fontWeight: 750 }}>{syncEntityLabel(item.entityType)}</span>
+                      <span>{syncEntityLabel(item.entityType)}</span>
                     </div>
                   </td>
-                  <th scope="row" style={{ ...cellStyle, textAlign: 'left' }}>
-                    <div style={{ color: '#0f274f', fontSize: '14px', fontWeight: 850 }}>{item.displayName}</div>
-                    {item.groupCode && <div style={{ marginTop: '4px', color: '#64748b', fontSize: '12px' }}>{item.groupCode}</div>}
+                  <th scope="row">
+                    <div className="unique-play-diff__name">{item.displayName}</div>
+                    {item.groupCode && <div className="unique-play-diff__meta">{item.groupCode}</div>}
                   </th>
-                  <td style={cellStyle}>
-                    <div style={{ display: 'grid', gap: '4px', color: '#64748b', fontSize: '12px' }}>
+                  <td>
+                    <div className="unique-play-diff__meta-list">
                       <span>외부 ID: {item.externalId ?? '—'}</span>
                       <span>AUBL ID: {item.localEntityId ?? '—'}</span>
-                      {item.resolved && <strong style={{ color: '#166534' }}>처리 결정 저장됨</strong>}
+                      {item.resolved && <strong className="is-success">처리 결정 저장됨</strong>}
                     </div>
                   </td>
-                  <td style={cellStyle}><ChangeList item={item} /></td>
+                  <td><ChangeList item={item} /></td>
                 </tr>
                 {needsResolution && (
-                  <tr>
-                    <td colSpan={4} style={{ padding: '0 12px 14px', borderBottom: '1px solid #e2e8f0' }}>
+                  <tr className="unique-play-diff__resolution-row">
+                    <td colSpan={4}>
                       <ResolutionEditor
                         key={`${item.itemId}-${item.resolution ?? 'unresolved'}-${item.localEntityId ?? ''}`}
                         item={item}
