@@ -15,10 +15,12 @@ import '../../core/config/app_config.dart';
 import '../../core/contracts/flutter_bridge_contract.dart';
 import '../../core/contracts/web_contracts.dart';
 import '../../core/services/auth_bridge_service.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/webview/auth_sync/webview_auth_scripts.dart';
 import '../../core/webview/auth_sync/webview_auth_sync_controller.dart';
 import '../../core/webview/auth_sync/webview_auth_sync_state.dart';
 import '../../core/webview/navigation/webview_navigation_guard.dart';
+import '../../core/webview/webview_theme_bridge.dart';
 
 class LoginWebViewScreen extends StatefulWidget {
   const LoginWebViewScreen({
@@ -34,12 +36,6 @@ class LoginWebViewScreen extends StatefulWidget {
 
 class _LoginWebViewScreenState extends State<LoginWebViewScreen>
     with WidgetsBindingObserver {
-  static const Color _chromeColor = Color(0xFF0F172A);
-  static const SystemUiOverlayStyle _overlayStyle = SystemUiOverlayStyle(
-    statusBarIconBrightness: Brightness.light,
-    statusBarBrightness: Brightness.dark,
-    systemNavigationBarIconBrightness: Brightness.light,
-  );
   final AuthBridgeService _authBridgeService = AuthBridgeService();
   late final WebViewController _controller;
   StreamSubscription<User?>? _authSub;
@@ -52,13 +48,17 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
   bool _appleSigningIn = false;
   bool _retriedErrFailed = false;
   String? _error;
+  Brightness _brightness =
+      WidgetsBinding.instance.platformDispatcher.platformBrightness;
 
   bool get _isIosAppleNativeEnabled =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
   void _applySystemUiChrome() {
     unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
-    SystemChrome.setSystemUIOverlayStyle(_overlayStyle);
+    SystemChrome.setSystemUIOverlayStyle(
+      AppTheme.systemUiStyleFor(_brightness),
+    );
   }
 
   void _finishLogin() {
@@ -99,7 +99,7 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
     }
 
     _controller = WebViewController()
-      ..setBackgroundColor(_chromeColor)
+      ..setBackgroundColor(WebViewThemeBridge.background(_brightness))
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..addJavaScriptChannel(
         FlutterBridgeContracts.channelName,
@@ -142,6 +142,7 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
             setState(() {
               _pageLoading = false;
             });
+            unawaited(WebViewThemeBridge.sync(_controller, _brightness));
             unawaited(_requestWebIdTokenIfNeeded());
           },
           onWebResourceError: (error) {
@@ -166,6 +167,19 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final next = Theme.of(context).brightness;
+    if (next == _brightness) return;
+    _brightness = next;
+    _applySystemUiChrome();
+    unawaited(_controller.setBackgroundColor(
+      WebViewThemeBridge.background(_brightness),
+    ));
+    unawaited(WebViewThemeBridge.sync(_controller, _brightness));
+  }
+
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _authSub?.cancel();
@@ -186,6 +200,7 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
       queryParameters: WebQueryContracts.embeddedParams(
         nextPath: widget.nextPath,
         includeForceLogout: true,
+        themeName: WebViewThemeBridge.name(_brightness),
       ),
     );
   }
@@ -393,10 +408,11 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
 
   @override
   Widget build(BuildContext context) {
+    final background = WebViewThemeBridge.background(_brightness);
     return Scaffold(
-      backgroundColor: _chromeColor,
+      backgroundColor: background,
       body: AnnotatedRegion<SystemUiOverlayStyle>(
-        value: _overlayStyle,
+        value: AppTheme.systemUiStyleFor(_brightness),
         child: SafeArea(
           child: Stack(
             children: [
@@ -406,7 +422,7 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
                   _googleSigningIn ||
                   _appleSigningIn)
                 Container(
-                  color: _chromeColor,
+                  color: background,
                   child: const Center(child: CircularProgressIndicator()),
                 ),
               if (_error != null)

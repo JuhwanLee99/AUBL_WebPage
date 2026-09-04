@@ -8,9 +8,13 @@
     <script>
       (() => {
         const storageKey = 'aubl:theme:v1';
+        const params = new URLSearchParams(window.location.search);
+        const nativeTheme = params.get('embedded') === 'flutter' ? params.get('theme') : null;
         let stored = null;
         try { stored = localStorage.getItem(storageKey); } catch { /* Use the system preference. */ }
-        const theme = stored === 'light' || stored === 'dark'
+        const theme = nativeTheme === 'light' || nativeTheme === 'dark'
+          ? nativeTheme
+          : stored === 'light' || stored === 'dark'
           ? stored
           : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
         document.documentElement.dataset.theme = theme;

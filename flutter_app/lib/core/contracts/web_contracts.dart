@@ -25,12 +25,14 @@ class WebQueryContracts {
   static const String nativeGoogle = 'nativeGoogle';
   static const String next = 'next';
   static const String forceLogout = 'forceLogout';
+  static const String theme = 'theme';
   static const String enabled = '1';
 
   static Map<String, String> embeddedParams({
     String? nextPath,
     bool includeNativeGoogle = true,
     bool includeForceLogout = false,
+    String? themeName,
   }) {
     final query = <String, String>{
       embedded: embeddedFlutter,
@@ -40,6 +42,9 @@ class WebQueryContracts {
     }
     if (includeForceLogout) {
       query[forceLogout] = enabled;
+    }
+    if (themeName == 'light' || themeName == 'dark') {
+      query[theme] = themeName!;
     }
     if (nextPath != null && nextPath.startsWith('/')) {
       query[next] = nextPath;

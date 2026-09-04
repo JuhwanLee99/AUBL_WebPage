@@ -20,6 +20,7 @@ import '../core/webview/app_webview_screen.dart';
 import '../core/webview/auth_sync/webview_auth_sync_controller.dart';
 import '../core/webview/auth_sync/webview_auth_sync_state.dart';
 import '../core/webview/navigation/webview_navigation_guard.dart';
+import '../core/webview/webview_theme_bridge.dart';
 
 /// MainShell 내부에서 하단바를 유지한 채 표시되는 WebView 패널.
 class EmbeddedWebViewPanel extends StatefulWidget {
@@ -58,6 +59,8 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
   bool _loginBypassInFlight = false;
   String? _pendingLoginRedirect;
   bool _retriedErrFailed = false;
+  Brightness _brightness =
+      WidgetsBinding.instance.platformDispatcher.platformBrightness;
 
   bool get _isIosAppleNativeEnabled =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
@@ -68,7 +71,9 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
 
   Uri get _pageUri => AppConfig.webUri(
         widget.path,
-        queryParameters: WebQueryContracts.embeddedParams(),
+        queryParameters: WebQueryContracts.embeddedParams(
+          themeName: WebViewThemeBridge.name(_brightness),
+        ),
       );
 
   String get _pageUrl => _pageUri.toString();
@@ -92,7 +97,7 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
     super.initState();
 
     _controller = WebViewController()
-      ..setBackgroundColor(AppTheme.slate900)
+      ..setBackgroundColor(WebViewThemeBridge.background(_brightness))
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..addJavaScriptChannel(
         FlutterBridgeContracts.channelName,
@@ -111,6 +116,7 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
           onPageFinished: (_) {
             if (!mounted) return;
             setState(() => _loading = false);
+            unawaited(WebViewThemeBridge.sync(_controller, _brightness));
             unawaited(_injectAuthIfNeeded());
             unawaited(_requestWebIdTokenIfNeeded());
             if (_pendingLoginRedirect != null && !_loginBypassInFlight) {
@@ -183,6 +189,18 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
     if (_barsVisible) {
       _scheduleAutoHide();
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final next = Theme.of(context).brightness;
+    if (next == _brightness) return;
+    _brightness = next;
+    unawaited(_controller.setBackgroundColor(
+      WebViewThemeBridge.background(_brightness),
+    ));
+    unawaited(WebViewThemeBridge.sync(_controller, _brightness));
   }
 
   @override
@@ -434,6 +452,7 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.aublColors;
     final matchId = _matchId;
     final topPadding = MediaQuery.of(context).padding.top;
     final isFullscreen = widget.fullscreen;
@@ -447,19 +466,19 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
           // 헤더 바 (fullscreen일 때 AnimatedSlide로 숨김)
           if (showBars)
             Container(
-              color: AppTheme.slate900,
+              color: colors.canvas,
               padding: EdgeInsets.only(top: topPadding),
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    icon: Icon(Icons.arrow_back, color: colors.ink),
                     onPressed: widget.onClose,
                   ),
                   Expanded(
                     child: Text(
                       widget.title,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: colors.ink,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
@@ -481,7 +500,7 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
                 // 주입 중 WebView 랜딩페이지 가리기 (불투명 오버레이)
                 if (_injecting)
                   Container(
-                    color: AppTheme.slate900,
+                    color: WebViewThemeBridge.background(_brightness),
                     child: const Center(child: CircularProgressIndicator()),
                   ),
                 if (_error != null)
@@ -543,7 +562,7 @@ class _EmbeddedWebViewPanelState extends State<EmbeddedWebViewPanel> {
                           ),
                         ));
                       },
-                      backgroundColor: AppTheme.red500,
+                      backgroundColor: colors.danger,
                       icon: const Icon(Icons.live_tv, color: Colors.white),
                       label: const Text('라이브',
                           style: TextStyle(

@@ -469,6 +469,15 @@ export default function Layout() {
       ?.setAttribute('content', theme === 'dark' ? '#07142b' : '#ffffff');
   }, [theme]);
 
+  useEffect(() => {
+    const handleNativeTheme = (event: Event) => {
+      const requested = (event as CustomEvent<{ theme?: unknown }>).detail?.theme;
+      if (requested === 'light' || requested === 'dark') setTheme(requested);
+    };
+    window.addEventListener('aubl-native-theme', handleNativeTheme);
+    return () => window.removeEventListener('aubl-native-theme', handleNativeTheme);
+  }, []);
+
   const handleShellMenuToggle = useCallback((event: SyntheticEvent<HTMLDetailsElement>) => {
     if (!event.currentTarget.open) return;
     headerRef.current?.querySelectorAll<HTMLDetailsElement>('details[open]').forEach((details) => {

@@ -20,6 +20,7 @@ import '../theme/app_theme.dart';
 import 'auth_sync/webview_auth_sync_controller.dart';
 import 'auth_sync/webview_auth_sync_state.dart';
 import 'navigation/webview_navigation_guard.dart';
+import 'webview_theme_bridge.dart';
 
 /// 범용 WebView 래퍼.
 /// 스코어보드, 관리자 페이지 등 WebView가 필요한 화면에서 공통 사용.
@@ -60,18 +61,24 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
   bool _loginBypassInFlight = false;
   String? _pendingLoginRedirect;
   bool _retriedErrFailed = false;
+  Brightness _brightness =
+      WidgetsBinding.instance.platformDispatcher.platformBrightness;
 
   bool get _isIosAppleNativeEnabled =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
   void _applySystemUiChrome() {
     unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
-    SystemChrome.setSystemUIOverlayStyle(AppTheme.systemUiStyle);
+    SystemChrome.setSystemUIOverlayStyle(
+      AppTheme.systemUiStyleFor(_brightness),
+    );
   }
 
   Uri get _pageUri => AppConfig.webUri(
         widget.path,
-        queryParameters: WebQueryContracts.embeddedParams(),
+        queryParameters: WebQueryContracts.embeddedParams(
+          themeName: WebViewThemeBridge.name(_brightness),
+        ),
       );
 
   String get _pageUrl => _pageUri.toString();
@@ -82,7 +89,7 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
     _applySystemUiChrome();
 
     _controller = WebViewController()
-      ..setBackgroundColor(AppTheme.slate900)
+      ..setBackgroundColor(WebViewThemeBridge.background(_brightness))
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..addJavaScriptChannel(
         FlutterBridgeContracts.channelName,
@@ -103,6 +110,7 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
             _applySystemUiChrome();
             if (!mounted) return;
             setState(() => _loading = false);
+            unawaited(WebViewThemeBridge.sync(_controller, _brightness));
             unawaited(_injectAuthIfNeeded());
             unawaited(_requestWebIdTokenIfNeeded());
             if (_pendingLoginRedirect != null && !_loginBypassInFlight) {
@@ -153,6 +161,19 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
       _authSyncState.markObservedUid(user.uid);
       unawaited(_injectAuthIfNeeded());
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final next = Theme.of(context).brightness;
+    if (next == _brightness) return;
+    _brightness = next;
+    _applySystemUiChrome();
+    unawaited(_controller.setBackgroundColor(
+      WebViewThemeBridge.background(_brightness),
+    ));
+    unawaited(WebViewThemeBridge.sync(_controller, _brightness));
   }
 
   @override
@@ -416,7 +437,7 @@ class _AppWebViewScreenState extends State<AppWebViewScreen> {
           // 주입 중 WebView 랜딩페이지 가리기 (불투명 오버레이)
           if (_injecting)
             Container(
-              color: AppTheme.slate900,
+              color: WebViewThemeBridge.background(_brightness),
               child: const Center(child: CircularProgressIndicator()),
             ),
           if (widget.minimalHeader)

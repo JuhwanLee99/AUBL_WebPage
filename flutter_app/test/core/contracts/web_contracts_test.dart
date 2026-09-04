@@ -19,6 +19,14 @@ void main() {
       expect(query[WebQueryContracts.forceLogout], WebQueryContracts.enabled);
     });
 
+    test('includes only a supported native theme', () {
+      final dark = WebQueryContracts.embeddedParams(themeName: 'dark');
+      final system = WebQueryContracts.embeddedParams(themeName: 'system');
+
+      expect(dark[WebQueryContracts.theme], 'dark');
+      expect(system.containsKey(WebQueryContracts.theme), isFalse);
+    });
+
     test('does not include next when next path is invalid', () {
       final query = WebQueryContracts.embeddedParams(nextPath: 'scorekeeper');
       expect(query.containsKey(WebQueryContracts.next), isFalse);

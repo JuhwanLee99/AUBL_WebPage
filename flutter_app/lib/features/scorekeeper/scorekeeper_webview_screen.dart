@@ -10,8 +10,10 @@ import '../../core/contracts/flutter_bridge_contract.dart';
 import '../../core/contracts/web_contracts.dart';
 import '../../core/services/auth_session_service.dart';
 import '../../core/services/auth_bridge_service.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/webview/auth_sync/webview_auth_sync_controller.dart';
 import '../../core/webview/auth_sync/webview_auth_sync_state.dart';
+import '../../core/webview/webview_theme_bridge.dart';
 
 class ScorekeeperWebViewScreen extends StatefulWidget {
   const ScorekeeperWebViewScreen({
@@ -27,13 +29,6 @@ class ScorekeeperWebViewScreen extends StatefulWidget {
 }
 
 class _ScorekeeperWebViewScreenState extends State<ScorekeeperWebViewScreen> {
-  static const Color _chromeColor = Color(0xFF0F172A);
-  static const SystemUiOverlayStyle _overlayStyle = SystemUiOverlayStyle(
-    statusBarIconBrightness: Brightness.light,
-    statusBarBrightness: Brightness.dark,
-    systemNavigationBarIconBrightness: Brightness.light,
-  );
-
   final AuthBridgeService _authBridgeService = AuthBridgeService();
   late final WebViewController _controller;
   final WebViewAuthSyncState _authSyncState = WebViewAuthSyncState();
@@ -42,18 +37,28 @@ class _ScorekeeperWebViewScreenState extends State<ScorekeeperWebViewScreen> {
   bool _authenticating = false;
   bool _redirectedToFallbackLogin = false;
   String? _error;
+  Brightness _brightness =
+      WidgetsBinding.instance.platformDispatcher.platformBrightness;
 
   void _applySystemUiChrome() {
     unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
-    SystemChrome.setSystemUIOverlayStyle(_overlayStyle);
+    SystemChrome.setSystemUIOverlayStyle(
+      AppTheme.systemUiStyleFor(_brightness),
+    );
   }
 
-  Uri get _scorekeeperUri => AppConfig.webUri(WebRouteContracts.scorekeeper);
+  Uri get _scorekeeperUri => AppConfig.webUri(
+        WebRouteContracts.scorekeeper,
+        queryParameters: WebQueryContracts.embeddedParams(
+          themeName: WebViewThemeBridge.name(_brightness),
+        ),
+      );
 
   Uri get _loginFallbackUri => AppConfig.webUri(
         WebRouteContracts.login,
         queryParameters: WebQueryContracts.embeddedParams(
           nextPath: WebRouteContracts.scorekeeper,
+          themeName: WebViewThemeBridge.name(_brightness),
         ),
       );
 
@@ -63,7 +68,7 @@ class _ScorekeeperWebViewScreenState extends State<ScorekeeperWebViewScreen> {
     _applySystemUiChrome();
 
     _controller = WebViewController()
-      ..setBackgroundColor(_chromeColor)
+      ..setBackgroundColor(WebViewThemeBridge.background(_brightness))
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..addJavaScriptChannel(
         FlutterBridgeContracts.channelName,
@@ -86,6 +91,7 @@ class _ScorekeeperWebViewScreenState extends State<ScorekeeperWebViewScreen> {
             setState(() {
               _loading = false;
             });
+            unawaited(WebViewThemeBridge.sync(_controller, _brightness));
           },
           onWebResourceError: (error) {
             if (!mounted) return;
@@ -113,6 +119,19 @@ class _ScorekeeperWebViewScreenState extends State<ScorekeeperWebViewScreen> {
         ),
       )
       ..loadRequest(_scorekeeperUri);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final next = Theme.of(context).brightness;
+    if (next == _brightness) return;
+    _brightness = next;
+    _applySystemUiChrome();
+    unawaited(_controller.setBackgroundColor(
+      WebViewThemeBridge.background(_brightness),
+    ));
+    unawaited(WebViewThemeBridge.sync(_controller, _brightness));
   }
 
   @override
