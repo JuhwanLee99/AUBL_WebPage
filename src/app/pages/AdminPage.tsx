@@ -1,26 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useContent, type ContentState } from '../../shared/state/contentProvider';
-import { useRef } from 'react';
-
-const cardStyle = {
-  borderRadius: '16px',
-  border: '1px solid rgba(148,163,184,0.28)',
-  background: 'linear-gradient(135deg, rgba(15,23,42,0.78), rgba(30,41,59,0.78))',
-  padding: '16px',
-  boxShadow: '0 16px 40px rgba(0,0,0,0.25)',
-};
-
-const inputStyle = {
-  width: '100%',
-  padding: '10px 12px',
-  borderRadius: '10px',
-  border: '1px solid rgba(148,163,184,0.3)',
-  background: 'rgba(15,23,42,0.6)',
-  color: '#e2e8f0',
-  fontSize: '14px',
-};
-
-const labelStyle = { color: '#cbd5e1', fontWeight: 800, fontSize: '13px', marginBottom: '6px', display: 'block' };
+import './AdminPage.css';
 
 function serializeHistory(items: ContentState['intro']['historyHighlights']) {
   return items.map((h) => `${h.title} | ${h.desc} | ${h.accent}`).join('\n');
@@ -179,7 +159,8 @@ export default function AdminPage() {
     });
     setStatus('리그 소개 미리보기를 갱신했습니다. 아래에서 확인하세요.');
     queueMicrotask(() => {
-      previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      previewRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
     });
   };
 
@@ -198,283 +179,212 @@ export default function AdminPage() {
   );
 
   return (
-    <div style={{ display: 'grid', gap: '18px', padding: 'var(--section-padding) 0' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-        <span
-          style={{
-            padding: '8px 12px',
-            borderRadius: '10px',
-            background: 'rgba(249,115,22,0.12)',
-            color: '#f97316',
-            fontWeight: 900,
-            border: '1px solid rgba(249,115,22,0.4)',
-            letterSpacing: '0.04em',
-          }}
-        >
-          ADMIN
-        </span>
-        <div style={{ display: 'grid', gap: '4px' }}>
-          <p style={{ margin: 0, fontWeight: 900, color: '#e2e8f0' }}>콘텐츠 관리</p>
-          <p style={{ margin: 0, color: '#94a3b8', fontWeight: 700, fontSize: '13px' }}>{infoText}</p>
-        </div>
-      </div>
+    <div className="admin-content-page">
+      <header className="admin-content-page__header">
+        <p className="admin-content-page__eyebrow">ADMIN CONTENT</p>
+        <h1>콘텐츠 관리</h1>
+        <p>{infoText}</p>
+      </header>
 
       {status && (
-        <div
-          role="status"
-          style={{
-            padding: '12px 14px',
-            borderRadius: '12px',
-            border: '1px solid rgba(34,197,94,0.35)',
-            background: 'rgba(34,197,94,0.12)',
-            color: '#bbf7d0',
-            fontWeight: 800,
-          }}
-        >
+        <div className="admin-content-page__status" role="status" aria-live="polite">
           {status}
         </div>
       )}
 
-      <div style={cardStyle}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-          <h3 style={{ margin: 0, color: '#e2e8f0' }}>리그 소개 문구</h3>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button
-              type='button'
-              onClick={previewIntroContent}
-              style={{
-                padding: '8px 12px',
-                borderRadius: '10px',
-                border: '1px solid rgba(234,179,8,0.5)',
-                background: 'rgba(234,179,8,0.18)',
-                color: '#fef08a',
-                fontWeight: 800,
-              }}
-            >
+      <section className="admin-content-card">
+        <header className="admin-content-card__header">
+          <div>
+            <p className="admin-content-card__eyebrow">LEAGUE INTRO</p>
+            <h2>리그 소개 문구</h2>
+          </div>
+          <div className="admin-content-card__actions">
+            <button type="button" className="admin-content-action admin-content-action--secondary" onClick={previewIntroContent}>
               미리보기
             </button>
-            <button
-              type='button'
-              onClick={saveIntro}
-              style={{
-                padding: '8px 12px',
-                borderRadius: '10px',
-                border: '1px solid rgba(34,197,94,0.4)',
-                background: 'rgba(34,197,94,0.14)',
-                color: '#bbf7d0',
-                fontWeight: 800,
-              }}
-            >
+            <button type="button" className="admin-content-action admin-content-action--primary" onClick={saveIntro}>
               저장
             </button>
           </div>
-        </div>
+        </header>
 
-        <div style={{ display: 'grid', gap: '10px' }}>
-          <div>
-            <label style={labelStyle} htmlFor="tagline-input">
-              상단 태그라인
-            </label>
-            <input id="tagline-input" style={inputStyle} value={tagline} onChange={(e) => setTagline(e.target.value)} />
-          </div>
-          <div>
-            <label style={labelStyle} htmlFor="subtitle-input">
-              상단 서브텍스트
-            </label>
-            <input id="subtitle-input" style={inputStyle} value={heroSubtitle} onChange={(e) => setHeroSubtitle(e.target.value)} />
-          </div>
-          <div>
-            <label style={labelStyle} htmlFor="title-input">
-              히어로 타이틀
-            </label>
-            <input id="title-input" style={inputStyle} value={heroTitle} onChange={(e) => setHeroTitle(e.target.value)} />
-          </div>
-          <div>
-            <label style={labelStyle} htmlFor="desc-input">
-              히어로 설명
-            </label>
+        <div className="admin-content-fields">
+          <label className="admin-content-field" htmlFor="tagline-input">
+            <span>상단 태그라인</span>
+            <input id="tagline-input" value={tagline} onChange={(e) => setTagline(e.target.value)} />
+          </label>
+          <label className="admin-content-field" htmlFor="subtitle-input">
+            <span>상단 서브텍스트</span>
+            <input id="subtitle-input" value={heroSubtitle} onChange={(e) => setHeroSubtitle(e.target.value)} />
+          </label>
+          <label className="admin-content-field" htmlFor="title-input">
+            <span>히어로 타이틀</span>
+            <input id="title-input" value={heroTitle} onChange={(e) => setHeroTitle(e.target.value)} />
+          </label>
+          <label className="admin-content-field" htmlFor="desc-input">
+            <span>히어로 설명</span>
             <textarea
               id="desc-input"
-              style={{ ...inputStyle, minHeight: '80px', fontFamily: 'inherit' }}
+              className="admin-content-field__textarea admin-content-field__textarea--short"
               value={heroDescription}
               onChange={(e) => setHeroDescription(e.target.value)}
             />
-          </div>
-        </div>
+          </label>
 
-        <div style={{ display: 'grid', gap: '10px', marginTop: '12px' }}>
-          <div>
-            <label style={labelStyle} htmlFor="history-input">
-              하이라이트 카드 (제목 | 설명 | 색상)
-            </label>
+          <label className="admin-content-field" htmlFor="history-input">
+            <span>하이라이트 카드 (제목 | 설명 | 색상)</span>
             <textarea
               id="history-input"
-              style={{ ...inputStyle, minHeight: '110px', fontFamily: 'inherit' }}
+              className="admin-content-field__textarea"
               value={historyDraft}
               onChange={(e) => setHistoryDraft(e.target.value)}
             />
-          </div>
-          <div>
-            <label style={labelStyle} htmlFor="gov-input">
-              거버넌스 (레이블 | 값 | 상세)
-            </label>
+          </label>
+          <label className="admin-content-field" htmlFor="gov-input">
+            <span>거버넌스 (레이블 | 값 | 상세)</span>
             <textarea
               id="gov-input"
-              style={{ ...inputStyle, minHeight: '110px', fontFamily: 'inherit' }}
+              className="admin-content-field__textarea"
               value={governanceDraft}
               onChange={(e) => setGovernanceDraft(e.target.value)}
             />
-          </div>
-          <div>
-            <label style={labelStyle} htmlFor="structure-input">
-              구조 카드 (제목 | 포인트1; 포인트2; ...)
-            </label>
+          </label>
+          <label className="admin-content-field" htmlFor="structure-input">
+            <span>구조 카드 (제목 | 포인트1; 포인트2; ...)</span>
             <textarea
               id="structure-input"
-              style={{ ...inputStyle, minHeight: '110px', fontFamily: 'inherit' }}
+              className="admin-content-field__textarea"
               value={structureDraft}
               onChange={(e) => setStructureDraft(e.target.value)}
             />
-          </div>
-          <div>
-            <label style={labelStyle} htmlFor="postseason-input">
-              포스트시즌 매치업 (제목 | 매치업1; 매치업2; ...)
-            </label>
+          </label>
+          <label className="admin-content-field" htmlFor="postseason-input">
+            <span>포스트시즌 매치업 (제목 | 매치업1; 매치업2; ...)</span>
             <textarea
               id="postseason-input"
-              style={{ ...inputStyle, minHeight: '110px', fontFamily: 'inherit' }}
+              className="admin-content-field__textarea"
               value={postseasonDraft}
               onChange={(e) => setPostseasonDraft(e.target.value)}
             />
-          </div>
-          <div>
-            <label style={labelStyle} htmlFor="metrics-input">
-              히어로 메트릭 (레이블 | 값 | 노트)
-            </label>
+          </label>
+          <label className="admin-content-field" htmlFor="metrics-input">
+            <span>히어로 메트릭 (레이블 | 값 | 노트)</span>
             <textarea
               id="metrics-input"
-              style={{ ...inputStyle, minHeight: '110px', fontFamily: 'inherit' }}
+              className="admin-content-field__textarea"
               value={metricsDraft}
               onChange={(e) => setMetricsDraft(e.target.value)}
             />
-          </div>
+          </label>
         </div>
-      </div>
+      </section>
 
-      <div style={cardStyle}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-          <h3 style={{ margin: 0, color: '#e2e8f0' }}>기본값 복원</h3>
-          <button
-            type='button'
-            onClick={handleReset}
-            style={{
-              padding: '8px 12px',
-              borderRadius: '10px',
-              border: '1px solid rgba(248,113,113,0.4)',
-              background: 'rgba(248,113,113,0.14)',
-              color: '#fecdd3',
-              fontWeight: 800,
-            }}
-          >
+      <section className="admin-content-card admin-content-card--danger">
+        <header className="admin-content-card__header">
+          <div>
+            <p className="admin-content-card__eyebrow">RESET</p>
+            <h2>기본값 복원</h2>
+          </div>
+          <button type="button" className="admin-content-action admin-content-action--danger" onClick={handleReset}>
             기본값으로 초기화
           </button>
-        </div>
-        <p style={{ margin: 0, color: '#94a3b8', fontWeight: 700, fontSize: '13px' }}>
+        </header>
+        <p className="admin-content-card__description">
           모든 필드를 기본 텍스트로 되돌립니다. 저장된 커스텀 문구가 사라집니다.
         </p>
-      </div>
+      </section>
 
       {previewIntro && (
-        <div ref={previewRef} style={{ ...cardStyle, border: '1px solid rgba(34,197,94,0.28)', background: 'rgba(15,23,42,0.72)' }}>
-          <h3 style={{ margin: '0 0 10px', color: '#e2e8f0' }}>미리보기</h3>
-          <div style={{ display: 'grid', gap: '14px' }}>
-            <p style={{ margin: 0, color: '#bbf7d0', fontWeight: 800, fontSize: '13px' }}>리그 소개 미리보기</p>
-              <div style={{ border: '1px solid rgba(148,163,184,0.25)', borderRadius: '12px', padding: '14px', background: 'rgba(255,255,255,0.02)' }}>
-                <p style={{ margin: 0, color: '#cbd5e1', fontWeight: 700, letterSpacing: '0.04em', fontSize: '12px' }}>{previewIntro.tagline}</p>
-                <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '13px' }}>{previewIntro.heroSubtitle}</span>
-                <h4 style={{ margin: '6px 0', color: '#e2e8f0' }}>{previewIntro.heroTitle}</h4>
-                <p style={{ margin: 0, color: '#94a3b8' }}>{previewIntro.heroDescription}</p>
-              </div>
+        <section ref={previewRef} className="admin-content-card admin-content-card--preview" aria-labelledby="admin-preview-title">
+          <header className="admin-content-card__header">
+            <div>
+              <p className="admin-content-card__eyebrow">PREVIEW</p>
+              <h2 id="admin-preview-title">리그 소개 미리보기</h2>
+            </div>
+          </header>
+          <div className="admin-content-preview">
+            <div className="admin-content-preview__hero">
+              <p className="admin-content-preview__eyebrow">{previewIntro.tagline}</p>
+              <span>{previewIntro.heroSubtitle}</span>
+              <h3>{previewIntro.heroTitle}</h3>
+              <p>{previewIntro.heroDescription}</p>
+            </div>
 
-              <div style={{ display: 'grid', gap: '10px' }}>
-                <p style={{ margin: '0 0 4px', color: '#cbd5e1', fontWeight: 700, fontSize: '13px' }}>히어로 메트릭</p>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px' }}>
-                  {previewIntro.heroMetrics.map((m, idx) => (
-                    <div key={`pm-${idx}`} style={{ border: '1px solid rgba(148,163,184,0.25)', borderRadius: '10px', padding: '8px', background: 'rgba(255,255,255,0.03)' }}>
-                      <p style={{ margin: 0, color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>{m.label}</p>
-                      <p style={{ margin: '2px 0 0', color: '#e2e8f0', fontWeight: 800 }}>{m.value}</p>
-                      {m.note && <p style={{ margin: 0, color: '#cbd5e1', fontSize: '12px' }}>{m.note}</p>}
-                    </div>
-                  ))}
-                </div>
+            <section className="admin-content-preview__section">
+              <h3>히어로 메트릭</h3>
+              <div className="admin-content-preview__grid admin-content-preview__grid--metrics">
+                {previewIntro.heroMetrics.map((metric, index) => (
+                  <article key={`pm-${index}`} className="admin-content-preview__item">
+                    <small>{metric.label}</small>
+                    <strong>{metric.value}</strong>
+                    {metric.note && <p>{metric.note}</p>}
+                  </article>
+                ))}
               </div>
+            </section>
 
-              <div style={{ display: 'grid', gap: '10px' }}>
-                <p style={{ margin: '0 0 4px', color: '#cbd5e1', fontWeight: 700, fontSize: '13px' }}>하이라이트</p>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
-                  {previewIntro.historyHighlights.map((h, idx) => (
-                    <div
-                      key={`ph-${idx}`}
-                      style={{
-                        border: '1px solid rgba(148,163,184,0.25)',
-                        borderRadius: '10px',
-                        padding: '10px',
-                        background: 'rgba(255,255,255,0.03)',
-                      }}
-                    >
-                      <p style={{ margin: 0, color: h.accent || '#60a5fa', fontWeight: 800 }}>{h.title}</p>
-                      <p style={{ margin: '4px 0 0', color: '#e2e8f0', fontSize: '13px' }}>{h.desc}</p>
-                    </div>
-                  ))}
-                </div>
+            <section className="admin-content-preview__section">
+              <h3>하이라이트</h3>
+              <div className="admin-content-preview__grid">
+                {previewIntro.historyHighlights.map((highlight, index) => (
+                  <article
+                    key={`ph-${index}`}
+                    className="admin-content-preview__item admin-content-preview__item--accent"
+                    style={{ borderLeftColor: highlight.accent || 'var(--season-blue-600)' }}
+                  >
+                    <strong>{highlight.title}</strong>
+                    <p>{highlight.desc}</p>
+                  </article>
+                ))}
               </div>
+            </section>
 
-              <div style={{ display: 'grid', gap: '10px' }}>
-                <p style={{ margin: '0 0 4px', color: '#cbd5e1', fontWeight: 700, fontSize: '13px' }}>거버넌스</p>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px' }}>
-                  {previewIntro.governance.map((g, idx) => (
-                    <div key={`pg-${idx}`} style={{ border: '1px solid rgba(148,163,184,0.25)', borderRadius: '10px', padding: '10px', background: 'rgba(255,255,255,0.02)' }}>
-                      <p style={{ margin: 0, color: '#e2e8f0', fontWeight: 800 }}>{g.label}</p>
-                      <p style={{ margin: '2px 0 0', color: '#cbd5e1', fontSize: '13px' }}>{g.value}</p>
-                      <p style={{ margin: 0, color: '#94a3b8', fontSize: '12px' }}>{g.detail}</p>
-                    </div>
-                  ))}
-                </div>
+            <section className="admin-content-preview__section">
+              <h3>거버넌스</h3>
+              <div className="admin-content-preview__grid admin-content-preview__grid--governance">
+                {previewIntro.governance.map((item, index) => (
+                  <article key={`pg-${index}`} className="admin-content-preview__item">
+                    <strong>{item.label}</strong>
+                    <p>{item.value}</p>
+                    <small>{item.detail}</small>
+                  </article>
+                ))}
               </div>
+            </section>
 
-              <div style={{ display: 'grid', gap: '10px' }}>
-                <p style={{ margin: '0 0 4px', color: '#cbd5e1', fontWeight: 700, fontSize: '13px' }}>구조 카드</p>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
-                  {previewIntro.structureCards.map((s, idx) => (
-                    <div key={`ps-${idx}`} style={{ border: '1px solid rgba(148,163,184,0.25)', borderRadius: '10px', padding: '10px', background: 'rgba(255,255,255,0.02)' }}>
-                      <p style={{ margin: 0, color: '#e2e8f0', fontWeight: 800 }}>{s.title}</p>
-                      <ul style={{ margin: '6px 0 0', paddingLeft: '18px', color: '#cbd5e1', fontSize: '12px', lineHeight: 1.5 }}>
-                        {s.points.map((p, pi) => (
-                          <li key={`psp-${idx}-${pi}`}>{p}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
+            <section className="admin-content-preview__section">
+              <h3>구조 카드</h3>
+              <div className="admin-content-preview__grid">
+                {previewIntro.structureCards.map((card, index) => (
+                  <article key={`ps-${index}`} className="admin-content-preview__item">
+                    <strong>{card.title}</strong>
+                    <ul>
+                      {card.points.map((point, pointIndex) => (
+                        <li key={`psp-${index}-${pointIndex}`}>{point}</li>
+                      ))}
+                    </ul>
+                  </article>
+                ))}
               </div>
+            </section>
 
-              <div style={{ display: 'grid', gap: '10px' }}>
-                <p style={{ margin: '0 0 4px', color: '#cbd5e1', fontWeight: 700, fontSize: '13px' }}>포스트시즌</p>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
-                  {previewIntro.postseasonMatches.map((m, idx) => (
-                    <div key={`ppm-${idx}`} style={{ border: '1px solid rgba(148,163,184,0.25)', borderRadius: '10px', padding: '10px', background: 'rgba(255,255,255,0.02)' }}>
-                      <p style={{ margin: 0, color: '#e2e8f0', fontWeight: 800 }}>{m.title}</p>
-                      <ul style={{ margin: '6px 0 0', paddingLeft: '18px', color: '#cbd5e1', fontSize: '12px', lineHeight: 1.5 }}>
-                        {m.matchups.map((p, pi) => (
-                          <li key={`ppm-${idx}-${pi}`}>{p}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
+            <section className="admin-content-preview__section">
+              <h3>포스트시즌</h3>
+              <div className="admin-content-preview__grid">
+                {previewIntro.postseasonMatches.map((match, index) => (
+                  <article key={`ppm-${index}`} className="admin-content-preview__item">
+                    <strong>{match.title}</strong>
+                    <ul>
+                      {match.matchups.map((matchup, matchupIndex) => (
+                        <li key={`ppm-${index}-${matchupIndex}`}>{matchup}</li>
+                      ))}
+                    </ul>
+                  </article>
+                ))}
               </div>
+            </section>
           </div>
-        </div>
+        </section>
       )}
     </div>
   );

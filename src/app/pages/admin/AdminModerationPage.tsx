@@ -21,20 +21,20 @@ import type { ModerationReport } from '@shared/types';
 const currentTimestamp = () => Date.now();
 
 const cardStyle: React.CSSProperties = {
-  borderRadius: '16px',
-  border: '1px solid rgba(148,163,184,0.28)',
-  background: 'linear-gradient(135deg, rgba(15,23,42,0.78), rgba(30,41,59,0.78))',
+  borderRadius: '4px',
+  border: '1px solid var(--season-line)',
+  background: 'var(--season-surface)',
   padding: '16px',
-  boxShadow: '0 16px 40px rgba(0,0,0,0.25)',
 };
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
+  minHeight: '44px',
   padding: '10px 12px',
-  borderRadius: '10px',
-  border: '1px solid rgba(148,163,184,0.35)',
-  background: 'rgba(15,23,42,0.65)',
-  color: '#e2e8f0',
+  borderRadius: '2px',
+  border: '1px solid var(--season-line-strong)',
+  background: 'var(--season-surface)',
+  color: 'var(--season-ink)',
   fontSize: '13px',
 };
 
@@ -141,15 +141,15 @@ export default function AdminModerationPage() {
       <section style={cardStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
           <div style={{ display: 'grid', gap: '6px' }}>
-            <h2 style={{ margin: 0, color: '#e2e8f0' }}>신고/차단 관리</h2>
-            <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px', fontWeight: 700 }}>
+            <h2 style={{ margin: 0, color: 'var(--season-ink)' }}>신고/차단 관리</h2>
+            <p style={{ margin: 0, color: 'var(--season-muted)', fontSize: '13px', fontWeight: 700 }}>
               신규 접수 {pendingCount}건 · 총 {reports.length}건
             </p>
           </div>
         </div>
 
         <div style={{ display: 'grid', gap: '8px', marginTop: '12px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '8px' }}>
             <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} style={inputStyle}>
               <option value="ALL">전체 상태</option>
               {moderationStatuses.map((status) => (
@@ -179,9 +179,9 @@ export default function AdminModerationPage() {
 
       <section style={{ ...cardStyle, display: 'grid', gap: '10px' }}>
         {loading ? (
-          <div style={{ color: '#94a3b8', fontWeight: 700 }}>신고함을 불러오는 중...</div>
+          <div style={{ color: 'var(--season-muted)', fontWeight: 700 }}>신고함을 불러오는 중...</div>
         ) : filteredReports.length === 0 ? (
-          <div style={{ color: '#94a3b8', fontWeight: 700 }}>조건에 맞는 신고가 없습니다.</div>
+          <div style={{ color: 'var(--season-muted)', fontWeight: 700 }}>조건에 맞는 신고가 없습니다.</div>
         ) : (
           filteredReports.map((report) => {
             const link = buildModerationContentLink(report.contentDomain, report.contentId, report.contextId);
@@ -190,30 +190,30 @@ export default function AdminModerationPage() {
               <article
                 key={report.id}
                 style={{
-                  borderRadius: '12px',
-                  border: '1px solid rgba(148,163,184,0.24)',
-                  background: 'rgba(15,23,42,0.55)',
+                  borderRadius: '4px',
+                  border: '1px solid var(--season-line)',
+                  background: 'var(--season-surface)',
                   padding: '12px',
                   display: 'grid',
                   gap: '8px',
                 }}
               >
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 900, borderRadius: '999px', padding: '2px 8px', background: 'rgba(96,165,250,0.22)', color: '#bfdbfe' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 900, borderRadius: '2px', padding: '4px 8px', background: 'var(--season-blue-100)', color: 'var(--season-blue-700)' }}>
                     {report.action === 'block' ? '차단' : '신고'}
                   </span>
-                  <span style={{ fontSize: '11px', fontWeight: 900, borderRadius: '999px', padding: '2px 8px', background: 'rgba(148,163,184,0.2)', color: '#e2e8f0' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 900, borderRadius: '2px', padding: '4px 8px', background: 'var(--season-surface-muted)', color: 'var(--season-ink)' }}>
                     {contentDomainLabel(report.contentDomain)}
                   </span>
-                  <span style={{ fontSize: '11px', fontWeight: 900, borderRadius: '999px', padding: '2px 8px', background: 'rgba(251,191,36,0.18)', color: '#fde68a' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 900, borderRadius: '2px', padding: '4px 8px', background: 'var(--season-surface-muted)', color: 'var(--season-warning)' }}>
                     {statusLabel}
                   </span>
-                  <span style={{ marginLeft: 'auto', color: '#94a3b8', fontSize: '12px' }}>
+                  <span style={{ marginLeft: 'auto', color: 'var(--season-muted)', fontSize: '12px' }}>
                     {new Date(report.createdAt).toLocaleString('ko-KR')}
                   </span>
                 </div>
 
-                <div style={{ color: '#cbd5e1', fontSize: '13px', lineHeight: 1.5 }}>
+                <div style={{ color: 'var(--season-ink)', fontSize: '13px', lineHeight: 1.5 }}>
                   <div>사유: {moderationReasonLabel(report.reasonType)}</div>
                   {report.reasonDetail ? <div>상세: {report.reasonDetail}</div> : null}
                   <div>신고자: {report.reporterLabel || report.reporterUid}</div>
@@ -222,10 +222,10 @@ export default function AdminModerationPage() {
 
                 <div
                   style={{
-                    borderRadius: '10px',
-                    border: '1px solid rgba(148,163,184,0.2)',
-                    background: 'rgba(2,6,23,0.5)',
-                    color: '#e2e8f0',
+                    borderRadius: '2px',
+                    border: '1px solid var(--season-line)',
+                    background: 'var(--season-surface-muted)',
+                    color: 'var(--season-ink)',
                     fontSize: '12px',
                     padding: '9px 10px',
                     lineHeight: 1.6,
@@ -236,7 +236,7 @@ export default function AdminModerationPage() {
                 </div>
 
                 {report.reviewNote ? (
-                  <div style={{ color: '#94a3b8', fontSize: '12px' }}>처리 메모: {report.reviewNote}</div>
+                  <div style={{ color: 'var(--season-muted)', fontSize: '12px' }}>처리 메모: {report.reviewNote}</div>
                 ) : null}
 
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -253,11 +253,14 @@ export default function AdminModerationPage() {
                     <Link
                       to={link}
                       style={{
+                        alignItems: 'center',
+                        display: 'inline-flex',
+                        minHeight: '44px',
                         padding: '9px 12px',
-                        borderRadius: '10px',
-                        border: '1px solid rgba(96,165,250,0.42)',
-                        background: 'rgba(59,130,246,0.18)',
-                        color: '#dbeafe',
+                        borderRadius: '2px',
+                        border: '1px solid var(--season-blue-600)',
+                        background: 'var(--season-blue-100)',
+                        color: 'var(--season-blue-700)',
                         fontWeight: 800,
                         fontSize: '12px',
                         textDecoration: 'none',

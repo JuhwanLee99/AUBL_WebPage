@@ -1,0 +1,313 @@
+.schedule-manage {
+  display: grid;
+  gap: clamp(18px, 2.6vw, 30px) !important;
+  min-width: 0;
+  color: var(--season-ink);
+}
+
+.schedule-manage .season-page-hero {
+  min-height: 220px;
+}
+
+.schedule-manage__board {
+  min-width: 0;
+  display: grid;
+  gap: 18px;
+  padding: clamp(18px, 2.6vw, 28px);
+  border: 1px solid var(--season-line);
+  border-radius: 4px;
+  background: var(--season-surface);
+}
+
+.schedule-manage__list,
+.schedule-manage__note-list,
+.schedule-manage__trash-list {
+  display: grid;
+  gap: 0;
+}
+
+.schedule-manage__match {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--season-line);
+}
+
+.schedule-manage__match:first-child {
+  padding-top: 2px;
+}
+
+.schedule-manage__match:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.schedule-manage__match-head {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, auto);
+  align-items: center;
+  gap: 16px;
+}
+
+.schedule-manage__match-copy {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.schedule-manage__match-title-row,
+.schedule-manage__meta,
+.schedule-manage__controls,
+.schedule-manage__choice-group,
+.schedule-manage__trash-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.schedule-manage__match-title-row {
+  gap: 8px;
+}
+
+.schedule-manage__match-link {
+  min-height: 44px;
+  margin: -8px 0;
+  padding: 8px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--season-navy-950);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 900;
+  text-align: left;
+  cursor: pointer;
+}
+
+.schedule-manage__match-link:hover {
+  color: var(--season-blue-700);
+}
+
+.schedule-manage__meta {
+  gap: 6px 14px;
+  color: var(--season-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.schedule-manage__meta span::before {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  margin: 0 8px 2px 0;
+  border-radius: 50%;
+  background: var(--season-line-strong);
+}
+
+.schedule-manage__controls {
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.schedule-manage__controls > select,
+.schedule-manage__edit-grid :where(input, select),
+.schedule-manage__note-row input {
+  min-height: 44px;
+  box-sizing: border-box;
+  border: 1px solid var(--season-line-strong);
+  border-radius: 4px;
+  outline: 0;
+  background: var(--season-surface);
+  color: var(--season-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.schedule-manage__controls > select {
+  width: 132px;
+  padding: 9px 34px 9px 11px;
+}
+
+.schedule-manage__choice-group {
+  gap: 0;
+  border: 1px solid var(--season-line-strong);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.schedule-manage__choice-group button {
+  min-height: 42px;
+  padding: 8px 11px;
+  border: 0;
+  border-right: 1px solid var(--season-line);
+  background: var(--season-surface);
+  color: var(--season-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.schedule-manage__choice-group button:last-child {
+  border-right: 0;
+}
+
+.schedule-manage__choice-group button:hover {
+  background: var(--season-surface-muted);
+  color: var(--season-navy-900);
+}
+
+.schedule-manage__choice-group button.is-active {
+  background: var(--season-primary-fill);
+  color: var(--season-on-primary);
+}
+
+.schedule-manage__edit-grid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--season-line);
+  border-left: 3px solid var(--season-blue-600);
+  background: var(--season-surface-muted);
+}
+
+.schedule-manage__edit-grid :where(input, select),
+.schedule-manage__note-row input {
+  width: 100%;
+  padding: 9px 11px;
+}
+
+.schedule-manage__edit-grid :where(input, select)::placeholder,
+.schedule-manage__note-row input::placeholder {
+  color: var(--season-muted);
+  opacity: 0.72;
+}
+
+.schedule-manage__note-row,
+.schedule-manage__trash-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(190px, 0.5fr) minmax(240px, 1.5fr);
+  align-items: center;
+  gap: 18px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--season-line);
+}
+
+.schedule-manage__note-row:first-child,
+.schedule-manage__trash-row:first-child {
+  padding-top: 2px;
+}
+
+.schedule-manage__note-row:last-child,
+.schedule-manage__trash-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.schedule-manage__trash-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.schedule-manage__trash-copy {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.schedule-manage__trash-copy strong {
+  color: var(--season-navy-950);
+  font-size: 14px;
+}
+
+.schedule-manage__trash-copy span {
+  color: var(--season-muted);
+  font-size: 12px;
+}
+
+.schedule-manage__trash-copy .schedule-manage__trash-date {
+  color: var(--season-danger);
+  font-weight: 750;
+}
+
+.schedule-manage__trash-actions {
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.schedule-manage__empty {
+  padding: 20px;
+  border: 1px dashed var(--season-line-strong);
+  color: var(--season-muted);
+  font-size: 13px;
+  font-weight: 750;
+  text-align: center;
+}
+
+.schedule-manage :where(button, input, select):focus-visible {
+  border-color: var(--season-focus) !important;
+  outline: 3px solid color-mix(in srgb, var(--season-focus) 32%, transparent);
+  outline-offset: 2px;
+}
+
+.schedule-manage input[type='datetime-local'] {
+  color-scheme: light;
+}
+
+[data-theme='dark'] .schedule-manage input[type='datetime-local'] {
+  color-scheme: dark;
+}
+
+@media (max-width: 1080px) {
+  .schedule-manage__match-head {
+    grid-template-columns: 1fr;
+  }
+
+  .schedule-manage__controls {
+    justify-content: flex-start;
+  }
+
+  .schedule-manage__edit-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .schedule-manage .season-page-hero__actions,
+  .schedule-manage .season-page-hero__actions .season-action {
+    width: 100%;
+  }
+
+  .schedule-manage__board {
+    padding: 16px;
+  }
+
+  .schedule-manage__controls,
+  .schedule-manage__controls > select,
+  .schedule-manage__choice-group,
+  .schedule-manage__controls > .season-action {
+    width: 100%;
+  }
+
+  .schedule-manage__choice-group button {
+    flex: 1;
+    min-width: 0;
+    padding-inline: 6px;
+  }
+
+  .schedule-manage__edit-grid,
+  .schedule-manage__note-row,
+  .schedule-manage__trash-row {
+    grid-template-columns: 1fr;
+  }
+
+  .schedule-manage__trash-actions,
+  .schedule-manage__trash-actions .season-action {
+    width: 100%;
+  }
+}

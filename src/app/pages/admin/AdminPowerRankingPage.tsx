@@ -2,15 +2,14 @@ import { useState, type CSSProperties } from 'react';
 import { rebuildPowerRanking } from '../../../core/api/backendClient';
 
 const cardStyle: CSSProperties = {
-  borderRadius: '16px',
-  border: '1px solid rgba(148,163,184,0.28)',
-  background: 'linear-gradient(135deg, rgba(15,23,42,0.78), rgba(30,41,59,0.78))',
+  borderRadius: '4px',
+  border: '1px solid var(--season-line)',
+  background: 'var(--season-surface)',
   padding: '20px',
-  boxShadow: '0 16px 40px rgba(0,0,0,0.25)',
 };
 
 const labelStyle: CSSProperties = {
-  color: '#cbd5e1',
+  color: 'var(--season-ink)',
   fontWeight: 800,
   fontSize: '13px',
   marginBottom: '6px',
@@ -19,11 +18,12 @@ const labelStyle: CSSProperties = {
 
 const inputStyle: CSSProperties = {
   width: '100%',
+  minHeight: '44px',
   padding: '10px 12px',
-  borderRadius: '10px',
-  border: '1px solid rgba(148,163,184,0.3)',
-  background: 'rgba(15,23,42,0.6)',
-  color: '#e2e8f0',
+  borderRadius: '2px',
+  border: '1px solid var(--season-line-strong)',
+  background: 'var(--season-surface)',
+  color: 'var(--season-ink)',
   fontSize: '14px',
   boxSizing: 'border-box',
 };
@@ -71,13 +71,14 @@ export default function AdminPowerRankingPage() {
       <div
         style={{
           padding: '14px 18px',
-          borderRadius: '12px',
-          background: 'rgba(96,165,250,0.1)',
-          border: '1px solid rgba(96,165,250,0.35)',
+          borderRadius: '4px',
+          background: 'var(--season-surface)',
+          border: '1px solid var(--season-line)',
+          borderLeft: '4px solid var(--season-blue-600)',
         }}
       >
-        <div style={{ color: '#93c5fd', fontWeight: 800, fontSize: '15px' }}>파워랭킹 재계산</div>
-        <div style={{ color: '#64748b', fontSize: '12px', marginTop: '4px', lineHeight: '1.6' }}>
+        <div style={{ color: 'var(--season-navy-900)', fontWeight: 800, fontSize: '15px' }}>파워랭킹 재계산</div>
+        <div style={{ color: 'var(--season-muted)', fontSize: '12px', marginTop: '4px', lineHeight: '1.6' }}>
           DB의 경기 데이터를 기반으로 지정 연도 범위의 파워랭킹을 재계산합니다.
           <br />
           계산식: (y-2)×0.3 + (y-1)×0.6 + (y)×1.0 (3개년 가중 합산)
@@ -117,18 +118,19 @@ export default function AdminPowerRankingPage() {
         <div
           style={{
             padding: '16px 20px',
-            borderRadius: '12px',
-            background: 'rgba(239,68,68,0.1)',
-            border: '1px solid rgba(239,68,68,0.45)',
+            borderRadius: '4px',
+            background: 'var(--season-surface)',
+            border: '1px solid var(--season-danger)',
+            borderLeft: '4px solid var(--season-danger)',
             display: 'grid',
             gap: '12px',
           }}
         >
-          <div style={{ color: '#fca5a5', fontWeight: 800, fontSize: '14px' }}>
-            ⚠ 정말 재계산을 실행하시겠습니까?
+          <div style={{ color: 'var(--season-danger)', fontWeight: 800, fontSize: '14px' }}>
+            재계산 실행 확인
           </div>
-          <div style={{ color: '#94a3b8', fontSize: '13px', lineHeight: '1.7' }}>
-            <strong style={{ color: '#f87171' }}>{fromYear}~{toYear}년</strong> 범위의 기존 파워랭킹 데이터가
+          <div style={{ color: 'var(--season-muted)', fontSize: '13px', lineHeight: '1.7' }}>
+            <strong style={{ color: 'var(--season-danger)' }}>{fromYear}~{toYear}년</strong> 범위의 기존 파워랭킹 데이터가
             삭제되고 새로운 데이터로 교체됩니다.<br />
             이 작업은 되돌릴 수 없습니다.
           </div>
@@ -136,11 +138,12 @@ export default function AdminPowerRankingPage() {
             <button
               onClick={() => { void handleConfirmRebuild(); }}
               style={{
+                minHeight: '44px',
                 padding: '9px 22px',
-                borderRadius: '10px',
+                borderRadius: '2px',
                 border: 'none',
-                background: '#ef4444',
-                color: '#fff',
+                background: 'var(--season-danger-fill)',
+                color: 'var(--season-on-danger)',
                 fontWeight: 800,
                 fontSize: '13px',
                 cursor: 'pointer',
@@ -151,11 +154,12 @@ export default function AdminPowerRankingPage() {
             <button
               onClick={() => setConfirming(false)}
               style={{
+                minHeight: '44px',
                 padding: '9px 22px',
-                borderRadius: '10px',
-                border: '1px solid rgba(148,163,184,0.35)',
-                background: 'transparent',
-                color: '#94a3b8',
+                borderRadius: '2px',
+                border: '1px solid var(--season-line-strong)',
+                background: 'var(--season-surface)',
+                color: 'var(--season-ink)',
                 fontWeight: 800,
                 fontSize: '13px',
                 cursor: 'pointer',
@@ -173,11 +177,12 @@ export default function AdminPowerRankingPage() {
           onClick={handleRequestRebuild}
           disabled={running || confirming}
           style={{
+            minHeight: '44px',
             padding: '10px 28px',
-            borderRadius: '10px',
+            borderRadius: '2px',
             border: 'none',
-            background: running ? 'rgba(96,165,250,0.4)' : '#3b82f6',
-            color: '#fff',
+            background: 'var(--season-primary-fill)',
+            color: 'var(--season-on-primary)',
             fontWeight: 800,
             fontSize: '14px',
             cursor: (running || confirming) ? 'not-allowed' : 'pointer',
@@ -189,22 +194,22 @@ export default function AdminPowerRankingPage() {
         {result && (
           <span
             style={{
-              color: result.ok ? '#4ade80' : '#f87171',
+              color: result.ok ? 'var(--season-success)' : 'var(--season-danger)',
               fontSize: '13px',
               fontWeight: 700,
             }}
           >
-            {result.ok ? '✓' : '✗'} {result.message}
+            {result.message}
           </span>
         )}
       </div>
 
       {/* 주의사항 */}
-      <div style={{ ...cardStyle, borderColor: 'rgba(234,179,8,0.35)', background: 'rgba(234,179,8,0.07)' }}>
-        <div style={{ color: '#fbbf24', fontWeight: 800, fontSize: '13px', marginBottom: '8px' }}>
-          ⚠ 주의사항
+      <div style={{ ...cardStyle, borderColor: 'var(--season-warning)', borderLeft: '4px solid var(--season-warning)' }}>
+        <div style={{ color: 'var(--season-warning)', fontWeight: 800, fontSize: '13px', marginBottom: '8px' }}>
+          주의사항
         </div>
-        <ul style={{ margin: 0, paddingLeft: '18px', color: '#94a3b8', fontSize: '13px', lineHeight: '1.8' }}>
+        <ul style={{ margin: 0, paddingLeft: '18px', color: 'var(--season-muted)', fontSize: '13px', lineHeight: '1.8' }}>
           <li>재계산 시 기존 파워랭킹 데이터에 새 버전이 추가됩니다.</li>
           <li>경기 데이터(GAME)가 DB에 없으면 계산 결과가 비어있을 수 있습니다.</li>
           <li>대량 연도 범위는 처리에 시간이 걸릴 수 있습니다.</li>

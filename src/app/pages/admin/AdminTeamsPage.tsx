@@ -4,24 +4,24 @@ import type { GroupLetter } from '../../../shared/lib/teamGroups';
 import { getTeams, updateTeamActive, type TeamSummary } from '../../../core/api/backendClient';
 
 const cardStyle: CSSProperties = {
-  borderRadius: '16px',
-  border: '1px solid rgba(148,163,184,0.28)',
-  background: 'linear-gradient(135deg, rgba(15,23,42,0.78), rgba(30,41,59,0.78))',
+  borderRadius: '4px',
+  border: '1px solid var(--season-line)',
+  background: 'var(--season-surface)',
   padding: '16px',
-  boxShadow: '0 16px 40px rgba(0,0,0,0.25)',
 };
 
 const inputStyle: CSSProperties = {
   width: '100%',
+  minHeight: '44px',
   padding: '10px 12px',
-  borderRadius: '10px',
-  border: '1px solid rgba(148,163,184,0.3)',
-  background: 'rgba(15,23,42,0.6)',
-  color: '#e2e8f0',
+  borderRadius: '2px',
+  border: '1px solid var(--season-line-strong)',
+  background: 'var(--season-surface)',
+  color: 'var(--season-ink)',
   fontSize: '14px',
 };
 
-const labelStyle: CSSProperties = { color: '#cbd5e1', fontWeight: 800, fontSize: '13px', marginBottom: '6px', display: 'block' };
+const labelStyle: CSSProperties = { color: 'var(--season-ink)', fontWeight: 800, fontSize: '13px', marginBottom: '6px', display: 'block' };
 
 const VALID_GROUPS = new Set<GroupLetter>(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']);
 
@@ -137,13 +137,13 @@ export default function AdminTeamsPage() {
 
   return (
     <div style={{ display: 'grid', gap: '14px' }}>
-      {status && <div style={{ ...cardStyle, borderColor: 'rgba(34,197,94,0.45)', color: '#bbf7d0', fontWeight: 800 }}>{status}</div>}
-      {error && <div style={{ ...cardStyle, borderColor: 'rgba(248,113,113,0.45)', color: '#fecaca', fontWeight: 800 }}>{error}</div>}
-      {backendStatus && <div style={{ ...cardStyle, borderColor: 'rgba(34,197,94,0.45)', color: '#bbf7d0', fontWeight: 800 }}>{backendStatus}</div>}
-      {backendError && <div style={{ ...cardStyle, borderColor: 'rgba(248,113,113,0.45)', color: '#fecaca', fontWeight: 800 }}>{backendError}</div>}
+      {status && <div style={{ ...cardStyle, borderColor: 'var(--season-success)', color: 'var(--season-success)', fontWeight: 800 }}>{status}</div>}
+      {error && <div style={{ ...cardStyle, borderColor: 'var(--season-danger)', color: 'var(--season-danger)', fontWeight: 800 }}>{error}</div>}
+      {backendStatus && <div style={{ ...cardStyle, borderColor: 'var(--season-success)', color: 'var(--season-success)', fontWeight: 800 }}>{backendStatus}</div>}
+      {backendError && <div style={{ ...cardStyle, borderColor: 'var(--season-danger)', color: 'var(--season-danger)', fontWeight: 800 }}>{backendError}</div>}
 
       <section style={cardStyle}>
-        <h3 style={{ margin: '0 0 12px', color: '#e2e8f0' }}>참가팀 · 조편성 편집</h3>
+        <h3 style={{ margin: '0 0 12px', color: 'var(--season-ink)' }}>참가팀 · 조편성 편집</h3>
         <div style={{ display: 'grid', gap: '10px' }}>
           <div><label style={labelStyle}>페이지 배지</label><input style={inputStyle} value={pageBadge} onChange={(e) => setPageBadge(e.target.value)} /></div>
           <div><label style={labelStyle}>페이지 제목</label><input style={inputStyle} value={pageTitle} onChange={(e) => setPageTitle(e.target.value)} /></div>
@@ -156,7 +156,7 @@ export default function AdminTeamsPage() {
         </div>
 
         <div style={{ marginTop: '12px' }}>
-          <button type="button" onClick={saveTeams} style={{ ...inputStyle, width: 'auto', cursor: 'pointer', fontWeight: 800 }}>
+          <button type="button" onClick={saveTeams} style={{ ...inputStyle, width: 'auto', cursor: 'pointer', fontWeight: 800, borderColor: 'var(--season-primary-fill)', background: 'var(--season-primary-fill)', color: 'var(--season-on-primary)' }}>
             팀/조편성 저장
           </button>
         </div>
@@ -164,7 +164,7 @@ export default function AdminTeamsPage() {
 
       <section style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
-          <h3 style={{ margin: 0, color: '#e2e8f0' }}>백엔드 팀 활성/비활성 관리</h3>
+          <h3 style={{ margin: 0, color: 'var(--season-ink)' }}>백엔드 팀 활성/비활성 관리</h3>
           <button
             type="button"
             onClick={() => { void loadBackendTeams(); }}
@@ -185,25 +185,25 @@ export default function AdminTeamsPage() {
                   gridTemplateColumns: '1fr auto auto',
                   gap: '10px',
                   alignItems: 'center',
-                  border: '1px solid rgba(148,163,184,0.2)',
-                  borderRadius: '10px',
+                  border: '1px solid var(--season-line)',
+                  borderRadius: '2px',
                   padding: '10px 12px',
-                  background: 'rgba(15,23,42,0.45)',
+                  background: 'var(--season-surface-muted)',
                 }}
               >
                 <div>
-                  <div style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '14px' }}>{team.teamName}</div>
-                  <div style={{ color: '#94a3b8', fontSize: '12px' }}>
+                  <div style={{ color: 'var(--season-ink)', fontWeight: 800, fontSize: '14px' }}>{team.teamName}</div>
+                  <div style={{ color: 'var(--season-muted)', fontSize: '12px' }}>
                     ID: {team.id} · teamCode: {team.teamCode || '-'}
                   </div>
                 </div>
                 <span
                   style={{
-                    color: team.active ? '#86efac' : '#fca5a5',
+                    color: team.active ? 'var(--season-success)' : 'var(--season-danger)',
                     fontWeight: 800,
                     fontSize: '12px',
-                    border: `1px solid ${team.active ? 'rgba(34,197,94,0.35)' : 'rgba(248,113,113,0.35)'}`,
-                    borderRadius: '999px',
+                    border: `1px solid ${team.active ? 'var(--season-success)' : 'var(--season-danger)'}`,
+                    borderRadius: '2px',
                     padding: '3px 10px',
                   }}
                 >
@@ -220,8 +220,8 @@ export default function AdminTeamsPage() {
                     width: 'auto',
                     cursor: busy ? 'not-allowed' : 'pointer',
                     fontWeight: 800,
-                    borderColor: team.active ? 'rgba(248,113,113,0.35)' : 'rgba(34,197,94,0.35)',
-                    color: team.active ? '#fecaca' : '#bbf7d0',
+                    borderColor: team.active ? 'var(--season-danger)' : 'var(--season-success)',
+                    color: team.active ? 'var(--season-danger)' : 'var(--season-success)',
                   }}
                 >
                   {busy ? '처리 중...' : team.active ? '비활성화' : '활성화'}
@@ -230,7 +230,7 @@ export default function AdminTeamsPage() {
             );
           })}
           {!backendLoading && backendTeams.length === 0 && (
-            <div style={{ color: '#94a3b8', fontSize: '13px' }}>백엔드 팀 목록이 비어 있습니다.</div>
+            <div style={{ color: 'var(--season-muted)', fontSize: '13px' }}>백엔드 팀 목록이 비어 있습니다.</div>
           )}
         </div>
       </section>

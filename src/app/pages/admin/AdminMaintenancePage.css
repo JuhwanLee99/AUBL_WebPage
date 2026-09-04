@@ -1,0 +1,226 @@
+.admin-maintenance {
+  display: grid;
+  gap: clamp(18px, 2.6vw, 30px);
+  min-width: 0;
+  color: var(--season-ink);
+}
+
+.admin-maintenance .season-page-hero {
+  min-height: 210px;
+}
+
+.admin-maintenance__hero-status {
+  min-width: 170px;
+  display: grid;
+  align-content: end;
+  justify-items: start;
+  gap: 10px;
+  padding: 8px 0 8px 22px;
+  border-left: 3px solid var(--season-blue-600);
+}
+
+.admin-maintenance__hero-status > span {
+  color: var(--season-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.admin-maintenance__loading {
+  min-height: 140px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--season-line);
+  background: var(--season-surface);
+  color: var(--season-muted);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.admin-maintenance__status {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid color-mix(in srgb, var(--season-success) 38%, var(--season-line));
+  border-left: 4px solid var(--season-success);
+  background: color-mix(in srgb, var(--season-success) 6%, var(--season-surface));
+}
+
+.admin-maintenance__status.is-enabled {
+  border-color: color-mix(in srgb, var(--season-danger) 38%, var(--season-line));
+  border-left-color: var(--season-danger);
+  background: color-mix(in srgb, var(--season-danger) 6%, var(--season-surface));
+}
+
+.admin-maintenance__status-mark {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border: 3px solid color-mix(in srgb, var(--season-success) 20%, var(--season-surface));
+  border-radius: 50%;
+  background: var(--season-success);
+  box-shadow: 0 0 0 1px var(--season-success);
+}
+
+.admin-maintenance__status.is-enabled .admin-maintenance__status-mark {
+  border-color: color-mix(in srgb, var(--season-danger) 20%, var(--season-surface));
+  background: var(--season-danger);
+  box-shadow: 0 0 0 1px var(--season-danger);
+}
+
+.admin-maintenance__status strong {
+  color: var(--season-navy-950);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.admin-maintenance__status p,
+.admin-maintenance__toggle-row p {
+  margin: 3px 0 0;
+  color: var(--season-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.admin-maintenance__board {
+  min-width: 0;
+  display: grid;
+  gap: 22px;
+  padding: clamp(18px, 2.8vw, 30px);
+  border: 1px solid var(--season-line);
+  background: var(--season-surface);
+}
+
+.admin-maintenance__toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px;
+  border: 1px solid var(--season-line);
+  border-left: 3px solid var(--season-blue-600);
+  background: var(--season-surface-muted);
+}
+
+.admin-maintenance__toggle-row strong {
+  color: var(--season-navy-950);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.admin-maintenance__toggle {
+  min-width: 82px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 8px 13px;
+  border: 1px solid var(--season-line-strong);
+  border-radius: 4px;
+  background: var(--season-surface);
+  color: var(--season-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.admin-maintenance__toggle > span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--season-muted);
+}
+
+.admin-maintenance__toggle.is-enabled {
+  border-color: var(--season-danger);
+  background: color-mix(in srgb, var(--season-danger) 7%, var(--season-surface));
+  color: var(--season-danger);
+}
+
+.admin-maintenance__toggle.is-enabled > span {
+  background: var(--season-danger);
+}
+
+.admin-maintenance__field {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-maintenance__field > span {
+  color: var(--season-ink);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.admin-maintenance__field :where(input, textarea) {
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--season-line-strong);
+  border-radius: 4px;
+  outline: 0;
+  background: var(--season-surface);
+  color: var(--season-ink);
+  font: inherit;
+  font-size: 14px;
+}
+
+.admin-maintenance__field textarea {
+  min-height: 142px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.admin-maintenance__field input::placeholder {
+  color: var(--season-muted);
+  opacity: 0.72;
+}
+
+.admin-maintenance__field small {
+  color: var(--season-muted);
+  font-size: 11px;
+}
+
+.admin-maintenance__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 18px;
+  border-top: 1px solid var(--season-line);
+}
+
+.admin-maintenance__saved {
+  color: var(--season-success);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.admin-maintenance :where(button, input, textarea):focus-visible {
+  border-color: var(--season-focus) !important;
+  outline: 3px solid color-mix(in srgb, var(--season-focus) 32%, transparent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .admin-maintenance__hero-status {
+    min-width: 0;
+    padding: 16px 0 0;
+    border-top: 1px solid var(--season-line);
+    border-left: 0;
+  }
+
+  .admin-maintenance__toggle-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-maintenance__toggle,
+  .admin-maintenance__actions .season-action {
+    width: 100%;
+  }
+}
