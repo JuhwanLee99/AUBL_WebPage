@@ -14,11 +14,12 @@ import '../../core/models/notice.dart';
 import '../../core/models/public_season_models.dart';
 import '../../core/models/team_notice.dart';
 import '../../core/navigation/app_destination.dart';
-import '../../core/services/backend_api_service.dart';
 import '../../core/services/cache_service.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/services/notification_service.dart';
+import '../../core/services/public_season_repository.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/kst_clock.dart';
 import '../../core/widgets/season_components.dart';
 import '../community/notice_detail_screen.dart';
 import '../teams/team_notice_detail_screen.dart';
@@ -38,7 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
   static const _majorUrl = 'https://www.baseballm.com/';
   static const _instagramUrl = 'https://www.instagram.com/aubl_1981/';
 
-  final BackendApiService _api = BackendApiService();
+  final PublicSeasonRepository _seasonRepository = PublicSeasonRepository();
   final FirestoreService _firestore = FirestoreService();
 
   StreamSubscription<User?>? _authSubscription;
@@ -55,9 +56,11 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _error;
   bool _loading = true;
   bool _calendarLoading = false;
+  bool _usingCachedSeasonData = false;
+  DateTime? _seasonCacheTime;
   MatchViewMode _viewMode = MatchViewMode.list;
-  DateTime _visibleMonth = _monthStart(_kstNow());
-  DateTime _selectedDate = _kstToday();
+  DateTime _visibleMonth = _monthStart(KstClock.now());
+  DateTime _selectedDate = KstClock.today();
   _SiteAnnouncement? _announcement;
   bool _announcementCollapsed = false;
   bool _announcementHidden = false;
@@ -133,14 +136,13 @@ class _HomeScreenState extends State<HomeScreen> {
     if (showLoading && mounted) setState(() => _loading = true);
     String? nextError;
     SeasonOverview? nextOverview;
+    var usingCache = false;
+    DateTime? cacheTime;
     try {
-      final seasons = await _api.getSeasons();
-      if (seasons.isEmpty) throw StateError('공개된 시즌이 없습니다.');
-      final season = seasons.firstWhere(
-        (item) => item.year == 2026,
-        orElse: () => seasons.first,
-      );
-      nextOverview = await _api.getSeasonOverview(season.id);
+      final result = await _seasonRepository.loadOverview();
+      nextOverview = result.data;
+      usingCache = result.fromCache;
+      cacheTime = result.cachedAt;
     } catch (_) {
       nextError = '공식 시즌 데이터를 불러오지 못했습니다.';
     }
@@ -154,6 +156,8 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _overview = nextOverview ?? _overview;
       _error = nextError;
+      _usingCachedSeasonData = usingCache;
+      _seasonCacheTime = cacheTime;
       _loading = false;
       _applyPreferredGroup();
     });
@@ -237,13 +241,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final first = _monthStart(_visibleMonth);
     final last = DateTime(first.year, first.month + 1, 0);
     try {
-      final games = await _api.getPublicGames(
+      final result = await _seasonRepository.loadGames(
         seasonId: overview.seasonId,
+        revision: overview.sourceFreshness.publishedRevision,
         dateFrom: first,
         dateTo: last,
       );
       if (!mounted) return;
-      setState(() => _monthGames = games);
+      setState(() => _monthGames = result.data);
     } catch (_) {
       if (!mounted) return;
       setState(() => _monthGames = const []);
@@ -330,7 +335,11 @@ class _HomeScreenState extends State<HomeScreen> {
             _buildHero(),
             const SizedBox(height: 14),
             if (_overview != null)
-              DataFreshnessCard(freshness: _overview!.sourceFreshness)
+              DataFreshnessCard(
+                freshness: _overview!.sourceFreshness,
+                fromCache: _usingCachedSeasonData,
+                cachedAt: _seasonCacheTime,
+              )
             else if (_loading)
               const _HomeLoadingCard()
             else
@@ -580,8 +589,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     TextButton(
                       onPressed: () {
                         setState(() {
-                          _visibleMonth = _monthStart(_kstNow());
-                          _selectedDate = _kstToday();
+                          _visibleMonth = _monthStart(KstClock.now());
+                          _selectedDate = KstClock.today();
                         });
                         _loadMonthGames();
                       },
@@ -629,7 +638,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     }
                     final date = DateTime(first.year, first.month, day);
                     final games = _gamesOn(date);
-                    final selected = _sameDay(date, _selectedDate);
+                    final selected = KstClock.isSameDay(date, _selectedDate);
                     return Semantics(
                       button: true,
                       selected: selected,
@@ -721,7 +730,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<PublicGame> _gamesOn(DateTime date) {
     return _monthGames.where((game) {
       final gameDate = game.gameDate ?? game.startTime;
-      return gameDate != null && _sameDay(gameDate, date);
+      return gameDate != null && KstClock.isSameDay(gameDate, date);
     }).toList();
   }
 
@@ -1316,14 +1325,4 @@ String? _normalizeTeamName(String? value) {
   return normalized == null || normalized.isEmpty ? null : normalized;
 }
 
-DateTime _kstNow() => DateTime.now().toUtc().add(const Duration(hours: 9));
-
-DateTime _kstToday() {
-  final now = _kstNow();
-  return DateTime(now.year, now.month, now.day);
-}
-
-DateTime _monthStart(DateTime date) => DateTime(date.year, date.month);
-
-bool _sameDay(DateTime a, DateTime b) =>
-    a.year == b.year && a.month == b.month && a.day == b.day;
+DateTime _monthStart(DateTime date) => KstClock.monthStart(date);

@@ -1,3 +1,5 @@
+import '../utils/kst_clock.dart';
+
 enum QualificationState {
   currentEutteum,
   currentBeogeum,
@@ -31,6 +33,17 @@ enum QualificationState {
         tiePending => '판정 대기',
         unknown => '확인 중',
       };
+
+  String get wire => switch (this) {
+        currentEutteum => 'CURRENT_EUTTEUM',
+        currentBeogeum => 'CURRENT_BEOGEUM',
+        currentOut => 'CURRENT_OUT',
+        confirmedEutteum => 'CONFIRMED_EUTTEUM',
+        confirmedBeogeum => 'CONFIRMED_BEOGEUM',
+        confirmedOut => 'CONFIRMED_OUT',
+        tiePending => 'TIE_PENDING',
+        unknown => 'UNKNOWN',
+      };
 }
 
 enum PublicGameStatus {
@@ -51,6 +64,15 @@ enum PublicGameStatus {
       _ => unknown,
     };
   }
+
+  String get wire => switch (this) {
+        scheduled => 'SCHEDULED',
+        inProgress => 'IN_PROGRESS',
+        completed => 'COMPLETED',
+        canceled => 'CANCELED',
+        suspended => 'SUSPENDED',
+        unknown => 'UNKNOWN',
+      };
 }
 
 class SourceFreshness {
@@ -86,6 +108,17 @@ class SourceFreshness {
       status: _string(json['status']),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'provider': provider,
+        'syncMode': syncMode,
+        'publishedRevision': publishedRevision,
+        'publishedAt': publishedAt?.toIso8601String(),
+        'latestSourceUpdatedAt': latestSourceUpdatedAt?.toIso8601String(),
+        'checkedAt': checkedAt?.toIso8601String(),
+        'ageSeconds': ageSeconds,
+        'status': status,
+      };
 }
 
 class PublicGame {
@@ -181,6 +214,34 @@ class PublicGame {
       activeRevision: json['activeRevision'] != false,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': backendGameId,
+        'seasonId': seasonId,
+        'seasonYear': seasonYear,
+        'gameDate': gameDate?.toIso8601String(),
+        'startTime': startTime?.toIso8601String(),
+        'timezone': timezone,
+        'venue': venue,
+        'groupCode': groupCode,
+        'status': status.wire,
+        'gameType': gameType,
+        'gameNumber': gameNumber,
+        'homeTeamId': homeTeamId,
+        'homeTeamName': homeTeamName,
+        'homeScore': homeScore,
+        'homeQualificationState': homeQualificationState.wire,
+        'awayTeamId': awayTeamId,
+        'awayTeamName': awayTeamName,
+        'awayScore': awayScore,
+        'awayQualificationState': awayQualificationState.wire,
+        'sourceProvider': sourceProvider,
+        'sourceGameId': sourceGameId,
+        'syncRevision': syncRevision,
+        'sourceUpdatedAt': sourceUpdatedAt?.toIso8601String(),
+        'freshnessStatus': freshnessStatus,
+        'activeRevision': activeRevision,
+      };
 }
 
 class GroupStanding {
@@ -244,6 +305,25 @@ class GroupStanding {
       syncRevision: _string(json['syncRevision']),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'rank': rank,
+        'teamId': teamId,
+        'teamName': teamName,
+        'groupCode': groupCode,
+        'gamesPlayed': gamesPlayed,
+        'wins': wins,
+        'ties': ties,
+        'losses': losses,
+        'runsFor': runsFor,
+        'runsAgainst': runsAgainst,
+        'runDifferential': runDifferential,
+        'winPct': winPct,
+        'points': points,
+        'gamesBehind': gamesBehind,
+        'qualificationState': qualificationState.wire,
+        'syncRevision': syncRevision,
+      };
 }
 
 class GroupOverview {
@@ -275,6 +355,13 @@ class GroupOverview {
       standings: rows,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'groupCode': groupCode,
+        'teamCount': teamCount,
+        'completedGameCount': completedGameCount,
+        'standings': standings.map((row) => row.toJson()).toList(),
+      };
 }
 
 class SeasonBatterLeader {
@@ -313,6 +400,17 @@ class SeasonBatterLeader {
       homeRuns: _int(json['homeRuns']),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'rank': rank,
+        'playerId': playerId,
+        'playerName': playerName,
+        'teamName': teamName,
+        'groupCode': groupCode,
+        'battingAverage': battingAverage,
+        'hits': hits,
+        'homeRuns': homeRuns,
+      };
 }
 
 class SeasonPitcherLeader {
@@ -351,6 +449,17 @@ class SeasonPitcherLeader {
       strikeouts: _int(json['strikeouts']),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'rank': rank,
+        'playerId': playerId,
+        'playerName': playerName,
+        'teamName': teamName,
+        'groupCode': groupCode,
+        'era': era,
+        'wins': wins,
+        'strikeouts': strikeouts,
+      };
 }
 
 class SeasonOverview {
@@ -415,6 +524,18 @@ class SeasonOverview {
           .toList(),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'seasonId': seasonId,
+        'seasonYear': seasonYear,
+        'generatedAt': generatedAt?.toIso8601String(),
+        'sourceFreshness': sourceFreshness.toJson(),
+        'upcomingGames': upcomingGames.map((game) => game.toJson()).toList(),
+        'recentGames': recentGames.map((game) => game.toJson()).toList(),
+        'groups': groups.map((group) => group.toJson()).toList(),
+        'batterLeaders': batterLeaders.map((row) => row.toJson()).toList(),
+        'pitcherLeaders': pitcherLeaders.map((row) => row.toJson()).toList(),
+      };
 }
 
 List<PublicGame> _games(dynamic value) {
@@ -442,8 +563,7 @@ double? _double(dynamic value) {
 }
 
 DateTime? _dateTime(dynamic value) {
-  final text = _string(value);
-  return text == null ? null : DateTime.tryParse(text);
+  return KstClock.tryParseApi(value);
 }
 
 DateTime? _date(dynamic value) {

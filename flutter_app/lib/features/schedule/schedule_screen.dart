@@ -5,12 +5,14 @@ import 'package:intl/intl.dart';
 
 import '../../app/shell_controller.dart';
 import '../../core/contracts/web_contracts.dart';
+import '../../core/models/api_cache_envelope.dart';
 import '../../core/models/match.dart';
 import '../../core/models/match_view_mode.dart';
 import '../../core/models/public_season_models.dart';
-import '../../core/services/backend_api_service.dart';
 import '../../core/services/firestore_service.dart';
+import '../../core/services/public_season_repository.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/kst_clock.dart';
 import '../../core/widgets/season_components.dart';
 
 class ScheduleScreen extends StatefulWidget {
@@ -22,7 +24,7 @@ class ScheduleScreen extends StatefulWidget {
 
 class _ScheduleScreenState extends State<ScheduleScreen>
     with SingleTickerProviderStateMixin {
-  final BackendApiService _api = BackendApiService();
+  final PublicSeasonRepository _seasonRepository = PublicSeasonRepository();
   final FirestoreService _firestore = FirestoreService();
   late final TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
@@ -33,8 +35,8 @@ class _ScheduleScreenState extends State<ScheduleScreen>
   List<PublicGame> _monthGames = const [];
   List<PublicGame> _groupGames = const [];
   List<Match> _practiceGames = const [];
-  DateTime _visibleMonth = _monthStart(_kstNow());
-  DateTime _selectedDate = _kstToday();
+  DateTime _visibleMonth = _monthStart(KstClock.now());
+  DateTime _selectedDate = KstClock.today();
   MatchViewMode _viewMode = MatchViewMode.list;
   PublicGameStatus? _statusFilter;
   String _groupFilter = 'A';
@@ -42,6 +44,8 @@ class _ScheduleScreenState extends State<ScheduleScreen>
   bool _loading = true;
   bool _groupLoading = false;
   String? _error;
+  bool _usingCachedSeasonData = false;
+  DateTime? _seasonCacheTime;
 
   @override
   void initState() {
@@ -83,14 +87,13 @@ class _ScheduleScreenState extends State<ScheduleScreen>
   Future<void> _loadInitial({bool showLoading = true}) async {
     if (showLoading && mounted) setState(() => _loading = true);
     try {
-      final seasons = await _api.getSeasons();
-      if (seasons.isEmpty) throw StateError('공개된 시즌이 없습니다.');
-      final season = seasons.firstWhere(
-        (row) => row.year == 2026,
-        orElse: () => seasons.first,
+      final overviewResult = await _seasonRepository.loadOverview();
+      final overview = overviewResult.data;
+      final games = await _fetchMonth(
+        overview.seasonId,
+        overview.sourceFreshness.publishedRevision,
+        _visibleMonth,
       );
-      final overview = await _api.getSeasonOverview(season.id);
-      final games = await _fetchMonth(season.id, _visibleMonth);
       List<Match> practice = const [];
       try {
         practice = (await _firestore.getAllMatches())
@@ -99,10 +102,12 @@ class _ScheduleScreenState extends State<ScheduleScreen>
       } catch (_) {}
       if (!mounted) return;
       setState(() {
-        _seasonId = season.id;
+        _seasonId = overview.seasonId;
         _overview = overview;
-        _monthGames = games;
+        _monthGames = games.data;
         _practiceGames = practice;
+        _usingCachedSeasonData = overviewResult.fromCache;
+        _seasonCacheTime = overviewResult.cachedAt;
         _loading = false;
         _error = null;
       });
@@ -115,11 +120,16 @@ class _ScheduleScreenState extends State<ScheduleScreen>
     }
   }
 
-  Future<List<PublicGame>> _fetchMonth(int seasonId, DateTime month) {
+  Future<ApiLoadResult<List<PublicGame>>> _fetchMonth(
+    int seasonId,
+    String? revision,
+    DateTime month,
+  ) {
     final first = _monthStart(month);
     final last = DateTime(first.year, first.month + 1, 0);
-    return _api.getPublicGames(
+    return _seasonRepository.loadGames(
       seasonId: seasonId,
+      revision: revision,
       dateFrom: first,
       dateTo: last,
     );
@@ -135,10 +145,14 @@ class _ScheduleScreenState extends State<ScheduleScreen>
       _loading = true;
     });
     try {
-      final games = await _fetchMonth(seasonId, next);
+      final games = await _fetchMonth(
+        seasonId,
+        _overview?.sourceFreshness.publishedRevision,
+        next,
+      );
       if (!mounted) return;
       setState(() {
-        _monthGames = games;
+        _monthGames = games.data;
         _loading = false;
       });
     } catch (_) {
@@ -157,13 +171,14 @@ class _ScheduleScreenState extends State<ScheduleScreen>
     setState(() => _groupLoading = true);
     try {
       final isGroup = RegExp(r'^[A-H]$').hasMatch(_groupFilter);
-      final games = await _api.getPublicGames(
+      final games = await _seasonRepository.loadGames(
         seasonId: seasonId,
+        revision: _overview?.sourceFreshness.publishedRevision,
         group: isGroup ? _groupFilter : null,
         qualification: isGroup ? null : _groupFilter,
       );
       if (!mounted) return;
-      setState(() => _groupGames = games);
+      setState(() => _groupGames = games.data);
     } catch (_) {
       if (!mounted) return;
       setState(() => _groupGames = const []);
@@ -231,13 +246,21 @@ class _ScheduleScreenState extends State<ScheduleScreen>
             description: '공식 게시된 경기만 월별·상태별로 확인할 수 있습니다.',
           ),
           const SizedBox(height: 16),
+          if (_overview != null) ...[
+            DataFreshnessCard(
+              freshness: _overview!.sourceFreshness,
+              fromCache: _usingCachedSeasonData,
+              cachedAt: _seasonCacheTime,
+            ),
+            const SizedBox(height: 12),
+          ],
           _MonthNavigator(
             month: _visibleMonth,
             onPrevious: () => _changeMonth(-1),
             onToday: () {
               setState(() {
-                _visibleMonth = _monthStart(_kstNow());
-                _selectedDate = _kstToday();
+                _visibleMonth = _monthStart(KstClock.now());
+                _selectedDate = KstClock.today();
               });
               _loadInitial(showLoading: false);
             },
@@ -661,7 +684,7 @@ class _ScheduleCalendar extends StatelessWidget {
 
   List<PublicGame> _on(DateTime date) => games.where((game) {
         final gameDate = game.gameDate ?? game.startTime;
-        return gameDate != null && _sameDay(gameDate, date);
+        return gameDate != null && KstClock.isSameDay(gameDate, date);
       }).toList();
 
   @override
@@ -710,7 +733,7 @@ class _ScheduleCalendar extends StatelessWidget {
                     if (day < 1 || day > days) return const SizedBox.shrink();
                     final date = DateTime(first.year, first.month, day);
                     final count = _on(date).length;
-                    final selected = _sameDay(date, selectedDate);
+                    final selected = KstClock.isSameDay(date, selectedDate);
                     return Semantics(
                       button: true,
                       selected: selected,
@@ -909,7 +932,7 @@ class _PracticeMatchCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final start = DateTime.tryParse(match.startTime ?? '');
+    final start = KstClock.tryParseApi(match.startTime);
     return Card(
       child: InkWell(
         onTap: onTap,
@@ -958,14 +981,4 @@ class _PracticeMatchCard extends StatelessWidget {
   }
 }
 
-DateTime _kstNow() => DateTime.now().toUtc().add(const Duration(hours: 9));
-
-DateTime _kstToday() {
-  final now = _kstNow();
-  return DateTime(now.year, now.month, now.day);
-}
-
-DateTime _monthStart(DateTime value) => DateTime(value.year, value.month);
-
-bool _sameDay(DateTime a, DateTime b) =>
-    a.year == b.year && a.month == b.month && a.day == b.day;
+DateTime _monthStart(DateTime value) => KstClock.monthStart(value);

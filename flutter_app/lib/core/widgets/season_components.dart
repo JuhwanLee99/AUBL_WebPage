@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../models/public_season_models.dart';
 import '../theme/app_theme.dart';
+import '../utils/kst_clock.dart';
 
 class SeasonPageHero extends StatelessWidget {
   const SeasonPageHero({
@@ -247,14 +248,22 @@ class SeasonStatusBadge extends StatelessWidget {
 }
 
 class DataFreshnessCard extends StatelessWidget {
-  const DataFreshnessCard({super.key, required this.freshness});
+  const DataFreshnessCard({
+    super.key,
+    required this.freshness,
+    this.fromCache = false,
+    this.cachedAt,
+  });
 
   final SourceFreshness freshness;
+  final bool fromCache;
+  final DateTime? cachedAt;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.aublColors;
-    final date = freshness.publishedAt ?? freshness.checkedAt;
+    final date =
+        fromCache ? cachedAt : freshness.publishedAt ?? freshness.checkedAt;
     final status = freshness.status?.toUpperCase() ?? 'UNKNOWN';
     final tone = status == 'CURRENT'
         ? SeasonBadgeTone.success
@@ -266,21 +275,26 @@ class DataFreshnessCard extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         child: Row(
           children: [
-            Icon(Icons.sync_outlined, color: colors.cobalt),
+            Icon(
+              fromCache ? Icons.cloud_done_outlined : Icons.sync_outlined,
+              color: colors.cobalt,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${freshness.provider ?? '공식 기록'} · ${freshness.syncMode == 'MANUAL' ? '관리자 수동 게시' : '게시 데이터'}',
+                    fromCache
+                        ? '${freshness.provider ?? '공식 기록'} · 오프라인 저장본'
+                        : '${freshness.provider ?? '공식 기록'} · ${freshness.syncMode == 'MANUAL' ? '관리자 수동 게시' : '게시 데이터'}',
                     style: Theme.of(context).textTheme.labelLarge,
                   ),
                   const SizedBox(height: 3),
                   Text(
                     date == null
                         ? '게시 시각 확인 중'
-                        : '${DateFormat('yyyy.MM.dd HH:mm').format(date.toLocal())} 기준',
+                        : '${DateFormat('yyyy.MM.dd HH:mm').format(KstClock.normalizeApi(date))} 기준',
                     style: Theme.of(context)
                         .textTheme
                         .bodySmall
@@ -290,12 +304,14 @@ class DataFreshnessCard extends StatelessWidget {
               ),
             ),
             SeasonStatusBadge(
-              label: status == 'CURRENT'
-                  ? '최신'
-                  : status == 'STALE'
-                      ? '갱신 필요'
-                      : '확인 중',
-              tone: tone,
+              label: fromCache
+                  ? '저장본'
+                  : status == 'CURRENT'
+                      ? '최신'
+                      : status == 'STALE'
+                          ? '갱신 필요'
+                          : '확인 중',
+              tone: fromCache ? SeasonBadgeTone.warning : tone,
             ),
           ],
         ),
@@ -335,7 +351,8 @@ class PublicMatchCard extends StatelessWidget {
         SeasonBadgeTone.warning,
       _ => SeasonBadgeTone.muted,
     };
-    final date = game.startTime ?? game.gameDate;
+    final rawDate = game.startTime ?? game.gameDate;
+    final date = rawDate == null ? null : KstClock.normalizeApi(rawDate);
     return Card(
       child: InkWell(
         onTap: onTap,
