@@ -677,11 +677,20 @@ function normalizeBatterRankingRow(
   entry: unknown,
   fallbackSeasonId: number,
   fallbackRank: number,
+  includeIncomplete = false,
 ): BatterRanking | null {
   if (!entry || typeof entry !== 'object') return null;
   const row = entry as Record<string, unknown>;
   const playerId = toFiniteNumber(row.playerId ?? row.player_id);
   if (playerId == null) return null;
+  const hasPublishedStats = [
+    row.gamesPlayed ?? row.games_played,
+    row.plateAppearance ?? row.plate_appearance,
+    row.atBats ?? row.at_bats,
+    row.hits,
+    row.battingAverage ?? row.batting_average ?? row.avg,
+  ].some((value) => toFiniteNumber(value) !== null);
+  if (!includeIncomplete && !hasPublishedStats) return null;
   const playerName =
     toStringValue(row.playerName ?? row.player_name ?? row.name) || `선수 #${playerId}`;
 
@@ -720,11 +729,20 @@ function normalizePitcherRankingRow(
   entry: unknown,
   fallbackSeasonId: number,
   fallbackRank: number,
+  includeIncomplete = false,
 ): PitcherRanking | null {
   if (!entry || typeof entry !== 'object') return null;
   const row = entry as Record<string, unknown>;
   const playerId = toFiniteNumber(row.playerId ?? row.player_id);
   if (playerId == null) return null;
+  const hasPublishedStats = [
+    row.gamesPlayed ?? row.games_played,
+    row.inningsPitched ?? row.innings_pitched ?? row.ip,
+    row.wins ?? row.w,
+    row.losses ?? row.l,
+    row.era,
+  ].some((value) => toFiniteNumber(value) !== null);
+  if (!includeIncomplete && !hasPublishedStats) return null;
   const playerName =
     toStringValue(row.playerName ?? row.player_name ?? row.name) || `선수 #${playerId}`;
 
@@ -755,17 +773,17 @@ function normalizePitcherRankingRow(
   };
 }
 
-function normalizeBatterRankings(raw: unknown, seasonId: number): BatterRanking[] {
+function normalizeBatterRankings(raw: unknown, seasonId: number, includeIncomplete = false): BatterRanking[] {
   if (!Array.isArray(raw)) return [];
   return raw
-    .map((entry, index) => normalizeBatterRankingRow(entry, seasonId, index + 1))
+    .map((entry, index) => normalizeBatterRankingRow(entry, seasonId, index + 1, includeIncomplete))
     .filter((row): row is BatterRanking => row !== null);
 }
 
-function normalizePitcherRankings(raw: unknown, seasonId: number): PitcherRanking[] {
+function normalizePitcherRankings(raw: unknown, seasonId: number, includeIncomplete = false): PitcherRanking[] {
   if (!Array.isArray(raw)) return [];
   return raw
-    .map((entry, index) => normalizePitcherRankingRow(entry, seasonId, index + 1))
+    .map((entry, index) => normalizePitcherRankingRow(entry, seasonId, index + 1, includeIncomplete))
     .filter((row): row is PitcherRanking => row !== null);
 }
 
@@ -775,6 +793,7 @@ export async function getBatterRankings(opts: {
   sort?: BatterRankingSort;
   filters?: RecordFilterParams;
   regulation?: RecordRegulation;
+  includeIncomplete?: boolean;
 }): Promise<BatterRanking[]> {
   if (!Number.isInteger(opts.seasonId) || opts.seasonId <= 0) {
     throw new Error('seasonId is required and must be a positive integer.');
@@ -783,13 +802,13 @@ export async function getBatterRankings(opts: {
   const qs = params.toString();
   try {
     const raw = await fetchApi<unknown>(`/api/rankings/batters${qs ? `?${qs}` : ''}`);
-    return normalizeBatterRankings(raw, opts.seasonId);
+    return normalizeBatterRankings(raw, opts.seasonId, opts.includeIncomplete);
   } catch (err) {
     if (isBadRequestError(err) && hasActiveRecordFilters(opts.filters)) {
       const fallbackParams = buildQuery({ ...opts, filters: undefined });
       const fallbackQs = fallbackParams.toString();
       const raw = await fetchApi<unknown>(`/api/rankings/batters${fallbackQs ? `?${fallbackQs}` : ''}`);
-      return normalizeBatterRankings(raw, opts.seasonId);
+      return normalizeBatterRankings(raw, opts.seasonId, opts.includeIncomplete);
     }
     throw err;
   }
@@ -801,6 +820,7 @@ export async function getPitcherRankings(opts: {
   sort?: PitcherRankingSort;
   filters?: RecordFilterParams;
   regulation?: RecordRegulation;
+  includeIncomplete?: boolean;
 }): Promise<PitcherRanking[]> {
   if (!Number.isInteger(opts.seasonId) || opts.seasonId <= 0) {
     throw new Error('seasonId is required and must be a positive integer.');
@@ -809,13 +829,13 @@ export async function getPitcherRankings(opts: {
   const qs = params.toString();
   try {
     const raw = await fetchApi<unknown>(`/api/rankings/pitchers${qs ? `?${qs}` : ''}`);
-    return normalizePitcherRankings(raw, opts.seasonId);
+    return normalizePitcherRankings(raw, opts.seasonId, opts.includeIncomplete);
   } catch (err) {
     if (isBadRequestError(err) && hasActiveRecordFilters(opts.filters)) {
       const fallbackParams = buildQuery({ ...opts, filters: undefined });
       const fallbackQs = fallbackParams.toString();
       const raw = await fetchApi<unknown>(`/api/rankings/pitchers${fallbackQs ? `?${fallbackQs}` : ''}`);
-      return normalizePitcherRankings(raw, opts.seasonId);
+      return normalizePitcherRankings(raw, opts.seasonId, opts.includeIncomplete);
     }
     throw err;
   }
@@ -849,8 +869,8 @@ export async function getPlayerSearchIndex(seasonId: number): Promise<PlayerLook
   }
 
   const [battersResult, pitchersResult] = await Promise.allSettled([
-    getBatterRankings({ seasonId, limit: 0, sort: 'battingAverage' }),
-    getPitcherRankings({ seasonId, limit: 0, sort: 'era' }),
+    getBatterRankings({ seasonId, limit: 0, sort: 'battingAverage', includeIncomplete: true }),
+    getPitcherRankings({ seasonId, limit: 0, sort: 'era', includeIncomplete: true }),
   ]);
 
   const batters = battersResult.status === 'fulfilled' ? battersResult.value : [];
