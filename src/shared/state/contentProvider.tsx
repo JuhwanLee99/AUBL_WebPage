@@ -58,8 +58,22 @@ export type TeamsContent = {
   entries: TeamContentEntry[];
 };
 
+export type SiteAnnouncementTone = 'info' | 'warning';
+
+export type SiteAnnouncement = {
+  enabled: boolean;
+  revision: string;
+  tone: SiteAnnouncementTone;
+  title: string;
+  message: string;
+  linkLabel: string;
+  linkHref: string;
+  publishedAt: number;
+};
+
 export type ContentState = {
   tickerItems: string[];
+  announcement: SiteAnnouncement;
   landing: LandingContent;
   intro: IntroContent;
   rules: RulesContent;
@@ -239,6 +253,16 @@ const defaultContent: ContentState = {
     '🏆 [2024 결과] 으뜸 우승: 홍익대 / 버금 우승: 동국대 LAE',
     '⚾ [현재 시즌] 2025 AUBL 토너먼트 진행 중 (주최: 아주대학교)',
   ],
+  announcement: {
+    enabled: false,
+    revision: 'initial',
+    tone: 'info',
+    title: '',
+    message: '',
+    linkLabel: '',
+    linkHref: '',
+    publishedAt: 0,
+  },
   landing: DEFAULT_LANDING,
   intro: DEFAULT_INTRO,
   rules: DEFAULT_RULES,
@@ -248,8 +272,12 @@ const defaultContent: ContentState = {
 type ContentContextValue = {
   content: ContentState;
   updateContent: (next: Partial<ContentState>) => void;
+  updateAnnouncement: (next: SiteAnnouncement) => Promise<void>;
   resetContent: () => void;
 };
+
+type LiveContentState = Pick<ContentState, 'tickerItems' | 'announcement'>;
+type StaticContentState = Pick<ContentState, 'landing' | 'intro' | 'rules' | 'teams'>;
 
 const LEGACY_STORAGE_KEY = 'aubl:content:v1';
 const LIVE_STORAGE_KEY = 'aubl:content:live:v1';
@@ -260,7 +288,7 @@ const LIVE_DOC = 'settings/liveInfo';
 const STATIC_DOC = 'settings/staticContent';
 const META_DOC = 'settings/contentMeta';
 
-const STATIC_KEYS: (keyof Omit<ContentState, 'tickerItems'>)[] = ['landing', 'intro', 'rules', 'teams'];
+const STATIC_KEYS: (keyof StaticContentState)[] = ['landing', 'intro', 'rules', 'teams'];
 
 const VALID_GROUPS: GroupLetter[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 const DEFAULT_GROUP_BY_TEAM = new Map<string, GroupLetter>(
@@ -270,6 +298,7 @@ const DEFAULT_GROUP_BY_TEAM = new Map<string, GroupLetter>(
 const ContentContext = createContext<ContentContextValue>({
   content: defaultContent,
   updateContent: () => {},
+  updateAnnouncement: async () => {},
   resetContent: () => {},
 });
 
@@ -277,6 +306,7 @@ function deepMerge(base: ContentState, patch: Partial<ContentState>): ContentSta
   return {
     ...base,
     ...patch,
+    announcement: patch.announcement ? { ...base.announcement, ...patch.announcement } : base.announcement,
     landing: patch.landing ? { ...base.landing, ...patch.landing } : base.landing,
     intro: patch.intro ? { ...base.intro, ...patch.intro } : base.intro,
     rules: patch.rules ? { ...base.rules, ...patch.rules } : base.rules,
@@ -314,6 +344,52 @@ function normalizeTicker(value: unknown, fallback: string[]): string[] {
     .filter((item): item is string => typeof item === 'string')
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+export function normalizeSiteAnnouncementHref(value: string): string | null {
+  const normalized = value.trim();
+  if (!normalized) return '';
+  if (Array.from(normalized).some((character) => character === '\\' || character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) {
+    return null;
+  }
+  if (normalized.startsWith('/') && !normalized.startsWith('//')) return normalized;
+
+  try {
+    const url = new URL(normalized);
+    return url.protocol === 'https:' && !url.username && !url.password ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeAnnouncement(value: unknown, fallback: SiteAnnouncement): SiteAnnouncement {
+  if (!value || typeof value !== 'object') return fallback;
+  const raw = value as Partial<Record<keyof SiteAnnouncement, unknown>>;
+  const title = typeof raw.title === 'string' ? raw.title.trim().slice(0, 100) : '';
+  const message = typeof raw.message === 'string' ? raw.message.trim().slice(0, 500) : '';
+  const revision = typeof raw.revision === 'string' && raw.revision.trim()
+    ? raw.revision.trim().slice(0, 120)
+    : fallback.revision;
+  const tone: SiteAnnouncementTone = raw.tone === 'warning' ? 'warning' : 'info';
+  const rawHref = typeof raw.linkHref === 'string' ? raw.linkHref : '';
+  const safeHref = normalizeSiteAnnouncementHref(rawHref) ?? '';
+  const linkLabel = safeHref && typeof raw.linkLabel === 'string'
+    ? raw.linkLabel.trim().slice(0, 60)
+    : '';
+  const publishedAt = typeof raw.publishedAt === 'number' && Number.isFinite(raw.publishedAt)
+    ? Math.max(0, raw.publishedAt)
+    : fallback.publishedAt;
+
+  return {
+    enabled: raw.enabled === true && Boolean(title && message),
+    revision,
+    tone,
+    title,
+    message,
+    linkLabel,
+    linkHref: linkLabel ? safeHref : '',
+    publishedAt,
+  };
 }
 
 function normalizeTeamsEntries(value: unknown, fallback: TeamContentEntry[]): TeamContentEntry[] {
@@ -370,6 +446,13 @@ function normalizeContentPatch(input: Partial<ContentState>): Partial<ContentSta
 
   if (hasField(input, 'tickerItems')) {
     patch.tickerItems = normalizeTicker((input as { tickerItems?: unknown }).tickerItems, defaultContent.tickerItems);
+  }
+
+  if (hasField(input, 'announcement')) {
+    patch.announcement = normalizeAnnouncement(
+      (input as { announcement?: unknown }).announcement,
+      defaultContent.announcement,
+    );
   }
 
   if (input.landing) {
@@ -431,13 +514,31 @@ function areSameStrings(a: string[], b: string[]) {
   return a.every((item, idx) => item === b[idx]);
 }
 
-function staticPayload(content: ContentState): Omit<ContentState, 'tickerItems'> {
+function staticPayload(content: ContentState): StaticContentState {
   return {
     landing: content.landing,
     intro: content.intro,
     rules: content.rules,
     teams: content.teams,
   };
+}
+
+function livePayload(content: ContentState): LiveContentState {
+  return {
+    tickerItems: content.tickerItems,
+    announcement: content.announcement,
+  };
+}
+
+function areSameAnnouncements(a: SiteAnnouncement, b: SiteAnnouncement) {
+  return a.enabled === b.enabled
+    && a.revision === b.revision
+    && a.tone === b.tone
+    && a.title === b.title
+    && a.message === b.message
+    && a.linkLabel === b.linkLabel
+    && a.linkHref === b.linkHref
+    && a.publishedAt === b.publishedAt;
 }
 
 export function ContentProvider({ children }: { children: ReactNode }) {
@@ -462,7 +563,7 @@ export function ContentProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const cachedLegacy = readLocalCache<Partial<ContentState>>(LEGACY_STORAGE_KEY);
     const cachedStatic = readLocalCache<Partial<ContentState>>(STATIC_STORAGE_KEY);
-    const cachedLive = readLocalCache<{ tickerItems?: unknown }>(LIVE_STORAGE_KEY);
+    const cachedLive = readLocalCache<Partial<LiveContentState>>(LIVE_STORAGE_KEY);
 
     const patch: Partial<ContentState> = {};
     if (cachedStatic) {
@@ -479,6 +580,12 @@ export function ContentProvider({ children }: { children: ReactNode }) {
 
     if ((cachedLive && hasField(cachedLive, 'tickerItems')) || (cachedLegacy && hasField(cachedLegacy, 'tickerItems'))) {
       patch.tickerItems = normalizeTicker(cachedLive?.tickerItems ?? cachedLegacy?.tickerItems, defaultContent.tickerItems);
+    }
+    if ((cachedLive && hasField(cachedLive, 'announcement')) || (cachedLegacy && hasField(cachedLegacy, 'announcement'))) {
+      patch.announcement = normalizeAnnouncement(
+        cachedLive?.announcement ?? cachedLegacy?.announcement,
+        defaultContent.announcement,
+      );
     }
 
     if (Object.keys(patch).length) {
@@ -510,7 +617,7 @@ export function ContentProvider({ children }: { children: ReactNode }) {
       const patch = normalizeContentPatch(legacy);
       const next = applyPatch(patch);
       writeLocalCache(STATIC_STORAGE_KEY, staticPayload(next));
-      writeLocalCache(LIVE_STORAGE_KEY, { tickerItems: next.tickerItems });
+      writeLocalCache(LIVE_STORAGE_KEY, livePayload(next));
     } catch (error) {
       console.error('[ContentProvider] Failed to fetch static content:', error);
     }
@@ -520,15 +627,19 @@ export function ContentProvider({ children }: { children: ReactNode }) {
     const liveRef = doc(firestore, LIVE_DOC);
     const legacyRef = doc(firestore, LEGACY_DOC);
 
-    const loadLegacyTicker = async () => {
+    const loadLegacyLiveContent = async () => {
       try {
         const legacySnapshot = await getDoc(legacyRef);
         if (!legacySnapshot.exists()) return;
         const legacy = legacySnapshot.data() as Partial<ContentState>;
         const tickerItems = normalizeTicker(legacy.tickerItems, defaultContent.tickerItems);
-        if (areSameStrings(contentRef.current.tickerItems, tickerItems)) return;
-        applyPatch({ tickerItems });
-        writeLocalCache(LIVE_STORAGE_KEY, { tickerItems });
+        const announcement = normalizeAnnouncement(legacy.announcement, defaultContent.announcement);
+        const patch: Partial<ContentState> = {};
+        if (!areSameStrings(contentRef.current.tickerItems, tickerItems)) patch.tickerItems = tickerItems;
+        if (!areSameAnnouncements(contentRef.current.announcement, announcement)) patch.announcement = announcement;
+        if (!Object.keys(patch).length) return;
+        const next = applyPatch(patch);
+        writeLocalCache(LIVE_STORAGE_KEY, livePayload(next));
       } catch {
         // ignore fallback
       }
@@ -538,15 +649,18 @@ export function ContentProvider({ children }: { children: ReactNode }) {
       liveRef,
       (snapshot) => {
         if (snapshot.exists()) {
-          const data = snapshot.data() as { tickerItems?: unknown };
+          const data = snapshot.data() as { tickerItems?: unknown; announcement?: unknown };
           const tickerItems = normalizeTicker(data.tickerItems, defaultContent.tickerItems);
-          if (!areSameStrings(contentRef.current.tickerItems, tickerItems)) {
-            applyPatch({ tickerItems });
-            writeLocalCache(LIVE_STORAGE_KEY, { tickerItems });
-          }
+          const announcement = normalizeAnnouncement(data.announcement, defaultContent.announcement);
+          const patch: Partial<ContentState> = {};
+          if (!areSameStrings(contentRef.current.tickerItems, tickerItems)) patch.tickerItems = tickerItems;
+          if (!areSameAnnouncements(contentRef.current.announcement, announcement)) patch.announcement = announcement;
+          if (!Object.keys(patch).length) return;
+          const next = applyPatch(patch);
+          writeLocalCache(LIVE_STORAGE_KEY, livePayload(next));
           return;
         }
-        void loadLegacyTicker();
+        void loadLegacyLiveContent();
       },
       (error) => {
         console.error('[ContentProvider] LIVE INFO subscription error:', error);
@@ -588,7 +702,7 @@ export function ContentProvider({ children }: { children: ReactNode }) {
     savingRef.current = true;
     try {
       const merged = applyPatch(next);
-      writeLocalCache(LIVE_STORAGE_KEY, { tickerItems: merged.tickerItems });
+      writeLocalCache(LIVE_STORAGE_KEY, livePayload(merged));
       writeLocalCache(STATIC_STORAGE_KEY, staticPayload(merged));
 
       const writes: Promise<unknown>[] = [];
@@ -626,14 +740,30 @@ export function ContentProvider({ children }: { children: ReactNode }) {
     }
   }, [applyPatch]);
 
+  const updateAnnouncement = useCallback(async (next: SiteAnnouncement) => {
+    const announcement = normalizeAnnouncement(next, defaultContent.announcement);
+    try {
+      await setDoc(
+        doc(firestore, LIVE_DOC),
+        { announcement, updatedAt: Date.now() },
+        { merge: true },
+      );
+      const merged = applyPatch({ announcement });
+      writeLocalCache(LIVE_STORAGE_KEY, livePayload(merged));
+    } catch (error) {
+      console.error('[ContentProvider] Failed to save announcement:', error);
+      throw error;
+    }
+  }, [applyPatch]);
+
   const resetContent = useCallback(async () => {
     applyPatch(defaultContent);
-    writeLocalCache(LIVE_STORAGE_KEY, { tickerItems: defaultContent.tickerItems });
+    writeLocalCache(LIVE_STORAGE_KEY, livePayload(defaultContent));
     writeLocalCache(STATIC_STORAGE_KEY, staticPayload(defaultContent));
 
     try {
       await Promise.all([
-        setDoc(doc(firestore, LIVE_DOC), { tickerItems: defaultContent.tickerItems, updatedAt: Date.now() }),
+        setDoc(doc(firestore, LIVE_DOC), { ...livePayload(defaultContent), updatedAt: Date.now() }),
         setDoc(doc(firestore, STATIC_DOC), { ...staticPayload(defaultContent), updatedAt: Date.now() }),
         setDoc(
           doc(firestore, META_DOC),
@@ -646,7 +776,10 @@ export function ContentProvider({ children }: { children: ReactNode }) {
     }
   }, [applyPatch]);
 
-  const value = useMemo(() => ({ content, updateContent, resetContent }), [content, updateContent, resetContent]);
+  const value = useMemo(
+    () => ({ content, updateContent, updateAnnouncement, resetContent }),
+    [content, updateContent, updateAnnouncement, resetContent],
+  );
 
   return <ContentContext.Provider value={value}>{children}</ContentContext.Provider>;
 }

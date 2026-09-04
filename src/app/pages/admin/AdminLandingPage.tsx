@@ -1,5 +1,10 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { useContent } from '../../../shared/state/contentProvider';
+import { SeasonButton } from '../../../shared/components/season';
+import {
+  normalizeSiteAnnouncementHref,
+  useContent,
+  type SiteAnnouncementTone,
+} from '../../../shared/state/contentProvider';
 
 const cardStyle: CSSProperties = {
   borderRadius: '16px',
@@ -27,6 +32,25 @@ const labelStyle: CSSProperties = {
   display: 'block',
 };
 
+const announcementInputStyle: CSSProperties = {
+  width: '100%',
+  minHeight: '44px',
+  boxSizing: 'border-box',
+  padding: '10px 12px',
+  border: '1px solid var(--season-line)',
+  borderRadius: '4px',
+  background: 'var(--season-surface)',
+  color: 'var(--season-ink)',
+  font: 'inherit',
+};
+
+const createAnnouncementRevision = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `announcement-${Date.now()}`;
+};
+
 const serialize = {
   valueProps: (items: { title: string; desc: string; icon: string }[]) => items.map((v) => `${v.title} | ${v.desc} | ${v.icon}`).join('\n'),
   snapshotCards: (items: { label: string; value: string; desc: string }[]) => items.map((v) => `${v.label} | ${v.value} | ${v.desc}`).join('\n'),
@@ -34,10 +58,19 @@ const serialize = {
 };
 
 export default function AdminLandingPage() {
-  const { updateContent, content } = useContent();
+  const { updateContent, updateAnnouncement, content } = useContent();
   const landing = content.landing;
+  const announcement = content.announcement;
 
   const [status, setStatus] = useState<string | null>(null);
+  const [announcementStatus, setAnnouncementStatus] = useState<string | null>(null);
+  const [announcementError, setAnnouncementError] = useState<string | null>(null);
+  const [announcementBusy, setAnnouncementBusy] = useState(false);
+  const [announcementTone, setAnnouncementTone] = useState<SiteAnnouncementTone>(announcement.tone);
+  const [announcementTitle, setAnnouncementTitle] = useState(announcement.title);
+  const [announcementMessage, setAnnouncementMessage] = useState(announcement.message);
+  const [announcementLinkLabel, setAnnouncementLinkLabel] = useState(announcement.linkLabel);
+  const [announcementLinkHref, setAnnouncementLinkHref] = useState(announcement.linkHref);
 
   const [heroEyebrow, setHeroEyebrow] = useState(landing.heroEyebrow);
   const [heroBadgeText, setHeroBadgeText] = useState(landing.heroBadgeText);
@@ -61,6 +94,75 @@ export default function AdminLandingPage() {
     };
     queueMicrotask(syncDraft);
   }, [landing]);
+
+  useEffect(() => {
+    const syncAnnouncementDraft = () => {
+      setAnnouncementTone(announcement.tone);
+      setAnnouncementTitle(announcement.title);
+      setAnnouncementMessage(announcement.message);
+      setAnnouncementLinkLabel(announcement.linkLabel);
+      setAnnouncementLinkHref(announcement.linkHref);
+    };
+    queueMicrotask(syncAnnouncementDraft);
+  }, [announcement]);
+
+  const publishAnnouncement = async () => {
+    const title = announcementTitle.trim();
+    const message = announcementMessage.trim();
+    const linkLabel = announcementLinkLabel.trim();
+    const rawLinkHref = announcementLinkHref.trim();
+
+    setAnnouncementStatus(null);
+    setAnnouncementError(null);
+
+    if (!title || !message) {
+      setAnnouncementError('제목과 본문을 모두 입력해 주세요.');
+      return;
+    }
+    if (Boolean(linkLabel) !== Boolean(rawLinkHref)) {
+      setAnnouncementError('링크 문구와 링크 주소는 함께 입력하거나 모두 비워 두어야 합니다.');
+      return;
+    }
+
+    const safeLinkHref = normalizeSiteAnnouncementHref(rawLinkHref);
+    if (rawLinkHref && safeLinkHref === null) {
+      setAnnouncementError('링크는 /로 시작하는 AUBL 내부 경로 또는 https 주소만 사용할 수 있습니다.');
+      return;
+    }
+
+    setAnnouncementBusy(true);
+    try {
+      await updateAnnouncement({
+        enabled: true,
+        revision: createAnnouncementRevision(),
+        tone: announcementTone,
+        title,
+        message,
+        linkLabel,
+        linkHref: safeLinkHref ?? '',
+        publishedAt: Date.now(),
+      });
+      setAnnouncementStatus('새 중요공지를 공개했습니다. 이전 공지의 24시간 숨김 설정은 새 공지에 적용되지 않습니다.');
+    } catch {
+      setAnnouncementError('중요공지를 저장하지 못했습니다. 관리자 권한과 네트워크 상태를 확인해 주세요.');
+    } finally {
+      setAnnouncementBusy(false);
+    }
+  };
+
+  const deactivateAnnouncement = async () => {
+    setAnnouncementStatus(null);
+    setAnnouncementError(null);
+    setAnnouncementBusy(true);
+    try {
+      await updateAnnouncement({ ...announcement, enabled: false });
+      setAnnouncementStatus('상단 중요공지를 비활성화했습니다.');
+    } catch {
+      setAnnouncementError('중요공지를 비활성화하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setAnnouncementBusy(false);
+    }
+  };
 
   const saveLanding = () => {
     const valueProps = valuePropsDraft
@@ -115,6 +217,123 @@ export default function AdminLandingPage() {
           {status}
         </div>
       )}
+
+      <section
+        aria-labelledby="admin-announcement-title"
+        style={{
+          ...cardStyle,
+          display: 'grid',
+          gap: '18px',
+          borderRadius: '4px',
+          background: 'var(--season-surface)',
+          color: 'var(--season-ink)',
+          boxShadow: 'none',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'grid', gap: '5px', maxWidth: '720px' }}>
+            <span style={{ color: 'var(--season-blue-600)', fontSize: '11px', fontWeight: 900, letterSpacing: '0.12em' }}>
+              HOME ANNOUNCEMENT
+            </span>
+            <h2 id="admin-announcement-title" style={{ margin: 0, color: 'var(--season-ink)', fontSize: '22px' }}>상단 중요공지</h2>
+            <p style={{ margin: 0, color: 'var(--season-muted)', fontSize: '13px', lineHeight: 1.6 }}>
+              활성화하면 홈 상단 메뉴와 캠페인 히어로 사이에 즉시 표시됩니다. 새로 공개할 때마다 새 리비전으로 처리됩니다.
+            </p>
+          </div>
+          <strong style={{ color: announcement.enabled ? 'var(--season-blue-700)' : 'var(--season-muted)', fontSize: '13px' }}>
+            현재 {announcement.enabled ? '활성' : '비활성'}
+          </strong>
+        </div>
+
+        {announcementStatus ? (
+          <div role="status" style={{ borderLeft: '4px solid var(--season-blue-600)', padding: '11px 13px', background: 'var(--season-surface-muted)', color: 'var(--season-ink)', fontSize: '13px', fontWeight: 750 }}>
+            {announcementStatus}
+          </div>
+        ) : null}
+        {announcementError ? (
+          <div role="alert" style={{ borderLeft: '4px solid var(--season-danger)', padding: '11px 13px', background: 'color-mix(in srgb, var(--season-danger) 9%, var(--season-surface))', color: 'var(--season-ink)', fontSize: '13px', fontWeight: 750 }}>
+            {announcementError}
+          </div>
+        ) : null}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: '14px' }}>
+          <label style={{ display: 'grid', gap: '6px', color: 'var(--season-ink)', fontSize: '13px', fontWeight: 800 }}>
+            표시 유형
+            <select
+              value={announcementTone}
+              onChange={(event) => setAnnouncementTone(event.target.value as SiteAnnouncementTone)}
+              style={announcementInputStyle}
+              disabled={announcementBusy}
+            >
+              <option value="info">주요 안내</option>
+              <option value="warning">긴급 안내</option>
+            </select>
+          </label>
+          <label style={{ display: 'grid', gap: '6px', color: 'var(--season-ink)', fontSize: '13px', fontWeight: 800 }}>
+            제목
+            <input
+              value={announcementTitle}
+              onChange={(event) => setAnnouncementTitle(event.target.value)}
+              maxLength={100}
+              placeholder="예) 주말 경기 일정 변경 안내"
+              style={announcementInputStyle}
+              disabled={announcementBusy}
+            />
+          </label>
+        </div>
+
+        <label style={{ display: 'grid', gap: '6px', color: 'var(--season-ink)', fontSize: '13px', fontWeight: 800 }}>
+          본문
+          <textarea
+            value={announcementMessage}
+            onChange={(event) => setAnnouncementMessage(event.target.value)}
+            maxLength={500}
+            rows={4}
+            placeholder="필요한 날짜, 변경 사유, 확인 사항을 간결히 입력하세요."
+            style={{ ...announcementInputStyle, resize: 'vertical', lineHeight: 1.6 }}
+            disabled={announcementBusy}
+          />
+        </label>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '14px' }}>
+          <label style={{ display: 'grid', gap: '6px', color: 'var(--season-ink)', fontSize: '13px', fontWeight: 800 }}>
+            링크 문구 (선택)
+            <input
+              value={announcementLinkLabel}
+              onChange={(event) => setAnnouncementLinkLabel(event.target.value)}
+              maxLength={60}
+              placeholder="예) 공지 자세히 보기"
+              style={announcementInputStyle}
+              disabled={announcementBusy}
+            />
+          </label>
+          <label style={{ display: 'grid', gap: '6px', color: 'var(--season-ink)', fontSize: '13px', fontWeight: 800 }}>
+            링크 주소 (선택)
+            <input
+              value={announcementLinkHref}
+              onChange={(event) => setAnnouncementLinkHref(event.target.value)}
+              inputMode="url"
+              placeholder="/community/notices/... 또는 https://..."
+              style={announcementInputStyle}
+              disabled={announcementBusy}
+            />
+          </label>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+          <span style={{ color: 'var(--season-muted)', fontSize: '12px', lineHeight: 1.5 }}>
+            링크는 AUBL 내부 경로(/...) 또는 보안된 https 주소만 허용됩니다.
+          </span>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <SeasonButton variant="secondary" onClick={deactivateAnnouncement} disabled={announcementBusy || !announcement.enabled}>
+              비활성화
+            </SeasonButton>
+            <SeasonButton onClick={publishAnnouncement} disabled={announcementBusy}>
+              {announcementBusy ? '저장 중…' : '게시 및 활성화'}
+            </SeasonButton>
+          </div>
+        </div>
+      </section>
 
       <section style={cardStyle}>
         <h3 style={{ margin: '0 0 10px', color: '#e2e8f0' }}>랜딩 정적 콘텐츠</h3>

@@ -196,6 +196,7 @@ export default function LandingPage() {
   return (
     <Season2026Home
       landing={content.landing}
+      announcement={content.announcement}
       matches={state.matches}
       schedulePhase={schedulePhase}
       scheduleCheckedAt={scheduleCheckedAt}

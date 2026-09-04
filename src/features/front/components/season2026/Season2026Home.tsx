@@ -1,7 +1,7 @@
-import { useMemo, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
 import type { BatterRanking, PitcherRanking } from '@core/api/backendClient';
-import type { LandingContent } from '@shared/state/contentProvider';
+import type { LandingContent, SiteAnnouncement } from '@shared/state/contentProvider';
 import type { MatchSchedule } from '@shared/state/demoStore';
 import type { Notice, TeamNotice } from '@shared/types';
 import type {
@@ -16,6 +16,14 @@ const UNIQUE_PLAY_URL = 'https://unique-play.com/league/57';
 const INSTAGRAM_URL = 'https://www.instagram.com/aubl_1981/';
 const GOLDBALLPARK_URL = 'https://www.goldballpark.co.kr/';
 const BASEBALL_MAJOR_URL = 'https://www.baseballm.com/';
+const ANNOUNCEMENT_COLLAPSED_KEY = 'aubl:home-announcement:collapsed:v1';
+const ANNOUNCEMENT_HIDDEN_KEY = 'aubl:home-announcement:hidden:v1';
+const ANNOUNCEMENT_HIDE_DURATION_MS = 24 * 60 * 60 * 1000;
+
+type AnnouncementHiddenPreference = {
+  revision: string;
+  until: number;
+};
 
 type FeedPhase = 'loading' | 'ready' | 'error';
 
@@ -29,6 +37,7 @@ const associationSchoolCopy = (value: string) =>
 
 interface Season2026HomeProps {
   landing: LandingContent;
+  announcement: SiteAnnouncement;
   matches: MatchSchedule[];
   schedulePhase: FeedPhase;
   scheduleCheckedAt: number | null;
@@ -44,6 +53,105 @@ interface Season2026HomeProps {
   teamNoticePhase: FeedPhase | 'idle';
   allstarEnabled: boolean;
   nowTs: number;
+}
+
+const readCollapsedAnnouncementRevision = () => {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.sessionStorage.getItem(ANNOUNCEMENT_COLLAPSED_KEY);
+  } catch {
+    return null;
+  }
+};
+
+const readHiddenAnnouncementPreference = (): AnnouncementHiddenPreference | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(ANNOUNCEMENT_HIDDEN_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<AnnouncementHiddenPreference>;
+    if (typeof parsed.revision !== 'string' || typeof parsed.until !== 'number' || parsed.until <= Date.now()) {
+      window.localStorage.removeItem(ANNOUNCEMENT_HIDDEN_KEY);
+      return null;
+    }
+    return { revision: parsed.revision, until: parsed.until };
+  } catch {
+    return null;
+  }
+};
+
+function HomeAnnouncement({ announcement }: { announcement: SiteAnnouncement }) {
+  const titleId = useId();
+  const [collapsedRevision, setCollapsedRevision] = useState<string | null>(readCollapsedAnnouncementRevision);
+  const [hiddenPreference, setHiddenPreference] = useState<AnnouncementHiddenPreference | null>(readHiddenAnnouncementPreference);
+  const collapsed = collapsedRevision === announcement.revision;
+  const hidden = hiddenPreference?.revision === announcement.revision;
+
+  useEffect(() => {
+    if (!hiddenPreference) return;
+    const remaining = Math.max(0, hiddenPreference.until - Date.now());
+    const timer = window.setTimeout(() => setHiddenPreference(null), remaining);
+    return () => window.clearTimeout(timer);
+  }, [hiddenPreference]);
+
+  if (!announcement.enabled || !announcement.title || !announcement.message || hidden) return null;
+
+  const toggleCollapsed = () => {
+    const nextRevision = collapsed ? null : announcement.revision;
+    setCollapsedRevision(nextRevision);
+    try {
+      if (nextRevision) window.sessionStorage.setItem(ANNOUNCEMENT_COLLAPSED_KEY, nextRevision);
+      else window.sessionStorage.removeItem(ANNOUNCEMENT_COLLAPSED_KEY);
+    } catch {
+      // The in-memory state still provides the interaction when storage is unavailable.
+    }
+  };
+
+  const hideForOneDay = () => {
+    const next = {
+      revision: announcement.revision,
+      until: Date.now() + ANNOUNCEMENT_HIDE_DURATION_MS,
+    };
+    setHiddenPreference(next);
+    try {
+      window.localStorage.setItem(ANNOUNCEMENT_HIDDEN_KEY, JSON.stringify(next));
+    } catch {
+      // The current page still hides the announcement when storage is unavailable.
+    }
+  };
+
+  const action = announcement.linkLabel && announcement.linkHref
+    ? announcement.linkHref.startsWith('/')
+      ? <Link className="s26-announcement__link" to={announcement.linkHref}>{announcement.linkLabel}</Link>
+      : <a className="s26-announcement__link" href={announcement.linkHref}>{announcement.linkLabel}</a>
+    : null;
+
+  return (
+    <aside
+      className={`s26-announcement is-${announcement.tone}${collapsed ? ' is-collapsed' : ''}`}
+      aria-labelledby={titleId}
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      <div className="s26-announcement__marker" aria-hidden="true" />
+      <div className="s26-announcement__copy">
+        <span className="s26-announcement__label">
+          {announcement.tone === 'warning' ? '긴급 안내' : '중요 공지'}
+        </span>
+        <strong id={titleId}>{announcement.title}</strong>
+        {!collapsed ? <p>{announcement.message}</p> : null}
+      </div>
+      <div className="s26-announcement__actions">
+        {!collapsed ? action : null}
+        <button type="button" className="s26-announcement__button" onClick={toggleCollapsed}>
+          {collapsed ? '펼치기' : '접어두기'}
+        </button>
+        <button type="button" className="s26-announcement__button" onClick={hideForOneDay}>
+          24시간 보지 않기
+        </button>
+      </div>
+    </aside>
+  );
 }
 
 const getKstDateKey = (value: string | number | Date) => {
@@ -310,7 +418,12 @@ function MatchItem({ match }: { match: MatchSchedule }) {
           {isFinal || isLive ? <b>{awayScore ?? '-'}</b> : null}
         </div>
       </div>
-      <p className="s26-match-card__venue">{match.venue || '장소 미정'}</p>
+      <div className="s26-match-card__footer">
+        <p className="s26-match-card__venue">{match.venue || '장소 미정'}</p>
+        <Link className="s26-match-card__detail" to={`/scoreboard-text/${match.id}`}>
+          경기 상세
+        </Link>
+      </div>
     </article>
   );
 }
@@ -686,6 +799,7 @@ function PartnerLinks({ allstarEnabled }: { allstarEnabled: boolean }) {
 export default function Season2026Home(props: Season2026HomeProps) {
   return (
     <div className="s26-home">
+      <HomeAnnouncement announcement={props.announcement} />
       <CampaignHero landing={props.landing} />
       <FreshnessBar
         schedulePhase={props.schedulePhase}
