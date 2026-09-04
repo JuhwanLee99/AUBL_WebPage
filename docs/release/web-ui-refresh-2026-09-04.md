@@ -56,16 +56,34 @@
 - 모바일 `더보기` 시트를 연 상태에서 화면을 데스크톱 폭으로 넓히면 시트는 사라지지만 `body`의 `overflow: hidden`이 남던 결함을 수정했다.
 - 900px 초과로 전환할 때 모바일 메뉴 상태를 닫아 기존 effect 정리 과정이 스크롤 잠금을 해제하게 했다.
 
+### 6. 최종 홈 일정 전환과 시즌 화면 마감
+
+- 커밋: `3a47cff feat(home): add monthly match calendar toggle`
+- 홈 경기 목록에 목록·달력 전환을 추가해 월별 일정 탐색을 한 화면에서 제공한다.
+- `5c7201a fix(home): improve calendar schedule readability`에서 달력 셀 안의 날짜·경기·상태 글자와 팀명을 한 단계 더 키우고 셀 높이를 확보했다.
+- 최종 시즌 화면 마감에는 `d8d6a6e`(공용 시즌 기반), `0e13ecb`(2026 시즌 콘텐츠), `4678d50`(순위 표현), `c6e172a`(조별·수동 화면), `6fe5bd0`(시즌 운영), `3a5501c`(계정 화면), `887c3d3`(수동 검수 화면)가 포함됐다.
+- 접근성 마감은 `201160a fix(a11y): close final season interface gaps`, 불완전 공개 기록 행 처리는 `be233c7 fix(records): hide incomplete published stat rows`에서 반영했다.
+
 ## 검증 결과
 
 - `git diff --check`: 통과
 - `npm run lint`: 통과
 - `npm run typecheck`: 통과
-- `npm run build`: 통과, 996개 모듈 변환 및 OG 경로 26개 생성
+- `npm run build`: 통과, 1,004개 모듈 변환 및 OG 경로 26개 생성
 - 실제 Chrome 360px: 홈 경기 상세 링크 8개, 각 터치 높이 44px, 가로 넘침 없음
 - 실제 Chrome 반응형 전환: 모바일 시트 열림 중 `body overflow=hidden`, 1280px 전환 후 `overflow=visible`, wheel 스크롤 정상
 - 실제 Chrome 주요 공개 페이지: 문서 세로 스크롤과 하단 접근 정상
+- 실제 Chrome 360px·반응형 전환 및 주요 공개 화면에서 접근성 이름, 키보드/터치 조작, 가로 넘침과 세로 스크롤을 점검했다.
+- 홈 목록·달력 전환과 확대된 달력 셀 타이포그래피를 실제 브라우저에서 확인했다.
 - 기존 번들 크기 경고는 유지되며 이번 변경의 빌드 실패 항목은 아니다.
+
+## 최종 배포 확인 (2026-09-04)
+
+- Firebase preview와 live를 Firebase 프로젝트 `aubl-backup`에 배포했다.
+- `5c7201a`의 달력 가독성 보정도 live에 재배포했고, 실제 live 렌더링에서 팀명 14px, 시간·상태·경기 수 12px, 셀 높이 약 132px를 확인했다.
+- preview 환경의 CORS 오류는 preview 도메인 허용 목록 차이로 예상된 현상이며, live API 호출은 성공했다.
+- 워커 소스 검증 빌드 `2026.09.04.5`는 테스트 15/15를 통과했지만 아직 배포하지 않았다.
+- Flutter는 이번 웹 UI 롤아웃 범위에서 제외했으며, `flutter_app/pubspec.lock` 변경은 이번 릴리스 문서 변경에 포함하지 않는다.
 
 ## 후속 결정이 필요한 기능 항목
 
