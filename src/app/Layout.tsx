@@ -334,6 +334,17 @@ export default function Layout() {
   }, [location.pathname, location.search]);
 
   useEffect(() => {
+    const mobileViewport = window.matchMedia('(max-width: 900px)');
+    const closeMenuOutsideMobile = (event: MediaQueryListEvent | MediaQueryList) => {
+      if (!event.matches) setShowMobileMenu(false);
+    };
+
+    closeMenuOutsideMobile(mobileViewport);
+    mobileViewport.addEventListener('change', closeMenuOutsideMobile);
+    return () => mobileViewport.removeEventListener('change', closeMenuOutsideMobile);
+  }, []);
+
+  useEffect(() => {
     if (!showMobileMenu) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
