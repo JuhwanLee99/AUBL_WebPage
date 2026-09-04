@@ -19,6 +19,7 @@ import type {
   PlayerRegistrationCategory,
   PlayerRegistrationPost,
 } from '../../shared/types';
+import './PlayerRegistrationPages.css';
 
 export default function PlayerRegistrationDetailPage() {
   const { postId } = useParams<{ postId: string }>();
@@ -161,66 +162,49 @@ export default function PlayerRegistrationDetailPage() {
     }
   };
 
-  if (roleLoading || loading) return <div style={{ color: '#94a3b8', padding: '40px', textAlign: 'center' }}>로딩 중...</div>;
-  if (!post) return <div style={{ color: '#f87171', padding: '40px', textAlign: 'center' }}>게시글이 없습니다.</div>;
+  if (roleLoading || loading) return <div className="player-registration-state">로딩 중...</div>;
+  if (!post) return <div className="player-registration-state player-registration-state--error">게시글이 없습니다.</div>;
 
   if (!isPlayerOrAbove) {
-    return <div style={{ color: '#f87171', padding: '40px', textAlign: 'center' }}>선수/기록원 등급 이상만 접근할 수 있습니다.</div>;
+    return <div className="player-registration-state player-registration-state--error">선수/기록원 등급 이상만 접근할 수 있습니다.</div>;
   }
 
   const isBlockedPost = blockedUserIds.has(post.uid);
   if (isBlockedPost) {
     return (
-      <div style={{ color: '#f8fafc', maxWidth: '900px', margin: '0 auto', paddingBottom: '40px' }}>
-        <div
-          style={{
-            borderRadius: '14px',
-            border: '1px solid rgba(248,113,113,0.35)',
-            background: 'rgba(127,29,29,0.35)',
-            color: '#fecaca',
-            padding: '18px 20px',
-            lineHeight: 1.7,
-            fontWeight: 700,
-          }}
-        >
+      <div className="player-registration-page player-registration-access-page">
+        <div className="player-registration-feedback player-registration-feedback--error" role="alert">
           차단한 사용자의 게시글입니다. 계정 화면에서 차단을 해제하면 다시 볼 수 있습니다.
         </div>
       </div>
     );
   }
 
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '10px',
-    background: '#1e293b',
-    border: '1px solid #334155',
-    color: '#fff',
-    borderRadius: '8px',
-    boxSizing: 'border-box',
-  };
-
   return (
-    <div className="season-content-page detail-board-page" style={{ maxWidth: '1100px', margin: '0 auto', color: '#f8fafc', paddingBottom: '40px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+    <div className="season-content-page detail-board-page player-registration-page player-registration-detail">
+      <div className="player-registration-detail__toolbar">
         <button
+          type="button"
           onClick={() => navigate('/community/player-registration')}
-          style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontWeight: 700 }}
+          className="player-registration-action player-registration-action--text"
         >
           &larr; 목록으로
         </button>
         {!isEditing ? (
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div className="player-registration-detail__actions">
             {currentUser && currentUser.uid !== post.uid && (
               <>
                 <button
+                  type="button"
                   onClick={() => void handleModerationAction('report')}
-                  style={{ padding: '6px 12px', borderRadius: '6px', background: 'rgba(59,130,246,0.2)', color: '#bfdbfe', border: '1px solid rgba(59,130,246,0.5)', cursor: 'pointer' }}
+                  className="player-registration-action"
                 >
                   게시글 신고
                 </button>
                 <button
+                  type="button"
                   onClick={() => void handleModerationAction('block')}
-                  style={{ padding: '6px 12px', borderRadius: '6px', background: 'rgba(239,68,68,0.18)', color: '#fecaca', border: '1px solid rgba(239,68,68,0.45)', cursor: 'pointer' }}
+                  className="player-registration-action player-registration-action--danger"
                 >
                   작성자 차단
                 </button>
@@ -229,14 +213,16 @@ export default function PlayerRegistrationDetailPage() {
             {canEdit && (
               <>
                 <button
+                  type="button"
                   onClick={() => setIsEditing(true)}
-                  style={{ padding: '6px 12px', borderRadius: '6px', background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer' }}
+                  className="player-registration-action player-registration-action--primary"
                 >
                   수정
                 </button>
                 <button
+                  type="button"
                   onClick={handleDelete}
-                  style={{ padding: '6px 12px', borderRadius: '6px', background: '#ef4444', color: '#fff', border: 'none', cursor: 'pointer' }}
+                  className="player-registration-action player-registration-action--danger"
                 >
                   삭제
                 </button>
@@ -246,44 +232,47 @@ export default function PlayerRegistrationDetailPage() {
         ) : null}
       </div>
 
-      <article
-        style={{
-          background: 'rgba(15, 23, 42, 0.6)',
-          border: '1px solid rgba(148, 163, 184, 0.15)',
-          borderRadius: '16px',
-          padding: '32px',
-          marginBottom: '32px',
-        }}
-      >
+      <article className="player-registration-detail__article">
         {isEditing ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <select
-              value={editCategory}
-              onChange={(e) => setEditCategory(e.target.value as PlayerRegistrationCategory)}
-              style={{ ...inputStyle, fontWeight: 700, cursor: 'pointer' }}
-            >
-              {editableCategories.map((c) => (
-                <option key={c} value={c} style={{ background: '#1e293b' }}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            <input
-              style={{ ...inputStyle, fontSize: '18px', fontWeight: 700 }}
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-            />
-            <RichTextEditor value={editContent} onChange={setEditContent} minHeight={260} />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <div className="player-registration-form">
+            <div className="player-registration-field">
+              <label htmlFor="player-registration-edit-category">분류</label>
+              <select
+                id="player-registration-edit-category"
+                value={editCategory}
+                onChange={(e) => setEditCategory(e.target.value as PlayerRegistrationCategory)}
+              >
+                {editableCategories.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div className="player-registration-field">
+              <label htmlFor="player-registration-edit-title">제목</label>
+              <input
+                id="player-registration-edit-title"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+              />
+            </div>
+            <div className="player-registration-field">
+              <label>내용</label>
+              <div className="player-registration-editor">
+                <RichTextEditor value={editContent} onChange={setEditContent} minHeight={260} />
+              </div>
+            </div>
+            <div className="player-registration-form__actions player-registration-form__actions--end">
               <button
+                type="button"
                 onClick={() => setIsEditing(false)}
-                style={{ padding: '8px 16px', background: 'transparent', color: '#94a3b8', border: 'none', cursor: 'pointer' }}
+                className="player-registration-action"
               >
                 취소
               </button>
               <button
+                type="button"
                 onClick={handleUpdate}
-                style={{ padding: '8px 16px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}
+                className="player-registration-action player-registration-action--primary"
               >
                 저장하기
               </button>
@@ -291,39 +280,19 @@ export default function PlayerRegistrationDetailPage() {
           </div>
         ) : (
           <>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
-              <span
-                style={{
-                  fontSize: '12px',
-                  padding: '3px 9px',
-                  borderRadius: '5px',
-                  fontWeight: 800,
-                  background: getCategoryColor(post.category),
-                  color: '#0f172a',
-                }}
-              >
-                {post.category}
-              </span>
+            <div className="player-registration-detail__heading">
+              <span className="player-registration-category">{post.category}</span>
+              <h1>{post.title}</h1>
+              <div className="player-registration-detail__meta">
+                {post.author} · {new Date(post.createdAt).toLocaleString()}
+              </div>
             </div>
-            <h1 style={{ margin: 0, fontSize: '30px', fontWeight: 900, lineHeight: 1.3 }}>{post.title}</h1>
-            <div style={{ color: '#94a3b8', marginTop: '10px', marginBottom: '20px' }}>
-              {post.author} · {new Date(post.createdAt).toLocaleString()}
+            <div className="player-registration-rich-text">
+              <RichTextViewer content={post.content} />
             </div>
-            <RichTextViewer content={post.content} />
           </>
         )}
       </article>
     </div>
   );
-}
-
-function getCategoryColor(category: PlayerRegistrationCategory) {
-  switch (category) {
-    case '선수 등록':
-      return '#f87171';
-    case '유니폼 등록':
-      return '#34d399';
-    default:
-      return '#94a3b8';
-  }
 }

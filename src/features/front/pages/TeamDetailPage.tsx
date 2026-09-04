@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, orderBy, query, setDoc, where } from 'firebase/firestore';
 import { useContent } from '@shared/state/contentProvider';
@@ -15,21 +15,13 @@ import { useTeamRole } from '@shared/auth/useTeamRole';
 import { useAdmin } from '@shared/auth/useAdmin';
 import { useAuth } from '@shared/auth/AuthProvider';
 import type { TeamMember, TeamNotice, TeamNoticeCategory, UserProfile } from '@shared/types';
-
-const cardBase: CSSProperties = {
-  borderRadius: '16px',
-  padding: '16px',
-  border: '1px solid rgba(148,163,184,0.25)',
-  background: 'rgba(15,23,42,0.7)',
-  display: 'grid',
-  gap: '12px',
-};
+import './TeamPages.css';
 
 const statusLabel = (match: MatchSchedule) => {
-  if (match.status === 'inProgress') return { text: '진행 중', color: '#38bdf8', bg: 'rgba(56,189,248,0.14)' };
-  if (match.status === 'completed') return { text: '경기 종료', color: '#f97316', bg: 'rgba(249,115,22,0.14)' };
-  if (match.status === 'canceled') return { text: '취소', color: '#94a3b8', bg: 'rgba(148,163,184,0.18)' };
-  return { text: '예정', color: '#22c55e', bg: 'rgba(34,197,94,0.14)' };
+  if (match.status === 'inProgress') return { text: '진행 중', tone: 'live' };
+  if (match.status === 'completed') return { text: '경기 종료', tone: 'complete' };
+  if (match.status === 'canceled') return { text: '취소', tone: 'canceled' };
+  return { text: '예정', tone: 'scheduled' };
 };
 
 const safeScore = (value?: number | null) => (typeof value === 'number' && Number.isFinite(value) ? value : '-');
@@ -39,12 +31,6 @@ const MEMBER_ROLE_LABELS: Record<TeamMember['role'], string> = {
   coach: '감독',
 };
 const NOTICE_CATEGORIES: TeamNoticeCategory[] = ['일반', '훈련', '경기', '긴급'];
-const NOTICE_CATEGORY_STYLE: Record<TeamNoticeCategory, { color: string; bg: string }> = {
-  일반: { color: '#e2e8f0', bg: 'rgba(148,163,184,0.2)' },
-  훈련: { color: '#38bdf8', bg: 'rgba(56,189,248,0.16)' },
-  경기: { color: '#f97316', bg: 'rgba(249,115,22,0.16)' },
-  긴급: { color: '#f87171', bg: 'rgba(248,113,113,0.16)' },
-};
 
 export default function TeamDetailPage() {
   const { teamId } = useParams();
@@ -494,22 +480,10 @@ export default function TeamDetailPage() {
 
   if (!team) {
     return (
-      <section style={{ ...cardBase, maxWidth: '640px' }}>
-        <h2 style={{ margin: 0, color: '#f97316', fontWeight: 900 }}>팀을 찾을 수 없습니다</h2>
-        <p style={{ margin: 0, color: '#cbd5e1' }}>요청한 팀 페이지가 존재하지 않습니다. 팀 목록으로 돌아가 다시 선택해 주세요.</p>
-        <Link
-          to="/teams"
-          style={{
-            width: 'fit-content',
-            padding: '10px 14px',
-            borderRadius: '12px',
-            border: '1px solid rgba(148,163,184,0.4)',
-            background: 'rgba(255,255,255,0.04)',
-            color: '#e2e8f0',
-            fontWeight: 800,
-            textDecoration: 'none',
-          }}
-        >
+      <section className="team-profile-not-found">
+        <h2>팀을 찾을 수 없습니다</h2>
+        <p className="team-profile-muted">요청한 팀 페이지가 존재하지 않습니다. 팀 목록으로 돌아가 다시 선택해 주세요.</p>
+        <Link to="/teams" className="team-profile-action">
           팀 허브로 돌아가기
         </Link>
       </section>
@@ -525,248 +499,106 @@ export default function TeamDetailPage() {
   const historyText = teamInfo?.history ?? '연혁 정보가 아직 등록되지 않았습니다.';
 
   return (
-    <div className="season-content-page team-profile-page" style={{ display: 'grid', gap: '24px' }}>
+    <div className="season-content-page team-profile-page">
       {/* ── HERO ── */}
-      <section
-        className="team-profile-hero"
-        style={{
-          borderRadius: '24px',
-          padding: '26px',
-          background:
-            `radial-gradient(circle at 10% 20%, ${team.color}22, transparent 30%), radial-gradient(circle at 88% 5%, rgba(56,189,248,0.12), transparent 26%), linear-gradient(130deg, #0f172a 0%, #0b1220 100%)`,
-          border: '1px solid rgba(148,163,184,0.25)',
-          boxShadow: '0 24px 60px rgba(0,0,0,0.34)',
-          display: 'grid',
-          gap: '16px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <span
-            style={{
-              padding: '8px 12px',
-              borderRadius: '999px',
-              fontWeight: 800,
-              letterSpacing: '0.05em',
-              background: `${team.color}22`,
-              color: team.color,
-              border: `1px solid ${team.color}55`,
-              fontSize: '12px',
-            }}
-          >
-            {team.group}조
-          </span>
-          <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '13px' }}>TEAM HOME</span>
+      <section className="team-profile-hero">
+        <div className="team-profile-hero__copy">
+          <div className="team-page-eyebrow">
+            <span className="team-page-kicker">{team.group}조</span>
+            <span>TEAM HOME</span>
+          </div>
+          <h1>{team.name}</h1>
+          <p>팀 공지, 로스터, 경기 일정/결과를 한눈에 확인할 수 있는 팀 전용 페이지입니다.</p>
         </div>
-        <div style={{ display: 'grid', gap: '8px' }}>
-          <h1 style={{ margin: 0, fontSize: 'clamp(26px, 6vw, 36px)', fontWeight: 900 }}>{team.name}</h1>
-          <p style={{ margin: 0, color: '#cbd5e1', fontWeight: 600 }}>
-            팀 공지, 로스터, 경기 일정/결과를 한눈에 확인할 수 있는 팀 전용 페이지입니다.
-          </p>
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-          <div style={{
-            padding: '10px 12px',
-            borderRadius: '12px',
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(148,163,184,0.25)',
-            color: '#e2e8f0',
-            fontWeight: 800,
-            fontSize: '13px',
-          }}>총 {totalGames}경기</div>
-          <div style={{
-            padding: '10px 12px',
-            borderRadius: '12px',
-            background: 'rgba(34,197,94,0.12)',
-            border: '1px solid rgba(34,197,94,0.35)',
-            color: '#bbf7d0',
-            fontWeight: 800,
-            fontSize: '13px',
-          }}>승 {record.wins}</div>
-          <div style={{
-            padding: '10px 12px',
-            borderRadius: '12px',
-            background: 'rgba(248,113,113,0.12)',
-            border: '1px solid rgba(248,113,113,0.35)',
-            color: '#fecaca',
-            fontWeight: 800,
-            fontSize: '13px',
-          }}>패 {record.losses}</div>
-          <div style={{
-            padding: '10px 12px',
-            borderRadius: '12px',
-            background: 'rgba(148,163,184,0.18)',
-            border: '1px solid rgba(148,163,184,0.35)',
-            color: '#e2e8f0',
-            fontWeight: 800,
-            fontSize: '13px',
-          }}>무 {record.draws}</div>
+        <div className="team-profile-record" aria-label="시즌 전적">
+          <div><strong>{totalGames}</strong><span>경기</span></div>
+          <div><strong>{record.wins}</strong><span>승</span></div>
+          <div><strong>{record.losses}</strong><span>패</span></div>
+          <div><strong>{record.draws}</strong><span>무</span></div>
         </div>
       </section>
 
       {/* ── 팀 정보 ── */}
-      <section style={cardBase}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-          <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 900 }}>팀 정보</h2>
+      <section className="team-profile-section">
+        <div className="team-profile-section__header">
+          <h2>팀 정보</h2>
           {canManage && (
-            <span
-              style={{
-                padding: '6px 10px',
-                borderRadius: '999px',
-                background: 'rgba(34,197,94,0.14)',
-                color: '#bbf7d0',
-                border: '1px solid rgba(34,197,94,0.4)',
-                fontWeight: 800,
-                fontSize: '11px',
-                letterSpacing: '0.04em',
-              }}
-            >
-              EDITABLE
-            </span>
+            <span className="team-access-label">EDITABLE</span>
           )}
         </div>
 
         {teamInfoStatus && (
-          <div style={{ color: '#bbf7d0', fontWeight: 800, background: 'rgba(34,197,94,0.1)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(34,197,94,0.35)' }}>
+          <div className="team-feedback team-feedback--success" role="status">
             {teamInfoStatus}
           </div>
         )}
         {teamInfoError && (
-          <div style={{ color: '#fecaca', fontWeight: 800, background: 'rgba(248,113,113,0.1)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(248,113,113,0.35)' }}>
+          <div className="team-feedback team-feedback--error" role="alert">
             {teamInfoError}
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '14px', alignItems: 'center' }}>
-          {emblemUrl ? (
-            <img
-              src={emblemUrl}
-              alt={`${team.name} emblem`}
-              referrerPolicy="no-referrer"
-              style={{
-                width: '84px',
-                height: '84px',
-                borderRadius: '18px',
-                objectFit: 'cover',
-                border: '1px solid rgba(148,163,184,0.35)',
-                background: emblemForceBoost
-                  ? 'radial-gradient(circle at center, rgba(255,255,255,1) 0%, rgba(255,255,255,0.92) 24%, rgba(255,255,255,0.5) 42%, rgba(255,255,255,0.1) 58%, rgba(255,255,255,0) 76%), rgba(15,23,42,0.6)'
-                  : 'rgba(15,23,42,0.6)',
-              }}
-            />
-          ) : (
-            <div
-              style={{
-                width: '84px',
-                height: '84px',
-                borderRadius: '18px',
-                border: '1px solid rgba(148,163,184,0.35)',
-                background: `${team.color}22`,
-                color: team.color,
-                display: 'grid',
-                placeItems: 'center',
-                fontWeight: 900,
-                fontSize: '22px',
-              }}
-            >
-              {team.name.slice(0, 2)}
-            </div>
-          )}
-          <div style={{ display: 'grid', gap: '8px' }}>
-            <div style={{ fontWeight: 800, color: '#e2e8f0' }}>{shortIntro}</div>
-            <div style={{ color: '#cbd5e1', fontSize: '13px', lineHeight: 1.6 }}>{longIntro}</div>
+        <div className="team-profile-identity">
+          <div className={`team-profile-emblem${emblemForceBoost ? ' needs-contrast' : ''}`}>
+            {emblemUrl ? (
+              <img src={emblemUrl} alt={`${team.name} emblem`} referrerPolicy="no-referrer" />
+            ) : (
+              <span>{team.name.slice(0, 2)}</span>
+            )}
+          </div>
+          <div className="team-profile-identity__copy">
+            <div className="team-profile-identity__lead">{shortIntro}</div>
+            <div className="team-profile-identity__description">{longIntro}</div>
           </div>
         </div>
-        <div style={{ color: '#94a3b8', fontSize: '13px', lineHeight: 1.7 }}>{historyText}</div>
+        <div className="team-profile-history">{historyText}</div>
 
         {canManage && (
-          <div
-            style={{
-              display: 'grid',
-              gap: '10px',
-              padding: '12px',
-              borderRadius: '12px',
-              border: '1px solid rgba(148,163,184,0.25)',
-              background: 'rgba(255,255,255,0.02)',
-            }}
-          >
-            <div style={{ display: 'grid', gap: '6px' }}>
-              <label style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>엠블럼 URL</label>
+          <div className="team-profile-form">
+            <div className="team-profile-field">
+              <label htmlFor="team-emblem-url">엠블럼 URL</label>
               <input
+                id="team-emblem-url"
                 value={teamInfoDraft.emblemUrl}
                 onChange={(e) => setTeamInfoDraft((prev) => ({ ...prev, emblemUrl: e.target.value }))}
                 placeholder="https://example.com/logo.png"
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(148,163,184,0.35)',
-                  background: 'rgba(15,23,42,0.6)',
-                  color: '#e2e8f0',
-                }}
               />
             </div>
-            <div style={{ display: 'grid', gap: '6px' }}>
-              <label style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>한 줄 소개</label>
+            <div className="team-profile-field">
+              <label htmlFor="team-short-intro">한 줄 소개</label>
               <input
+                id="team-short-intro"
                 value={teamInfoDraft.shortIntro}
                 onChange={(e) => setTeamInfoDraft((prev) => ({ ...prev, shortIntro: e.target.value }))}
                 placeholder="팀을 한 문장으로 소개해 주세요."
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(148,163,184,0.35)',
-                  background: 'rgba(15,23,42,0.6)',
-                  color: '#e2e8f0',
-                }}
               />
             </div>
-            <div style={{ display: 'grid', gap: '6px' }}>
-              <label style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>상세 소개</label>
+            <div className="team-profile-field">
+              <label htmlFor="team-long-intro">상세 소개</label>
               <textarea
+                id="team-long-intro"
                 value={teamInfoDraft.longIntro}
                 onChange={(e) => setTeamInfoDraft((prev) => ({ ...prev, longIntro: e.target.value }))}
                 rows={3}
                 placeholder="팀 상세 소개를 입력하세요."
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(148,163,184,0.35)',
-                  background: 'rgba(15,23,42,0.6)',
-                  color: '#e2e8f0',
-                  resize: 'vertical',
-                }}
               />
             </div>
-            <div style={{ display: 'grid', gap: '6px' }}>
-              <label style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>연혁</label>
+            <div className="team-profile-field">
+              <label htmlFor="team-history">연혁</label>
               <textarea
+                id="team-history"
                 value={teamInfoDraft.history}
                 onChange={(e) => setTeamInfoDraft((prev) => ({ ...prev, history: e.target.value }))}
                 rows={4}
                 placeholder="연혁/주요 성과를 입력하세요."
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(148,163,184,0.35)',
-                  background: 'rgba(15,23,42,0.6)',
-                  color: '#e2e8f0',
-                  resize: 'vertical',
-                }}
               />
             </div>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <div className="team-profile-form__actions">
               <button
                 type="button"
                 onClick={handleSaveTeamInfo}
                 disabled={teamInfoBusy}
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(148,163,184,0.35)',
-                  background: 'rgba(255,255,255,0.05)',
-                  color: '#e2e8f0',
-                  fontWeight: 800,
-                  cursor: teamInfoBusy ? 'not-allowed' : 'pointer',
-                }}
+                className="team-profile-action team-profile-action--primary"
               >
                 팀 정보 저장
               </button>
@@ -776,41 +608,20 @@ export default function TeamDetailPage() {
       </section>
 
       {/* ── 팀 공지 ── */}
-      <section style={cardBase}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-          <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 900 }}>팀 공지</h2>
+      <section className="team-profile-section">
+        <div className="team-profile-section__header">
+          <h2>팀 공지</h2>
           {canManage && (
-            <span
-              style={{
-                padding: '6px 10px',
-                borderRadius: '999px',
-                background: 'rgba(34,197,94,0.14)',
-                color: '#bbf7d0',
-                border: '1px solid rgba(34,197,94,0.4)',
-                fontWeight: 800,
-                fontSize: '11px',
-                letterSpacing: '0.04em',
-              }}
-            >
-              COACH MODE
-            </span>
+            <span className="team-access-label">COACH MODE</span>
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        <div className="team-notice-filters" role="group" aria-label="공지 카테고리">
           <button
             type="button"
             onClick={() => setNoticeFilter('ALL')}
-            style={{
-              padding: '6px 10px',
-              borderRadius: '10px',
-              border: noticeFilter === 'ALL' ? '1px solid #f97316' : '1px solid rgba(148,163,184,0.35)',
-              background: noticeFilter === 'ALL' ? 'rgba(249,115,22,0.15)' : 'rgba(255,255,255,0.03)',
-              color: noticeFilter === 'ALL' ? '#f97316' : '#94a3b8',
-              fontWeight: 800,
-              fontSize: '12px',
-              cursor: 'pointer',
-            }}
+            className={`team-notice-filter${noticeFilter === 'ALL' ? ' is-active' : ''}`}
+            aria-pressed={noticeFilter === 'ALL'}
           >
             전체
           </button>
@@ -819,162 +630,93 @@ export default function TeamDetailPage() {
               key={cat}
               type="button"
               onClick={() => setNoticeFilter(cat)}
-              style={{
-                padding: '6px 10px',
-                borderRadius: '10px',
-                border: noticeFilter === cat ? `1px solid ${NOTICE_CATEGORY_STYLE[cat].color}` : '1px solid rgba(148,163,184,0.35)',
-                background: noticeFilter === cat ? NOTICE_CATEGORY_STYLE[cat].bg : 'rgba(255,255,255,0.03)',
-                color: noticeFilter === cat ? NOTICE_CATEGORY_STYLE[cat].color : '#94a3b8',
-                fontWeight: 800,
-                fontSize: '12px',
-                cursor: 'pointer',
-              }}
+              className={`team-notice-filter${noticeFilter === cat ? ' is-active' : ''}`}
+              aria-pressed={noticeFilter === cat}
             >
               {cat}
             </button>
           ))}
         </div>
 
-        <div style={{ display: 'grid', gap: '8px' }}>
-          <div style={{ position: 'relative' }}>
-            <input
-              value={noticeSearchQuery}
-              onChange={(e) => setNoticeSearchQuery(e.target.value)}
-              placeholder="제목, 내용, 작성자 검색"
-              style={{
-                width: '100%',
-                padding: '10px 76px 10px 12px',
-                borderRadius: '10px',
-                border: '1px solid rgba(148,163,184,0.35)',
-                background: 'rgba(15,23,42,0.6)',
-                color: '#e2e8f0',
-                fontWeight: 600,
-              }}
-            />
-            {noticeSearchQuery.trim() && (
-              <button
-                type="button"
-                onClick={() => setNoticeSearchQuery('')}
-                style={{
-                  position: 'absolute',
-                  right: '8px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  padding: '4px 8px',
-                  borderRadius: '8px',
-                  border: '1px solid rgba(148,163,184,0.35)',
-                  background: 'rgba(51,65,85,0.85)',
-                  color: '#e2e8f0',
-                  fontWeight: 800,
-                  fontSize: '11px',
-                  cursor: 'pointer',
-                }}
-              >
-                초기화
-              </button>
-            )}
-          </div>
-          <div style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
+        <div className="team-notice-search">
+          <input
+            value={noticeSearchQuery}
+            onChange={(e) => setNoticeSearchQuery(e.target.value)}
+            placeholder="제목, 내용, 작성자 검색"
+            aria-label="팀 공지 검색"
+          />
+          {noticeSearchQuery.trim() && (
+            <button
+              type="button"
+              onClick={() => setNoticeSearchQuery('')}
+              className="team-profile-action"
+            >
+              초기화
+            </button>
+          )}
+          <div className="team-notice-count">
             {sortedNotices.length}개 공지
           </div>
         </div>
 
         {noticeStatus && (
-          <div style={{ color: '#bbf7d0', fontWeight: 800, background: 'rgba(34,197,94,0.1)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(34,197,94,0.35)' }}>
+          <div className="team-feedback team-feedback--success" role="status">
             {noticeStatus}
           </div>
         )}
         {noticeError && (
-          <div style={{ color: '#fecaca', fontWeight: 800, background: 'rgba(248,113,113,0.1)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(248,113,113,0.35)' }}>
+          <div className="team-feedback team-feedback--error" role="alert">
             {noticeError}
           </div>
         )}
 
         {canManage && (
-          <div
-            style={{
-              display: 'grid',
-              gap: '10px',
-              padding: '12px',
-              borderRadius: '12px',
-              border: '1px solid rgba(148,163,184,0.25)',
-              background: 'rgba(255,255,255,0.02)',
-            }}
-            >
-              <div style={{ display: 'grid', gap: '6px' }}>
-                <label style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>공지 제목</label>
+          <div className="team-profile-form">
+            <div className="team-profile-field">
+              <label htmlFor="team-notice-title">공지 제목</label>
               <input
+                id="team-notice-title"
                 value={noticeTitle}
                 onChange={(e) => setNoticeTitle(e.target.value)}
                 placeholder="공지 제목"
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(148,163,184,0.35)',
-                  background: 'rgba(15,23,42,0.6)',
-                  color: '#e2e8f0',
-                }}
               />
-              </div>
-              <div style={{ display: 'grid', gap: '6px' }}>
-                <label style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>카테고리</label>
-                <select
-                  value={noticeCategory}
-                  onChange={(e) => setNoticeCategory(e.target.value as TeamNoticeCategory)}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: '10px',
-                    border: '1px solid rgba(148,163,184,0.35)',
-                    background: 'rgba(15,23,42,0.6)',
-                    color: '#e2e8f0',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {NOTICE_CATEGORIES.map((cat) => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ display: 'grid', gap: '6px' }}>
-                <label style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>공지 내용</label>
+            </div>
+            <div className="team-profile-field">
+              <label htmlFor="team-notice-category">카테고리</label>
+              <select
+                id="team-notice-category"
+                value={noticeCategory}
+                onChange={(e) => setNoticeCategory(e.target.value as TeamNoticeCategory)}
+              >
+                {NOTICE_CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+            <div className="team-profile-field">
+              <label htmlFor="team-notice-content">공지 내용</label>
               <textarea
+                id="team-notice-content"
                 value={noticeContent}
                 onChange={(e) => setNoticeContent(e.target.value)}
                 rows={3}
                 placeholder="공지 내용을 입력하세요."
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(148,163,184,0.35)',
-                  background: 'rgba(15,23,42,0.6)',
-                  color: '#e2e8f0',
-                  resize: 'vertical',
-                }}
               />
-              </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#cbd5e1', fontWeight: 700, fontSize: '13px' }}>
-                <input
-                  type="checkbox"
-                  checked={noticePinned}
-                  onChange={(e) => setNoticePinned(e.target.checked)}
-                  style={{ width: '16px', height: '16px' }}
-                />
-                상단 고정 공지
-              </label>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  onClick={handleAddNotice}
-                  disabled={noticeBusy}
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(148,163,184,0.35)',
-                  background: 'rgba(255,255,255,0.05)',
-                  color: '#e2e8f0',
-                  fontWeight: 800,
-                  cursor: noticeBusy ? 'not-allowed' : 'pointer',
-                }}
+            </div>
+            <label className="team-notice-checkbox">
+              <input
+                type="checkbox"
+                checked={noticePinned}
+                onChange={(e) => setNoticePinned(e.target.checked)}
+              />
+              상단 고정 공지
+            </label>
+            <div className="team-profile-form__actions">
+              <button
+                type="button"
+                onClick={handleAddNotice}
+                disabled={noticeBusy}
+                className="team-profile-action team-profile-action--primary"
               >
                 공지 등록
               </button>
@@ -983,383 +725,179 @@ export default function TeamDetailPage() {
         )}
 
         {noticesLoading ? (
-          <div style={{ color: '#94a3b8', fontWeight: 700 }}>팀 공지를 불러오는 중...</div>
+          <div className="team-profile-empty">팀 공지를 불러오는 중...</div>
         ) : noticesAccessDenied ? (
-          <div style={{ color: '#fca5a5', fontWeight: 700 }}>
+          <div className="team-profile-access-denied">
             팀 공지는 해당 팀 선수/감독만 열람할 수 있습니다.
           </div>
         ) : sortedNotices.length ? (
-          <div style={{ display: 'grid', gap: '10px' }}>
+          <div className="team-notice-list">
             {sortedNotices.map((notice) => {
               const category = notice.category ?? '일반';
-              const badgeStyle = NOTICE_CATEGORY_STYLE[category];
               return (
-              <div
-                key={notice.id}
-                style={{
-                  display: 'grid',
-                  gap: '8px',
-                  padding: '12px',
-                  borderRadius: '12px',
-                  border: '1px solid rgba(148,163,184,0.25)',
-                  background: 'rgba(255,255,255,0.02)',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    {notice.pinned && (
-                      <span
-                        style={{
-                          padding: '2px 6px',
-                          borderRadius: '999px',
-                          background: 'rgba(249,115,22,0.16)',
-                          color: '#f97316',
-                          fontWeight: 800,
-                          fontSize: '11px',
-                        }}
-                      >
-                        고정
+                <article key={notice.id} className="team-notice-card">
+                  <div className="team-notice-card__header">
+                    <div className="team-notice-card__title">
+                      {notice.pinned && <span className="team-notice-tag team-notice-tag--pinned">고정</span>}
+                      <span className={`team-notice-tag${category === '긴급' ? ' team-notice-tag--urgent' : ''}`}>
+                        {category}
                       </span>
-                    )}
-                    <span
-                      style={{
-                        padding: '2px 6px',
-                        borderRadius: '999px',
-                        background: badgeStyle.bg,
-                        color: badgeStyle.color,
-                        fontWeight: 800,
-                        fontSize: '11px',
-                      }}
-                    >
-                      {category}
-                    </span>
+                      <Link to={`/teams/${resolvedTeamDocId}/notices/${notice.id}`}>
+                        {notice.title}
+                      </Link>
+                    </div>
+                    <div className="team-notice-card__date">
+                      {notice.createdAt ? new Date(notice.createdAt).toLocaleString('ko-KR') : '날짜 미정'}
+                    </div>
+                  </div>
+                  <div className="team-notice-content">{notice.content}</div>
+                  {canManage ? (
+                    <div className="team-notice-actions">
+                      <button
+                        type="button"
+                        onClick={() => handleTogglePinned(notice.id, !notice.pinned)}
+                        disabled={noticeBusy}
+                        className="team-profile-action"
+                      >
+                        {notice.pinned ? '고정 해제' : '공지 고정'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteNotice(notice.id)}
+                        disabled={noticeBusy}
+                        className="team-profile-action team-profile-action--danger"
+                      >
+                        공지 삭제
+                      </button>
+                    </div>
+                  ) : (
                     <Link
                       to={`/teams/${resolvedTeamDocId}/notices/${notice.id}`}
-                      style={{ fontWeight: 800, color: '#e2e8f0', textDecoration: 'none' }}
+                      className="team-profile-action"
                     >
-                      {notice.title}
+                      상세 보기
                     </Link>
-                  </div>
-                  <div style={{ color: '#94a3b8', fontSize: '12px' }}>
-                    {notice.createdAt ? new Date(notice.createdAt).toLocaleString('ko-KR') : '날짜 미정'}
-                  </div>
-                </div>
-                <div style={{ color: '#cbd5e1', fontSize: '13px', lineHeight: 1.6 }}>{notice.content}</div>
-                {canManage ? (
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      onClick={() => handleTogglePinned(notice.id, !notice.pinned)}
-                      disabled={noticeBusy}
-                      style={{
-                        padding: '6px 10px',
-                        borderRadius: '10px',
-                        border: '1px solid rgba(148,163,184,0.35)',
-                        background: 'rgba(255,255,255,0.04)',
-                        color: '#e2e8f0',
-                        fontWeight: 800,
-                        cursor: noticeBusy ? 'not-allowed' : 'pointer',
-                        width: 'fit-content',
-                      }}
-                    >
-                      {notice.pinned ? '고정 해제' : '공지 고정'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteNotice(notice.id)}
-                      disabled={noticeBusy}
-                      style={{
-                        padding: '6px 10px',
-                        borderRadius: '10px',
-                        border: '1px solid rgba(248,113,113,0.5)',
-                        background: 'rgba(248,113,113,0.12)',
-                        color: '#fecdd3',
-                        fontWeight: 800,
-                        cursor: noticeBusy ? 'not-allowed' : 'pointer',
-                        width: 'fit-content',
-                      }}
-                    >
-                      공지 삭제
-                    </button>
-                  </div>
-                ) : (
-                  <Link
-                    to={`/teams/${resolvedTeamDocId}/notices/${notice.id}`}
-                    style={{
-                      padding: '6px 10px',
-                      borderRadius: '10px',
-                      border: '1px solid rgba(148,163,184,0.35)',
-                      background: 'rgba(255,255,255,0.04)',
-                      color: '#e2e8f0',
-                      fontWeight: 800,
-                      textDecoration: 'none',
-                      fontSize: '12px',
-                      width: 'fit-content',
-                    }}
-                  >
-                    상세 보기
-                  </Link>
-                )}
-              </div>
-            )})}
+                  )}
+                </article>
+              );
+            })}
           </div>
         ) : (
-          <div style={{ color: '#94a3b8', fontWeight: 700 }}>
+          <div className="team-profile-empty">
             {noticeSearchQuery.trim() ? '검색 결과가 없습니다.' : '등록된 팀 공지가 없습니다.'}
           </div>
         )}
       </section>
 
       {/* ── 일정 ── */}
-      <section style={cardBase}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-          <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 900 }}>예정/진행 경기</h2>
-          <Link
-            to="/schedule"
-            style={{
-              padding: '8px 12px',
-              borderRadius: '10px',
-              border: '1px solid rgba(148,163,184,0.35)',
-              background: 'rgba(255,255,255,0.04)',
-              color: '#e2e8f0',
-              fontWeight: 800,
-              fontSize: '12px',
-              textDecoration: 'none',
-            }}
-          >
-            전체 일정 보기
-          </Link>
+      <section className="team-profile-section">
+        <div className="team-profile-section__header">
+          <h2>예정/진행 경기</h2>
+          <Link to="/schedule" className="team-profile-action">전체 일정 보기</Link>
         </div>
         {upcoming.length ? (
-          <div style={{ display: 'grid', gap: '10px' }}>
+          <div className="team-match-list">
             {upcoming.map((match) => {
               const badge = statusLabel(match);
               return (
-                <div
-                  key={match.id}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr auto',
-                    gap: '10px',
-                    alignItems: 'center',
-                    padding: '12px',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(148,163,184,0.25)',
-                    background: 'rgba(255,255,255,0.02)',
-                  }}
-                >
-                  <div style={{ display: 'grid', gap: '6px' }}>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 800, color: '#e2e8f0' }}>
-                        {match.awayTeamName} <span style={{ color: '#94a3b8' }}>vs</span> {match.homeTeamName}
-                      </span>
-                      <span
-                        style={{
-                          padding: '2px 8px',
-                          borderRadius: '999px',
-                          background: badge.bg,
-                          color: badge.color,
-                          fontWeight: 800,
-                          fontSize: '11px',
-                        }}
-                      >
-                        {badge.text}
-                      </span>
+                <div key={match.id} className="team-match-card">
+                  <div className="team-match-card__body">
+                    <div className="team-match-card__title">
+                      <span>{match.awayTeamName} <span className="team-profile-muted">vs</span> {match.homeTeamName}</span>
+                      <span className={`team-state-badge team-state-badge--${badge.tone}`}>{badge.text}</span>
                     </div>
-                    <div style={{ color: '#94a3b8', fontSize: '12px' }}>
+                    <div className="team-match-card__meta">
                       {new Date(match.startTime).toLocaleString('ko-KR')} · {match.venue || '장소 미정'}
                     </div>
                   </div>
-                  <div style={{ fontWeight: 900, color: '#e2e8f0' }}>
-                    {safeScore(match.awayScore)} : {safeScore(match.homeScore)}
-                  </div>
+                  <div className="team-match-card__score">{safeScore(match.awayScore)} : {safeScore(match.homeScore)}</div>
                 </div>
               );
             })}
           </div>
         ) : (
-          <div style={{ color: '#94a3b8', fontWeight: 700 }}>예정된 경기가 아직 없습니다.</div>
+          <div className="team-profile-empty">예정된 경기가 아직 없습니다.</div>
         )}
       </section>
 
       {/* ── 결과 ── */}
-      <section style={cardBase}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-          <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 900 }}>최근 경기 결과</h2>
-          <Link
-            to="/schedule/results"
-            style={{
-              padding: '8px 12px',
-              borderRadius: '10px',
-              border: '1px solid rgba(148,163,184,0.35)',
-              background: 'rgba(255,255,255,0.04)',
-              color: '#e2e8f0',
-              fontWeight: 800,
-              fontSize: '12px',
-              textDecoration: 'none',
-            }}
-          >
-            결과 페이지 보기
-          </Link>
+      <section className="team-profile-section">
+        <div className="team-profile-section__header">
+          <h2>최근 경기 결과</h2>
+          <Link to="/schedule/results" className="team-profile-action">결과 페이지 보기</Link>
         </div>
         {recentResults.length ? (
-          <div style={{ display: 'grid', gap: '10px' }}>
+          <div className="team-match-list">
             {recentResults.map((match) => {
               const badge = statusLabel(match);
               return (
-                <div
-                  key={match.id}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr auto',
-                    gap: '10px',
-                    alignItems: 'center',
-                    padding: '12px',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(148,163,184,0.25)',
-                    background: 'rgba(255,255,255,0.02)',
-                  }}
-                >
-                  <div style={{ display: 'grid', gap: '6px' }}>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 800, color: '#e2e8f0' }}>
-                        {match.awayTeamName} <span style={{ color: '#94a3b8' }}>vs</span> {match.homeTeamName}
-                      </span>
-                      <span
-                        style={{
-                          padding: '2px 8px',
-                          borderRadius: '999px',
-                          background: badge.bg,
-                          color: badge.color,
-                          fontWeight: 800,
-                          fontSize: '11px',
-                        }}
-                      >
-                        {badge.text}
-                      </span>
+                <div key={match.id} className="team-match-card">
+                  <div className="team-match-card__body">
+                    <div className="team-match-card__title">
+                      <span>{match.awayTeamName} <span className="team-profile-muted">vs</span> {match.homeTeamName}</span>
+                      <span className={`team-state-badge team-state-badge--${badge.tone}`}>{badge.text}</span>
                     </div>
-                    <div style={{ color: '#94a3b8', fontSize: '12px' }}>
+                    <div className="team-match-card__meta">
                       {new Date(match.startTime).toLocaleString('ko-KR')} · {match.venue || '장소 미정'}
                     </div>
                   </div>
-                  <div style={{ fontWeight: 900, color: '#e2e8f0' }}>
-                    {safeScore(match.awayScore)} : {safeScore(match.homeScore)}
-                  </div>
+                  <div className="team-match-card__score">{safeScore(match.awayScore)} : {safeScore(match.homeScore)}</div>
                 </div>
               );
             })}
           </div>
         ) : (
-          <div style={{ color: '#94a3b8', fontWeight: 700 }}>최근 경기 결과가 아직 없습니다.</div>
+          <div className="team-profile-empty">최근 경기 결과가 아직 없습니다.</div>
         )}
       </section>
 
       {/* ── 로스터 ── */}
-      <section style={cardBase}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-          <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 900 }}>로스터</h2>
-          {canManage && (
-            <span
-              style={{
-                padding: '6px 10px',
-                borderRadius: '999px',
-                background: 'rgba(34,197,94,0.14)',
-                color: '#bbf7d0',
-                border: '1px solid rgba(34,197,94,0.4)',
-                fontWeight: 800,
-                fontSize: '11px',
-                letterSpacing: '0.04em',
-              }}
-            >
-              COACH MODE
-            </span>
-          )}
+      <section className="team-profile-section">
+        <div className="team-profile-section__header">
+          <h2>로스터</h2>
+          {canManage && <span className="team-access-label">COACH MODE</span>}
         </div>
 
-        {memberStatus && (
-          <div style={{ color: '#bbf7d0', fontWeight: 800, background: 'rgba(34,197,94,0.1)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(34,197,94,0.35)' }}>
-            {memberStatus}
-          </div>
-        )}
-        {memberError && (
-          <div style={{ color: '#fecaca', fontWeight: 800, background: 'rgba(248,113,113,0.1)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(248,113,113,0.35)' }}>
-            {memberError}
-          </div>
-        )}
+        {memberStatus && <div className="team-feedback team-feedback--success" role="status">{memberStatus}</div>}
+        {memberError && <div className="team-feedback team-feedback--error" role="alert">{memberError}</div>}
 
         {canManage && (
-          <div
-            style={{
-              display: 'grid',
-              gap: '10px',
-              padding: '12px',
-              borderRadius: '12px',
-              border: '1px solid rgba(148,163,184,0.25)',
-              background: 'rgba(255,255,255,0.02)',
-            }}
-          >
-            <div style={{ display: 'grid', gap: '6px' }}>
-              <label style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>팀원 이메일</label>
+          <div className="team-profile-form">
+            <div className="team-profile-field">
+              <label htmlFor="team-member-email">팀원 이메일</label>
               <input
+                id="team-member-email"
                 value={memberEmail}
                 onChange={(e) => setMemberEmail(e.target.value)}
                 placeholder="player@example.com"
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(148,163,184,0.35)',
-                  background: 'rgba(15,23,42,0.6)',
-                  color: '#e2e8f0',
-                }}
               />
             </div>
-            <div style={{ display: 'grid', gap: '6px' }}>
-              <label style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>팀원 이름</label>
+            <div className="team-profile-field">
+              <label htmlFor="team-member-name">팀원 이름</label>
               <input
+                id="team-member-name"
                 value={memberName}
                 onChange={(e) => setMemberName(e.target.value)}
                 placeholder="선수 실명"
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(148,163,184,0.35)',
-                  background: 'rgba(15,23,42,0.6)',
-                  color: '#e2e8f0',
-                }}
               />
             </div>
-            <div style={{ display: 'grid', gap: '6px' }}>
-              <label style={{ color: '#94a3b8', fontWeight: 800, fontSize: '12px' }}>역할</label>
+            <div className="team-profile-field">
+              <label htmlFor="team-member-role">역할</label>
               <select
+                id="team-member-role"
                 value={memberRole}
                 onChange={(e) => setMemberRole(e.target.value as 'player' | 'staff')}
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(148,163,184,0.35)',
-                  background: 'rgba(15,23,42,0.6)',
-                  color: '#e2e8f0',
-                  cursor: 'pointer',
-                }}
               >
                 <option value="player">선수</option>
                 <option value="staff">스태프</option>
               </select>
             </div>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <div className="team-profile-form__actions">
               <button
                 type="button"
                 onClick={handleAddMember}
                 disabled={memberBusy}
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(148,163,184,0.35)',
-                  background: 'rgba(255,255,255,0.05)',
-                  color: '#e2e8f0',
-                  fontWeight: 800,
-                  cursor: memberBusy ? 'not-allowed' : 'pointer',
-                }}
+                className="team-profile-action team-profile-action--primary"
               >
                 팀원 추가
               </button>
@@ -1367,9 +905,9 @@ export default function TeamDetailPage() {
           </div>
         )}
 
-        <div style={{ display: 'grid', gap: '10px' }}>
+        <div className="team-member-list">
           {membersLoading ? (
-            <div style={{ color: '#94a3b8', fontWeight: 700 }}>로스터를 불러오는 중...</div>
+            <div className="team-profile-empty">로스터를 불러오는 중...</div>
           ) : members.length ? (
             members.map((member) => {
               const edits = memberEdits[member.uid] ?? {};
@@ -1380,54 +918,19 @@ export default function TeamDetailPage() {
               const profileImageValue = normalizeExternalImageUrl(edits.profileImageUrl ?? member.profileImageUrl ?? '');
               const profileBioValue = edits.profileBio ?? member.profileBio ?? '';
               return (
-                <div
-                  key={member.uid}
-                  style={{
-                    display: 'grid',
-                    gap: '10px',
-                    padding: '12px',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(148,163,184,0.25)',
-                    background: 'rgba(255,255,255,0.02)',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      {profileImageValue ? (
-                        <img
-                          src={profileImageValue}
-                          alt={`${member.name} profile`}
-                          referrerPolicy="no-referrer"
-                          style={{
-                            width: '44px',
-                            height: '44px',
-                            borderRadius: '12px',
-                            objectFit: 'cover',
-                            border: '1px solid rgba(148,163,184,0.35)',
-                            background: 'rgba(15,23,42,0.6)',
-                          }}
-                        />
-                      ) : (
-                        <div
-                          style={{
-                            width: '44px',
-                            height: '44px',
-                            borderRadius: '12px',
-                            border: '1px solid rgba(148,163,184,0.35)',
-                            background: 'rgba(148,163,184,0.12)',
-                            color: '#e2e8f0',
-                            display: 'grid',
-                            placeItems: 'center',
-                            fontWeight: 800,
-                            fontSize: '14px',
-                          }}
-                        >
-                          {member.name.slice(0, 2)}
-                        </div>
-                      )}
-                      <div style={{ display: 'grid', gap: '4px' }}>
-                        <div style={{ fontWeight: 800, color: '#e2e8f0' }}>{member.name}</div>
-                        <div style={{ color: '#94a3b8', fontSize: '12px' }}>{MEMBER_ROLE_LABELS[member.role]}</div>
+                <div key={member.uid} className="team-member-card">
+                  <div className="team-member-card__header">
+                    <div className="team-member-identity">
+                      <div className="team-member-avatar">
+                        {profileImageValue ? (
+                          <img src={profileImageValue} alt={`${member.name} profile`} referrerPolicy="no-referrer" />
+                        ) : (
+                          <span>{member.name.slice(0, 2)}</span>
+                        )}
+                      </div>
+                      <div className="team-member-identity__copy">
+                        <div className="team-member-name">{member.name}</div>
+                        <div className="team-member-role">{MEMBER_ROLE_LABELS[member.role]}</div>
                       </div>
                     </div>
                     {canManage && (
@@ -1435,15 +938,7 @@ export default function TeamDetailPage() {
                         type="button"
                         onClick={() => handleRemoveMember(member.uid)}
                         disabled={memberBusy}
-                        style={{
-                          padding: '6px 10px',
-                          borderRadius: '10px',
-                          border: '1px solid rgba(248,113,113,0.5)',
-                          background: 'rgba(248,113,113,0.12)',
-                          color: '#fecdd3',
-                          fontWeight: 800,
-                          cursor: memberBusy ? 'not-allowed' : 'pointer',
-                        }}
+                        className="team-profile-action team-profile-action--danger"
                       >
                         제거
                       </button>
@@ -1451,43 +946,24 @@ export default function TeamDetailPage() {
                   </div>
 
                   {canManage ? (
-                    <div style={{ display: 'grid', gap: '8px' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px' }}>
+                    <div className="team-member-details">
+                      <div className="team-member-edit-grid">
                         <input
                           value={numberValue}
                           onChange={(e) => setMemberEdits((prev) => ({ ...prev, [member.uid]: { ...prev[member.uid], number: e.target.value } }))}
                           placeholder="등번호"
-                          style={{
-                            padding: '8px 10px',
-                            borderRadius: '10px',
-                            border: '1px solid rgba(148,163,184,0.35)',
-                            background: 'rgba(15,23,42,0.6)',
-                            color: '#e2e8f0',
-                          }}
+                          aria-label={`${member.name} 등번호`}
                         />
                         <input
                           value={positionValue}
                           onChange={(e) => setMemberEdits((prev) => ({ ...prev, [member.uid]: { ...prev[member.uid], position: e.target.value } }))}
                           placeholder="포지션"
-                          style={{
-                            padding: '8px 10px',
-                            borderRadius: '10px',
-                            border: '1px solid rgba(148,163,184,0.35)',
-                            background: 'rgba(15,23,42,0.6)',
-                            color: '#e2e8f0',
-                          }}
+                          aria-label={`${member.name} 포지션`}
                         />
                         <select
                           value={batsValue}
                           onChange={(e) => setMemberEdits((prev) => ({ ...prev, [member.uid]: { ...prev[member.uid], bats: e.target.value } }))}
-                          style={{
-                            padding: '8px 10px',
-                            borderRadius: '10px',
-                            border: '1px solid rgba(148,163,184,0.35)',
-                            background: 'rgba(15,23,42,0.6)',
-                            color: '#e2e8f0',
-                            cursor: 'pointer',
-                          }}
+                          aria-label={`${member.name} 타석`}
                         >
                           <option value="R">타 R</option>
                           <option value="L">타 L</option>
@@ -1496,71 +972,40 @@ export default function TeamDetailPage() {
                         <select
                           value={throwsValue}
                           onChange={(e) => setMemberEdits((prev) => ({ ...prev, [member.uid]: { ...prev[member.uid], throws: e.target.value } }))}
-                          style={{
-                            padding: '8px 10px',
-                            borderRadius: '10px',
-                            border: '1px solid rgba(148,163,184,0.35)',
-                            background: 'rgba(15,23,42,0.6)',
-                            color: '#e2e8f0',
-                            cursor: 'pointer',
-                          }}
+                          aria-label={`${member.name} 투구`}
                         >
                           <option value="R">투 R</option>
                           <option value="L">투 L</option>
                         </select>
                       </div>
-                      <div style={{ display: 'grid', gap: '8px' }}>
-                        <input
-                          value={profileImageValue}
-                          onChange={(e) => setMemberEdits((prev) => ({ ...prev, [member.uid]: { ...prev[member.uid], profileImageUrl: e.target.value } }))}
-                          placeholder="프로필 이미지 URL"
-                          style={{
-                            padding: '8px 10px',
-                            borderRadius: '10px',
-                            border: '1px solid rgba(148,163,184,0.35)',
-                            background: 'rgba(15,23,42,0.6)',
-                            color: '#e2e8f0',
-                          }}
-                        />
-                        <textarea
-                          value={profileBioValue}
-                          onChange={(e) => setMemberEdits((prev) => ({ ...prev, [member.uid]: { ...prev[member.uid], profileBio: e.target.value } }))}
-                          placeholder="프로필 한 줄 소개"
-                          rows={2}
-                          style={{
-                            padding: '8px 10px',
-                            borderRadius: '10px',
-                            border: '1px solid rgba(148,163,184,0.35)',
-                            background: 'rgba(15,23,42,0.6)',
-                            color: '#e2e8f0',
-                            resize: 'vertical',
-                          }}
-                        />
+                      <input
+                        value={profileImageValue}
+                        onChange={(e) => setMemberEdits((prev) => ({ ...prev, [member.uid]: { ...prev[member.uid], profileImageUrl: e.target.value } }))}
+                        placeholder="프로필 이미지 URL"
+                        aria-label={`${member.name} 프로필 이미지 URL`}
+                      />
+                      <textarea
+                        value={profileBioValue}
+                        onChange={(e) => setMemberEdits((prev) => ({ ...prev, [member.uid]: { ...prev[member.uid], profileBio: e.target.value } }))}
+                        placeholder="프로필 한 줄 소개"
+                        aria-label={`${member.name} 프로필 소개`}
+                        rows={2}
+                      />
+                      <div className="team-member-actions">
+                        <button
+                          type="button"
+                          onClick={() => handleSaveMember(member.uid)}
+                          disabled={memberBusy}
+                          className="team-profile-action"
+                        >
+                          정보 저장
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleSaveMember(member.uid)}
-                        disabled={memberBusy}
-                        style={{
-                          padding: '8px 12px',
-                          borderRadius: '10px',
-                          border: '1px solid rgba(148,163,184,0.35)',
-                          background: 'rgba(255,255,255,0.05)',
-                          color: '#e2e8f0',
-                          fontWeight: 800,
-                          cursor: memberBusy ? 'not-allowed' : 'pointer',
-                          width: 'fit-content',
-                        }}
-                      >
-                        정보 저장
-                      </button>
                     </div>
                   ) : (
-                    <div style={{ display: 'grid', gap: '6px' }}>
-                      {member.profileBio && (
-                        <div style={{ color: '#cbd5e1', fontSize: '13px' }}>{member.profileBio}</div>
-                      )}
-                      <div style={{ color: '#94a3b8', fontSize: '12px' }}>
+                    <div className="team-member-details">
+                      {member.profileBio && <div className="team-member-bio">{member.profileBio}</div>}
+                      <div className="team-member-meta">
                         #{member.number || '-'} · {member.position || '-'} · 타 {member.bats || '-'} / 투 {member.throws || '-'}
                       </div>
                     </div>
@@ -1569,35 +1014,23 @@ export default function TeamDetailPage() {
               );
             })
           ) : (
-            <div style={{ color: '#94a3b8', fontWeight: 700 }}>등록된 팀원이 없습니다.</div>
+            <div className="team-profile-empty">등록된 팀원이 없습니다.</div>
           )}
         </div>
 
         {!canManage && !roleLoading && (
-          <div style={{ color: '#64748b', fontSize: '12px', fontWeight: 700 }}>
-            감독 계정으로 로그인하면 팀원 관리를 사용할 수 있습니다.
-          </div>
+          <div className="team-profile-muted">감독 계정으로 로그인하면 팀원 관리를 사용할 수 있습니다.</div>
         )}
       </section>
 
       {/* ── 기록 ── */}
-      <section style={cardBase}>
-        <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 900 }}>시즌 기록</h2>
-        <div style={{ color: '#94a3b8', fontWeight: 700 }}>팀/선수 기록 통계는 준비 중입니다.</div>
+      <section className="team-profile-section">
+        <h2>시즌 기록</h2>
+        <div className="team-profile-empty">팀/선수 기록 통계는 준비 중입니다.</div>
       </section>
 
       {/* ── 안내 ── */}
-      <section
-        style={{
-          borderRadius: '14px',
-          padding: '16px',
-          border: '1px solid rgba(148,163,184,0.2)',
-          background: 'rgba(255,255,255,0.02)',
-          color: '#94a3b8',
-          fontSize: '13px',
-          lineHeight: 1.7,
-        }}
-      >
+      <section className="team-profile-note">
         팀 공지/팀 정보/로스터 편집은 감독 계정에서만 사용할 수 있습니다. 시즌 기록 상세는 추후 제공될 예정입니다.
       </section>
     </div>

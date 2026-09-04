@@ -18,15 +18,7 @@ import type { TeamNotice, TeamNoticeComment } from '@shared/types';
 import RichTextEditor from '@shared/components/editor/RichTextEditor';
 import RichTextViewer from '@shared/components/editor/RichTextViewer';
 import { isDeltaEmpty } from '@shared/components/editor/quillUtils';
-
-const cardBase: React.CSSProperties = {
-  borderRadius: '16px',
-  padding: '16px',
-  border: '1px solid rgba(148,163,184,0.25)',
-  background: 'rgba(15,23,42,0.7)',
-  display: 'grid',
-  gap: '12px',
-};
+import './TeamPages.css';
 
 export default function TeamNoticeDetailPage() {
   const { teamId, noticeId } = useParams();
@@ -304,86 +296,74 @@ export default function TeamNoticeDetailPage() {
   );
 
   return (
-    <div className="season-content-page detail-board-page" style={{ display: 'grid', gap: '18px' }}>
-      <section style={cardBase}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-          <div style={{ display: 'grid', gap: '6px' }}>
-            <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 900 }}>팀 공지</h1>
-            <div style={{ color: '#94a3b8', fontSize: '13px' }}>{teamName} · 팀 공지 상세</div>
+    <div className="season-content-page team-notice-detail-page">
+      <section className="team-profile-section team-notice-detail__notice">
+        <div className="team-profile-section__header team-notice-detail__header">
+          <div>
+            <span className="team-page-kicker">TEAM NOTICE</span>
+            <h1>팀 공지</h1>
+            <p>{teamName} · 팀 공지 상세</p>
           </div>
-          <Link
-            to={`/teams/${teamDocId}`}
-            style={{
-              padding: '8px 12px',
-              borderRadius: '10px',
-              border: '1px solid rgba(148,163,184,0.35)',
-              background: 'rgba(255,255,255,0.04)',
-              color: '#e2e8f0',
-              fontWeight: 800,
-              fontSize: '12px',
-              textDecoration: 'none',
-            }}
-          >
+          <Link to={`/teams/${teamDocId}`} className="team-profile-action">
             팀 페이지로 돌아가기
           </Link>
         </div>
 
         {loadingNotice ? (
-          <div style={{ color: '#94a3b8', fontWeight: 700 }}>공지 내용을 불러오는 중...</div>
+          <div className="team-profile-empty">공지 내용을 불러오는 중...</div>
         ) : noticeAccessDenied ? (
-          <div style={{ color: '#fca5a5', fontWeight: 700 }}>
+          <div className="team-profile-access-denied">
             팀 공지는 해당 팀 선수/감독만 열람할 수 있습니다.
           </div>
         ) : notice ? (
-          <div style={{ display: 'grid', gap: '8px' }}>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-              {notice.pinned && (
-                <span style={{ padding: '2px 6px', borderRadius: '999px', background: 'rgba(249,115,22,0.16)', color: '#f97316', fontWeight: 800, fontSize: '11px' }}>
-                  고정
-                </span>
-              )}
-              {notice.category && (
-                <span style={{ padding: '2px 6px', borderRadius: '999px', background: 'rgba(148,163,184,0.2)', color: '#e2e8f0', fontWeight: 800, fontSize: '11px' }}>
-                  {notice.category}
-                </span>
-              )}
-              <div style={{ fontWeight: 900, color: '#e2e8f0', fontSize: '18px' }}>{notice.title}</div>
+          <article className="team-notice-detail__article">
+            <div className="team-notice-detail__title-row">
+              <div className="team-notice-detail__tags">
+                {notice.pinned && <span className="team-notice-tag team-notice-tag--pinned">고정</span>}
+                {notice.category && (
+                  <span className={`team-notice-tag${notice.category === '긴급' ? ' team-notice-tag--urgent' : ''}`}>
+                    {notice.category}
+                  </span>
+                )}
+              </div>
+              <h2>{notice.title}</h2>
             </div>
-            <div style={{ color: '#94a3b8', fontSize: '12px' }}>
+            <div className="team-notice-detail__meta">
               {notice.createdAt ? new Date(notice.createdAt).toLocaleString('ko-KR') : '날짜 미정'} · {notice.createdByName ?? '운영진'}
             </div>
-            <RichTextViewer content={notice.content} style={{ lineHeight: 1.7 }} />
-          </div>
+            <div className="team-rich-text team-rich-text--notice">
+              <RichTextViewer content={notice.content} />
+            </div>
+          </article>
         ) : (
-          <div style={{ color: '#94a3b8', fontWeight: 700 }}>해당 공지를 찾을 수 없습니다.</div>
+          <div className="team-profile-empty">해당 공지를 찾을 수 없습니다.</div>
         )}
       </section>
 
-      <section style={cardBase}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900 }}>댓글</h2>
-          <span style={{ color: '#94a3b8', fontSize: '12px' }}>{visibleCommentCount}개</span>
+      <section className="team-profile-section team-comments-section">
+        <div className="team-profile-section__header">
+          <h2>댓글</h2>
+          <span className="team-notice-count">{visibleCommentCount}개</span>
         </div>
 
         {liveAlert && (
-          <div style={{ color: '#f97316', fontWeight: 800, background: 'rgba(249,115,22,0.12)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(249,115,22,0.35)' }}>
+          <div className="team-feedback team-feedback--info" role="status" aria-live="polite">
             {liveAlert}
           </div>
         )}
-
         {commentStatus && (
-          <div style={{ color: '#bbf7d0', fontWeight: 800, background: 'rgba(34,197,94,0.1)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(34,197,94,0.35)' }}>
+          <div className="team-feedback team-feedback--success" role="status">
             {commentStatus}
           </div>
         )}
         {commentError && (
-          <div style={{ color: '#fecaca', fontWeight: 800, background: 'rgba(248,113,113,0.1)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(248,113,113,0.35)' }}>
+          <div className="team-feedback team-feedback--error" role="alert">
             {commentError}
           </div>
         )}
 
         {user ? (
-          <div style={{ display: 'grid', gap: '8px' }}>
+          <div className="team-comment-composer">
             <RichTextEditor
               mini
               value={commentInput}
@@ -395,66 +375,44 @@ export default function TeamNoticeDetailPage() {
               type="button"
               onClick={handleAddComment}
               disabled={commentBusy}
-              style={{
-                padding: '8px 12px',
-                borderRadius: '10px',
-                border: '1px solid rgba(148,163,184,0.35)',
-                background: 'rgba(255,255,255,0.05)',
-                color: '#e2e8f0',
-                fontWeight: 800,
-                cursor: commentBusy ? 'not-allowed' : 'pointer',
-                width: 'fit-content',
-              }}
+              className="team-profile-action team-profile-action--primary"
             >
               댓글 등록
             </button>
           </div>
         ) : (
-          <div style={{ color: '#94a3b8', fontWeight: 700 }}>로그인 후 댓글을 작성할 수 있습니다.</div>
+          <div className="team-profile-muted">로그인 후 댓글을 작성할 수 있습니다.</div>
         )}
 
         {loadingComments ? (
-          <div style={{ color: '#94a3b8', fontWeight: 700 }}>댓글을 불러오는 중...</div>
+          <div className="team-profile-empty">댓글을 불러오는 중...</div>
         ) : commentsAccessDenied ? (
-          <div style={{ color: '#fca5a5', fontWeight: 700 }}>댓글은 팀 소속 사용자만 볼 수 있습니다.</div>
+          <div className="team-profile-access-denied">댓글은 팀 소속 사용자만 볼 수 있습니다.</div>
         ) : groupedComments.roots.length ? (
-          <div style={{ display: 'grid', gap: '10px' }}>
+          <div className="team-comment-list">
             {groupedComments.roots.map((comment) => {
               const likeCount = comment.likeCount ?? comment.likedBy?.length ?? 0;
               const hasLiked = Boolean(user && comment.likedBy?.includes(user.uid));
               const replies = groupedComments.repliesMap.get(comment.id) ?? [];
               const isCollapsed = collapsedReplies[comment.id] ?? false;
               return (
-                <div
-                  key={comment.id}
-                  style={{
-                    display: 'grid',
-                    gap: '8px',
-                    padding: '12px',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(148,163,184,0.25)',
-                    background: 'rgba(255,255,255,0.02)',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-                    <div style={{ fontWeight: 800, color: '#e2e8f0' }}>{comment.author}</div>
-                    <div style={{ color: '#94a3b8', fontSize: '12px' }}>{new Date(comment.createdAt).toLocaleString('ko-KR')}</div>
+                <article key={comment.id} className="team-comment-card">
+                  <header className="team-comment-card__header">
+                    <strong>{comment.author}</strong>
+                    <time>
+                      {new Date(comment.createdAt).toLocaleString('ko-KR')}
+                    </time>
+                  </header>
+                  <div className="team-rich-text team-rich-text--comment">
+                    <RichTextViewer content={comment.content} />
                   </div>
-                  <RichTextViewer content={comment.content} style={{ fontSize: '13px', color: '#cbd5e1' }} />
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <div className="team-comment-actions">
                     <button
                       type="button"
                       onClick={() => handleToggleLike(comment)}
                       disabled={!user || commentBusy}
-                      style={{
-                        padding: '6px 10px',
-                        borderRadius: '10px',
-                        border: '1px solid rgba(148,163,184,0.35)',
-                        background: hasLiked ? 'rgba(249,115,22,0.14)' : 'rgba(255,255,255,0.04)',
-                        color: hasLiked ? '#f97316' : '#e2e8f0',
-                        fontWeight: 800,
-                        cursor: !user || commentBusy ? 'not-allowed' : 'pointer',
-                      }}
+                      className={`team-profile-action${hasLiked ? ' is-active' : ''}`}
+                      aria-pressed={hasLiked}
                     >
                       좋아요 {likeCount}
                     </button>
@@ -467,15 +425,7 @@ export default function TeamNoticeDetailPage() {
                           setCollapsedReplies((prev) => ({ ...prev, [comment.id]: false }));
                         }}
                         disabled={commentBusy}
-                        style={{
-                          padding: '6px 10px',
-                          borderRadius: '10px',
-                          border: '1px solid rgba(148,163,184,0.35)',
-                          background: 'rgba(255,255,255,0.04)',
-                          color: '#e2e8f0',
-                          fontWeight: 800,
-                          cursor: commentBusy ? 'not-allowed' : 'pointer',
-                        }}
+                        className="team-profile-action"
                       >
                         답글
                       </button>
@@ -486,15 +436,7 @@ export default function TeamNoticeDetailPage() {
                           type="button"
                           onClick={() => void handleModerationAction('report', comment)}
                           disabled={commentBusy}
-                          style={{
-                            padding: '6px 10px',
-                            borderRadius: '10px',
-                            border: '1px solid rgba(96,165,250,0.45)',
-                            background: 'rgba(59,130,246,0.14)',
-                            color: '#bfdbfe',
-                            fontWeight: 800,
-                            cursor: commentBusy ? 'not-allowed' : 'pointer',
-                          }}
+                          className="team-profile-action"
                         >
                           신고
                         </button>
@@ -502,15 +444,7 @@ export default function TeamNoticeDetailPage() {
                           type="button"
                           onClick={() => void handleModerationAction('block', comment)}
                           disabled={commentBusy}
-                          style={{
-                            padding: '6px 10px',
-                            borderRadius: '10px',
-                            border: '1px solid rgba(248,113,113,0.5)',
-                            background: 'rgba(248,113,113,0.12)',
-                            color: '#fecaca',
-                            fontWeight: 800,
-                            cursor: commentBusy ? 'not-allowed' : 'pointer',
-                          }}
+                          className="team-profile-action team-profile-action--danger"
                         >
                           차단
                         </button>
@@ -521,15 +455,7 @@ export default function TeamNoticeDetailPage() {
                         type="button"
                         onClick={() => handleDeleteComment(comment.id)}
                         disabled={commentBusy}
-                        style={{
-                          padding: '6px 10px',
-                          borderRadius: '10px',
-                          border: '1px solid rgba(248,113,113,0.5)',
-                          background: 'rgba(248,113,113,0.12)',
-                          color: '#fecdd3',
-                          fontWeight: 800,
-                          cursor: commentBusy ? 'not-allowed' : 'pointer',
-                        }}
+                        className="team-profile-action team-profile-action--danger"
                       >
                         댓글 삭제
                       </button>
@@ -540,22 +466,15 @@ export default function TeamNoticeDetailPage() {
                     <button
                       type="button"
                       onClick={() => setCollapsedReplies((prev) => ({ ...prev, [comment.id]: !isCollapsed }))}
-                      style={{
-                        padding: '6px 10px',
-                        borderRadius: '10px',
-                        border: '1px solid rgba(148,163,184,0.35)',
-                        background: 'rgba(255,255,255,0.03)',
-                        color: '#94a3b8',
-                        fontWeight: 800,
-                        width: 'fit-content',
-                      }}
+                      className="team-profile-action team-comment-replies-toggle"
+                      aria-expanded={!isCollapsed}
                     >
                       {isCollapsed ? `답글 ${replies.length}개 보기` : `답글 ${replies.length}개 접기`}
                     </button>
                   )}
 
                   {replyTo === comment.id && user && (
-                    <div style={{ display: 'grid', gap: '8px', marginTop: '6px' }}>
+                    <div className="team-comment-reply-editor">
                       <RichTextEditor
                         mini
                         value={replyInput}
@@ -563,20 +482,12 @@ export default function TeamNoticeDetailPage() {
                         placeholder="답글을 입력하세요."
                         minHeight={60}
                       />
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                      <div className="team-comment-actions">
                         <button
                           type="button"
                           onClick={() => handleAddReply(comment.id)}
                           disabled={commentBusy}
-                          style={{
-                            padding: '6px 10px',
-                            borderRadius: '10px',
-                            border: '1px solid rgba(148,163,184,0.35)',
-                            background: 'rgba(255,255,255,0.05)',
-                            color: '#e2e8f0',
-                            fontWeight: 800,
-                            cursor: commentBusy ? 'not-allowed' : 'pointer',
-                          }}
+                          className="team-profile-action team-profile-action--primary"
                         >
                           답글 등록
                         </button>
@@ -586,14 +497,7 @@ export default function TeamNoticeDetailPage() {
                             setReplyTo(null);
                             setReplyInput('');
                           }}
-                          style={{
-                            padding: '6px 10px',
-                            borderRadius: '10px',
-                            border: '1px solid rgba(148,163,184,0.35)',
-                            background: 'rgba(255,255,255,0.02)',
-                            color: '#94a3b8',
-                            fontWeight: 800,
-                          }}
+                          className="team-profile-action"
                         >
                           취소
                         </button>
@@ -602,41 +506,28 @@ export default function TeamNoticeDetailPage() {
                   )}
 
                   {replies.length > 0 && !isCollapsed && (
-                    <div style={{ display: 'grid', gap: '8px', marginLeft: '18px' }}>
+                    <div className="team-comment-replies">
                       {replies.map((reply) => {
                         const replyLikeCount = reply.likeCount ?? reply.likedBy?.length ?? 0;
                         const replyHasLiked = Boolean(user && reply.likedBy?.includes(user.uid));
                         return (
-                          <div
-                            key={reply.id}
-                            style={{
-                              display: 'grid',
-                              gap: '6px',
-                              padding: '10px',
-                              borderRadius: '10px',
-                              border: '1px solid rgba(148,163,184,0.2)',
-                              background: 'rgba(255,255,255,0.01)',
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-                              <div style={{ fontWeight: 800, color: '#e2e8f0' }}>{reply.author}</div>
-                              <div style={{ color: '#94a3b8', fontSize: '12px' }}>{new Date(reply.createdAt).toLocaleString('ko-KR')}</div>
+                          <article key={reply.id} className="team-comment-reply">
+                            <header className="team-comment-card__header">
+                              <strong>{reply.author}</strong>
+                              <time>
+                                {new Date(reply.createdAt).toLocaleString('ko-KR')}
+                              </time>
+                            </header>
+                            <div className="team-rich-text team-rich-text--comment">
+                              <RichTextViewer content={reply.content} />
                             </div>
-                            <RichTextViewer content={reply.content} style={{ fontSize: '13px', color: '#cbd5e1' }} />
-                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <div className="team-comment-actions">
                               <button
                                 type="button"
                                 onClick={() => handleToggleLike(reply)}
                                 disabled={!user || commentBusy}
-                                style={{
-                                  padding: '6px 10px',
-                                  borderRadius: '10px',
-                                  border: '1px solid rgba(148,163,184,0.35)',
-                                  background: replyHasLiked ? 'rgba(249,115,22,0.14)' : 'rgba(255,255,255,0.04)',
-                                  color: replyHasLiked ? '#f97316' : '#e2e8f0',
-                                  fontWeight: 800,
-                                  cursor: !user || commentBusy ? 'not-allowed' : 'pointer',
-                                }}
+                                className={`team-profile-action${replyHasLiked ? ' is-active' : ''}`}
+                                aria-pressed={replyHasLiked}
                               >
                                 좋아요 {replyLikeCount}
                               </button>
@@ -646,15 +537,7 @@ export default function TeamNoticeDetailPage() {
                                     type="button"
                                     onClick={() => void handleModerationAction('report', reply)}
                                     disabled={commentBusy}
-                                    style={{
-                                      padding: '6px 10px',
-                                      borderRadius: '10px',
-                                      border: '1px solid rgba(96,165,250,0.45)',
-                                      background: 'rgba(59,130,246,0.14)',
-                                      color: '#bfdbfe',
-                                      fontWeight: 800,
-                                      cursor: commentBusy ? 'not-allowed' : 'pointer',
-                                    }}
+                                    className="team-profile-action"
                                   >
                                     신고
                                   </button>
@@ -662,15 +545,7 @@ export default function TeamNoticeDetailPage() {
                                     type="button"
                                     onClick={() => void handleModerationAction('block', reply)}
                                     disabled={commentBusy}
-                                    style={{
-                                      padding: '6px 10px',
-                                      borderRadius: '10px',
-                                      border: '1px solid rgba(248,113,113,0.5)',
-                                      background: 'rgba(248,113,113,0.12)',
-                                      color: '#fecaca',
-                                      fontWeight: 800,
-                                      cursor: commentBusy ? 'not-allowed' : 'pointer',
-                                    }}
+                                    className="team-profile-action team-profile-action--danger"
                                   >
                                     차단
                                   </button>
@@ -681,31 +556,23 @@ export default function TeamNoticeDetailPage() {
                                   type="button"
                                   onClick={() => handleDeleteComment(reply.id)}
                                   disabled={commentBusy}
-                                  style={{
-                                    padding: '6px 10px',
-                                    borderRadius: '10px',
-                                    border: '1px solid rgba(248,113,113,0.5)',
-                                    background: 'rgba(248,113,113,0.12)',
-                                    color: '#fecdd3',
-                                    fontWeight: 800,
-                                    cursor: commentBusy ? 'not-allowed' : 'pointer',
-                                  }}
+                                  className="team-profile-action team-profile-action--danger"
                                 >
                                   댓글 삭제
                                 </button>
                               )}
                             </div>
-                          </div>
+                          </article>
                         );
                       })}
                     </div>
                   )}
-                </div>
+                </article>
               );
             })}
           </div>
         ) : (
-          <div style={{ color: '#94a3b8', fontWeight: 700 }}>등록된 댓글이 없습니다.</div>
+          <div className="team-profile-empty">등록된 댓글이 없습니다.</div>
         )}
       </section>
     </div>

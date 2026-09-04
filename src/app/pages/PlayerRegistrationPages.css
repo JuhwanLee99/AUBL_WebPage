@@ -1,0 +1,585 @@
+.player-registration-page,
+.player-registration-state {
+  --registration-solid-navy: #0a2457;
+  --registration-solid-blue: #2565bd;
+  width: min(100%, 1100px);
+  min-width: 0;
+  margin-inline: auto;
+  color: var(--season-ink);
+}
+
+.player-registration-page {
+  display: grid;
+  gap: 18px;
+  padding-bottom: 40px;
+}
+
+.player-registration-header {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  overflow: hidden;
+  border: 2px solid var(--registration-solid-navy);
+  border-radius: 4px;
+  background: var(--season-surface);
+  padding: clamp(26px, 4vw, 40px);
+}
+
+.player-registration-header::before {
+  content: '';
+  position: absolute;
+  top: 14px;
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: var(--registration-solid-navy);
+}
+
+.player-registration-header--split {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 18px;
+}
+
+.player-registration-header--split > div {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.player-registration-kicker,
+.player-registration-category {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border: 1px solid var(--season-line-strong);
+  border-radius: 2px;
+  background: var(--season-surface-muted);
+  color: var(--season-blue-700);
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+}
+
+.player-registration-category {
+  color: var(--season-muted);
+  letter-spacing: 0;
+}
+
+.player-registration-header h1,
+.player-registration-detail__heading h1 {
+  margin: 0;
+  color: var(--season-navy-950);
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 950;
+  letter-spacing: -0.05em;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.player-registration-header p {
+  margin: 0;
+  color: var(--season-muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.player-registration-action,
+.player-registration-filter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  width: fit-content;
+  border: 1px solid var(--season-line-strong);
+  border-radius: 4px;
+  background: var(--season-surface);
+  color: var(--season-ink);
+  padding: 9px 13px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease;
+}
+
+.player-registration-action:hover,
+.player-registration-filter:hover {
+  border-color: var(--season-blue-600);
+  background: var(--season-surface-muted);
+  color: var(--season-blue-700);
+}
+
+.player-registration-action--primary {
+  border-color: var(--registration-solid-navy);
+  background: var(--registration-solid-navy);
+  color: #fff;
+}
+
+.player-registration-action--primary:hover {
+  border-color: var(--registration-solid-blue);
+  background: var(--registration-solid-blue);
+  color: #fff;
+}
+
+.player-registration-action--danger {
+  border-color: color-mix(in srgb, var(--season-danger) 42%, var(--season-line));
+  background: color-mix(in srgb, var(--season-danger) 7%, var(--season-surface));
+  color: var(--season-danger);
+}
+
+.player-registration-action--text {
+  border-color: transparent;
+  background: transparent;
+  color: var(--season-blue-700);
+  padding-inline: 4px;
+}
+
+.player-registration-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.player-registration-action:focus-visible,
+.player-registration-filter:focus-visible,
+.player-registration-page input:focus-visible,
+.player-registration-page select:focus-visible,
+.player-registration-page textarea:focus-visible,
+.player-registration-list-item:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--season-focus) 36%, transparent);
+  outline-offset: 2px;
+}
+
+.player-registration-guide,
+.player-registration-feedback {
+  border: 1px solid var(--season-line);
+  border-left: 4px solid var(--registration-solid-blue);
+  border-radius: 4px;
+  background: var(--season-surface-muted);
+  color: var(--season-muted);
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.7;
+}
+
+.player-registration-feedback--error {
+  border-left-color: var(--season-danger);
+  color: var(--season-danger);
+  font-weight: 750;
+}
+
+.player-registration-feedback a {
+  color: var(--season-blue-700);
+  font-weight: 850;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.player-registration-access-page {
+  max-width: 900px;
+}
+
+.player-registration-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.player-registration-filter {
+  color: var(--season-muted);
+  white-space: nowrap;
+}
+
+.player-registration-filter.is-active {
+  border-color: var(--season-blue-600);
+  background: var(--season-blue-100);
+  color: var(--season-blue-700);
+}
+
+.player-registration-search {
+  min-width: 0;
+}
+
+.player-registration-search input,
+.player-registration-field input,
+.player-registration-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  border: 1px solid var(--season-line-strong) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+  padding: 10px 12px !important;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  box-shadow: none !important;
+}
+
+.player-registration-search input::placeholder,
+.player-registration-field input::placeholder {
+  color: var(--season-muted);
+  opacity: 0.76;
+}
+
+.player-registration-count {
+  color: var(--season-muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.player-registration-list {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--season-line);
+  border-radius: 4px;
+  background: var(--season-surface);
+}
+
+.player-registration-list-item {
+  display: block;
+  min-width: 0;
+  border-bottom: 1px solid var(--season-line);
+  background: var(--season-surface);
+  color: var(--season-ink);
+  text-decoration: none;
+  transition: background-color 150ms ease;
+}
+
+.player-registration-list-item:last-child {
+  border-bottom: 0;
+}
+
+.player-registration-list-item:hover {
+  background: var(--season-surface-muted);
+}
+
+.player-registration-list-item article {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  border-left: 3px solid transparent;
+  padding: 16px 18px;
+}
+
+.player-registration-list-item:hover article,
+.player-registration-list-item:focus-visible article {
+  border-left-color: var(--registration-solid-blue);
+}
+
+.player-registration-list-item__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.player-registration-list-item__meta time {
+  margin-left: auto;
+  color: var(--season-muted);
+  font-size: 11px;
+}
+
+.player-registration-list-item h2 {
+  margin: 0;
+  color: var(--season-ink);
+  font-size: 16px;
+  font-weight: 850;
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
+}
+
+.player-registration-list-item__author {
+  color: var(--season-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.player-registration-state {
+  display: grid;
+  place-items: center;
+  min-height: 140px;
+  border: 1px solid var(--season-line);
+  border-radius: 4px;
+  background: var(--season-surface);
+  color: var(--season-muted);
+  padding: 30px 18px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.player-registration-state--error {
+  border-left: 4px solid var(--season-danger);
+  color: var(--season-danger);
+}
+
+.player-registration-write {
+  border: 1px solid var(--season-line) !important;
+  border-top: 4px solid var(--registration-solid-navy) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  padding: clamp(18px, 3vw, 30px) !important;
+}
+
+.player-registration-write .player-registration-header {
+  overflow: visible;
+  border: 0;
+  border-bottom: 2px solid var(--registration-solid-navy);
+  padding: 0 0 18px;
+}
+
+.player-registration-write .player-registration-header::before {
+  display: none;
+}
+
+.player-registration-form {
+  display: grid;
+  min-width: 0;
+  gap: 18px;
+}
+
+.player-registration-field {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.player-registration-field > label {
+  color: var(--season-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.player-registration-editor {
+  min-width: 0;
+}
+
+.player-registration-editor > div:first-child {
+  min-width: 0;
+  overflow: hidden !important;
+  border: 1px solid var(--season-line-strong) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+}
+
+.player-registration-page .ql-toolbar.ql-snow {
+  border-bottom-color: var(--season-line) !important;
+  background: var(--season-surface-muted) !important;
+}
+
+.player-registration-page .ql-container.ql-snow,
+.player-registration-page .ql-editor {
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+}
+
+.player-registration-page .ql-editor.ql-blank::before,
+.player-registration-page .ql-snow .ql-picker {
+  color: var(--season-muted) !important;
+}
+
+.player-registration-page .ql-snow .ql-stroke {
+  stroke: var(--season-muted) !important;
+}
+
+.player-registration-page .ql-snow .ql-fill {
+  fill: var(--season-muted) !important;
+}
+
+.player-registration-form__actions,
+.player-registration-detail__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.player-registration-form__actions {
+  border-top: 1px solid var(--season-line);
+  padding-top: 16px;
+}
+
+.player-registration-form__actions--end {
+  justify-content: flex-end;
+}
+
+.player-registration-detail {
+  gap: 14px;
+}
+
+.player-registration-detail__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.player-registration-detail__article {
+  display: grid;
+  min-width: 0;
+  gap: 20px;
+  border: 1px solid var(--season-line) !important;
+  border-top: 4px solid var(--registration-solid-navy) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  padding: clamp(20px, 4vw, 36px) !important;
+  box-shadow: none !important;
+}
+
+.player-registration-detail__heading {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  border-bottom: 1px solid var(--season-line);
+  padding-bottom: 18px;
+}
+
+.player-registration-detail__meta {
+  color: var(--season-muted);
+  font-size: 12px;
+}
+
+.player-registration-rich-text {
+  min-width: 0;
+  color: var(--season-ink);
+  overflow-wrap: anywhere;
+}
+
+.player-registration-rich-text .rt-viewer,
+.player-registration-rich-text > p {
+  color: var(--season-ink) !important;
+}
+
+.player-registration-rich-text .rt-viewer a,
+.player-registration-rich-text > p a {
+  color: var(--season-blue-700) !important;
+}
+
+.player-registration-rich-text .rt-viewer blockquote {
+  border-left-color: var(--season-line-strong) !important;
+  color: var(--season-muted) !important;
+}
+
+.player-registration-rich-text .rt-aubl-table-wrap {
+  max-width: 100%;
+  border-color: var(--season-line) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+}
+
+.player-registration-rich-text .rt-aubl-table th {
+  border-color: var(--season-line) !important;
+  background: var(--season-surface-muted) !important;
+  color: var(--season-ink) !important;
+}
+
+.player-registration-rich-text .rt-aubl-table td {
+  border-color: var(--season-line) !important;
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+}
+
+@media (max-width: 640px) {
+  .player-registration-page {
+    gap: 14px;
+    padding-bottom: 24px;
+  }
+
+  .player-registration-header {
+    padding: 28px 18px 20px;
+  }
+
+  .player-registration-header--split {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .player-registration-header--split > .player-registration-action,
+  .player-registration-form__actions > .player-registration-action {
+    width: 100%;
+  }
+
+  .player-registration-list-item__meta time {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .player-registration-write {
+    padding: 18px !important;
+  }
+
+  .player-registration-write .player-registration-header {
+    padding: 0 0 16px;
+  }
+
+  .player-registration-detail__toolbar {
+    align-items: stretch;
+  }
+
+  .player-registration-detail__toolbar > .player-registration-action {
+    width: 100%;
+  }
+
+  .player-registration-detail__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .player-registration-detail__actions .player-registration-action {
+    width: 100%;
+  }
+}
+
+@media (max-width: 380px) {
+  .player-registration-filter-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .player-registration-filter:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .player-registration-filter {
+    width: 100%;
+  }
+}
+
+:root[data-theme='dark'] .player-registration-page,
+:root[data-theme='dark'] .player-registration-state {
+  --registration-solid-navy: #b7d2fb;
+  --registration-solid-blue: #6ea7f5;
+}
+
+:root[data-theme='dark'] .player-registration-action--primary {
+  border-color: #397bd3;
+  background: #174f9d;
+  color: #fff;
+}
+
+:root[data-theme='dark'] .player-registration-action--primary:hover {
+  border-color: #6ea7f5;
+  background: #2565bd;
+  color: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .player-registration-action,
+  .player-registration-filter,
+  .player-registration-list-item {
+    transition: none;
+  }
+}

@@ -26,6 +26,7 @@ import {
   reportContent,
 } from '../../shared/moderation/moderationService';
 import type { ModerationReportPayload } from '../../shared/types';
+import './CommunityPages.css';
 
 interface Comment {
   id: string;
@@ -219,8 +220,8 @@ export default function NoticeDetailPage() {
     }
   };
 
-  if (loading) return <div style={{ color: '#94a3b8', padding: '40px', textAlign: 'center' }}>로딩 중...</div>;
-  if (!notice) return <div style={{ color: '#f87171', padding: '40px', textAlign: 'center' }}>공지사항이 없습니다.</div>;
+  if (loading) return <div className="season-content-page community-ui community-state-message" role="status">공지를 불러오는 중입니다.</div>;
+  if (!notice) return <div className="season-content-page community-ui community-state-message is-error" role="alert">공지사항이 없습니다.</div>;
 
   // [중요] 댓글 허용 여부 확인 (undefined면 true로 간주)
   const isCommentsAllowed = notice.allowComments ?? true;
@@ -229,69 +230,73 @@ export default function NoticeDetailPage() {
   const visibleComments = comments.filter((comment) => !blockedUserIds.has(comment.uid));
 
   return (
-    <div className="season-content-page detail-board-page" style={{ maxWidth: '1100px', margin: '0 auto', color: '#f8fafc', paddingBottom: '40px' }}>
+    <div className="season-content-page community-ui community-notice-detail">
       {/* 상단 네비게이션 & 관리자 버튼 */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+      <div className="community-detail-toolbar">
         <button
+          type="button"
           onClick={() => navigate('/community/notices')}
-          style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontWeight: 700 }}
+          className="community-action community-action--quiet"
         >
           &larr; 목록으로
         </button>
 
         {isAdmin && !isEditing && (
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={() => setIsEditing(true)} style={{ padding: '6px 12px', borderRadius: '6px', background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer' }}>수정</button>
-            <button onClick={handleDelete} style={{ padding: '6px 12px', borderRadius: '6px', background: '#ef4444', color: '#fff', border: 'none', cursor: 'pointer' }}>삭제</button>
+          <div className="community-detail-toolbar__actions">
+            <button type="button" onClick={() => setIsEditing(true)} className="community-action">수정</button>
+            <button type="button" onClick={handleDelete} className="community-action community-action--danger">삭제</button>
           </div>
         )}
       </div>
 
-      <article style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(148, 163, 184, 0.15)', borderRadius: '16px', padding: '32px', marginBottom: '32px' }}>
+      <article className="community-notice-article">
         {isEditing ? (
           /* 수정 모드 UI */
-          <div style={{ display: 'grid', gap: '16px' }}>
-            <input 
-              style={{ width: '100%', padding: '10px', background: '#1e293b', border: '1px solid #334155', color: '#fff', borderRadius: '8px', fontSize: '20px', fontWeight: 700 }}
+          <div className="community-edit-form">
+            <input
+              className="community-input community-title-input"
               value={editTitle}
               onChange={(e) => setEditTitle(e.target.value)}
+              aria-label="공지 제목"
             />
-            <RichTextEditor
-              value={editContent}
-              onChange={setEditContent}
-              minHeight={300}
-            />
+            <div className="community-editor">
+              <RichTextEditor
+                value={editContent}
+                onChange={setEditContent}
+                minHeight={300}
+              />
+            </div>
             
             {/* [추가] 수정 모드에서 댓글 허용 설정 */}
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <label className="community-check-field">
               <input
                 type="checkbox"
                 checked={editAllowComments}
                 onChange={(e) => setEditAllowComments(e.target.checked)}
-                style={{ width: '18px', height: '18px', accentColor: '#3b82f6' }}
               />
-              <span style={{ color: '#cbd5e1' }}>댓글 허용</span>
+              <span>댓글 허용</span>
             </label>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button onClick={() => setIsEditing(false)} style={{ padding: '8px 16px', background: 'transparent', color: '#94a3b8', border: 'none', cursor: 'pointer' }}>취소</button>
-              <button onClick={handleUpdate} style={{ padding: '8px 16px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}>저장하기</button>
+            <div className="community-form-actions">
+              <button type="button" onClick={() => setIsEditing(false)} className="community-action community-action--quiet">취소</button>
+              <button type="button" onClick={handleUpdate} className="community-action community-action--primary">저장하기</button>
             </div>
           </div>
         ) : (
           /* 보기 모드 UI */
           <>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '16px' }}>
-              <span style={{ fontSize: '13px', padding: '3px 10px', borderRadius: '6px', fontWeight: 800, background: getCategoryColor(notice.category), color: '#0f172a' }}>
+            <div className="community-notice-meta">
+              <span className={`community-label${notice.category === '긴급' ? ' is-urgent' : ''}`}>
                 {notice.category}
               </span>
-              <span style={{ color: '#94a3b8', fontSize: '14px' }}>
+              <span className="community-notice-meta__byline">
                 {new Date(notice.createdAt).toLocaleString()} · {notice.author}
               </span>
             </div>
             {currentUser && (!noticeOwnerUid || noticeOwnerUid !== currentUser.uid) && (
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+              <div className="community-moderation-actions">
                 <button
+                  type="button"
                   onClick={() =>
                     void handleModerationAction({
                       action: 'report',
@@ -302,12 +307,13 @@ export default function NoticeDetailPage() {
                       contentPreview: buildContentPreview(`${notice.title}\n${notice.content}`),
                     })
                   }
-                  style={{ padding: '6px 12px', borderRadius: '6px', background: 'rgba(59,130,246,0.2)', color: '#bfdbfe', border: '1px solid rgba(59,130,246,0.5)', cursor: 'pointer' }}
+                  className="community-action"
                 >
                   게시글 신고
                 </button>
                 {noticeOwnerUid ? (
                   <button
+                    type="button"
                     onClick={() =>
                       void handleModerationAction({
                         action: 'block',
@@ -318,21 +324,21 @@ export default function NoticeDetailPage() {
                         contentPreview: buildContentPreview(`${notice.title}\n${notice.content}`),
                       })
                     }
-                    style={{ padding: '6px 12px', borderRadius: '6px', background: 'rgba(239,68,68,0.18)', color: '#fecaca', border: '1px solid rgba(239,68,68,0.45)', cursor: 'pointer' }}
+                    className="community-action community-action--danger"
                   >
                     작성자 차단
                   </button>
                 ) : null}
               </div>
             )}
-            <h1 style={{ fontSize: '28px', fontWeight: 900, margin: '0 0 24px 0', lineHeight: 1.3 }}>{notice.title}</h1>
-            <div style={{ borderTop: '1px solid rgba(148,163,184,0.1)', paddingTop: '24px' }}>
+            <h1 className="community-notice-title">{notice.title}</h1>
+            <div className="community-notice-body">
               {isBlockedPost ? (
-                <div style={{ color: '#fecaca', lineHeight: 1.8 }}>
+                <div className="community-blocked-note">
                   차단한 사용자의 게시글입니다. 계정 화면에서 차단을 해제하면 다시 볼 수 있습니다.
                 </div>
               ) : (
-                <RichTextViewer content={notice.content} style={{ fontSize: '16px', lineHeight: 1.8 }} />
+                <div className="community-richtext"><RichTextViewer content={notice.content} /></div>
               )}
             </div>
           </>
@@ -341,13 +347,13 @@ export default function NoticeDetailPage() {
 
       {/* [수정] 댓글 섹션: allowComments가 false이면 숨김 */}
       {isCommentsAllowed && !isBlockedPost ? (
-        <section style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '16px', padding: '24px', border: '1px solid rgba(148, 163, 184, 0.1)' }}>
-          <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            댓글 <span style={{ color: '#94a3b8', fontSize: '14px', fontWeight: 400 }}>{visibleComments.length}</span>
-          </h3>
+        <section className="community-comments">
+          <h2 className="community-comments__heading">
+            댓글 <span>{visibleComments.length}</span>
+          </h2>
 
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '32px', alignItems: 'flex-end' }}>
-            <div style={{ flex: 1 }}>
+          <div className="community-comment-composer">
+            <div className="community-editor">
               <RichTextEditor
                 value={commentText}
                 onChange={setCommentText}
@@ -357,36 +363,30 @@ export default function NoticeDetailPage() {
               />
             </div>
             <button
+              type="button"
               onClick={handleWriteComment}
               disabled={!currentUser}
-              style={{
-                padding: '0 20px',
-                borderRadius: '8px',
-                background: currentUser ? '#3b82f6' : '#475569',
-                color: currentUser ? '#fff' : '#94a3b8',
-                border: 'none',
-                fontWeight: 700,
-                cursor: currentUser ? 'pointer' : 'not-allowed',
-              }}
+              className="community-action community-action--primary"
             >
               등록
             </button>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="community-comment-list">
             {visibleComments.map((comment) => (
-              <div key={comment.id} style={{ padding: '16px', background: '#1e293b', borderRadius: '12px', border: '1px solid rgba(148, 163, 184, 0.1)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontWeight: 700, color: '#e2e8f0' }}>{comment.author}</span>
-                    <span style={{ fontSize: '12px', color: '#64748b' }}>
+              <article key={comment.id} className="community-comment">
+                <div className="community-comment__header">
+                  <div className="community-comment__identity">
+                    <strong>{comment.author}</strong>
+                    <time dateTime={new Date(comment.createdAt).toISOString()}>
                       {new Date(comment.createdAt).toLocaleString()}
-                    </span>
+                    </time>
                   </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  <div className="community-comment-actions">
                     {currentUser && currentUser.uid !== comment.uid && (
                       <>
                         <button
+                          type="button"
                           onClick={() =>
                             void handleModerationAction({
                               action: 'report',
@@ -398,11 +398,12 @@ export default function NoticeDetailPage() {
                               contentPreview: buildContentPreview(comment.content),
                             })
                           }
-                          style={{ background: 'transparent', border: 'none', color: '#93c5fd', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}
                         >
                           신고
                         </button>
                         <button
+                          type="button"
+                          className="is-danger"
                           onClick={() =>
                             void handleModerationAction({
                               action: 'block',
@@ -414,45 +415,34 @@ export default function NoticeDetailPage() {
                               contentPreview: buildContentPreview(comment.content),
                             })
                           }
-                          style={{ background: 'transparent', border: 'none', color: '#fca5a5', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}
                         >
                           차단
                         </button>
                       </>
                     )}
                     {(currentUser?.uid === comment.uid || isAdmin) && (
-                      <button 
+                      <button
+                        type="button"
                         onClick={() => handleDeleteComment(comment.id)}
-                        style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}
                       >
                         삭제
                       </button>
                     )}
                   </div>
                 </div>
-                <RichTextViewer content={comment.content} style={{ fontSize: '15px', lineHeight: 1.5, color: '#cbd5e1' }} />
-              </div>
+                <div className="community-richtext"><RichTextViewer content={comment.content} /></div>
+              </article>
             ))}
             {visibleComments.length === 0 && (
-              <div style={{ textAlign: 'center', color: '#64748b', padding: '20px 0' }}>아직 댓글이 없습니다.</div>
+              <div className="community-empty">아직 댓글이 없습니다.</div>
             )}
           </div>
         </section>
       ) : (
-        <div style={{ textAlign: 'center', color: '#64748b', padding: '20px', background: 'rgba(15, 23, 42, 0.4)', borderRadius: '16px' }}>
+        <div className="community-comments-unavailable">
           {isBlockedPost ? '차단한 사용자의 게시글이라 댓글이 숨겨졌습니다.' : '댓글 작성이 허용되지 않은 게시글입니다.'}
         </div>
       )}
     </div>
   );
-}
-
-function getCategoryColor(category: string) {
-  switch(category) {
-    case '긴급': return '#f87171';
-    case '심판/기록원 모집': return '#22c55e';
-    case '징계': return '#fb923c';
-    case '경기공지': return '#60a5fa';
-    default: return '#94a3b8';
-  }
 }

@@ -19,6 +19,7 @@ interface Props {
   mini?: boolean;
   placeholder?: string;
   minHeight?: number;
+  ariaLabel?: string;
 }
 
 interface TableDialogState {
@@ -37,26 +38,28 @@ const FULL_TOOLBAR = [
 const MINI_TOOLBAR = [['bold', 'italic', 'link']];
 
 const wrapStyle: CSSProperties = {
-  borderRadius: '10px',
-  border: '1px solid rgba(148,163,184,0.3)',
+  borderRadius: '4px',
+  border: '1px solid var(--season-line-strong)',
   overflow: 'hidden',
-  background: 'rgba(15,23,42,0.6)',
+  background: 'var(--season-surface)',
 };
 
 const editorTheme: CSSProperties = {
-  color: '#e2e8f0',
+  color: 'var(--season-ink)',
   fontSize: '14px',
   lineHeight: 1.6,
 };
 
 const tableControlButtonStyle: CSSProperties = {
-  padding: '4px 10px',
-  borderRadius: 6,
-  border: '1px solid rgba(148,163,184,0.3)',
-  background: 'rgba(15,23,42,0.8)',
-  color: '#cbd5e1',
+  minHeight: 44,
+  padding: '8px 12px',
+  borderRadius: 4,
+  border: '1px solid var(--season-line-strong)',
+  background: 'var(--season-surface)',
+  color: 'var(--season-ink)',
   cursor: 'pointer',
   fontSize: 12,
+  fontWeight: 750,
 };
 
 let tableBlotRegistered = false;
@@ -87,7 +90,14 @@ function ensureAublTableBlotRegistered() {
   tableBlotRegistered = true;
 }
 
-export default function RichTextEditor({ value, onChange, mini = false, placeholder = '내용을 입력하세요', minHeight = 200 }: Props) {
+export default function RichTextEditor({
+  value,
+  onChange,
+  mini = false,
+  placeholder = '내용을 입력하세요',
+  minHeight = 200,
+  ariaLabel = placeholder,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const quillRef = useRef<Quill | null>(null);
   const onChangeRef = useRef(onChange);
@@ -119,6 +129,7 @@ export default function RichTextEditor({ value, onChange, mini = false, placehol
         toolbar: mini ? MINI_TOOLBAR : FULL_TOOLBAR,
       },
     });
+    q.root.setAttribute('aria-label', ariaLabel);
 
     const tableClickHandler = (event: MouseEvent) => {
       if (mini) return;
@@ -261,38 +272,38 @@ export default function RichTextEditor({ value, onChange, mini = false, placehol
     <>
       <div style={wrapStyle}>
         <style>{`
-          .ql-toolbar.ql-snow { border: none; border-bottom: 1px solid rgba(148,163,184,0.2); background: rgba(30,41,59,0.8); }
+          .ql-toolbar.ql-snow { border: none; border-bottom: 1px solid var(--season-line); background: var(--season-surface-muted); }
           .ql-container.ql-snow { border: none; }
-          .ql-editor { min-height: ${minHeight}px; color: #e2e8f0; font-size: 14px; line-height: 1.6; }
-          .ql-editor.ql-blank::before { color: rgba(148,163,184,0.5); font-style: normal; }
-          .ql-snow .ql-stroke { stroke: #94a3b8; }
-          .ql-snow .ql-fill { fill: #94a3b8; }
-          .ql-snow .ql-picker { color: #94a3b8; }
-          .ql-snow .ql-picker-options { background: #1e293b; border-color: rgba(148,163,184,0.3); }
+          .ql-editor { min-height: ${minHeight}px; color: var(--season-ink); font-size: 14px; line-height: 1.6; }
+          .ql-editor.ql-blank::before { color: var(--season-muted); opacity: .78; font-style: normal; }
+          .ql-snow .ql-stroke { stroke: var(--season-muted); }
+          .ql-snow .ql-fill { fill: var(--season-muted); }
+          .ql-snow .ql-picker { color: var(--season-muted); }
+          .ql-snow .ql-picker-options { background: var(--season-surface); border-color: var(--season-line-strong); color: var(--season-ink); }
           .ql-snow.ql-toolbar button:hover .ql-stroke,
-          .ql-snow .ql-toolbar button:hover .ql-stroke { stroke: #e2e8f0; }
-          .ql-snow.ql-toolbar button.ql-active .ql-stroke { stroke: #60a5fa; }
-          .ql-snow.ql-toolbar button.ql-active .ql-fill { fill: #60a5fa; }
-          .ql-editor a { color: #60a5fa; }
+          .ql-snow .ql-toolbar button:hover .ql-stroke { stroke: var(--season-ink); }
+          .ql-snow.ql-toolbar button.ql-active .ql-stroke { stroke: var(--season-blue-600); }
+          .ql-snow.ql-toolbar button.ql-active .ql-fill { fill: var(--season-blue-600); }
+          .ql-editor a { color: var(--season-blue-700); }
           .ql-editor ul, .ql-editor ol { padding-left: 1.5em; }
           .ql-editor img { max-width: 100%; border-radius: 6px; margin: 4px 0; display: block; }
           .ql-editor iframe { width: 100%; aspect-ratio: 16/9; border: none; border-radius: 6px; margin: 4px 0; }
-          .ql-tooltip { background: #1e293b; border-color: rgba(148,163,184,0.3); color: #e2e8f0; }
-          .ql-tooltip input[type=text] { background: rgba(15,23,42,0.8); border-color: rgba(148,163,184,0.3); color: #e2e8f0; }
+          .ql-tooltip { background: var(--season-surface); border-color: var(--season-line-strong); color: var(--season-ink); box-shadow: 0 12px 30px color-mix(in srgb, var(--season-navy-950) 14%, transparent); }
+          .ql-tooltip input[type=text] { background: var(--season-surface-muted); border-color: var(--season-line-strong); color: var(--season-ink); }
           .ql-snow .ql-toolbar button.ql-table::after,
-          .ql-snow.ql-toolbar button.ql-table::after { content: '▦'; font-size: 15px; color: #94a3b8; line-height: 1; display: block; }
+          .ql-snow.ql-toolbar button.ql-table::after { content: '▦'; font-size: 15px; color: var(--season-muted); line-height: 1; display: block; }
           .ql-snow .ql-toolbar button.ql-table:hover::after,
-          .ql-snow.ql-toolbar button.ql-table:hover::after { color: #e2e8f0; }
+          .ql-snow.ql-toolbar button.ql-table:hover::after { color: var(--season-ink); }
           .ql-snow .ql-toolbar button.ql-table.ql-active::after,
-          .ql-snow.ql-toolbar button.ql-table.ql-active::after { color: #60a5fa; }
-          .ql-editor .ql-aubl-table { border: 1px solid rgba(148,163,184,0.3); border-radius: 8px; overflow: hidden; background: rgba(15,23,42,0.5); margin: 6px 0; }
+          .ql-snow.ql-toolbar button.ql-table.ql-active::after { color: var(--season-blue-600); }
+          .ql-editor .ql-aubl-table { border: 1px solid var(--season-line-strong); border-radius: 4px; overflow: hidden; background: var(--season-surface); margin: 6px 0; }
           .ql-editor .ql-aubl-table-wrap { overflow-x: auto; }
           .ql-editor .ql-aubl-table-preview { width: max-content; min-width: 100%; border-collapse: collapse; }
           .ql-editor .ql-aubl-table-preview th,
-          .ql-editor .ql-aubl-table-preview td { border: 1px solid rgba(148,163,184,0.25); min-width: 120px; padding: 7px 10px; text-align: left; }
-          .ql-editor .ql-aubl-table-preview th { background: rgba(30,41,59,0.82); color: #f8fafc; }
-          .ql-editor .ql-aubl-table-preview td { background: rgba(15,23,42,0.58); color: #e2e8f0; }
-          .ql-editor .ql-aubl-table-hint { display: block; padding: 6px 10px; border-top: 1px solid rgba(148,163,184,0.22); color: #94a3b8; font-size: 11px; }
+          .ql-editor .ql-aubl-table-preview td { border: 1px solid var(--season-line); min-width: 120px; padding: 7px 10px; text-align: left; }
+          .ql-editor .ql-aubl-table-preview th { background: var(--season-navy-900); color: var(--season-surface); }
+          .ql-editor .ql-aubl-table-preview td { background: var(--season-surface); color: var(--season-ink); }
+          .ql-editor .ql-aubl-table-hint { display: block; padding: 6px 10px; border-top: 1px solid var(--season-line); color: var(--season-muted); font-size: 11px; }
         `}</style>
         <div ref={containerRef} style={editorTheme} />
       </div>
@@ -302,19 +313,19 @@ export default function RichTextEditor({ value, onChange, mini = false, placehol
           style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }}
           onClick={(e) => { if (e.target === e.currentTarget) handleEmbedCancel(); }}
         >
-          <div style={{ background: '#1e293b', padding: 24, borderRadius: 12, width: 360, border: '1px solid rgba(148,163,184,0.2)' }}>
-            <p style={{ color: '#e2e8f0', fontWeight: 600, marginBottom: 12 }}>
+          <div style={{ background: 'var(--season-surface)', padding: 24, borderRadius: 4, width: 360, border: '1px solid var(--season-line-strong)', color: 'var(--season-ink)' }}>
+            <p style={{ color: 'var(--season-ink)', fontWeight: 750, marginBottom: 12 }}>
               {embedDialog.type === 'image' ? '이미지 URL 입력' : '동영상 URL 입력'}
             </p>
             <input
               ref={embedInputRef}
               placeholder={embedDialog.type === 'image' ? 'https://... 또는 Google Drive 공유 링크' : 'https://www.youtube.com/watch?v=...'}
               onKeyDown={(e) => { if (e.key === 'Enter') handleEmbedConfirm(); if (e.key === 'Escape') handleEmbedCancel(); }}
-              style={{ width: '100%', background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(148,163,184,0.3)', borderRadius: 6, padding: '8px 10px', color: '#e2e8f0', fontSize: 13, boxSizing: 'border-box', outline: 'none' }}
+              style={{ width: '100%', minHeight: 44, background: 'var(--season-surface-muted)', border: '1px solid var(--season-line-strong)', borderRadius: 4, padding: '8px 10px', color: 'var(--season-ink)', fontSize: 13, boxSizing: 'border-box', outline: 'none' }}
             />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-              <button onClick={handleEmbedCancel} style={{ padding: '6px 16px', borderRadius: 6, border: '1px solid rgba(148,163,184,0.3)', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: 13 }}>취소</button>
-              <button onClick={handleEmbedConfirm} style={{ padding: '6px 16px', borderRadius: 6, border: 'none', background: '#3b82f6', color: '#fff', cursor: 'pointer', fontSize: 13 }}>삽입</button>
+              <button onClick={handleEmbedCancel} style={tableControlButtonStyle}>취소</button>
+              <button onClick={handleEmbedConfirm} style={{ ...tableControlButtonStyle, borderColor: '#397bd3', background: '#174f9d', color: '#fff' }}>삽입</button>
             </div>
           </div>
         </div>
@@ -325,29 +336,29 @@ export default function RichTextEditor({ value, onChange, mini = false, placehol
           style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }}
           onClick={(e) => { if (e.target === e.currentTarget) setTableDialog(null); }}
         >
-          <div style={{ background: '#1e293b', padding: 18, borderRadius: 12, width: 'min(920px, calc(100vw - 24px))', border: '1px solid rgba(148,163,184,0.2)' }}>
-            <p style={{ color: '#e2e8f0', fontWeight: 600, marginBottom: 12 }}>{tableDialog.index == null ? '표 삽입' : '표 편집'}</p>
+          <div style={{ background: 'var(--season-surface)', padding: 18, borderRadius: 4, width: 'min(920px, calc(100vw - 24px))', border: '1px solid var(--season-line-strong)', color: 'var(--season-ink)' }}>
+            <p style={{ color: 'var(--season-ink)', fontWeight: 750, marginBottom: 12 }}>{tableDialog.index == null ? '표 삽입' : '표 편집'}</p>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
               <button onClick={() => adjustTableShape(tableDialog.data.rows + 1, tableDialog.data.cols)} style={tableControlButtonStyle}>행 +</button>
               <button onClick={() => adjustTableShape(tableDialog.data.rows - 1, tableDialog.data.cols)} style={tableControlButtonStyle}>행 -</button>
               <button onClick={() => adjustTableShape(tableDialog.data.rows, tableDialog.data.cols + 1)} style={tableControlButtonStyle}>열 +</button>
               <button onClick={() => adjustTableShape(tableDialog.data.rows, tableDialog.data.cols - 1)} style={tableControlButtonStyle}>열 -</button>
-              <span style={{ color: '#94a3b8', fontSize: 12, marginLeft: 4, alignSelf: 'center' }}>
+              <span style={{ color: 'var(--season-muted)', fontSize: 12, marginLeft: 4, alignSelf: 'center' }}>
                 {tableDialog.data.rows}행 × {tableDialog.data.cols}열
               </span>
             </div>
-            <div style={{ maxHeight: '52vh', overflow: 'auto', border: '1px solid rgba(148,163,184,0.25)', borderRadius: 8 }}>
+            <div style={{ maxHeight: '52vh', overflow: 'auto', border: '1px solid var(--season-line)', borderRadius: 4 }}>
               <table style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'collapse' }}>
                 <tbody>
                   {tableDialog.data.cells.map((row, rowIdx) => (
                     <tr key={`row-${rowIdx}`}>
                       {row.map((cell, colIdx) => (
-                        <td key={`cell-${rowIdx}-${colIdx}`} style={{ border: '1px solid rgba(148,163,184,0.2)', background: rowIdx === 0 ? 'rgba(30,41,59,0.8)' : 'rgba(15,23,42,0.6)', minWidth: 130, padding: 0 }}>
+                        <td key={`cell-${rowIdx}-${colIdx}`} style={{ border: '1px solid var(--season-line)', background: rowIdx === 0 ? 'var(--season-surface-muted)' : 'var(--season-surface)', minWidth: 130, padding: 0 }}>
                           <input
                             value={cell}
                             onChange={(e) => handleTableCellChange(rowIdx, colIdx, e.target.value)}
                             placeholder={rowIdx === 0 ? `헤더 ${colIdx + 1}` : ''}
-                            style={{ width: '100%', border: 'none', outline: 'none', padding: '8px 10px', background: 'transparent', color: '#e2e8f0', fontSize: 13, boxSizing: 'border-box' }}
+                            style={{ width: '100%', minHeight: 44, border: 'none', outline: 'none', padding: '8px 10px', background: 'transparent', color: 'var(--season-ink)', fontSize: 13, boxSizing: 'border-box' }}
                           />
                         </td>
                       ))}
@@ -357,10 +368,10 @@ export default function RichTextEditor({ value, onChange, mini = false, placehol
               </table>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 14 }}>
-              <p style={{ margin: 0, color: '#94a3b8', fontSize: 12 }}>표를 클릭하면 언제든 셀 단위로 다시 편집할 수 있습니다.</p>
+              <p style={{ margin: 0, color: 'var(--season-muted)', fontSize: 12 }}>표를 클릭하면 언제든 셀 단위로 다시 편집할 수 있습니다.</p>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => setTableDialog(null)} style={{ padding: '6px 16px', borderRadius: 6, border: '1px solid rgba(148,163,184,0.3)', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: 13 }}>취소</button>
-                <button onClick={handleTableConfirm} style={{ padding: '6px 16px', borderRadius: 6, border: 'none', background: '#3b82f6', color: '#fff', cursor: 'pointer', fontSize: 13 }}>적용</button>
+                <button onClick={() => setTableDialog(null)} style={tableControlButtonStyle}>취소</button>
+                <button onClick={handleTableConfirm} style={{ ...tableControlButtonStyle, borderColor: '#397bd3', background: '#174f9d', color: '#fff' }}>적용</button>
               </div>
             </div>
           </div>

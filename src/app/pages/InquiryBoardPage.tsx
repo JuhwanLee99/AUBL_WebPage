@@ -5,6 +5,7 @@ import { firestore, auth } from '../../shared/firebase/client';
 import { useAdmin } from '../../shared/auth/useAdmin';
 import { useBlockedUserIds } from '../../shared/moderation/useBlockedUsers';
 import type { InquiryPost, InquiryPlatform, InquiryCategory, InquiryStatus } from '../../shared/types';
+import './CommunityPages.css';
 
 type PlatformFilter = InquiryPlatform | 'ALL';
 type CategoryFilter = InquiryCategory | 'ALL';
@@ -79,152 +80,122 @@ export default function InquiryBoardPage() {
   const isAccessible = (post: InquiryPost) =>
     !post.isPrivate || currentUser?.uid === post.uid || isAdmin;
 
-  const filterBtn = (
-    label: string,
-    active: boolean,
-    onClick: () => void,
-    color: string,
-  ) => (
-    <button
-      key={label}
-      onClick={onClick}
-      style={{
-        padding: '6px 13px',
-        borderRadius: '20px',
-        border: '1px solid',
-        borderColor: active ? color : 'rgba(148,163,184,0.3)',
-        background: active ? color : 'transparent',
-        color: active ? '#0f172a' : '#94a3b8',
-        fontWeight: 700,
-        fontSize: '13px',
-        cursor: 'pointer',
-        whiteSpace: 'nowrap' as const,
-        transition: 'all 0.15s',
-      }}
-    >
-      {label}
-    </button>
-  );
-
-  const sep = <div style={{ width: '1px', background: 'rgba(148,163,184,0.25)', margin: '0 4px', alignSelf: 'stretch' }} />;
-
   return (
-    <div className="season-content-page board-list-page" style={{ color: '#f8fafc', maxWidth: '1100px', margin: '0 auto', paddingBottom: '40px' }}>
+    <div className="season-content-page community-ui community-inquiry-list-page">
       {/* 헤더 */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2 style={{ fontSize: '24px', fontWeight: 900, margin: 0 }}>건의/문의 게시판</h2>
+      <header className="community-page-header">
+        <div className="community-page-header__copy">
+          <p className="community-eyebrow">AUBL SUPPORT</p>
+          <h1>건의/문의 게시판</h1>
+          <p className="community-page-header__description">서비스 개선 의견과 경기·기록 관련 문의를 남기고 처리 상태를 확인하세요.</p>
+        </div>
         {currentUser && (
           <button
+            type="button"
             onClick={() => navigate('new')}
-            style={{
-              padding: '8px 16px',
-              borderRadius: '8px',
-              background: '#3b82f6',
-              color: '#fff',
-              border: 'none',
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
+            className="community-action community-action--primary"
           >
             글쓰기
           </button>
         )}
-      </div>
+      </header>
 
-      <div
-        style={{
-          marginBottom: '14px',
-          padding: '11px 13px',
-          borderRadius: '10px',
-          border: '1px solid rgba(59,130,246,0.35)',
-          background: 'rgba(59,130,246,0.12)',
-          color: '#bfdbfe',
-          fontSize: '12px',
-          lineHeight: 1.7,
-          fontWeight: 600,
-        }}
-      >
+      <div className="community-info-note">
         첨부파일 업로드는 현재 지원하지 않습니다. 스크린샷 등 첨부가 필요하면 게시글 작성 후
         `aublcau@gmail.com`으로 전송해 주세요.
       </div>
 
       {/* 필터 행 */}
-      <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-        {PLATFORM_FILTERS.map((f) =>
-          filterBtn(f.label, platformFilter === f.value, () => setPlatformFilter(f.value), '#60a5fa'),
-        )}
-        {sep}
-        {CATEGORY_FILTERS.map((f) =>
-          filterBtn(f.label, categoryFilter === f.value, () => setCategoryFilter(f.value), getCategoryColor(f.value)),
-        )}
-        {sep}
-        {STATUS_FILTERS.map((f) =>
-          filterBtn(f.label, statusFilter === f.value, () => setStatusFilter(f.value), getStatusColor(f.value)),
-        )}
+      <div className="community-inquiry-filter-panel">
+        <div className="community-inquiry-filter-row">
+          <span className="community-inquiry-filter-label">플랫폼</span>
+          <div className="community-segmented" role="group" aria-label="플랫폼 필터">
+            {PLATFORM_FILTERS.map((f) => (
+              <button
+                key={f.value}
+                type="button"
+                onClick={() => setPlatformFilter(f.value)}
+                className={platformFilter === f.value ? 'is-active' : undefined}
+                aria-pressed={platformFilter === f.value}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="community-inquiry-filter-row">
+          <span className="community-inquiry-filter-label">분류</span>
+          <div className="community-segmented" role="group" aria-label="문의 분류 필터">
+            {CATEGORY_FILTERS.map((f) => (
+              <button
+                key={f.value}
+                type="button"
+                onClick={() => setCategoryFilter(f.value)}
+                className={categoryFilter === f.value ? 'is-active' : undefined}
+                aria-pressed={categoryFilter === f.value}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="community-inquiry-filter-row">
+          <span className="community-inquiry-filter-label">상태</span>
+          <div className="community-segmented" role="group" aria-label="처리 상태 필터">
+            {STATUS_FILTERS.map((f) => (
+              <button
+                key={f.value}
+                type="button"
+                onClick={() => setStatusFilter(f.value)}
+                className={statusFilter === f.value ? 'is-active' : undefined}
+                aria-pressed={statusFilter === f.value}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* 검색 */}
-      <div style={{ marginBottom: '14px', position: 'relative' }}>
+      <div className="community-search">
         <input
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="제목, 작성자 검색"
-          style={{
-            width: '100%',
-            borderRadius: '10px',
-            border: '1px solid rgba(148, 163, 184, 0.35)',
-            background: 'rgba(15, 23, 42, 0.6)',
-            color: '#e2e8f0',
-            fontSize: '14px',
-            fontWeight: 600,
-            padding: '11px 40px 11px 12px',
-            outline: 'none',
-            boxSizing: 'border-box',
-          }}
+          className="community-input"
+          aria-label="건의 및 문의 검색"
         />
         {searchQuery.trim() && (
           <button
             type="button"
             onClick={() => setSearchQuery('')}
-            style={{
-              position: 'absolute',
-              right: '8px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              border: 'none',
-              borderRadius: '8px',
-              background: 'rgba(51,65,85,0.85)',
-              color: '#cbd5e1',
-              fontSize: '12px',
-              fontWeight: 800,
-              padding: '5px 8px',
-              cursor: 'pointer',
-            }}
+            className="community-action community-action--quiet"
           >
             초기화
           </button>
         )}
       </div>
 
-      <div style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700, marginBottom: '12px' }}>
+      <div className="community-result-count" aria-live="polite">
         {filteredPosts.length}개 게시글
       </div>
 
       {/* 목록 */}
-      <div style={{ display: 'grid', gap: '10px' }}>
+      <div className="community-inquiry-list">
         {filteredPosts.length === 0 ? (
-          <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
+          <div className="community-empty">
             게시글이 없습니다.
           </div>
         ) : (
           filteredPosts.map((post) => {
             const accessible = isAccessible(post);
             return accessible ? (
-              <Link key={post.id} to={post.id} style={{ textDecoration: 'none', color: 'inherit' }}>
+              <Link key={post.id} to={post.id} className="community-inquiry-card-link">
                 <PostCard post={post} accessible />
               </Link>
             ) : (
-              <div key={post.id} style={{ cursor: 'not-allowed' }}>
+              <div key={post.id} className="community-inquiry-card-link is-locked" aria-disabled="true">
                 <PostCard post={post} accessible={false} />
               </div>
             );
@@ -238,91 +209,43 @@ export default function InquiryBoardPage() {
 function PostCard({ post, accessible }: { post: InquiryPost; accessible: boolean }) {
   const status = post.status ?? '미처리';
   return (
-    <div
-      style={{
-        background: accessible ? 'rgba(15, 23, 42, 0.6)' : 'rgba(15, 23, 42, 0.35)',
-        border: '1px solid rgba(148, 163, 184, 0.15)',
-        borderRadius: '12px',
-        padding: '16px 20px',
-        opacity: accessible ? 1 : 0.7,
-        transition: 'background 0.2s',
-      }}
-      onMouseOver={(e) => {
-        if (accessible) e.currentTarget.style.background = 'rgba(30, 41, 59, 0.8)';
-      }}
-      onMouseOut={(e) => {
-        e.currentTarget.style.background = accessible
-          ? 'rgba(15, 23, 42, 0.6)'
-          : 'rgba(15, 23, 42, 0.35)';
-      }}
-    >
+    <article className={`community-inquiry-card${accessible ? '' : ' is-locked'}`}>
       {/* 뱃지 행 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', flexWrap: 'wrap' }}>
-        <span style={{
-          fontSize: '11px', padding: '2px 7px', borderRadius: '4px', fontWeight: 800,
-          background: post.platform === 'app' ? '#818cf8' : '#34d399', color: '#0f172a',
-        }}>
+      <div className="community-inquiry-card__meta">
+        <span className="community-label">
           {post.platform === 'app' ? '앱' : '웹'}
         </span>
-        <span style={{
-          fontSize: '11px', padding: '2px 7px', borderRadius: '4px', fontWeight: 800,
-          background: getCategoryColor(post.category), color: '#0f172a',
-        }}>
+        <span className="community-label">
           {post.category}
         </span>
         {/* 처리 상태 뱃지 */}
-        <span style={{
-          fontSize: '11px', padding: '2px 7px', borderRadius: '4px', fontWeight: 800,
-          background: getStatusBg(status), color: getStatusColor(status),
-          border: `1px solid ${getStatusColor(status)}40`,
-        }}>
+        <span className={`community-inquiry-status ${getStatusClass(status)}`}>
           {status}
         </span>
         {post.isPrivate && (
-          <span style={{ fontSize: '13px', color: '#94a3b8' }}>🔒</span>
+          <span className="community-label is-private">비공개</span>
         )}
-        <span style={{ marginLeft: 'auto', color: '#64748b', fontSize: '12px' }}>
+        <time dateTime={new Date(post.createdAt).toISOString()}>
           {new Date(post.createdAt).toLocaleDateString()}
-        </span>
+        </time>
       </div>
 
       {/* 제목 */}
-      <span style={{ fontSize: '16px', fontWeight: 700, color: accessible ? '#f1f5f9' : '#64748b' }}>
-        {post.isPrivate && !accessible ? '🔒 비밀글입니다.' : post.title}
-      </span>
+      <h2>{post.isPrivate && !accessible ? '비밀글입니다.' : post.title}</h2>
 
       {/* 작성자 */}
-      <div style={{ marginTop: '5px', color: '#64748b', fontSize: '12px' }}>
+      <div className="community-inquiry-card__author">
         {post.isPrivate && !accessible ? '' : post.author}
       </div>
-    </div>
+    </article>
   );
 }
 
-function getCategoryColor(category: string) {
-  switch (category) {
-    case '기능 개선': return '#60a5fa';
-    case '버그 신고': return '#f87171';
-    case '사용 문의': return '#4ade80';
-    case '경기/기록 오류': return '#fb923c';
-    default: return '#94a3b8';
-  }
-}
-
-function getStatusColor(status: string) {
+function getStatusClass(status: string) {
   switch (status) {
-    case '미처리': return '#f87171';
-    case '처리 중': return '#fbbf24';
-    case '처리 완료': return '#4ade80';
-    default: return '#94a3b8';
-  }
-}
-
-function getStatusBg(status: string) {
-  switch (status) {
-    case '미처리': return 'rgba(248,113,113,0.12)';
-    case '처리 중': return 'rgba(251,191,36,0.12)';
-    case '처리 완료': return 'rgba(74,222,128,0.12)';
-    default: return 'rgba(148,163,184,0.12)';
+    case '미처리': return 'is-pending';
+    case '처리 중': return 'is-progress';
+    case '처리 완료': return 'is-complete';
+    default: return 'is-neutral';
   }
 }

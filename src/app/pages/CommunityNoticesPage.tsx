@@ -6,6 +6,7 @@ import { useAdmin } from '../../shared/auth/useAdmin';
 import { deltaToPreviewText } from '../../shared/components/editor/quillUtils';
 import { useBlockedUserIds } from '../../shared/moderation/useBlockedUsers';
 import type { Notice, NoticeCategory } from '../../shared/types';
+import './CommunityPages.css';
 
 // 필터 타입 정의
 type FilterValue = NoticeCategory | 'ALL';
@@ -64,48 +65,33 @@ export default function CommunityNoticesPage() {
   }, [notices, activeFilter, searchQuery, blockedUserIds]);
 
   return (
-    <div className="season-content-page board-list-page" style={{ color: '#f8fafc', maxWidth: '1100px', margin: '0 auto', paddingBottom: '40px' }}>
-      
-      {/* 상단 헤더 및 글쓰기 버튼 */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <h2 style={{ fontSize: '24px', fontWeight: 900, margin: 0 }}>공지사항</h2>
+    <div className="season-content-page community-ui community-notice-list-page">
+      <header className="community-page-header">
+        <div className="community-page-header__copy">
+          <p className="community-eyebrow">LEAGUE NOTICE</p>
+          <h1>공지사항</h1>
+          <p className="community-page-header__description">경기 운영과 리그 소식, 중요한 안내를 확인하세요.</p>
+        </div>
         {isAdmin && (
           <button
+            type="button"
             onClick={() => navigate('new')}
-            style={{
-              padding: '8px 16px',
-              borderRadius: '8px',
-              background: '#3b82f6',
-              color: '#fff',
-              border: 'none',
-              fontWeight: 700,
-              cursor: 'pointer'
-            }}
+            className="community-action community-action--primary"
           >
-            글쓰기
+            공지 작성
           </button>
         )}
-      </div>
+      </header>
 
       {/* 필터 탭 */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', overflowX: 'auto', paddingBottom: '4px' }}>
+      <div className="community-filter-bar" role="group" aria-label="공지 카테고리 필터">
         {FILTERS.map((filter) => (
           <button
+            type="button"
             key={filter.value}
             onClick={() => setActiveFilter(filter.value)}
-            style={{
-              padding: '8px 14px',
-              borderRadius: '20px',
-              border: '1px solid',
-              borderColor: activeFilter === filter.value ? getCategoryColor(filter.value) : 'rgba(148, 163, 184, 0.3)',
-              background: activeFilter === filter.value ? getCategoryColor(filter.value) : 'transparent',
-              color: activeFilter === filter.value ? '#0f172a' : '#94a3b8',
-              fontWeight: 700,
-              fontSize: '14px',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap'
-            }}
+            className={activeFilter === filter.value ? 'is-active' : undefined}
+            aria-pressed={activeFilter === filter.value}
           >
             {filter.label}
           </button>
@@ -113,55 +99,33 @@ export default function CommunityNoticesPage() {
       </div>
 
       {/* 검색 */}
-      <div style={{ marginBottom: '16px', position: 'relative' }}>
+      <div className="community-search">
         <input
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
           placeholder="제목, 내용, 작성자 검색"
-          style={{
-            width: '100%',
-            borderRadius: '10px',
-            border: '1px solid rgba(148, 163, 184, 0.35)',
-            background: 'rgba(15, 23, 42, 0.6)',
-            color: '#e2e8f0',
-            fontSize: '14px',
-            fontWeight: 600,
-            padding: '11px 40px 11px 12px',
-            outline: 'none',
-          }}
+          className="community-input"
+          aria-label="공지사항 검색"
         />
         {searchQuery.trim() && (
           <button
             type="button"
             onClick={() => setSearchQuery('')}
-            style={{
-              position: 'absolute',
-              right: '8px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              border: 'none',
-              borderRadius: '8px',
-              background: 'rgba(51,65,85,0.85)',
-              color: '#cbd5e1',
-              fontSize: '12px',
-              fontWeight: 800,
-              padding: '5px 8px',
-              cursor: 'pointer',
-            }}
+            className="community-action community-action--quiet"
           >
             초기화
           </button>
         )}
       </div>
 
-      <div style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700, marginBottom: '12px' }}>
+      <div className="community-result-count" aria-live="polite">
         {filteredNotices.length}개 공지
       </div>
 
       {/* 공지사항 목록 (filteredNotices 사용) */}
-      <div style={{ display: 'grid', gap: '16px' }}>
+      <div className="community-notice-list">
         {filteredNotices.length === 0 ? (
-          <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
+          <div className="community-empty">
             {searchQuery.trim() ? '검색 결과가 없습니다.' : '해당 카테고리의 게시글이 없습니다.'}
           </div>
         ) : (
@@ -169,68 +133,18 @@ export default function CommunityNoticesPage() {
             <Link
               key={notice.id}
               to={notice.id}
-              style={{ textDecoration: 'none', color: 'inherit' }}
+              className="community-notice-card"
             >
-              <div 
-                style={{
-                  background: 'rgba(15, 23, 42, 0.6)',
-                  border: '1px solid rgba(148, 163, 184, 0.15)',
-                  borderRadius: '12px',
-                  padding: '20px',
-                  transition: 'background 0.2s, transform 0.1s',
-                  cursor: 'pointer'
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.background = 'rgba(30, 41, 59, 0.8)')}
-                onMouseOut={(e) => (e.currentTarget.style.background = 'rgba(15, 23, 42, 0.6)')}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-                  <span style={{
-                    fontSize: '12px',
-                    padding: '3px 8px',
-                    borderRadius: '4px',
-                    fontWeight: 800,
-                    background: getCategoryColor(notice.category),
-                    color: '#0f172a'
-                  }}>
-                    {notice.category}
-                  </span>
-                  <span style={{ color: '#94a3b8', fontSize: '13px' }}>
-                    {new Date(notice.createdAt).toLocaleString()}
-                  </span>
-                </div>
-                
-                <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: 700, color: '#f1f5f9' }}>
-                  {notice.title}
-                </h3>
-                
-                <p style={{
-                  margin: 0,
-                  color: '#cbd5e1',
-                  lineHeight: 1.6,
-                  display: '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
-                }}>
-                  {deltaToPreviewText(notice.content)}
-                </p>
+              <div className="community-notice-card__meta">
+                <span className={`community-label${notice.category === '긴급' ? ' is-urgent' : ''}`}>{notice.category}</span>
+                <time dateTime={new Date(notice.createdAt).toISOString()}>{new Date(notice.createdAt).toLocaleString()}</time>
               </div>
+              <h2>{notice.title}</h2>
+              <p>{deltaToPreviewText(notice.content)}</p>
             </Link>
           ))
         )}
       </div>
     </div>
   );
-}
-
-function getCategoryColor(category: string) {
-  switch(category) {
-    case '긴급': return '#f87171';
-    case '심판/기록원 모집': return '#22c55e';
-    case '징계': return '#fb923c';
-    case '경기공지': return '#60a5fa';
-    case 'ALL': return '#cbd5e1';
-    default: return '#94a3b8';
-  }
 }

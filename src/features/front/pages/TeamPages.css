@@ -1,0 +1,1133 @@
+.team-hub-page,
+.team-profile-page {
+  --team-solid-navy: #0a2457;
+  --team-solid-blue: #2565bd;
+  display: grid;
+  min-width: 0;
+  gap: clamp(22px, 3vw, 32px);
+  color: var(--season-ink);
+}
+
+.team-page-hero,
+.team-profile-hero {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: clamp(18px, 3vw, 26px);
+  overflow: hidden;
+  border: 2px solid var(--team-solid-navy);
+  border-radius: 4px;
+  background: var(--season-surface);
+  padding: clamp(28px, 5vw, 52px);
+  box-shadow: none;
+}
+
+.team-page-hero::before,
+.team-profile-hero::before {
+  content: '';
+  position: absolute;
+  top: 16px;
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: var(--team-solid-navy);
+}
+
+.team-page-hero::after,
+.team-profile-hero::after {
+  content: '';
+  position: absolute;
+  top: 16px;
+  right: clamp(22px, 6vw, 88px);
+  width: clamp(34px, 7vw, 86px);
+  height: 2px;
+  background: var(--team-solid-blue);
+}
+
+.team-page-hero__copy,
+.team-profile-hero__copy {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.team-page-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--season-muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.team-page-kicker,
+.team-access-label,
+.team-state-badge,
+.team-notice-tag {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border: 1px solid var(--season-line-strong);
+  border-radius: 2px;
+  background: var(--season-surface-muted);
+  color: var(--season-blue-700);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.045em;
+  line-height: 1.2;
+  padding: 5px 8px;
+}
+
+.team-page-hero h1,
+.team-profile-hero h1 {
+  max-width: 940px;
+  margin: 0;
+  color: var(--season-navy-950);
+  font-size: clamp(32px, 5vw, 54px);
+  font-weight: 950;
+  letter-spacing: -0.055em;
+  line-height: 1.06;
+}
+
+.team-page-hero__copy > p,
+.team-profile-hero__copy > p {
+  max-width: 780px;
+  margin: 0;
+  color: var(--season-muted);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.72;
+}
+
+.team-page-hero__toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.team-page-hero__toolbar input,
+.team-profile-page input:not([type='checkbox']):not([type='radio']),
+.team-profile-page select,
+.team-profile-page textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--season-line-strong) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+  padding: 10px 12px !important;
+  box-shadow: none !important;
+  font: inherit;
+}
+
+.team-page-hero__toolbar input::placeholder,
+.team-profile-page input::placeholder,
+.team-profile-page textarea::placeholder {
+  color: var(--season-muted);
+  opacity: 0.78;
+}
+
+.team-page-hero__toolbar input:focus-visible,
+.team-profile-page input:focus-visible,
+.team-profile-page select:focus-visible,
+.team-profile-page textarea:focus-visible,
+.team-page-action:focus-visible,
+.team-hub-page button:focus-visible,
+.team-profile-page button:focus-visible,
+.team-profile-page a:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--season-focus) 36%, transparent);
+  outline-offset: 2px;
+}
+
+.team-page-action,
+.team-profile-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  width: fit-content;
+  border: 1px solid var(--season-line-strong);
+  border-radius: 4px;
+  background: var(--season-surface);
+  color: var(--season-ink);
+  padding: 9px 13px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-decoration: none;
+  transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease;
+}
+
+.team-page-action:hover,
+.team-profile-action:hover {
+  border-color: var(--season-blue-600);
+  background: var(--season-surface-muted);
+  color: var(--season-blue-700);
+}
+
+.team-page-action--primary,
+.team-profile-action--primary {
+  border-color: var(--team-solid-navy);
+  background: var(--team-solid-navy);
+  color: #fff;
+}
+
+.team-page-action--primary:hover,
+.team-profile-action--primary:hover {
+  border-color: var(--team-solid-blue);
+  background: var(--team-solid-blue);
+  color: #fff;
+}
+
+.team-page-action--text {
+  border-color: transparent;
+  background: transparent;
+  color: var(--season-blue-700);
+}
+
+.team-profile-action--danger {
+  border-color: color-mix(in srgb, var(--season-danger) 42%, var(--season-line));
+  background: color-mix(in srgb, var(--season-danger) 7%, var(--season-surface));
+  color: var(--season-danger);
+}
+
+.team-profile-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.team-page-summary,
+.team-profile-record {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--season-line);
+  padding-top: 16px;
+}
+
+.team-page-summary > div,
+.team-profile-record > div {
+  display: grid;
+  min-width: 88px;
+  gap: 1px;
+  border-right: 1px solid var(--season-line);
+  padding: 4px 18px 4px 0;
+  margin-right: 18px;
+}
+
+.team-page-summary strong,
+.team-profile-record strong {
+  color: var(--season-navy-950);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.team-page-summary span,
+.team-profile-record span {
+  color: var(--season-muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.team-page-section,
+.team-profile-section,
+.team-profile-not-found,
+.team-page-note,
+.team-profile-note {
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+  border: 1px solid var(--season-line);
+  border-radius: 4px;
+  background: var(--season-surface);
+  padding: clamp(18px, 2.8vw, 26px);
+  box-shadow: none;
+}
+
+.team-page-section__header,
+.team-profile-section__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-bottom: 2px solid var(--team-solid-navy);
+  padding-bottom: 12px;
+}
+
+.team-page-section__header h2,
+.team-profile-section__header h2,
+.team-profile-section > h2,
+.team-profile-not-found h2 {
+  margin: 0;
+  color: var(--season-navy-950);
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: -0.035em;
+}
+
+.team-page-section__header p {
+  margin: 6px 0 0;
+  color: var(--season-muted);
+  font-size: 13px;
+}
+
+.team-group-snapshot {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(76px, 1fr));
+  gap: 8px;
+}
+
+.team-group-snapshot__button,
+.team-filter-button,
+.team-sort-button,
+.team-notice-filter {
+  min-height: 44px;
+  border: 1px solid var(--season-line);
+  border-radius: 4px;
+  background: var(--season-surface);
+  color: var(--season-muted);
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.team-group-snapshot__button {
+  display: grid;
+  gap: 3px;
+  text-align: left;
+}
+
+.team-group-snapshot__button > span {
+  color: var(--season-ink);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.team-group-snapshot__button > small {
+  color: var(--season-muted);
+  font-size: 11px;
+}
+
+.team-group-snapshot__button.is-active,
+.team-filter-button.is-active,
+.team-sort-button.is-active,
+.team-notice-filter.is-active {
+  border-color: var(--season-blue-600);
+  background: var(--season-blue-100);
+  color: var(--season-blue-700);
+}
+
+.team-group-snapshot__button.is-active > span {
+  color: var(--season-blue-700);
+}
+
+.team-filter-section {
+  min-width: 0;
+}
+
+.team-filter-scroll {
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+.team-filter-rail {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  gap: 6px;
+}
+
+.team-filter-button {
+  min-width: 58px;
+  white-space: nowrap;
+}
+
+.team-directory__controls,
+.team-directory__sort {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.team-directory__count,
+.team-page-empty,
+.team-profile-empty,
+.team-profile-muted {
+  color: var(--season-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.team-directory__groups {
+  display: grid;
+  gap: 18px;
+}
+
+.team-hub-group-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.team-hub-group-label {
+  border-top: 3px solid var(--team-solid-blue);
+  color: var(--season-navy-950);
+  padding-top: 9px;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.team-hub-group-track {
+  position: relative;
+  min-width: 0;
+}
+
+.team-hub-group-grid,
+.team-directory__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+}
+
+.team-hub-page .team-directory-card {
+  --team-accent: var(--season-blue-600);
+}
+
+.team-hub-page .team-directory-card__logo {
+  background: var(--season-surface-muted) !important;
+}
+
+.team-hub-page .team-directory-card__logo.needs-contrast {
+  background: #f7f9fc !important;
+}
+
+.team-page-note,
+.team-profile-note {
+  border-left: 4px solid var(--team-solid-blue);
+  color: var(--season-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.team-page-note p {
+  margin: 0;
+}
+
+.team-page-note strong {
+  color: var(--season-ink);
+}
+
+.team-profile-page {
+  gap: 24px;
+}
+
+.team-profile-record {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.team-profile-identity {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+}
+
+.team-profile-emblem {
+  display: grid;
+  place-items: center;
+  width: 104px;
+  height: 104px;
+  overflow: hidden;
+  border: 1px solid var(--season-line);
+  border-radius: 4px;
+  background: var(--season-surface-muted);
+}
+
+.team-profile-emblem.needs-contrast {
+  background: #f7f9fc;
+}
+
+.team-profile-emblem img {
+  width: 84%;
+  height: 84%;
+  object-fit: contain;
+}
+
+.team-profile-emblem > span {
+  color: var(--season-blue-700);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 25px;
+  font-weight: 900;
+}
+
+.team-profile-identity__copy {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.team-profile-identity__lead {
+  color: var(--season-ink);
+  font-weight: 850;
+}
+
+.team-profile-identity__description,
+.team-profile-history,
+.team-notice-content,
+.team-member-bio {
+  color: var(--season-muted);
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.team-access-label {
+  border-color: var(--season-line-strong);
+  background: var(--season-surface-muted);
+  color: var(--season-muted);
+}
+
+.team-feedback {
+  border: 1px solid var(--season-line);
+  border-left-width: 4px;
+  border-radius: 4px;
+  background: var(--season-surface-muted);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.team-feedback--success {
+  border-left-color: var(--season-success);
+  color: var(--season-success);
+}
+
+.team-feedback--error {
+  border-left-color: var(--season-danger);
+  color: var(--season-danger);
+}
+
+.team-profile-form,
+.team-member-card,
+.team-notice-card,
+.team-match-card {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  border: 1px solid var(--season-line);
+  border-radius: 4px;
+  background: var(--season-surface-muted);
+  padding: 14px;
+}
+
+.team-profile-field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.team-profile-field > label {
+  color: var(--season-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.team-profile-form__actions,
+.team-notice-actions,
+.team-member-actions,
+.team-notice-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.team-notice-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.team-notice-count {
+  color: var(--season-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.team-notice-list,
+.team-match-list,
+.team-member-list {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+}
+
+.team-notice-card,
+.team-match-card,
+.team-member-card {
+  background: var(--season-surface);
+}
+
+.team-notice-card__header,
+.team-notice-card__title,
+.team-match-card__body,
+.team-match-card__title,
+.team-member-card__header,
+.team-member-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.team-notice-card__header,
+.team-member-card__header {
+  justify-content: space-between;
+}
+
+.team-notice-card__title a,
+.team-match-card__title,
+.team-member-name {
+  color: var(--season-ink);
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.team-notice-card__date,
+.team-match-card__meta,
+.team-member-role,
+.team-member-meta {
+  color: var(--season-muted);
+  font-size: 12px;
+}
+
+.team-notice-tag {
+  color: var(--season-muted);
+  letter-spacing: 0;
+  padding: 4px 6px;
+}
+
+.team-notice-tag--pinned {
+  border-color: color-mix(in srgb, var(--season-blue-600) 40%, var(--season-line));
+  background: var(--season-blue-100);
+  color: var(--season-blue-700);
+}
+
+.team-notice-tag--urgent {
+  border-color: color-mix(in srgb, var(--season-danger) 38%, var(--season-line));
+  background: color-mix(in srgb, var(--season-danger) 8%, var(--season-surface));
+  color: var(--season-danger);
+}
+
+.team-notice-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--season-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.team-notice-checkbox input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--team-solid-blue);
+}
+
+.team-profile-access-denied {
+  border-left: 4px solid var(--season-danger);
+  color: var(--season-danger);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.team-match-card {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.team-match-card__body {
+  display: grid;
+  align-items: start;
+  gap: 5px;
+}
+
+.team-state-badge {
+  color: var(--season-muted);
+  letter-spacing: 0;
+  padding: 4px 7px;
+}
+
+.team-state-badge--live {
+  border-color: color-mix(in srgb, var(--season-blue-600) 42%, var(--season-line));
+  background: var(--season-blue-100);
+  color: var(--season-blue-700);
+}
+
+.team-state-badge--canceled {
+  text-decoration: line-through;
+}
+
+.team-match-card__score {
+  min-width: 64px;
+  color: var(--season-navy-950);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 22px;
+  font-weight: 900;
+  text-align: right;
+}
+
+.team-member-avatar {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  overflow: hidden;
+  border: 1px solid var(--season-line);
+  border-radius: 4px;
+  background: var(--season-surface-muted);
+  color: var(--season-blue-700);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.team-member-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.team-member-identity__copy {
+  display: grid;
+  gap: 2px;
+}
+
+.team-member-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.team-member-details {
+  display: grid;
+  gap: 6px;
+}
+
+.team-notice-detail-page {
+  --team-solid-navy: #0a2457;
+  --team-solid-blue: #2565bd;
+  display: grid;
+  min-width: 0;
+  gap: 22px;
+  color: var(--season-ink);
+}
+
+.team-notice-detail__header > div {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.team-notice-detail__header h1 {
+  margin: 0;
+  color: var(--season-navy-950);
+  font-size: clamp(28px, 4vw, 40px);
+  font-weight: 950;
+  letter-spacing: -0.045em;
+  line-height: 1.08;
+}
+
+.team-notice-detail__header p {
+  margin: 0;
+  color: var(--season-muted);
+  font-size: 13px;
+}
+
+.team-notice-detail__article {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+  border-left: 4px solid var(--team-solid-blue);
+  background: var(--season-surface-muted);
+  padding: clamp(16px, 3vw, 24px);
+}
+
+.team-notice-detail__title-row {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+}
+
+.team-notice-detail__title-row h2 {
+  margin: 0;
+  color: var(--season-navy-950);
+  font-size: clamp(20px, 3vw, 27px);
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.team-notice-detail__tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.team-notice-detail__meta {
+  color: var(--season-muted);
+  font-size: 12px;
+}
+
+.team-rich-text {
+  min-width: 0;
+  color: var(--season-ink);
+  overflow-wrap: anywhere;
+}
+
+.team-rich-text .rt-viewer,
+.team-rich-text > p {
+  color: var(--season-ink) !important;
+}
+
+.team-rich-text .rt-viewer a,
+.team-rich-text > p a {
+  color: var(--season-blue-700) !important;
+}
+
+.team-rich-text .rt-viewer blockquote {
+  border-left-color: var(--season-line-strong) !important;
+  color: var(--season-muted) !important;
+}
+
+.team-rich-text .rt-aubl-table-wrap {
+  max-width: 100%;
+  border-color: var(--season-line) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+}
+
+.team-rich-text .rt-aubl-table th {
+  border-color: var(--season-line) !important;
+  background: var(--season-surface-muted) !important;
+  color: var(--season-ink) !important;
+}
+
+.team-rich-text .rt-aubl-table td {
+  border-color: var(--season-line) !important;
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+}
+
+.team-feedback--info {
+  border-left-color: var(--season-blue-600);
+  color: var(--season-blue-700);
+}
+
+.team-comment-composer,
+.team-comment-reply-editor {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  border: 1px solid var(--season-line);
+  border-radius: 4px;
+  background: var(--season-surface-muted);
+  padding: 12px;
+}
+
+.team-comment-composer > div:first-child,
+.team-comment-reply-editor > div:first-child {
+  min-width: 0;
+  overflow: hidden !important;
+  border: 1px solid var(--season-line-strong) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+}
+
+.team-notice-detail-page .ql-toolbar.ql-snow {
+  border-bottom-color: var(--season-line) !important;
+  background: var(--season-surface-muted) !important;
+}
+
+.team-notice-detail-page .ql-container.ql-snow,
+.team-notice-detail-page .ql-editor {
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+}
+
+.team-notice-detail-page .ql-editor.ql-blank::before,
+.team-notice-detail-page .ql-snow .ql-picker {
+  color: var(--season-muted) !important;
+}
+
+.team-notice-detail-page .ql-snow .ql-stroke {
+  stroke: var(--season-muted) !important;
+}
+
+.team-notice-detail-page .ql-snow .ql-fill {
+  fill: var(--season-muted) !important;
+}
+
+.team-comment-list {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.team-comment-card {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  border: 1px solid var(--season-line);
+  border-radius: 4px;
+  background: var(--season-surface);
+  padding: 16px;
+}
+
+.team-comment-card__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 14px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.team-comment-card__header strong {
+  color: var(--season-ink);
+  font-size: 14px;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
+.team-comment-card__header time {
+  color: var(--season-muted);
+  font-size: 11px;
+}
+
+.team-comment-actions {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.team-comment-actions .team-profile-action {
+  min-height: 44px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.team-profile-action.is-active {
+  border-color: var(--season-blue-600);
+  background: var(--season-blue-100);
+  color: var(--season-blue-700);
+}
+
+.team-comment-replies-toggle {
+  color: var(--season-muted);
+}
+
+.team-comment-reply-editor {
+  margin-top: 2px;
+}
+
+.team-comment-replies {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+  border-left: 3px solid var(--season-line-strong);
+  margin-left: 18px;
+  padding-left: 14px;
+}
+
+.team-comment-reply {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+  border: 1px solid var(--season-line);
+  border-radius: 4px;
+  background: var(--season-surface-muted);
+  padding: 12px;
+}
+
+@media (max-width: 900px) {
+  .team-group-snapshot {
+    grid-template-columns: repeat(4, minmax(92px, 1fr));
+  }
+
+  .team-member-edit-grid {
+    grid-template-columns: repeat(2, minmax(110px, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .team-hub-page,
+  .team-profile-page {
+    gap: 18px;
+  }
+
+  .team-page-hero,
+  .team-profile-hero,
+  .team-page-section,
+  .team-profile-section,
+  .team-page-note,
+  .team-profile-note {
+    padding: 18px;
+  }
+
+  .team-page-hero,
+  .team-profile-hero {
+    padding-top: 30px;
+  }
+
+  .team-page-hero__toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .team-page-hero__toolbar .team-page-action,
+  .team-page-summary .team-page-action,
+  .team-profile-form__actions .team-profile-action {
+    width: 100%;
+  }
+
+  .team-group-snapshot {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .team-page-section__header,
+  .team-profile-section__header,
+  .team-directory__controls {
+    align-items: stretch;
+  }
+
+  .team-directory__controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .team-hub-group-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .team-hub-group-label {
+    width: 48px;
+  }
+
+  .team-hub-group-grid,
+  .team-directory__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .team-profile-identity {
+    grid-template-columns: 78px minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .team-profile-emblem {
+    width: 78px;
+    height: 78px;
+  }
+
+  .team-match-card {
+    grid-template-columns: 1fr;
+  }
+
+  .team-match-card__score {
+    text-align: left;
+  }
+
+  .team-member-edit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .team-notice-detail-page {
+    gap: 18px;
+  }
+
+  .team-notice-detail__header > .team-profile-action,
+  .team-comment-composer > .team-profile-action {
+    width: 100%;
+  }
+
+  .team-comment-replies {
+    margin-left: 4px;
+    padding-left: 9px;
+  }
+}
+
+@media (max-width: 380px) {
+  .team-page-summary > div,
+  .team-profile-record > div {
+    min-width: calc(50% - 10px);
+    margin: 0 0 10px;
+    padding-right: 10px;
+  }
+
+  .team-directory__sort {
+    width: 100%;
+  }
+
+  .team-sort-button {
+    flex: 1;
+  }
+
+  .team-notice-search {
+    grid-template-columns: 1fr;
+  }
+}
+
+:root[data-theme='dark'] .team-hub-page,
+:root[data-theme='dark'] .team-profile-page,
+:root[data-theme='dark'] .team-notice-detail-page {
+  --team-solid-navy: #b7d2fb;
+  --team-solid-blue: #6ea7f5;
+}
+
+:root[data-theme='dark'] .team-page-action--primary,
+:root[data-theme='dark'] .team-profile-action--primary {
+  border-color: #397bd3;
+  background: #174f9d;
+  color: #fff;
+}
+
+:root[data-theme='dark'] .team-page-action--primary:hover,
+:root[data-theme='dark'] .team-profile-action--primary:hover {
+  border-color: #6ea7f5;
+  background: #2565bd;
+  color: #fff;
+}
+
+:root[data-theme='dark'] .team-hub-page .team-directory-card__logo {
+  background: var(--season-surface-muted) !important;
+}
+
+:root[data-theme='dark'] .team-hub-page .team-directory-card__logo.needs-contrast,
+:root[data-theme='dark'] .team-profile-emblem.needs-contrast {
+  background: #eef2f7 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .team-page-action,
+  .team-profile-action,
+  .team-hub-page button,
+  .team-profile-page button {
+    transition: none;
+  }
+}

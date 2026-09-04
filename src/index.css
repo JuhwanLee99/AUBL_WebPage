@@ -2873,6 +2873,11 @@ textarea:focus-visible {
   font-size: clamp(30px, 4vw, 46px) !important;
 }
 
+.admin-cms-page__draw-link {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .admin-cms-page__nav {
   gap: 0 !important;
   overflow-x: auto;

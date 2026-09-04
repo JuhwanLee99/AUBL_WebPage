@@ -1,5 +1,6 @@
-import { NavLink, Outlet, Link } from 'react-router-dom';
+import { NavLink, Outlet } from 'react-router-dom';
 import { useAdmin } from '@shared/auth/useAdmin';
+import { SeasonLinkButton } from '@shared/components/season';
 
 const tabs = [
   { path: '/admin/landing', label: '랜딩 관리', requiresAdmin: true },
@@ -35,27 +36,13 @@ export default function AdminLayoutPage() {
           </p>
         </div>
         {isAdmin && (
-          <Link
+          <SeasonLinkButton
             to="/draw"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '12px 20px',
-              borderRadius: '14px',
-              fontWeight: 900,
-              fontSize: '14px',
-              textDecoration: 'none',
-              background: 'linear-gradient(120deg, rgba(249,115,22,0.22), rgba(168,85,247,0.22))',
-              color: '#fdba74',
-              border: '1.5px solid rgba(249,115,22,0.45)',
-              boxShadow: '0 6px 20px rgba(249,115,22,0.18)',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}
+            variant="secondary"
+            className="admin-cms-page__draw-link"
           >
             조추첨식 페이지 →
-          </Link>
+          </SeasonLinkButton>
         )}
       </header>
 

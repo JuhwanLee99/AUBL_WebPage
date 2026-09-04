@@ -26,6 +26,7 @@ import {
 } from '../../shared/moderation/moderationService';
 import type { InquiryPost, InquiryComment, InquiryPlatform, InquiryCategory, InquiryStatus } from '../../shared/types';
 import type { ModerationReportPayload } from '../../shared/types';
+import './CommunityPages.css';
 
 const STATUSES: InquiryStatus[] = ['미처리', '처리 중', '처리 완료'];
 
@@ -216,44 +217,37 @@ export default function InquiryDetailPage() {
     }
   };
 
-  if (loading) return <div style={{ color: '#94a3b8', padding: '40px', textAlign: 'center' }}>로딩 중...</div>;
-  if (!post) return <div style={{ color: '#f87171', padding: '40px', textAlign: 'center' }}>게시글이 없습니다.</div>;
+  if (loading) return <div className="season-content-page community-ui community-state-message" role="status">게시글을 불러오는 중입니다.</div>;
+  if (!post) return <div className="season-content-page community-ui community-state-message is-error" role="alert">게시글이 없습니다.</div>;
 
   const canEdit = currentUser?.uid === post.uid || isAdmin;
   const isBlockedPost = blockedUserIds.has(post.uid);
   const visibleComments = comments.filter((comment) => !blockedUserIds.has(comment.uid));
 
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '10px',
-    background: '#1e293b',
-    border: '1px solid #334155',
-    color: '#fff',
-    borderRadius: '8px',
-    boxSizing: 'border-box',
-  };
-
   return (
-    <div className="season-content-page detail-board-page" style={{ maxWidth: '1100px', margin: '0 auto', color: '#f8fafc', paddingBottom: '40px' }}>
+    <div className="season-content-page community-ui community-inquiry-detail">
       {/* 상단 네비 */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+      <div className="community-detail-toolbar">
         <button
+          type="button"
           onClick={() => navigate('/community/inquiry')}
-          style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontWeight: 700 }}
+          className="community-action community-action--quiet"
         >
           &larr; 목록으로
         </button>
         {canEdit && !isEditing && (
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div className="community-detail-toolbar__actions">
             <button
+              type="button"
               onClick={() => setIsEditing(true)}
-              style={{ padding: '6px 12px', borderRadius: '6px', background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer' }}
+              className="community-action"
             >
               수정
             </button>
             <button
+              type="button"
               onClick={handleDelete}
-              style={{ padding: '6px 12px', borderRadius: '6px', background: '#ef4444', color: '#fff', border: 'none', cursor: 'pointer' }}
+              className="community-action community-action--danger"
             >
               삭제
             </button>
@@ -262,74 +256,76 @@ export default function InquiryDetailPage() {
       </div>
 
       {/* 본문 카드 */}
-      <article style={{
-        background: 'rgba(15, 23, 42, 0.6)',
-        border: '1px solid rgba(148, 163, 184, 0.15)',
-        borderRadius: '16px',
-        padding: '32px',
-        marginBottom: '32px',
-      }}>
+      <article className="community-notice-article community-inquiry-article">
         {isEditing ? (
           /* 수정 모드 */
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div className="community-edit-form">
             {/* 플랫폼 */}
-            <div style={{ display: 'flex', gap: '8px' }}>
-              {(['app', 'web'] as InquiryPlatform[]).map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setEditPlatform(p)}
-                  style={{
-                    padding: '7px 18px',
-                    borderRadius: '20px',
-                    border: 'none',
-                    background: editPlatform === p ? (p === 'app' ? '#818cf8' : '#34d399') : '#334155',
-                    color: editPlatform === p ? '#0f172a' : '#94a3b8',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {p === 'app' ? '앱' : '웹'}
-                </button>
-              ))}
-            </div>
+            <fieldset className="community-field community-fieldset">
+              <legend>플랫폼</legend>
+              <div className="community-segmented community-segmented--form">
+                {(['app', 'web'] as InquiryPlatform[]).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setEditPlatform(p)}
+                    className={editPlatform === p ? 'is-active' : undefined}
+                    aria-pressed={editPlatform === p}
+                  >
+                    {p === 'app' ? '앱' : '웹'}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
             {/* 분류 */}
-            <select
-              value={editCategory}
-              onChange={(e) => setEditCategory(e.target.value as InquiryCategory)}
-              style={{ ...inputStyle, fontWeight: 700, cursor: 'pointer' }}
-            >
-              {CATEGORIES.map((c) => <option key={c} value={c} style={{ background: '#1e293b' }}>{c}</option>)}
-            </select>
+            <label className="community-field">
+              <span>분류</span>
+              <select
+                value={editCategory}
+                onChange={(e) => setEditCategory(e.target.value as InquiryCategory)}
+                className="community-input community-select"
+              >
+                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
             {/* 제목 */}
-            <input
-              style={{ ...inputStyle, fontSize: '18px', fontWeight: 700 }}
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-            />
+            <label className="community-field">
+              <span>제목</span>
+              <input
+                className="community-input community-title-input"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+              />
+            </label>
             {/* 본문 */}
-            <RichTextEditor value={editContent} onChange={setEditContent} minHeight={250} />
+            <div className="community-field">
+              <span>내용</span>
+              <div className="community-editor">
+                <RichTextEditor value={editContent} onChange={setEditContent} minHeight={250} />
+              </div>
+            </div>
             {/* 비밀글 */}
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <label className="community-check-field">
               <input
                 type="checkbox"
                 checked={editIsPrivate}
                 onChange={(e) => setEditIsPrivate(e.target.checked)}
-                style={{ width: '18px', height: '18px', accentColor: '#3b82f6' }}
               />
-              <span style={{ color: '#cbd5e1' }}>비밀글</span>
+              <span>비밀글</span>
             </label>
             {/* 저장/취소 */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <div className="community-form-actions">
               <button
+                type="button"
                 onClick={() => setIsEditing(false)}
-                style={{ padding: '8px 16px', background: 'transparent', color: '#94a3b8', border: 'none', cursor: 'pointer' }}
+                className="community-action community-action--quiet"
               >
                 취소
               </button>
               <button
+                type="button"
                 onClick={handleUpdate}
-                style={{ padding: '8px 16px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}
+                className="community-action community-action--primary"
               >
                 저장하기
               </button>
@@ -337,34 +333,25 @@ export default function InquiryDetailPage() {
           </div>
         ) : !isAccessible ? (
           /* 비밀글 접근 불가 */
-          <div style={{ textAlign: 'center', padding: '40px 0', color: '#64748b' }}>
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔒</div>
-            <p style={{ fontSize: '18px', fontWeight: 700 }}>비밀글입니다.</p>
-            <p style={{ fontSize: '14px', marginTop: '8px' }}>작성자와 관리자만 열람할 수 있습니다.</p>
+          <div className="community-private-state">
+            <strong>비밀글입니다.</strong>
+            <p>작성자와 관리자만 열람할 수 있습니다.</p>
           </div>
         ) : isBlockedPost ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: '#fecaca' }}>
-            <p style={{ fontSize: '18px', fontWeight: 700 }}>차단한 사용자의 게시글입니다.</p>
-            <p style={{ fontSize: '14px', marginTop: '8px', color: '#94a3b8' }}>
+          <div className="community-private-state is-blocked">
+            <strong>차단한 사용자의 게시글입니다.</strong>
+            <p>
               계정 화면에서 차단을 해제하면 다시 볼 수 있습니다.
             </p>
           </div>
         ) : (
           /* 보기 모드 */
           <>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
-              <span style={{
-                fontSize: '12px', padding: '3px 9px', borderRadius: '5px', fontWeight: 800,
-                background: post.platform === 'app' ? '#818cf8' : '#34d399',
-                color: '#0f172a',
-              }}>
+            <div className="community-inquiry-meta">
+              <span className="community-label">
                 {post.platform === 'app' ? '앱' : '웹'}
               </span>
-              <span style={{
-                fontSize: '12px', padding: '3px 9px', borderRadius: '5px', fontWeight: 800,
-                background: getCategoryColor(post.category),
-                color: '#0f172a',
-              }}>
+              <span className="community-label">
                 {post.category}
               </span>
               {/* 처리 상태 */}
@@ -380,39 +367,27 @@ export default function InquiryDetailPage() {
                       alert('상태 변경 실패: ' + String(err));
                     }
                   }}
-                  style={{
-                    padding: '3px 8px',
-                    borderRadius: '5px',
-                    border: `1px solid ${getStatusColor(post.status ?? '미처리')}60`,
-                    background: getStatusBg(post.status ?? '미처리'),
-                    color: getStatusColor(post.status ?? '미처리'),
-                    fontWeight: 800,
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                  }}
+                  className={`community-inquiry-status-select ${getStatusClass(post.status ?? '미처리')}`}
+                  aria-label="문의 처리 상태"
                 >
-                  {STATUSES.map((s) => <option key={s} value={s} style={{ background: '#1e293b', color: '#fff' }}>{s}</option>)}
+                  {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               ) : (
-                <span style={{
-                  fontSize: '12px', padding: '3px 9px', borderRadius: '5px', fontWeight: 800,
-                  background: getStatusBg(post.status ?? '미처리'),
-                  color: getStatusColor(post.status ?? '미처리'),
-                  border: `1px solid ${getStatusColor(post.status ?? '미처리')}40`,
-                }}>
+                <span className={`community-inquiry-status ${getStatusClass(post.status ?? '미처리')}`}>
                   {post.status ?? '미처리'}
                 </span>
               )}
               {post.isPrivate && (
-                <span style={{ fontSize: '13px', color: '#94a3b8' }}>🔒 비밀글</span>
+                <span className="community-label is-private">비공개</span>
               )}
-              <span style={{ marginLeft: 'auto', color: '#94a3b8', fontSize: '13px' }}>
+              <span className="community-inquiry-meta__byline">
                 {new Date(post.createdAt).toLocaleString()} · {post.author}
               </span>
             </div>
             {currentUser && currentUser.uid !== post.uid && (
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+              <div className="community-moderation-actions">
                 <button
+                  type="button"
                   onClick={() =>
                     void handleModerationAction({
                       action: 'report',
@@ -423,11 +398,12 @@ export default function InquiryDetailPage() {
                       contentPreview: buildContentPreview(`${post.title}\n${post.content}`),
                     })
                   }
-                  style={{ padding: '6px 12px', borderRadius: '6px', background: 'rgba(59,130,246,0.2)', color: '#bfdbfe', border: '1px solid rgba(59,130,246,0.5)', cursor: 'pointer' }}
+                  className="community-action"
                 >
                   게시글 신고
                 </button>
                 <button
+                  type="button"
                   onClick={() =>
                     void handleModerationAction({
                       action: 'block',
@@ -438,15 +414,15 @@ export default function InquiryDetailPage() {
                       contentPreview: buildContentPreview(`${post.title}\n${post.content}`),
                     })
                   }
-                  style={{ padding: '6px 12px', borderRadius: '6px', background: 'rgba(239,68,68,0.18)', color: '#fecaca', border: '1px solid rgba(239,68,68,0.45)', cursor: 'pointer' }}
+                  className="community-action community-action--danger"
                 >
                   작성자 차단
                 </button>
               </div>
             )}
-            <h1 style={{ fontSize: '26px', fontWeight: 900, margin: '0 0 24px 0', lineHeight: 1.3 }}>{post.title}</h1>
-            <div style={{ borderTop: '1px solid rgba(148,163,184,0.1)', paddingTop: '24px' }}>
-              <RichTextViewer content={post.content} style={{ fontSize: '15px', lineHeight: 1.8 }} />
+            <h1 className="community-notice-title">{post.title}</h1>
+            <div className="community-notice-body">
+              <div className="community-richtext"><RichTextViewer content={post.content} /></div>
             </div>
           </>
         )}
@@ -454,14 +430,14 @@ export default function InquiryDetailPage() {
 
       {/* 댓글 섹션 (접근 가능한 경우만) */}
       {isAccessible && !isBlockedPost && (
-        <section style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '16px', padding: '24px', border: '1px solid rgba(148, 163, 184, 0.1)' }}>
-          <h3 style={{ fontSize: '17px', fontWeight: 700, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            댓글 <span style={{ color: '#94a3b8', fontSize: '14px', fontWeight: 400 }}>{visibleComments.length}</span>
-          </h3>
+        <section className="community-comments">
+          <h2 className="community-comments__heading">
+            댓글 <span>{visibleComments.length}</span>
+          </h2>
 
           {/* 댓글 입력 */}
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '28px', alignItems: 'flex-end' }}>
-            <div style={{ flex: 1 }}>
+          <div className="community-comment-composer">
+            <div className="community-editor">
               <RichTextEditor
                 value={commentText}
                 onChange={setCommentText}
@@ -471,40 +447,34 @@ export default function InquiryDetailPage() {
               />
             </div>
             <button
+              type="button"
               onClick={handleWriteComment}
               disabled={!currentUser || !commentText.trim()}
-              style={{
-                padding: '0 18px',
-                borderRadius: '8px',
-                background: currentUser && commentText.trim() ? '#3b82f6' : '#475569',
-                color: currentUser && commentText.trim() ? '#fff' : '#94a3b8',
-                border: 'none',
-                fontWeight: 700,
-                cursor: currentUser && commentText.trim() ? 'pointer' : 'not-allowed',
-              }}
+              className="community-action community-action--primary"
             >
               등록
             </button>
           </div>
 
           {/* 댓글 목록 */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div className="community-comment-list">
             {visibleComments.length === 0 ? (
-              <div style={{ textAlign: 'center', color: '#64748b', padding: '16px 0' }}>아직 댓글이 없습니다.</div>
+              <div className="community-empty">아직 댓글이 없습니다.</div>
             ) : (
               visibleComments.map((comment) => (
-                <div key={comment.id} style={{ padding: '14px 16px', background: '#1e293b', borderRadius: '10px', border: '1px solid rgba(148, 163, 184, 0.1)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontWeight: 700, color: '#e2e8f0', fontSize: '14px' }}>{comment.author}</span>
-                      <span style={{ fontSize: '12px', color: '#64748b' }}>
+                <article key={comment.id} className="community-comment">
+                  <div className="community-comment__header">
+                    <div className="community-comment__identity">
+                      <strong>{comment.author}</strong>
+                      <time dateTime={new Date(comment.createdAt).toISOString()}>
                         {new Date(comment.createdAt).toLocaleString()}
-                      </span>
+                      </time>
                     </div>
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                    <div className="community-comment-actions">
                       {currentUser && currentUser.uid !== comment.uid && (
                         <>
                           <button
+                            type="button"
                             onClick={() =>
                               void handleModerationAction({
                                 action: 'report',
@@ -516,11 +486,12 @@ export default function InquiryDetailPage() {
                                 contentPreview: buildContentPreview(comment.content),
                               })
                             }
-                            style={{ background: 'transparent', border: 'none', color: '#93c5fd', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}
                           >
                             신고
                           </button>
                           <button
+                            type="button"
+                            className="is-danger"
                             onClick={() =>
                               void handleModerationAction({
                                 action: 'block',
@@ -532,7 +503,6 @@ export default function InquiryDetailPage() {
                                 contentPreview: buildContentPreview(comment.content),
                               })
                             }
-                            style={{ background: 'transparent', border: 'none', color: '#fca5a5', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}
                           >
                             차단
                           </button>
@@ -540,16 +510,16 @@ export default function InquiryDetailPage() {
                       )}
                       {(currentUser?.uid === comment.uid || isAdmin) && (
                         <button
+                          type="button"
                           onClick={() => handleDeleteComment(comment.id)}
-                          style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}
                         >
                           삭제
                         </button>
                       )}
                     </div>
                   </div>
-                  <RichTextViewer content={comment.content} style={{ fontSize: '14px', lineHeight: 1.5, color: '#cbd5e1' }} />
-                </div>
+                  <div className="community-richtext"><RichTextViewer content={comment.content} /></div>
+                </article>
               ))
             )}
           </div>
@@ -559,29 +529,11 @@ export default function InquiryDetailPage() {
   );
 }
 
-function getCategoryColor(category: string) {
-  switch (category) {
-    case '기능 개선': return '#60a5fa';
-    case '버그 신고': return '#f87171';
-    case '사용 문의': return '#4ade80';
-    default: return '#94a3b8';
-  }
-}
-
-function getStatusColor(status: string) {
+function getStatusClass(status: string) {
   switch (status) {
-    case '미처리': return '#f87171';
-    case '처리 중': return '#fbbf24';
-    case '처리 완료': return '#4ade80';
-    default: return '#94a3b8';
-  }
-}
-
-function getStatusBg(status: string) {
-  switch (status) {
-    case '미처리': return 'rgba(248,113,113,0.12)';
-    case '처리 중': return 'rgba(251,191,36,0.12)';
-    case '처리 완료': return 'rgba(74,222,128,0.12)';
-    default: return 'rgba(148,163,184,0.12)';
+    case '미처리': return 'is-pending';
+    case '처리 중': return 'is-progress';
+    case '처리 완료': return 'is-complete';
+    default: return 'is-neutral';
   }
 }

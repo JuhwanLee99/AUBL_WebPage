@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import gsap from 'gsap';
 import { collection, getDocs } from 'firebase/firestore';
-import { GROUP_LETTERS, GROUP_COLORS, TEAM_GROUPS } from '@shared/lib/teamGroups';
+import { GROUP_LETTERS, TEAM_GROUPS } from '@shared/lib/teamGroups';
 import type { GroupLetter } from '@shared/lib/teamGroups';
 import { TEAM_SEED_INFO } from '@shared/lib/teamSeeds';
 import { useContent } from '@shared/state/contentProvider';
@@ -12,15 +12,16 @@ import {
   shouldForceLogoContrastBoost,
 } from '@shared/lib/imageUrl';
 import { firestore } from '@shared/firebase/client';
+import './TeamPages.css';
 
 /* ─── 로컬 타입 ─── */
 
 type GroupKey = 'ALL' | GroupLetter;
 type SortKey = 'NAME' | 'GROUP';
 
-const GROUP_TABS: { key: GroupKey; label: string; color: string }[] = [
-  { key: 'ALL', label: '전체', color: '#94a3b8' },
-  ...GROUP_LETTERS.map((g) => ({ key: g as GroupKey, label: `${g}조`, color: GROUP_COLORS[g] })),
+const GROUP_TABS: { key: GroupKey; label: string }[] = [
+  { key: 'ALL', label: '전체' },
+  ...GROUP_LETTERS.map((g) => ({ key: g as GroupKey, label: `${g}조` })),
 ];
 
 /* ─── 메인 페이지 ─── */
@@ -139,7 +140,6 @@ export default function TeamHubPage() {
         key={team.name}
         to={`/teams/${encodeTeamId(team.name)}`}
         className={`team-card team-directory-card${grouped ? ' team-hub-group-card' : ''}`}
-        style={{ '--team-accent': team.color } as CSSProperties}
       >
         <div className={`team-directory-card__logo${needsBoost ? ' needs-contrast' : ''}`} aria-hidden="true">
           {logoUrl ? (
@@ -162,168 +162,72 @@ export default function TeamHubPage() {
   };
 
   return (
-    <div style={{ display: 'grid', gap: '28px' }} ref={pageRef}>
+    <div className="team-hub-page" ref={pageRef}>
       {/* ── HERO ── */}
-      <section
-        className="team-hub-section"
-        style={{
-          display: 'grid',
-          gap: '18px',
-          padding: 'clamp(26px, 6vw, 38px)',
-          borderRadius: '28px',
-          background:
-            'linear-gradient(140deg, rgba(8,47,73,0.95) 0%, rgba(30,41,59,0.9) 45%, rgba(15,23,42,0.95) 100%)',
-          border: '1px solid rgba(148,163,184,0.25)',
-          boxShadow: '0 26px 70px rgba(0,0,0,0.35)',
-          position: 'relative',
-          overflow: 'hidden',
-        }}
-      >
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background:
-              'radial-gradient(circle at 15% 20%, rgba(56,189,248,0.16), transparent 35%), radial-gradient(circle at 85% 10%, rgba(249,115,22,0.14), transparent 30%)',
-            opacity: 0.9,
-          }}
-        />
-        <div style={{ position: 'relative', display: 'grid', gap: '14px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <span
-              style={{
-                padding: '8px 12px',
-                borderRadius: '999px',
-                fontWeight: 800,
-                letterSpacing: '0.08em',
-                background: 'rgba(56,189,248,0.16)',
-                color: '#bae6fd',
-                border: '1px solid rgba(56,189,248,0.4)',
-                fontSize: '11px',
-              }}
-            >
-              TEAM HUB
-            </span>
-            <span style={{ color: '#cbd5e1', fontWeight: 700, fontSize: '12px' }}>팀별 일정 · 로스터 · 공지</span>
+      <section className="team-hub-section team-page-hero">
+        <div className="team-page-hero__copy">
+          <div className="team-page-eyebrow">
+            <span className="team-page-kicker">TEAM HUB</span>
+            <span>팀별 일정 · 로스터 · 공지</span>
           </div>
-          <h1 style={{ margin: 0, fontSize: 'clamp(26px, 6vw, 36px)', fontWeight: 900, lineHeight: 1.2 }}>
+          <h1>
             {teamsContent.pageTitle || '2026 참가팀 · 조편성'}
           </h1>
-          <p style={{ margin: 0, color: '#cbd5e1', maxWidth: '780px', lineHeight: 1.7 }}>
+          <p>
             {teamsContent.pageDescription ||
               '총 40개 대학이 A~H조 조별 리그에 참가합니다. 조별 상위 2팀은 으뜸 토너먼트 16강, 3·4등은 버금 토너먼트 16강으로 포스트시즌이 진행됩니다.'}
           </p>
         </div>
 
-        <div style={{ position: 'relative', display: 'grid', gap: '12px', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'center' }}>
+        <div className="team-page-hero__toolbar">
           <input
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="팀명으로 검색"
-            style={{
-              width: '100%',
-              padding: '12px 14px',
-              borderRadius: '14px',
-              border: '1px solid rgba(148,163,184,0.35)',
-              background: 'rgba(15,23,42,0.6)',
-              color: '#e2e8f0',
-              fontSize: '14px',
-            }}
+            aria-label="팀명으로 검색"
           />
-          <Link
-            to="/schedule/groups"
-            style={{
-              padding: '12px 14px',
-              borderRadius: '14px',
-              border: '1px solid rgba(148,163,184,0.35)',
-              background: 'rgba(255,255,255,0.04)',
-              color: '#e2e8f0',
-              fontWeight: 800,
-              fontSize: '13px',
-              textDecoration: 'none',
-              whiteSpace: 'nowrap',
-            }}
-          >
+          <Link to="/schedule/groups" className="team-page-action team-page-action--secondary">
             조별 일정 보기 →
           </Link>
         </div>
 
-        <div style={{ position: 'relative', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          <div style={{
-            padding: '8px 12px',
-            borderRadius: '12px',
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(148,163,184,0.25)',
-            color: '#e2e8f0',
-            fontWeight: 800,
-            fontSize: '12px',
-          }}>총 {teams.length}팀</div>
-          <div style={{
-            padding: '8px 12px',
-            borderRadius: '12px',
-            background: 'rgba(56,189,248,0.14)',
-            border: '1px solid rgba(56,189,248,0.35)',
-            color: '#bae6fd',
-            fontWeight: 800,
-            fontSize: '12px',
-          }}>8개 조</div>
-          <Link
-            to="/intro"
-            style={{
-              padding: '8px 12px',
-              borderRadius: '12px',
-              border: '1px solid rgba(148,163,184,0.35)',
-              background: 'rgba(255,255,255,0.04)',
-              color: '#e2e8f0',
-              fontWeight: 800,
-              fontSize: '12px',
-              textDecoration: 'none',
-            }}
-          >
+        <div className="team-page-summary" aria-label="참가 현황">
+          <div><strong>{teams.length}</strong><span>참가팀</span></div>
+          <div><strong>8</strong><span>조</span></div>
+          <Link to="/intro" className="team-page-action team-page-action--text">
             리그 소개 →
           </Link>
         </div>
       </section>
 
       {/* ── 그룹 스냅샷 ── */}
-      <section className="team-hub-section" style={{ display: 'grid', gap: '14px' }}>
-        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+      <section className="team-hub-section team-page-section">
+        <header className="team-page-section__header">
           <div>
-            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 900 }}>조 스냅샷</h2>
-            <p style={{ margin: '6px 0 0', color: '#94a3b8', fontSize: '13px' }}>조별 참가팀 수를 빠르게 확인하세요.</p>
+            <h2>조 스냅샷</h2>
+            <p>조별 참가팀 수를 빠르게 확인하세요.</p>
           </div>
         </header>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
+        <div className="team-group-snapshot">
           {GROUP_LETTERS.map((group) => (
             <button
               key={group}
               type="button"
               onClick={() => setActiveGroup(group)}
-              className="team-card"
-              style={{
-                padding: '14px',
-                borderRadius: '16px',
-                border: activeGroup === group ? `1.5px solid ${GROUP_COLORS[group]}` : '1px solid rgba(148,163,184,0.25)',
-                background: activeGroup === group ? `${GROUP_COLORS[group]}22` : 'rgba(255,255,255,0.03)',
-                color: '#e2e8f0',
-                textAlign: 'left',
-                cursor: 'pointer',
-                display: 'grid',
-                gap: '8px',
-              }}
+              className={`team-card team-group-snapshot__button${activeGroup === group ? ' is-active' : ''}`}
+              aria-pressed={activeGroup === group}
             >
-              <span style={{ fontWeight: 900, fontSize: '16px', color: GROUP_COLORS[group] }}>{group}조</span>
-              <span style={{ color: '#cbd5e1', fontWeight: 700, fontSize: '12px' }}>{groupCounts[group]}팀</span>
+              <span>{group}조</span>
+              <small>{groupCounts[group]}팀</small>
             </button>
           ))}
         </div>
       </section>
 
       {/* ── 필터 탭 ── */}
-      <section className="team-hub-section" style={{ display: 'grid', gap: '12px' }}>
-        <div className="nav-scroll" style={{ position: 'relative' }}>
-          <div className="nav-scroll__rail" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+      <section className="team-hub-section team-filter-section" aria-label="조 필터">
+        <div className="nav-scroll team-filter-scroll">
+          <div className="nav-scroll__rail team-filter-rail">
             {GROUP_TABS.map((tab) => {
               const isActive = activeGroup === tab.key;
               return (
@@ -331,17 +235,8 @@ export default function TeamHubPage() {
                   key={tab.key}
                   type="button"
                   onClick={() => setActiveGroup(tab.key)}
-                  style={{
-                    padding: '10px 16px',
-                    borderRadius: '12px',
-                    fontWeight: 800,
-                    fontSize: '13px',
-                    background: isActive ? `${tab.color}22` : 'rgba(255,255,255,0.04)',
-                    color: isActive ? tab.color : '#94a3b8',
-                    border: isActive ? `1.5px solid ${tab.color}55` : '1.5px solid rgba(148,163,184,0.15)',
-                    cursor: 'pointer',
-                    transition: 'all 150ms ease',
-                  }}
+                  className={`team-filter-button${isActive ? ' is-active' : ''}`}
+                  aria-pressed={isActive}
                 >
                   {tab.label}
                 </button>
@@ -352,16 +247,16 @@ export default function TeamHubPage() {
       </section>
 
       {/* ── 팀 디렉토리 ── */}
-      <section className="team-hub-section team-directory" style={{ display: 'grid', gap: '14px' }}>
-        <header className="team-directory__header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+      <section className="team-hub-section team-page-section team-directory">
+        <header className="team-directory__header team-page-section__header">
           <div>
-            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 900 }}>팀 디렉토리</h2>
-            <p style={{ margin: '6px 0 0', color: '#94a3b8', fontSize: '13px' }}>
+            <h2>팀 디렉토리</h2>
+            <p>
               {activeGroup === 'ALL' ? '전체 팀을 표시합니다.' : `${activeGroup}조 소속 팀`}
             </p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <div className="team-directory__sort" style={{ display: 'flex', gap: '6px' }}>
+          <div className="team-directory__controls">
+            <div className="team-directory__sort" role="group" aria-label="팀 정렬">
               {[
                 { key: 'NAME', label: '가나다' },
                 { key: 'GROUP', label: '조별' },
@@ -372,49 +267,31 @@ export default function TeamHubPage() {
                     key={option.key}
                     type="button"
                     onClick={() => setSortKey(option.key as SortKey)}
-                    style={{
-                      padding: '8px 12px',
-                      borderRadius: '999px',
-                      fontWeight: 800,
-                      fontSize: '12px',
-                      background: isActive ? 'rgba(56,189,248,0.18)' : 'rgba(255,255,255,0.04)',
-                      color: isActive ? '#bae6fd' : '#94a3b8',
-                      border: isActive ? '1px solid rgba(56,189,248,0.5)' : '1px solid rgba(148,163,184,0.2)',
-                      cursor: 'pointer',
-                    }}
+                    className={`team-sort-button${isActive ? ' is-active' : ''}`}
+                    aria-pressed={isActive}
                   >
                     {option.label}
                   </button>
                 );
               })}
             </div>
-            <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>{visibleTeams.length}팀 표시</span>
+            <span className="team-directory__count">{visibleTeams.length}팀 표시</span>
           </div>
         </header>
 
         {visibleTeams.length ? (
           sortKey === 'GROUP' ? (
-            <div className="team-directory__groups" style={{ display: 'grid', gap: '12px' }}>
+            <div className="team-directory__groups">
               {groupedVisibleTeams.map((row) => (
                 <div
                   key={row.group}
                   className="team-hub-group-row"
-                  style={{ display: 'grid', gap: '10px', alignItems: 'start' }}
                 >
-                  <div
-                    className="team-hub-group-label"
-                    style={{
-                      paddingTop: '8px',
-                      color: GROUP_COLORS[row.group],
-                      fontSize: '14px',
-                      fontWeight: 900,
-                      letterSpacing: '0.03em',
-                    }}
-                  >
+                  <div className="team-hub-group-label">
                     {row.group}조
                   </div>
-                  <div className="team-hub-group-track" style={{ position: 'relative' }}>
-                    <div className="team-hub-group-grid" style={{ display: 'grid', gap: '10px' }}>
+                  <div className="team-hub-group-track">
+                    <div className="team-hub-group-grid">
                       {row.teams.map((team) => renderDirectoryCard(team, true))}
                     </div>
                   </div>
@@ -422,30 +299,19 @@ export default function TeamHubPage() {
               ))}
             </div>
           ) : (
-            <div className="team-directory__grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+            <div className="team-directory__grid">
               {visibleTeams.map((team) => renderDirectoryCard(team))}
             </div>
           )
         ) : (
-          <div style={{ color: '#94a3b8', fontWeight: 700 }}>조건에 맞는 팀이 없습니다. 검색어나 필터를 확인해주세요.</div>
+          <div className="team-page-empty">조건에 맞는 팀이 없습니다. 검색어나 필터를 확인해주세요.</div>
         )}
       </section>
 
       {/* ── 안내 ── */}
-      <section
-        className="team-hub-section"
-        style={{
-          padding: '20px 24px',
-          borderRadius: '14px',
-          border: '1px solid rgba(148,163,184,0.15)',
-          background: 'rgba(255,255,255,0.02)',
-          color: '#94a3b8',
-          fontSize: '12px',
-          lineHeight: 1.7,
-        }}
-      >
-        <p style={{ margin: 0 }}>
-          <strong style={{ color: '#cbd5e1' }}>참고</strong> — {teamsContent.pageNote || '조편성은 대표자회의 의결에 따라 확정되며, 변경될 수 있습니다. 최종 조편성은 시즌 개막 전 공지됩니다.'}
+      <section className="team-hub-section team-page-note">
+        <p>
+          <strong>참고</strong> — {teamsContent.pageNote || '조편성은 대표자회의 의결에 따라 확정되며, 변경될 수 있습니다. 최종 조편성은 시즌 개막 전 공지됩니다.'}
         </p>
       </section>
     </div>

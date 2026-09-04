@@ -5,6 +5,7 @@ import { firestore, auth } from '../../shared/firebase/client';
 import type { InquiryPlatform, InquiryCategory } from '../../shared/types';
 import RichTextEditor from '../../shared/components/editor/RichTextEditor';
 import { isDeltaEmpty } from '../../shared/components/editor/quillUtils';
+import './CommunityPages.css';
 
 const CATEGORIES: InquiryCategory[] = ['기능 개선', '버그 신고', '사용 문의', '경기/기록 오류', '기타'];
 
@@ -58,168 +59,107 @@ export default function InquiryWritePage() {
 
   if (!currentUser) return null;
 
-  const inputStyle: React.CSSProperties = {
-    padding: '14px',
-    borderRadius: '8px',
-    background: '#1e293b',
-    border: '1px solid #334155',
-    color: '#fff',
-    fontSize: '15px',
-    width: '100%',
-    boxSizing: 'border-box',
-  };
-
   return (
-    <div className="season-content-page board-write-page" style={{ maxWidth: '1100px', margin: '0 auto', color: '#f8fafc', padding: '20px' }}>
-      <h2 style={{ fontSize: '24px', fontWeight: 900, marginBottom: '24px' }}>건의/문의 작성</h2>
+    <div className="season-content-page community-ui community-inquiry-write">
+      <header className="community-page-header">
+        <div className="community-page-header__copy">
+          <p className="community-eyebrow">AUBL SUPPORT</p>
+          <h1>건의/문의 작성</h1>
+          <p className="community-page-header__description">문의 대상을 선택하고 필요한 내용을 자세히 남겨주세요.</p>
+        </div>
+      </header>
 
-      <div
-        style={{
-          marginBottom: '16px',
-          padding: '12px 14px',
-          borderRadius: '10px',
-          border: '1px solid rgba(59,130,246,0.35)',
-          background: 'rgba(59,130,246,0.12)',
-          color: '#bfdbfe',
-          fontSize: '13px',
-          lineHeight: 1.7,
-          fontWeight: 600,
-        }}
-      >
+      <div className="community-info-note">
         이미지/동영상은 툴바의 📷 / 🎬 버튼으로 URL을 입력하여 삽입할 수 있습니다.<br />
         스크린샷 등 파일 첨부가 필요한 경우, 게시글 등록 후 <strong>aublcau@gmail.com</strong>으로 전송해 주세요.
       </div>
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <form onSubmit={handleSubmit} className="community-notice-form community-inquiry-form">
 
         {/* 플랫폼 선택 */}
-        <div>
-          <label style={{ display: 'block', color: '#94a3b8', fontSize: '13px', fontWeight: 700, marginBottom: '8px' }}>
-            플랫폼
-          </label>
-          <div style={{ display: 'flex', gap: '8px' }}>
+        <fieldset className="community-field community-fieldset">
+          <legend>플랫폼</legend>
+          <div className="community-segmented community-segmented--form">
             {(['app', 'web'] as InquiryPlatform[]).map((p) => (
               <button
                 key={p}
                 type="button"
                 onClick={() => setPlatform(p)}
-                style={{
-                  padding: '8px 20px',
-                  borderRadius: '20px',
-                  border: 'none',
-                  background: platform === p
-                    ? (p === 'app' ? '#818cf8' : '#34d399')
-                    : '#334155',
-                  color: platform === p ? '#0f172a' : '#94a3b8',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
+                className={platform === p ? 'is-active' : undefined}
+                aria-pressed={platform === p}
               >
                 {p === 'app' ? '앱' : '웹'}
               </button>
             ))}
           </div>
-        </div>
+        </fieldset>
 
         {/* 말머리 */}
-        <div>
-          <label style={{ display: 'block', color: '#94a3b8', fontSize: '13px', fontWeight: 700, marginBottom: '8px' }}>
-            분류
-          </label>
+        <label className="community-field">
+          <span>분류</span>
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value as InquiryCategory)}
-            style={{
-              ...inputStyle,
-              fontWeight: 700,
-              cursor: 'pointer',
-              appearance: 'none',
-              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath fill='%2394a3b8' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E")`,
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'right 14px center',
-              paddingRight: '36px',
-            }}
+            className="community-input community-select"
           >
             {CATEGORIES.map((cat) => (
-              <option key={cat} value={cat} style={{ background: '#1e293b' }}>
+              <option key={cat} value={cat}>
                 {cat}
               </option>
             ))}
           </select>
-        </div>
+        </label>
 
         {/* 제목 */}
-        <div>
-          <label style={{ display: 'block', color: '#94a3b8', fontSize: '13px', fontWeight: 700, marginBottom: '8px' }}>
-            제목
-          </label>
+        <label className="community-field">
+          <span>제목</span>
           <input
             placeholder="제목을 입력하세요"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            style={{ ...inputStyle, fontWeight: 700 }}
+            className="community-input community-title-input"
             maxLength={100}
           />
-        </div>
+        </label>
 
         {/* 본문 */}
-        <div>
-          <label style={{ display: 'block', color: '#94a3b8', fontSize: '13px', fontWeight: 700, marginBottom: '8px' }}>
-            내용
-          </label>
-          <RichTextEditor
-            value={content}
-            onChange={setContent}
-            placeholder="내용을 입력하세요"
-            minHeight={280}
-          />
+        <div className="community-field">
+          <span>내용</span>
+          <div className="community-editor">
+            <RichTextEditor
+              value={content}
+              onChange={setContent}
+              placeholder="내용을 입력하세요"
+              minHeight={280}
+            />
+          </div>
         </div>
 
         {/* 비밀글 */}
-        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', userSelect: 'none' }}>
+        <label className="community-check-field">
           <input
             type="checkbox"
             checked={isPrivate}
             onChange={(e) => setIsPrivate(e.target.checked)}
-            style={{ width: '18px', height: '18px', accentColor: '#3b82f6' }}
           />
-          <span style={{ color: '#cbd5e1', fontSize: '15px' }}>
-            🔒 비밀글 (작성자와 관리자만 내용을 볼 수 있습니다)
+          <span>
+            비밀글 (작성자와 관리자만 내용을 볼 수 있습니다)
           </span>
         </label>
 
         {/* 버튼 */}
-        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+        <div className="community-form-actions">
           <button
             type="button"
             onClick={() => navigate(-1)}
-            style={{
-              flex: 1,
-              padding: '13px',
-              borderRadius: '8px',
-              background: '#334155',
-              color: '#94a3b8',
-              border: 'none',
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
+            className="community-action community-action--quiet"
           >
             취소
           </button>
           <button
             type="submit"
             disabled={submitting || !title.trim() || !content.trim()}
-            style={{
-              flex: 2,
-              padding: '13px',
-              borderRadius: '8px',
-              background: submitting || !title.trim() || !content.trim() ? '#334155' : '#3b82f6',
-              color: submitting || !title.trim() || !content.trim() ? '#64748b' : '#fff',
-              border: 'none',
-              fontWeight: 700,
-              cursor: submitting || !title.trim() || !content.trim() ? 'not-allowed' : 'pointer',
-            }}
+            className="community-action community-action--primary"
           >
             {submitting ? '저장 중...' : '작성 완료'}
           </button>

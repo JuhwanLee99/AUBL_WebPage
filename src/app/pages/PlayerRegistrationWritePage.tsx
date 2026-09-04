@@ -6,6 +6,7 @@ import RichTextEditor from '../../shared/components/editor/RichTextEditor';
 import { isDeltaEmpty } from '../../shared/components/editor/quillUtils';
 import { useCommunityAccess } from '../../shared/auth/useCommunityAccess';
 import type { PlayerRegistrationCategory } from '../../shared/types';
+import './PlayerRegistrationPages.css';
 
 export default function PlayerRegistrationWritePage() {
   const navigate = useNavigate();
@@ -75,118 +76,72 @@ export default function PlayerRegistrationWritePage() {
 
   if (!isPlayerOrAbove || writableCategories.length === 0) {
     return (
-      <div style={{ maxWidth: '900px', margin: '0 auto', color: '#f8fafc', padding: '20px' }}>
-        <h2 style={{ fontSize: '24px', fontWeight: 900, marginBottom: '16px' }}>선수 등록 게시판</h2>
-        <div
-          style={{
-            borderRadius: '12px',
-            border: '1px solid rgba(248,113,113,0.35)',
-            background: 'rgba(127,29,29,0.35)',
-            color: '#fecaca',
-            padding: '16px',
-            lineHeight: 1.6,
-            fontWeight: 700,
-          }}
-        >
+      <div className="player-registration-page player-registration-access-page">
+        <header className="player-registration-header">
+          <span className="player-registration-kicker">PLAYER REGISTRATION</span>
+          <h1>선수 등록 게시판</h1>
+        </header>
+        <div className="player-registration-feedback player-registration-feedback--error" role="alert">
           현재 계정은 글쓰기 권한이 없습니다. `선수 등록`: 관리자만, `유니폼 등록`: 감독/관리자
         </div>
       </div>
     );
   }
 
-  const inputStyle: React.CSSProperties = {
-    padding: '14px',
-    borderRadius: '8px',
-    background: '#1e293b',
-    border: '1px solid #334155',
-    color: '#fff',
-    fontSize: '15px',
-    width: '100%',
-    boxSizing: 'border-box',
-  };
-
   return (
-    <div className="season-content-page board-write-page" style={{ maxWidth: '1100px', margin: '0 auto', color: '#f8fafc', padding: '20px' }}>
-      <h2 style={{ fontSize: '24px', fontWeight: 900, marginBottom: '24px' }}>선수 등록 게시글 작성</h2>
+    <div className="season-content-page board-write-page player-registration-page player-registration-write">
+      <header className="player-registration-header">
+        <span className="player-registration-kicker">NEW REQUEST</span>
+        <h1>선수 등록 게시글 작성</h1>
+        <p>권한이 부여된 분류를 선택해 등록 요청을 작성합니다.</p>
+      </header>
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div>
-          <label style={{ display: 'block', color: '#94a3b8', fontSize: '13px', fontWeight: 700, marginBottom: '8px' }}>
-            분류
-          </label>
+      <form onSubmit={handleSubmit} className="player-registration-form">
+        <div className="player-registration-field">
+          <label htmlFor="player-registration-category">분류</label>
           <select
+            id="player-registration-category"
             value={category}
             onChange={(e) => setCategory(e.target.value as PlayerRegistrationCategory)}
-            style={{
-              ...inputStyle,
-              fontWeight: 700,
-              cursor: 'pointer',
-              appearance: 'none',
-              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath fill='%2394a3b8' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E")`,
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'right 14px center',
-              paddingRight: '36px',
-            }}
           >
             {writableCategories.map((cat) => (
-              <option key={cat} value={cat} style={{ background: '#1e293b' }}>
+              <option key={cat} value={cat}>
                 {cat}
               </option>
             ))}
           </select>
         </div>
 
-        <div>
-          <label style={{ display: 'block', color: '#94a3b8', fontSize: '13px', fontWeight: 700, marginBottom: '8px' }}>
-            제목
-          </label>
+        <div className="player-registration-field">
+          <label htmlFor="player-registration-title">제목</label>
           <input
+            id="player-registration-title"
             placeholder="제목을 입력하세요"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            style={{ ...inputStyle, fontWeight: 700 }}
             maxLength={100}
           />
         </div>
 
-        <div>
-          <label style={{ display: 'block', color: '#94a3b8', fontSize: '13px', fontWeight: 700, marginBottom: '8px' }}>
-            내용
-          </label>
-          <RichTextEditor value={content} onChange={setContent} placeholder="내용을 입력하세요" minHeight={280} />
+        <div className="player-registration-field">
+          <label>내용</label>
+          <div className="player-registration-editor">
+            <RichTextEditor value={content} onChange={setContent} placeholder="내용을 입력하세요" minHeight={280} />
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+        <div className="player-registration-form__actions">
           <button
             type="button"
             onClick={() => navigate(-1)}
-            style={{
-              flex: 1,
-              padding: '13px',
-              borderRadius: '8px',
-              background: '#334155',
-              color: '#94a3b8',
-              border: 'none',
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
+            className="player-registration-action"
           >
             취소
           </button>
           <button
             type="submit"
             disabled={submitting || !title.trim() || isDeltaEmpty(content) || !canWriteSelected}
-            style={{
-              flex: 2,
-              padding: '13px',
-              borderRadius: '8px',
-              background: submitting || !title.trim() || isDeltaEmpty(content) || !canWriteSelected ? '#334155' : '#3b82f6',
-              color: submitting || !title.trim() || isDeltaEmpty(content) || !canWriteSelected ? '#64748b' : '#fff',
-              border: 'none',
-              fontWeight: 700,
-              cursor:
-                submitting || !title.trim() || isDeltaEmpty(content) || !canWriteSelected ? 'not-allowed' : 'pointer',
-            }}
+            className="player-registration-action player-registration-action--primary"
           >
             {submitting ? '저장 중...' : '작성 완료'}
           </button>
