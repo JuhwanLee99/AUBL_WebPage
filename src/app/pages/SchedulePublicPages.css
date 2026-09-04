@@ -1,0 +1,1125 @@
+.schedule-public {
+  display: grid;
+  gap: clamp(18px, 2.6vw, 32px);
+  min-width: 0;
+  color: var(--season-ink);
+}
+
+.schedule-public p {
+  margin: 0;
+}
+
+.schedule-public .season-page-hero {
+  min-height: 230px;
+}
+
+.schedule-public__hero-aside {
+  min-width: 164px;
+  display: grid;
+  align-content: end;
+  gap: 2px;
+  padding: 8px 0 8px 22px;
+  border-left: 3px solid var(--season-blue-600);
+  text-align: left;
+}
+
+.schedule-public__hero-aside span {
+  color: var(--season-blue-700);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.schedule-public__hero-aside strong {
+  color: var(--season-navy-950);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: clamp(42px, 5vw, 66px);
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  line-height: 0.98;
+}
+
+.schedule-public__hero-aside small {
+  margin-top: 5px;
+  color: var(--season-muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.schedule-public__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--season-line);
+  border-radius: 4px;
+  background: var(--season-surface);
+}
+
+.schedule-public__metric {
+  min-width: 0;
+  padding: clamp(18px, 2.5vw, 28px);
+  border-right: 1px solid var(--season-line);
+}
+
+.schedule-public__metric:last-child {
+  border-right: 0;
+}
+
+.schedule-public__metric > span {
+  color: var(--season-blue-700);
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+}
+
+.schedule-public__metric > strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--season-navy-950);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: clamp(34px, 4vw, 48px);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.schedule-public__metric > p {
+  margin-top: 9px;
+  color: var(--season-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.schedule-public__filters,
+.schedule-public__board,
+.schedule-public__group-overview,
+.schedule-public__group-board {
+  min-width: 0;
+  border: 1px solid var(--season-line);
+  border-radius: 4px;
+  background: var(--season-surface);
+  box-shadow: none;
+}
+
+.schedule-public__filters {
+  display: grid;
+  gap: 18px;
+  padding: clamp(18px, 2.5vw, 26px);
+  border-left: 4px solid var(--season-blue-600);
+}
+
+.schedule-public__filter-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.schedule-public__filter-heading > div > span,
+.schedule-public__tab-label {
+  display: block;
+  color: var(--season-blue-700);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.13em;
+}
+
+.schedule-public__filter-heading h2 {
+  margin: 3px 0 0;
+  color: var(--season-navy-950);
+  font-size: clamp(21px, 2.4vw, 28px);
+  font-weight: 900;
+  letter-spacing: -0.035em;
+}
+
+.schedule-public__filter-heading > p {
+  color: var(--season-muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.schedule-public__filter-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 2fr) minmax(150px, 0.8fr) minmax(150px, 0.8fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.schedule-public__field {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.schedule-public__field > span {
+  color: var(--season-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.schedule-public__field input,
+.schedule-public__field select {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--season-line-strong);
+  border-radius: 4px;
+  outline: 0;
+  background: var(--season-surface);
+  color: var(--season-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.schedule-public__field input {
+  padding: 9px 12px;
+}
+
+.schedule-public__field select {
+  padding: 9px 34px 9px 12px;
+}
+
+.schedule-public__field input::placeholder {
+  color: var(--season-muted);
+  opacity: 0.72;
+}
+
+.schedule-public__field input:focus-visible,
+.schedule-public__field select:focus-visible,
+.schedule-public__tabs button:focus-visible,
+.schedule-public__group-summary-grid button:focus-visible {
+  border-color: var(--season-focus) !important;
+  outline: 3px solid color-mix(in srgb, var(--season-focus) 32%, transparent);
+  outline-offset: 2px;
+}
+
+.schedule-public__board,
+.schedule-public__group-overview,
+.schedule-public__group-board {
+  display: grid;
+  gap: 0;
+  padding: clamp(18px, 2.8vw, 30px);
+}
+
+.schedule-public__board > .season-section-header,
+.schedule-public__group-overview > .season-section-header,
+.schedule-public__group-board > .season-section-header {
+  margin-bottom: 8px;
+}
+
+.schedule-public__date-groups {
+  display: grid;
+  gap: 0;
+}
+
+.schedule-public__date-group {
+  min-width: 0;
+  padding-top: 22px;
+}
+
+.schedule-public__date-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--season-line-strong);
+}
+
+.schedule-public__date-heading h3 {
+  margin: 0;
+  color: var(--season-navy-950);
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+.schedule-public__date-heading span {
+  color: var(--season-muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.schedule-public__match-list {
+  display: grid;
+  gap: 0;
+}
+
+.schedule-public__match {
+  min-width: 0;
+  display: grid;
+  align-items: center;
+  gap: clamp(14px, 2vw, 24px);
+  padding: 18px 0;
+  border-bottom: 1px solid var(--season-line);
+  background: transparent;
+}
+
+.schedule-public__match:last-child {
+  border-bottom: 0;
+}
+
+.schedule-public__match--result {
+  grid-template-columns: minmax(140px, 0.48fr) minmax(320px, 1.6fr) auto;
+}
+
+.schedule-public__match--group {
+  grid-template-columns: minmax(170px, 0.65fr) minmax(300px, 1.5fr) minmax(210px, auto);
+}
+
+.schedule-public__match-meta,
+.schedule-public__match-date {
+  min-width: 0;
+  display: grid;
+  justify-items: start;
+  gap: 5px;
+}
+
+.schedule-public__match-meta time,
+.schedule-public__match-date strong {
+  color: var(--season-navy-950);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.schedule-public__match-meta > span:not(.season-badge),
+.schedule-public__match-date > span,
+.schedule-public__match-date > time {
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--season-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schedule-public__match-meta .season-badge {
+  margin-top: 3px;
+}
+
+.schedule-public__score {
+  min-width: 0;
+  display: grid;
+  border-top: 1px solid var(--season-line);
+  border-bottom: 1px solid var(--season-line);
+}
+
+.schedule-public__score > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 46px;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+}
+
+.schedule-public__score > div + div {
+  border-top: 1px solid var(--season-line);
+}
+
+.schedule-public__score span {
+  color: var(--season-muted);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+}
+
+.schedule-public__score strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--season-ink);
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schedule-public__score b {
+  color: var(--season-navy-950);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 25px;
+  font-weight: 900;
+  text-align: right;
+}
+
+.schedule-public__match-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.schedule-public__empty {
+  display: grid;
+  justify-items: start;
+  gap: 5px;
+  margin-top: 22px;
+  padding: 24px;
+  border: 1px dashed var(--season-line-strong);
+  border-radius: 4px;
+  background: var(--season-surface-muted);
+}
+
+.schedule-public__empty strong {
+  color: var(--season-ink);
+  font-size: 14px;
+}
+
+.schedule-public__empty span {
+  color: var(--season-muted);
+  font-size: 12px;
+}
+
+.schedule-public__more {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding-top: 24px;
+  border-top: 1px solid var(--season-line);
+}
+
+.schedule-public__more > span {
+  color: var(--season-muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.schedule-public__more-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.schedule-public__tabs {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--season-line);
+  border-radius: 4px;
+  background: var(--season-surface);
+}
+
+.schedule-public__tab-group {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 94px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.schedule-public__tab-group > div {
+  min-width: 0;
+  display: flex;
+  overflow-x: auto;
+  border: 1px solid var(--season-line);
+  border-radius: 2px;
+  scrollbar-width: thin;
+}
+
+.schedule-public__tabs button {
+  min-width: 70px;
+  min-height: 44px;
+  display: inline-flex;
+  flex: 1 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 0;
+  border-right: 1px solid var(--season-line);
+  border-radius: 0 !important;
+  background: var(--season-surface);
+  color: var(--season-muted);
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.schedule-public__tabs button:last-child {
+  border-right: 0;
+}
+
+.schedule-public__tabs button:hover {
+  background: var(--season-surface-muted);
+  color: var(--season-navy-950);
+}
+
+.schedule-public__tabs button.is-active {
+  border-bottom: 3px solid var(--season-blue-600);
+  background: var(--season-blue-100);
+  color: var(--season-navy-950);
+  box-shadow: none;
+}
+
+.schedule-public__tabs button small {
+  color: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  opacity: 0.78;
+}
+
+.schedule-public__group-overview {
+  gap: 18px;
+}
+
+.schedule-public__group-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  border: 1px solid var(--season-line);
+  border-radius: 2px;
+}
+
+.schedule-public__group-summary-grid button {
+  min-width: 0;
+  min-height: 104px;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 2px;
+  padding: 14px;
+  border: 0;
+  border-right: 1px solid var(--season-line);
+  border-radius: 0 !important;
+  background: var(--season-surface);
+  color: var(--season-ink);
+  box-shadow: none;
+  text-align: left;
+}
+
+.schedule-public__group-summary-grid button:last-child {
+  border-right: 0;
+}
+
+.schedule-public__group-summary-grid button:hover {
+  background: var(--season-surface-muted);
+}
+
+.schedule-public__group-summary-grid button > span {
+  color: var(--season-blue-700);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.schedule-public__group-summary-grid button > strong {
+  color: var(--season-navy-950);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.schedule-public__group-summary-grid button > small {
+  color: var(--season-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.schedule-public__group-list {
+  min-width: 0;
+  display: grid;
+  gap: 22px;
+}
+
+.schedule-public__group-list.is-all {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.schedule-public__group-board {
+  align-content: start;
+  border-top: 4px solid var(--season-navy-900);
+}
+
+.schedule-public__group-list.is-all .schedule-public__group-board {
+  padding: clamp(16px, 2vw, 22px);
+}
+
+.schedule-public__group-list.is-all .schedule-public__match--group {
+  grid-template-columns: minmax(120px, 0.62fr) minmax(210px, 1.4fr);
+}
+
+.schedule-public__group-list.is-all .schedule-public__match-actions {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+}
+
+.schedule-public__live-board {
+  gap: 20px;
+}
+
+.schedule-public__live-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.schedule-public__live-grid.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.schedule-public__live-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--season-line);
+  border-top: 4px solid var(--season-blue-600);
+  border-radius: 4px;
+  outline: 0;
+  background: var(--season-surface);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.schedule-public__live-card:hover {
+  border-color: var(--season-line-strong);
+  border-top-color: var(--season-blue-600);
+}
+
+.schedule-public__live-heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--season-line);
+  background: var(--season-surface);
+}
+
+.schedule-public__live-heading > div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.schedule-public__live-heading > div:first-child > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.schedule-public__live-heading strong {
+  overflow: hidden;
+  color: var(--season-navy-950);
+  font-size: 14px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schedule-public__live-heading span:not(.season-badge) {
+  overflow: hidden;
+  color: var(--season-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schedule-public__live-heading > div:last-child > .season-badge {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schedule-public__scoreboard-preview {
+  min-width: 0;
+  overflow: hidden;
+  background: var(--season-surface-muted);
+  cursor: pointer;
+}
+
+.schedule-public__empty--large {
+  min-height: 260px;
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+}
+
+.schedule-public__empty-mark {
+  display: grid;
+  width: 68px;
+  height: 68px;
+  place-items: center;
+  margin-bottom: 8px;
+  border: 2px solid var(--season-navy-900);
+  color: var(--season-navy-900) !important;
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 17px !important;
+  font-style: italic;
+  font-weight: 900 !important;
+}
+
+.schedule-public__practice-form {
+  min-width: 0;
+  display: grid;
+  gap: 22px;
+  padding: clamp(18px, 2.8vw, 30px);
+  border: 1px solid var(--season-line);
+  border-top: 4px solid var(--season-blue-600);
+  border-radius: 4px;
+  background: var(--season-surface);
+  box-shadow: none;
+}
+
+.schedule-public__practice-teams,
+.schedule-public__practice-details {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.schedule-public__practice-teams {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.schedule-public__practice-details {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.schedule-public__practice-teams fieldset {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--season-line);
+  border-radius: 2px;
+  background: var(--season-surface-muted);
+}
+
+.schedule-public__practice-teams legend {
+  padding: 0 7px;
+  color: var(--season-navy-950);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.schedule-public--practice input[type='datetime-local'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] .schedule-public--practice input[type='datetime-local'] {
+  color-scheme: dark;
+}
+
+.schedule-public__practice-submit {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+  border-top: 1px solid var(--season-line);
+}
+
+.schedule-public__practice-list {
+  display: grid;
+  gap: 0;
+}
+
+.schedule-public__practice-match {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(300px, 1.5fr) auto;
+  align-items: center;
+  gap: clamp(14px, 2vw, 24px);
+  padding: 18px 0;
+  border-bottom: 1px solid var(--season-line);
+}
+
+.schedule-public__practice-match:last-child {
+  border-bottom: 0;
+}
+
+.schedule-public__practice-meta {
+  min-width: 0;
+  display: grid;
+  justify-items: start;
+  gap: 5px;
+}
+
+.schedule-public__practice-meta time {
+  color: var(--season-navy-950);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.schedule-public__practice-meta > span {
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--season-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.schedule-public__practice-meta > div,
+.schedule-public__practice-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.schedule-public__practice-actions {
+  justify-content: flex-end;
+}
+
+@media (max-width: 1279px) {
+  .schedule-public__filter-grid {
+    grid-template-columns: minmax(240px, 2fr) repeat(2, minmax(150px, 1fr));
+  }
+
+  .schedule-public__filter-grid > .season-action {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
+
+  .schedule-public__group-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .schedule-public__group-summary-grid button:nth-child(4n) {
+    border-right: 0;
+  }
+
+  .schedule-public__group-summary-grid button:nth-child(-n + 4) {
+    border-bottom: 1px solid var(--season-line);
+  }
+
+  .schedule-public__group-list.is-all {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .schedule-public__group-list.is-all .schedule-public__match--group {
+    grid-template-columns: minmax(170px, 0.65fr) minmax(300px, 1.5fr) minmax(210px, auto);
+  }
+
+  .schedule-public__group-list.is-all .schedule-public__match-actions {
+    grid-column: auto;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 860px) {
+  .schedule-public .season-page-hero {
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .schedule-public__hero-aside {
+    min-width: 0;
+    grid-template-columns: auto auto 1fr;
+    align-items: baseline;
+    gap: 10px;
+    padding: 12px 0 0;
+    border-top: 1px solid var(--season-line);
+    border-left: 0;
+  }
+
+  .schedule-public__hero-aside strong {
+    font-size: 38px;
+  }
+
+  .schedule-public__filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .schedule-public__field--search {
+    grid-column: 1 / -1;
+  }
+
+  .schedule-public__match--result,
+  .schedule-public__match--group,
+  .schedule-public__group-list.is-all .schedule-public__match--group {
+    grid-template-columns: minmax(130px, 0.55fr) minmax(260px, 1.45fr);
+  }
+
+  .schedule-public__match--result > .season-action,
+  .schedule-public__match-actions,
+  .schedule-public__group-list.is-all .schedule-public__match-actions {
+    grid-column: 1 / -1;
+  }
+
+  .schedule-public__match--result > .season-action {
+    justify-self: end;
+  }
+
+  .schedule-public__match-actions,
+  .schedule-public__group-list.is-all .schedule-public__match-actions {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 640px) {
+  .schedule-public {
+    gap: 16px;
+  }
+
+  .schedule-public .season-page-hero {
+    padding: 30px 18px;
+  }
+
+  .schedule-public .season-page-hero__actions > .season-action {
+    width: 100%;
+  }
+
+  .schedule-public__hero-aside {
+    grid-template-columns: auto auto;
+  }
+
+  .schedule-public__hero-aside small {
+    grid-column: 1 / -1;
+    margin-top: 0;
+  }
+
+  .schedule-public__summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .schedule-public__metric {
+    border-right: 0;
+    border-bottom: 1px solid var(--season-line);
+  }
+
+  .schedule-public__metric:last-child {
+    border-bottom: 0;
+  }
+
+  .schedule-public__filter-heading {
+    align-items: start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .schedule-public__filter-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .schedule-public__field--search,
+  .schedule-public__filter-grid > .season-action {
+    grid-column: auto;
+  }
+
+  .schedule-public__filter-grid > .season-action {
+    width: 100%;
+  }
+
+  .schedule-public__board,
+  .schedule-public__group-overview,
+  .schedule-public__group-board,
+  .schedule-public__group-list.is-all .schedule-public__group-board {
+    padding: 16px;
+  }
+
+  .schedule-public .season-section-header {
+    align-items: start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .schedule-public__match--result,
+  .schedule-public__match--group,
+  .schedule-public__group-list.is-all .schedule-public__match--group {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 13px;
+  }
+
+  .schedule-public__match-meta,
+  .schedule-public__match-date {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: 10px;
+  }
+
+  .schedule-public__match-meta > .season-badge,
+  .schedule-public__match-date > span {
+    grid-column: 1 / -1;
+  }
+
+  .schedule-public__match--result > .season-action,
+  .schedule-public__match-actions,
+  .schedule-public__group-list.is-all .schedule-public__match-actions {
+    grid-column: auto;
+    width: 100%;
+  }
+
+  .schedule-public__match--result > .season-action {
+    justify-self: stretch;
+  }
+
+  .schedule-public__match-actions,
+  .schedule-public__group-list.is-all .schedule-public__match-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: stretch;
+  }
+
+  .schedule-public__match-actions .season-badge {
+    grid-column: 1 / -1;
+  }
+
+  .schedule-public__match-actions .season-action:only-of-type {
+    grid-column: 1 / -1;
+  }
+
+  .schedule-public__tab-group {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .schedule-public__group-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .schedule-public__group-summary-grid button,
+  .schedule-public__group-summary-grid button:nth-child(4n) {
+    border-right: 1px solid var(--season-line);
+    border-bottom: 1px solid var(--season-line);
+  }
+
+  .schedule-public__group-summary-grid button:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .schedule-public__group-summary-grid button:nth-last-child(-n + 2) {
+    border-bottom: 0;
+  }
+}
+
+@media (max-width: 390px) {
+  .schedule-public__filters,
+  .schedule-public__board,
+  .schedule-public__group-overview,
+  .schedule-public__group-board,
+  .schedule-public__group-list.is-all .schedule-public__group-board {
+    padding: 14px;
+  }
+
+  .schedule-public__score > div {
+    grid-template-columns: 36px minmax(0, 1fr) 32px;
+    gap: 7px;
+  }
+
+  .schedule-public__score strong {
+    font-size: 13px;
+  }
+
+  .schedule-public__match-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .schedule-public__match-actions .season-action,
+  .schedule-public__match-actions .season-badge {
+    grid-column: auto;
+    width: 100%;
+  }
+}
+
+@media (max-width: 1100px) {
+  .schedule-public__live-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .schedule-public__practice-match {
+    grid-template-columns: minmax(160px, 0.65fr) minmax(280px, 1.35fr);
+  }
+
+  .schedule-public__practice-actions {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .schedule-public__live-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .schedule-public__live-heading > div {
+    width: 100%;
+  }
+
+  .schedule-public__live-heading > div:last-child {
+    justify-content: space-between;
+  }
+
+  .schedule-public__scoreboard-preview > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .schedule-public__practice-teams,
+  .schedule-public__practice-details {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .schedule-public__practice-match {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .schedule-public__practice-actions {
+    grid-column: auto;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .schedule-public__live-board {
+    padding: 14px;
+  }
+
+  .schedule-public__live-heading {
+    padding: 12px;
+  }
+
+  .schedule-public__live-heading > div:first-child {
+    align-items: flex-start;
+  }
+
+  .schedule-public__live-heading > div:last-child {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .schedule-public__live-heading > div:last-child > .season-badge {
+    max-width: 100%;
+  }
+
+  .schedule-public__live-heading .season-action {
+    width: 100%;
+  }
+
+  .schedule-public__practice-form {
+    gap: 18px;
+    padding: 14px;
+  }
+
+  .schedule-public__practice-teams fieldset {
+    padding: 13px;
+  }
+
+  .schedule-public__practice-submit .season-action {
+    width: 100%;
+  }
+
+  .schedule-public__practice-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .schedule-public *,
+  .schedule-public *::before,
+  .schedule-public *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -13,7 +13,23 @@ import type {
 } from '../../shared/state/demoStore';
 import type { LeagueDivision } from '../../shared/types';
 import { useAdmin } from '../../shared/auth/useAdmin';
+import {
+  SeasonBadge,
+  SeasonButton,
+  type SeasonBadgeTone,
+} from '../../shared/components/season';
 import { useContent } from '../../shared/state/contentProvider';
+import './MatchSchedulePage.css';
+
+const MATCH_SECTION_PAGE_SIZE = 6;
+
+type MatchSectionKey = 'live' | 'upcoming' | 'past';
+
+const initialVisibleMatchCounts: Record<MatchSectionKey, number> = {
+  live: MATCH_SECTION_PAGE_SIZE,
+  upcoming: MATCH_SECTION_PAGE_SIZE,
+  past: MATCH_SECTION_PAGE_SIZE,
+};
 
 const emptyForm = {
   homeTeamName: '',
@@ -177,9 +193,9 @@ const normalizePlayerSlot = (player: PlayerSlot): PlayerSlot => ({
 
 type MatchDivisionCategory = 'LEAGUE' | 'PLAYOFF';
 
-const divisionStyles: Record<MatchDivisionCategory, { label: string; color: string }> = {
-  LEAGUE: { label: '리그', color: '#0ea5e9' },
-  PLAYOFF: { label: '플레이오프', color: '#f97316' },
+const divisionLabels: Record<MatchDivisionCategory, string> = {
+  LEAGUE: '리그',
+  PLAYOFF: '플레이오프',
 };
 
 const deriveDivision = (match: MatchSchedule): MatchDivisionCategory => {
@@ -211,13 +227,33 @@ function buildDateTimeIso(date: string, hour: string, minute: string) {
 function statusLabel(status: MatchStatus) {
   switch (status) {
     case 'completed':
-      return { text: '경기 종료', color: '#f97316', background: 'rgba(249,115,22,0.15)' };
+      return {
+        text: '경기 종료',
+        tone: 'navy' as SeasonBadgeTone,
+        color: 'var(--season-ink)',
+        background: 'var(--season-surface-muted)',
+      };
     case 'inProgress':
-      return { text: '진행 중', color: '#38bdf8', background: 'rgba(56,189,248,0.15)' };
+      return {
+        text: '진행 중',
+        tone: 'blue' as SeasonBadgeTone,
+        color: 'var(--season-blue-700)',
+        background: 'color-mix(in srgb, var(--season-blue-600) 10%, var(--season-surface))',
+      };
     case 'canceled':
-      return { text: '취소', color: '#94a3b8', background: 'rgba(148,163,184,0.18)' };
+      return {
+        text: '취소',
+        tone: 'muted' as SeasonBadgeTone,
+        color: 'var(--season-muted)',
+        background: 'var(--season-surface-muted)',
+      };
     default:
-      return { text: '예정', color: '#22c55e', background: 'rgba(34,197,94,0.15)' };
+      return {
+        text: '예정',
+        tone: 'muted' as SeasonBadgeTone,
+        color: 'var(--season-navy-900)',
+        background: 'var(--season-surface-muted)',
+      };
   }
 }
 
@@ -273,6 +309,9 @@ export default function MatchSchedulePage() {
     away: createEmptyBenchInput(),
   }));
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [visibleMatchCounts, setVisibleMatchCounts] = useState<Record<MatchSectionKey, number>>(
+    initialVisibleMatchCounts,
+  );
   const [nowTs, setNowTs] = useState<number>(() => Date.now());
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
@@ -309,12 +348,14 @@ export default function MatchSchedulePage() {
       (match) => match.status === 'scheduled' && getSafeTime(match.startTime) >= nowTs,
     );
     // [수정] match.status === 'scheduled' 이면 'inProgress'일 수 없으므로 redundant check 제거
-    const past = sortedMatches.filter(
-      (match) =>
-        match.status === 'completed' ||
-        match.status === 'canceled' ||
-        (match.status === 'scheduled' && getSafeTime(match.startTime) < nowTs),
-    );
+    const past = sortedMatches
+      .filter(
+        (match) =>
+          match.status === 'completed' ||
+          match.status === 'canceled' ||
+          (match.status === 'scheduled' && getSafeTime(match.startTime) < nowTs),
+      )
+      .reverse();
     return { live, upcoming, past };
   }, [sortedMatches, nowTs]);
 
@@ -526,211 +567,120 @@ export default function MatchSchedulePage() {
     const division = deriveDivision(match);
     const mode = match.recordMode ?? 'official';
     const scoreInputMode = match.scoreInputMode ?? 'live';
-    const quickActionStyle: CSSProperties = {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '6px',
-      padding: '8px 10px',
-      borderRadius: '999px',
-      border: '1px solid rgba(148,163,184,0.35)',
-      background: 'rgba(255,255,255,0.03)',
-      color: '#e2e8f0',
-      fontWeight: 800,
-      fontSize: '12px',
-      cursor: 'pointer',
-      transition: 'border-color 120ms ease, transform 120ms ease, background 120ms ease',
-    };
-    const quickActionDisabledStyle: CSSProperties = {
-      ...quickActionStyle,
-      border: '1px dashed rgba(248, 113, 113, 0.6)',
-      color: '#f87171',
-      background: 'rgba(248, 113, 113, 0.08)',
-      cursor: 'not-allowed',
-    };
     return (
-      <div
+      <article
         key={match.id}
-        className="schedule-match-row"
-        style={{
-          borderRadius: '16px',
-          border: isActive ? '1px solid rgba(249,115,22,0.6)' : '1px solid rgba(148,163,184,0.3)',
-          padding: '16px',
-          background: 'rgba(15,23,42,0.6)',
-          display: 'grid',
-          gap: '12px',
-        }}
+        className={`schedule-match-row schedule-match-card${isActive ? ' is-active' : ''}`}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '18px', fontWeight: 800 }}>
-                {match.awayTeamName} vs {match.homeTeamName}
-              </span>
-              <span
-                style={{
-                  padding: '4px 10px',
-                  borderRadius: '999px',
-                  color: badge.color,
-                  background: badge.background,
-                  fontSize: '12px',
-                  fontWeight: 800,
-                }}
-              >
-                {badge.text}
-              </span>
-              {isActive && <span style={{ fontSize: '12px', color: '#f97316' }}>선택됨</span>}
-              {mode === 'practice' && (
-                <span
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: '999px',
-                    background: 'rgba(16,185,129,0.16)',
-                    color: '#34d399',
-                    fontSize: '12px',
-                    fontWeight: 800,
-                  }}
-                >
-                  연습경기
-                </span>
-              )}
-              {scoreInputMode === 'manual' && (
-                <span
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: '999px',
-                    background: 'rgba(56,189,248,0.16)',
-                    color: '#67e8f9',
-                    fontSize: '12px',
-                    fontWeight: 800,
-                  }}
-                >
-                  수기 입력
-                </span>
-              )}
+        <div className="schedule-match-card__header">
+          <div className="schedule-match-card__identity">
+            <div className="schedule-match-card__badges">
+              <SeasonBadge tone={badge.tone}>{badge.text}</SeasonBadge>
+              <SeasonBadge tone={division === 'PLAYOFF' ? 'blue' : 'navy'}>
+                {divisionLabels[division]}
+              </SeasonBadge>
+              {isActive ? <SeasonBadge tone="blue">선택됨</SeasonBadge> : null}
+              {mode === 'practice' ? <SeasonBadge tone="muted">연습경기</SeasonBadge> : null}
+              {scoreInputMode === 'manual' ? <SeasonBadge tone="blue">수기 입력</SeasonBadge> : null}
             </div>
-            <div style={{ color: '#94a3b8', marginTop: '4px', fontSize: '13px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-              <span>
-                {formatDateTimeLabel(match.startTime)} · {match.venue}
-              </span>
-              {division && (
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '4px 10px',
-                    borderRadius: '999px',
-                    border: `1px solid ${divisionStyles[division].color}55`,
-                    background: `${divisionStyles[division].color}14`,
-                    color: divisionStyles[division].color,
-                    fontWeight: 800,
-                    fontSize: '12px',
-                  }}
-                >
-                  <span style={{ width: '10px', height: '10px', borderRadius: '999px', background: divisionStyles[division].color }} />
-                  {divisionStyles[division].label}
-                </span>
-              )}
-            </div>
+            <h3>
+              <span>{match.awayTeamName}</span>
+              <small>vs</small>
+              <span>{match.homeTeamName}</span>
+            </h3>
+            <p>
+              <time dateTime={match.startTime}>{formatDateTimeLabel(match.startTime)}</time>
+              <span aria-hidden="true">·</span>
+              <span>{match.venue}</span>
+            </p>
           </div>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-            {match.status === 'completed' && (
-              <span style={{ fontWeight: 700, color: '#e2e8f0' }}>
-                결과: {match.awayScore ?? 0} - {match.homeScore ?? 0}
-              </span>
-            )}
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <button type="button" onClick={() => goTo('/scoreboard-text')} style={quickActionStyle} title={textButtonLabel}>
-                <span aria-hidden>💬</span>
-                {textButtonLabel}
-              </button>
-              <button
-                type="button"
-                onClick={() => hasLiveOverlay && goTo('/live-overlay')}
-                style={hasLiveOverlay ? quickActionStyle : quickActionDisabledStyle}
-                title={hasLiveOverlay ? '라이브 오버레이' : '기록원에서 유튜브 링크 미입력'}
-                disabled={!hasLiveOverlay}
-              >
-                <span aria-hidden>{hasLiveOverlay ? '🛰️' : '🚫'}</span>
-                {hasLiveOverlay ? '라이브 오버레이' : '라이브 없음'}
-              </button>
-              <button
-                type="button"
-                onClick={(e) => goToScorekeeper(e.currentTarget)}
-                onMouseEnter={(e) => {
-                  if (!canUseScorekeeper) showScorekeeperBlockedTooltip(e.currentTarget);
-                }}
-                onMouseLeave={() => setTooltip(null)}
-                onFocus={(e) => {
-                  if (!canUseScorekeeper) showScorekeeperBlockedTooltip(e.currentTarget);
-                }}
-                onBlur={() => setTooltip(null)}
-                style={{
-                  ...quickActionStyle,
-                  cursor: canUseScorekeeper ? 'pointer' : 'not-allowed',
-                  color: canUseScorekeeper ? quickActionStyle.color : 'rgba(203,213,225,0.6)',
-                }}
-                title="기록원"
-              >
-                <span aria-hidden>📝</span>
-                기록원
-              </button>
+          {match.status === 'completed' ? (
+            <div className="schedule-match-card__result" aria-label="최종 스코어">
+              <span>FINAL</span>
+              <strong>{match.awayScore ?? 0}</strong>
+              <small>—</small>
+              <strong>{match.homeScore ?? 0}</strong>
             </div>
-            <button
-              type="button"
-              onClick={(e) => {
-                if (!canEdit) {
-                  showBlockedTooltip(e.currentTarget);
-                  return;
-                }
-                handleEditLineups(match);
-              }}
-              onMouseEnter={(e) => {
-                if (!canEdit) showBlockedTooltip(e.currentTarget);
-              }}
-              onMouseLeave={() => setTooltip(null)}
-              onFocus={(e) => {
-                if (!canEdit) showBlockedTooltip(e.currentTarget);
-              }}
-              onBlur={() => setTooltip(null)}
-              style={{
-                ...secondaryButtonStyle,
-                cursor: canEdit ? 'pointer' : 'not-allowed',
-                color: canEdit ? secondaryButtonStyle.color : 'rgba(203,213,225,0.65)',
-                border: canEdit ? secondaryButtonStyle.border : '1px solid rgba(148,163,184,0.35)',
-                background: canEdit ? secondaryButtonStyle.background : 'rgba(255,255,255,0.04)',
-              }}
-            >
-              라인업 편집
-            </button>
-            {canEdit && (
-              <button
-                type="button"
-                onClick={() =>
-                  actions.updateMatch(match.id, {
-                    scoreInputMode: scoreInputMode === 'manual' ? 'live' : 'manual',
-                  })
-                }
-                style={{
-                  ...secondaryButtonStyle,
-                  border:
-                    scoreInputMode === 'manual'
-                      ? '1px solid rgba(56,189,248,0.65)'
-                      : '1px solid rgba(148,163,184,0.3)',
-                  color: scoreInputMode === 'manual' ? '#67e8f9' : '#cbd5e1',
-                  background:
-                    scoreInputMode === 'manual'
-                      ? 'rgba(56,189,248,0.14)'
-                      : 'rgba(148,163,184,0.08)',
-                }}
-              >
-                {scoreInputMode === 'manual' ? '실시간 입력으로 변경' : '실시간 기록 안함'}
-              </button>
-            )}
-          </div>
+          ) : null}
         </div>
 
-        {match.notes && <div style={{ color: '#cbd5e1', fontSize: '13px' }}>메모: {match.notes}</div>}
+        <div className="schedule-match-card__actions" aria-label={`${match.awayTeamName} 대 ${match.homeTeamName} 경기 메뉴`}>
+          <SeasonButton
+            variant="secondary"
+            size="compact"
+            onClick={() => goTo('/scoreboard-text')}
+            title={textButtonLabel}
+          >
+            {textButtonLabel}
+          </SeasonButton>
+          <SeasonButton
+            variant="ghost"
+            size="compact"
+            onClick={() => hasLiveOverlay && goTo('/live-overlay')}
+            title={hasLiveOverlay ? '라이브 오버레이' : '기록원에서 유튜브 링크 미입력'}
+            disabled={!hasLiveOverlay}
+          >
+            {hasLiveOverlay ? '라이브 오버레이' : '라이브 없음'}
+          </SeasonButton>
+          <SeasonButton
+            variant="ghost"
+            size="compact"
+            className={canUseScorekeeper ? '' : 'is-permission-limited'}
+            aria-disabled={!canUseScorekeeper}
+            onClick={(e) => goToScorekeeper(e.currentTarget)}
+            onMouseEnter={(e) => {
+              if (!canUseScorekeeper) showScorekeeperBlockedTooltip(e.currentTarget);
+            }}
+            onMouseLeave={() => setTooltip(null)}
+            onFocus={(e) => {
+              if (!canUseScorekeeper) showScorekeeperBlockedTooltip(e.currentTarget);
+            }}
+            onBlur={() => setTooltip(null)}
+            title="기록원"
+          >
+            기록원
+          </SeasonButton>
+          <SeasonButton
+            variant="ghost"
+            size="compact"
+            className={canEdit ? '' : 'is-permission-limited'}
+            aria-disabled={!canEdit}
+            onClick={(e) => {
+              if (!canEdit) {
+                showBlockedTooltip(e.currentTarget);
+                return;
+              }
+              handleEditLineups(match);
+            }}
+            onMouseEnter={(e) => {
+              if (!canEdit) showBlockedTooltip(e.currentTarget);
+            }}
+            onMouseLeave={() => setTooltip(null)}
+            onFocus={(e) => {
+              if (!canEdit) showBlockedTooltip(e.currentTarget);
+            }}
+            onBlur={() => setTooltip(null)}
+          >
+            라인업 편집
+          </SeasonButton>
+          {canEdit ? (
+            <SeasonButton
+              variant={scoreInputMode === 'manual' ? 'secondary' : 'ghost'}
+              size="compact"
+              onClick={() =>
+                actions.updateMatch(match.id, {
+                  scoreInputMode: scoreInputMode === 'manual' ? 'live' : 'manual',
+                })
+              }
+            >
+              {scoreInputMode === 'manual' ? '실시간 입력으로 변경' : '실시간 기록 안함'}
+            </SeasonButton>
+          ) : null}
+        </div>
+
+        {match.notes ? (
+          <p className="schedule-match-card__notes"><strong>메모</strong>{match.notes}</p>
+        ) : null}
 
         {match.status === 'completed' && match.postGame && <CompletedResultCard match={match} />}
 
@@ -823,56 +773,109 @@ export default function MatchSchedulePage() {
             </div>
           </div>
         )}
-      </div>
+      </article>
     );
   };
 
-  const renderSection = (title: string, matches: MatchSchedule[], emptyText: string) => (
-    <section
-      className="schedule-board"
-      style={{
-        border: '1px solid rgba(148,163,184,0.2)',
-        borderRadius: '14px',
-        padding: '12px',
-        background: 'rgba(15,23,42,0.4)',
-        display: 'grid',
-        gap: '12px',
-      }}
-    >
-      <div className="schedule-board__heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ fontWeight: 900, fontSize: '17px', color: '#e2e8f0' }}>{title}</span>
-          <span
+  const renderSection = (
+    sectionKey: MatchSectionKey,
+    title: string,
+    matches: MatchSchedule[],
+    emptyText: string,
+  ) => {
+    const visibleCount = visibleMatchCounts[sectionKey];
+    const visibleMatches = matches.slice(0, visibleCount);
+    const shownCount = visibleMatches.length;
+    const hasMore = shownCount < matches.length;
+    const canCollapse = visibleCount > MATCH_SECTION_PAGE_SIZE;
+    const listId = `schedule-${sectionKey}-matches`;
+
+    return (
+      <section
+        className="schedule-board"
+        style={{
+          border: '1px solid rgba(148,163,184,0.2)',
+          borderRadius: '14px',
+          padding: '12px',
+          background: 'rgba(15,23,42,0.4)',
+          display: 'grid',
+          gap: '12px',
+        }}
+      >
+        <div className="schedule-board__heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontWeight: 900, fontSize: '17px', color: '#e2e8f0' }}>{title}</span>
+            <span
+              style={{
+                padding: '4px 8px',
+                borderRadius: '999px',
+                background: 'rgba(148,163,184,0.16)',
+                color: '#cbd5e1',
+                fontWeight: 800,
+                fontSize: '12px',
+              }}
+            >
+              {matches.length} 경기
+            </span>
+          </div>
+        </div>
+        {matches.length ? (
+          <>
+            <div id={listId} style={{ display: 'grid', gap: '12px' }}>{visibleMatches.map(renderMatchCard)}</div>
+            {(hasMore || canCollapse) && (
+              <div className="schedule-board__pagination">
+                <span aria-live="polite">{shownCount} / {matches.length} 경기 표시</span>
+                <div>
+                  {canCollapse && (
+                    <SeasonButton
+                      variant="ghost"
+                      size="compact"
+                      aria-controls={listId}
+                      onClick={() =>
+                        setVisibleMatchCounts((current) => ({
+                          ...current,
+                          [sectionKey]: MATCH_SECTION_PAGE_SIZE,
+                        }))
+                      }
+                    >
+                      접기
+                    </SeasonButton>
+                  )}
+                  {hasMore && (
+                    <SeasonButton
+                      variant="secondary"
+                      size="compact"
+                      aria-controls={listId}
+                      onClick={() =>
+                        setVisibleMatchCounts((current) => ({
+                          ...current,
+                          [sectionKey]: current[sectionKey] + MATCH_SECTION_PAGE_SIZE,
+                        }))
+                      }
+                    >
+                      {Math.min(MATCH_SECTION_PAGE_SIZE, matches.length - shownCount)}경기 더 보기
+                    </SeasonButton>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div
             style={{
-              padding: '4px 8px',
-              borderRadius: '999px',
-              background: 'rgba(148,163,184,0.16)',
-              color: '#cbd5e1',
-              fontWeight: 800,
-              fontSize: '12px',
+              borderRadius: '12px',
+              padding: '14px',
+              background: 'rgba(255,255,255,0.02)',
+              color: '#94a3b8',
+              fontWeight: 700,
             }}
           >
-            {matches.length} 경기
-          </span>
-        </div>
-      </div>
-      {matches.length ? (
-        <div style={{ display: 'grid', gap: '12px' }}>{matches.map(renderMatchCard)}</div>
-      ) : (
-        <div
-          style={{
-            borderRadius: '12px',
-            padding: '14px',
-            background: 'rgba(255,255,255,0.02)',
-            color: '#94a3b8',
-            fontWeight: 700,
-          }}
-        >
-          {emptyText}
-        </div>
-      )}
-    </section>
-  );
+            {emptyText}
+          </div>
+        )}
+      </section>
+    );
+  };
 
   return (
     <>
@@ -1330,9 +1333,9 @@ export default function MatchSchedulePage() {
 
       {viewMode === 'list' ? (
         <div className="schedule-page__sections" style={{ display: 'grid', gap: '14px' }}>
-          {renderSection('진행 중 경기', categorizedMatches.live, '현재 진행 중인 경기가 없습니다.')}
-          {renderSection('예정된 경기', categorizedMatches.upcoming, '예정된 경기가 없습니다.')}
-          {renderSection('종료된 경기', categorizedMatches.past, '지난 경기가 없습니다.')}
+          {renderSection('live', '진행 중 경기', categorizedMatches.live, '현재 진행 중인 경기가 없습니다.')}
+          {renderSection('upcoming', '예정된 경기', categorizedMatches.upcoming, '예정된 경기가 없습니다.')}
+          {renderSection('past', '종료된 경기', categorizedMatches.past, '지난 경기가 없습니다.')}
         </div>
       ) : (
         <div
@@ -1498,64 +1501,50 @@ function CompletedResultCard({ match }: { match: MatchSchedule }) {
   const detail = match.postGame as PostGameRecord | undefined;
   if (!detail) return null;
   const teams = { home: match.homeTeamName, away: match.awayTeamName };
+  const detailsId = `match-result-details-${match.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
   return (
-    <div
-      style={{
-        border: '1px solid rgba(148,163,184,0.3)',
-        borderRadius: '12px',
-        padding: '12px',
-        background: 'rgba(255,255,255,0.02)',
-        display: 'grid',
-        gap: '10px',
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-      <div style={{ display: 'grid', gap: '4px' }}>
-        <span style={{ fontWeight: 900, color: '#e2e8f0' }}>경기 결과</span>
-        <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>박스스코어와 투수·타자 기록을 바로 확인하세요.</span>
-      </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-          {detail.note && <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>{detail.note}</span>}
+    <section className="match-result-card">
+      <header className="match-result-card__header">
+        <div className="match-result-card__heading">
+          <span className="match-result-card__eyebrow">FINAL REPORT</span>
+          <strong>경기 결과</strong>
+          <span>박스스코어와 투수·타자 기록을 바로 확인하세요.</span>
+        </div>
+        <div className="match-result-card__actions">
+          {detail.note && <span className="match-result-card__note">{detail.note}</span>}
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
-            style={{
-              padding: '6px 10px',
-              borderRadius: '10px',
-              border: '1px solid rgba(148,163,184,0.35)',
-              background: 'rgba(255,255,255,0.04)',
-              color: '#e2e8f0',
-              fontWeight: 800,
-              fontSize: '12px',
-              cursor: 'pointer',
-            }}
+            className="match-result-card__toggle"
+            aria-expanded={open}
+            aria-controls={detailsId}
           >
             {open ? '접기' : '펼치기'}
           </button>
         </div>
-      </div>
+      </header>
 
       {open && (
-        <>
+        <div id={detailsId} className="match-result-card__body">
           <LineScoreCompact teams={teams} detail={detail} />
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
-            <TeamTotalsPill title={`${teams.away} 타격 요약`} totals={detail.teamBatterSummary?.away} color="#60a5fa" />
-            <TeamTotalsPill title={`${teams.home} 타격 요약`} totals={detail.teamBatterSummary?.home} color="#f97316" />
+          <div className="match-result-card__summary-grid">
+            <TeamTotalsPill title={`${teams.away} 타격 요약`} totals={detail.teamBatterSummary?.away} />
+            <TeamTotalsPill title={`${teams.home} 타격 요약`} totals={detail.teamBatterSummary?.home} />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '8px' }}>
-            <PitchingMiniTable title={`${teams.away} 투수`} color="#60a5fa" pitchers={detail.pitchers?.away ?? []} />
-            <PitchingMiniTable title={`${teams.home} 투수`} color="#f97316" pitchers={detail.pitchers?.home ?? []} />
+          <div className="match-result-card__table-grid">
+            <PitchingMiniTable title={`${teams.away} 투수`} pitchers={detail.pitchers?.away ?? []} />
+            <PitchingMiniTable title={`${teams.home} 투수`} pitchers={detail.pitchers?.home ?? []} />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '8px' }}>
-            <BattingMiniTable title={`${teams.away} 타자`} color="#60a5fa" batters={detail.batters?.away ?? []} />
-            <BattingMiniTable title={`${teams.home} 타자`} color="#f97316" batters={detail.batters?.home ?? []} />
+          <div className="match-result-card__table-grid">
+            <BattingMiniTable title={`${teams.away} 타자`} batters={detail.batters?.away ?? []} />
+            <BattingMiniTable title={`${teams.home} 타자`} batters={detail.batters?.home ?? []} />
           </div>
-        </>
+        </div>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -1563,7 +1552,6 @@ function CompletedResultCard({ match }: { match: MatchSchedule }) {
 interface LineScoreCell {
   text: string;
   bold?: boolean;
-  color?: string;
 }
 
 function LineScoreCompact({ teams, detail }: { teams: { home: string; away: string }; detail: PostGameRecord }) {
@@ -1571,8 +1559,8 @@ function LineScoreCompact({ teams, detail }: { teams: { home: string; away: stri
   const innings = detail.lineScore.innings || [];
   const header = ['팀', ...innings, 'R', 'H', 'E', 'LOB'];
   // [수정] 반환 타입 명시
-  const row = (label: string, scores: number[] = [], totals?: { runs?: number; hits?: number; errors?: number; lob?: number }, color?: string): LineScoreCell[] => [
-    { text: label, bold: true, color },
+  const row = (label: string, scores: number[] = [], totals?: { runs?: number; hits?: number; errors?: number; lob?: number }): LineScoreCell[] => [
+    { text: label, bold: true },
     ...innings.map((_, idx) => ({ text: scores[idx] != null ? String(scores[idx]) : '-' })),
     { text: totals?.runs != null ? String(totals.runs) : '-', bold: true },
     { text: totals?.hits != null ? String(totals.hits) : '-' },
@@ -1580,42 +1568,29 @@ function LineScoreCompact({ teams, detail }: { teams: { home: string; away: stri
     { text: totals?.lob != null ? String(totals.lob) : '-' },
   ];
   const rows = [
-    row(teams.away, detail.lineScore.away, detail.totals?.away, '#60a5fa'),
-    row(teams.home, detail.lineScore.home, detail.totals?.home, '#f97316'),
+    row(teams.away, detail.lineScore.away, detail.totals?.away),
+    row(teams.home, detail.lineScore.home, detail.totals?.home),
   ];
   return (
-    <div
-      style={{
-        border: '1px solid rgba(148,163,184,0.25)',
-        borderRadius: '10px',
-        overflow: 'hidden',
-      }}
-    >
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${header.length}, minmax(0, 1fr))`, background: 'rgba(255,255,255,0.03)' }}>
-        {header.map((h) => (
-          <div key={h} style={{ padding: '6px', textAlign: 'center', fontWeight: 900, color: '#e2e8f0', fontSize: '12px' }}>
-            {h}
-          </div>
-        ))}
-      </div>
-      {rows.map((cells, ridx) => (
-        <div key={ridx} style={{ display: 'grid', gridTemplateColumns: `repeat(${header.length}, minmax(0, 1fr))`, borderTop: '1px solid rgba(148,163,184,0.2)' }}>
-          {cells.map((cell, cidx) => (
-            <div
-              key={cidx}
-              style={{
-                padding: '6px',
-                textAlign: 'center',
-                color: cell.color ?? '#cbd5e1',
-                fontWeight: cell.bold ? 800 : 700,
-                fontSize: '12px',
-              }}
-            >
-              {cell.text}
-            </div>
+    <div className="match-result-table-scroll">
+      <table className="match-result-table match-result-table--line-score">
+        <thead>
+          <tr>
+            {header.map((heading) => <th key={heading}>{heading}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((cells, rowIndex) => (
+            <tr key={rowIndex}>
+              {cells.map((cell, cellIndex) => (
+                <td key={cellIndex} className={cellIndex === 0 ? 'match-result-table__player' : undefined}>
+                  {cell.bold ? <strong>{cell.text}</strong> : cell.text}
+                </td>
+              ))}
+            </tr>
           ))}
-        </div>
-      ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -1623,11 +1598,9 @@ function LineScoreCompact({ teams, detail }: { teams: { home: string; away: stri
 function TeamTotalsPill({
   title,
   totals,
-  color,
 }: {
   title: string;
   totals?: { ab?: number; h?: number; rbi?: number; r?: number; sb?: number };
-  color: string;
 }) {
   const items = [
     { label: '타수', value: totals?.ab },
@@ -1637,105 +1610,65 @@ function TeamTotalsPill({
     { label: '도루', value: totals?.sb },
   ].filter((item) => item.value != null);
   return (
-    <div
-      style={{
-        border: '1px solid rgba(148,163,184,0.25)',
-        borderRadius: '10px',
-        padding: '10px',
-        background: 'rgba(255,255,255,0.02)',
-        display: 'grid',
-        gap: '6px',
-      }}
-    >
-      <span style={{ fontWeight: 800, color: '#e2e8f0' }}>{title}</span>
+    <section className="match-result-summary">
+      <strong className="match-result-summary__title">{title}</strong>
       {items.length ? (
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        <dl className="match-result-summary__metrics">
           {items.map((item) => (
-            <span
-              key={item.label}
-              style={{
-                padding: '6px 10px',
-                borderRadius: '10px',
-                border: `1px solid ${color}55`,
-                background: 'rgba(255,255,255,0.03)',
-                color,
-                fontWeight: 800,
-                fontSize: '12px',
-              }}
-            >
-              {item.label}: {item.value}
-            </span>
+            <div key={item.label}>
+              <dt>{item.label}</dt>
+              <dd>{item.value}</dd>
+            </div>
           ))}
-        </div>
+        </dl>
       ) : (
-        <span style={{ color: '#94a3b8', fontSize: '12px' }}>요약 없음</span>
+        <span className="match-result-card__empty">요약 없음</span>
       )}
-    </div>
+    </section>
   );
 }
 
 function PitchingMiniTable({
   title,
   pitchers,
-  color,
 }: {
   title: string;
   pitchers: PostGamePitcher[];
-  color: string;
 }) {
   const header = ['투수', 'IP', 'BF', 'H', 'HR', 'BB', 'HBP', 'SO', 'R', 'ER', 'NP'];
   // [수정] v가 unknown 타입이므로 렌더링 안전성을 위해 String()으로 명시적 변환
   const value = (v: unknown) => (v == null ? '-' : String(v));
   
   return (
-    <div
-      style={{
-        border: '1px solid rgba(148,163,184,0.25)',
-        borderRadius: '10px',
-        padding: '10px',
-        background: 'rgba(255,255,255,0.02)',
-        display: 'grid',
-        gap: '6px',
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 800, color: '#e2e8f0' }}>{title}</span>
-        <span style={{ color: '#94a3b8', fontSize: '12px' }}>{pitchers.length}명</span>
+    <section className="match-result-stat-table">
+      <header>
+        <strong>{title}</strong>
+        <span>{pitchers.length}명</span>
+      </header>
+      <div className="match-result-table-scroll">
+        <table className="match-result-table match-result-table--pitching">
+          <thead><tr>{header.map((heading) => <th key={heading}>{heading}</th>)}</tr></thead>
+          <tbody>
+            {pitchers.map((pitcher, rowIndex) => (
+              <tr key={`${pitcher.name}-${rowIndex}`}>
+                {[pitcher.name, pitcher.ip, pitcher.bf, pitcher.h, pitcher.hr, pitcher.bb, pitcher.hbp, pitcher.so, pitcher.r, pitcher.er, pitcher.pitches].map((cell, cellIndex) => (
+                  <td key={cellIndex} className={cellIndex === 0 ? 'match-result-table__player' : undefined}>{value(cell)}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${header.length}, minmax(40px, 1fr))`, gap: '4px' }}>
-        {header.map((h) => (
-          <div key={h} style={{ textAlign: 'center', fontWeight: 800, color: '#cbd5e1', fontSize: '11px' }}>
-            {h}
-          </div>
-        ))}
-        {pitchers.map((p) =>
-          [p.name, p.ip, p.bf, p.h, p.hr, p.bb, p.hbp, p.so, p.r, p.er, p.pitches].map((v, idx) => (
-            <div
-              key={`${p.name}-${idx}`}
-              style={{
-                textAlign: 'center',
-                color: idx === 0 ? color : '#e2e8f0',
-                fontWeight: idx === 0 ? 800 : 700,
-                fontSize: '12px',
-              }}
-            >
-              {value(v)}
-            </div>
-          )),
-        )}
-      </div>
-    </div>
+    </section>
   );
 }
 
 function BattingMiniTable({
   title,
   batters,
-  color,
 }: {
   title: string;
   batters: PostGameBatter[];
-  color: string;
 }) {
   if (!batters.length) return null;
   const header = ['순번', '선수', '포지션', 'AB', 'H', 'R', 'RBI', 'SB', 'AVG', '시즌'];
@@ -1748,54 +1681,45 @@ function BattingMiniTable({
     return fixed.startsWith('0') ? fixed.slice(1) : fixed;
   };
   return (
-    <div
-      style={{
-        border: '1px solid rgba(148,163,184,0.25)',
-        borderRadius: '10px',
-        padding: '10px',
-        background: 'rgba(255,255,255,0.02)',
-        display: 'grid',
-        gap: '6px',
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 800, color: '#e2e8f0' }}>{title}</span>
-        <span style={{ color: '#94a3b8', fontSize: '12px' }}>{batters.length}명</span>
+    <section className="match-result-stat-table">
+      <header>
+        <strong>{title}</strong>
+        <span>{batters.length}명</span>
+      </header>
+      <div className="match-result-table-scroll">
+        <table className="match-result-table match-result-table--batting">
+          <thead><tr>{header.map((heading) => <th key={heading}>{heading}</th>)}</tr></thead>
+          <tbody>
+            {batters.map((batter, rowIndex) => {
+              const cells = [
+                batter.order ?? '-',
+                batter.name,
+                batter.pos ?? batter.slot ?? '-',
+                batter.ab,
+                batter.h,
+                batter.r,
+                batter.rbi,
+                batter.sb,
+                formatAvg(typeof batter.avg === 'number' ? batter.avg : (batter.avg as unknown as number)),
+                formatAvg(typeof batter.seasonAvg === 'number' ? batter.seasonAvg : (batter.seasonAvg as unknown as number)),
+              ];
+              return (
+                <tr key={`${batter.name}-${rowIndex}`}>
+                  {cells.map((cell, cellIndex) => (
+                    <td
+                      key={cellIndex}
+                      className={cellIndex === 0 ? 'match-result-table__leading' : cellIndex === 1 ? 'match-result-table__player' : undefined}
+                    >
+                      {value(cell)}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${header.length}, minmax(48px, 1fr))`, gap: '4px' }}>
-        {header.map((h) => (
-          <div key={h} style={{ textAlign: 'center', fontWeight: 800, color: '#cbd5e1', fontSize: '11px' }}>
-            {h}
-          </div>
-        ))}
-        {batters.map((b) =>
-          [
-            b.order ?? '-',
-            b.name,
-            b.pos ?? b.slot ?? '-',
-            b.ab,
-            b.h,
-            b.r,
-            b.rbi,
-            b.sb,
-            formatAvg(typeof b.avg === 'number' ? b.avg : (b.avg as unknown as number)),
-            formatAvg(typeof b.seasonAvg === 'number' ? b.seasonAvg : (b.seasonAvg as unknown as number)),
-          ].map((v, idx) => (
-            <div
-              key={`${b.name}-${idx}`}
-              style={{
-                textAlign: 'center',
-                color: idx === 1 ? color : '#e2e8f0',
-                fontWeight: idx <= 2 ? 800 : 700,
-                fontSize: '12px',
-              }}
-            >
-              {value(v)}
-            </div>
-          )),
-        )}
-      </div>
-    </div>
+    </section>
   );
 }
 

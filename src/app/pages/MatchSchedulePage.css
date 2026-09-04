@@ -1,0 +1,480 @@
+.match-result-card {
+  --match-result-heading-background: #0a2457;
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--season-line);
+  border-left: 4px solid var(--season-blue-600);
+  border-radius: 4px;
+  background: var(--season-surface);
+  color: var(--season-ink);
+}
+
+.schedule-board__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--season-line);
+}
+
+.schedule-board__pagination > span {
+  color: var(--season-muted);
+  font-size: 12px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.schedule-board__pagination > div {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.schedule-match-card {
+  position: relative;
+  min-width: 0;
+  display: grid !important;
+  gap: 14px !important;
+  color: var(--season-ink);
+}
+
+.schedule-match-card.is-active::before {
+  content: '';
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: -16px;
+  width: 3px;
+  background: var(--season-blue-600);
+}
+
+.schedule-match-card__header {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+}
+
+.schedule-match-card__identity {
+  min-width: 0;
+  display: grid;
+  gap: 9px;
+}
+
+.schedule-match-card__badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.schedule-match-card__identity h3 {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  margin: 0;
+  color: var(--season-navy-950);
+  font-size: clamp(17px, 2vw, 21px);
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  line-height: 1.25;
+}
+
+.schedule-match-card__identity h3 span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.schedule-match-card__identity h3 small {
+  flex: 0 0 auto;
+  color: var(--season-blue-700);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 11px;
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.schedule-match-card__identity p {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--season-muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+  flex-wrap: wrap;
+}
+
+.schedule-match-card__result {
+  display: grid;
+  grid-template-columns: auto auto auto auto;
+  align-items: center;
+  gap: 9px;
+  min-width: 150px;
+  padding: 10px 12px;
+  border: 1px solid var(--season-line);
+  border-radius: 2px;
+  background: var(--season-surface-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.schedule-match-card__result span {
+  color: var(--season-blue-700);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 10px;
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.schedule-match-card__result strong {
+  color: var(--season-navy-950);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 25px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.schedule-match-card__result small {
+  color: var(--season-muted);
+  font-size: 12px;
+}
+
+.schedule-match-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-top: 12px;
+  border-top: 1px solid var(--season-line);
+  flex-wrap: wrap;
+}
+
+.schedule-match-card__actions .season-action {
+  min-height: 44px;
+}
+
+.schedule-match-card__actions .season-action:disabled,
+.schedule-match-card__actions .season-action.is-permission-limited {
+  border-color: var(--season-line);
+  background: transparent;
+  color: var(--season-muted);
+  opacity: 0.62;
+  box-shadow: none;
+  transform: none;
+}
+
+.schedule-match-card__actions .season-action.is-permission-limited {
+  cursor: not-allowed;
+}
+
+.schedule-match-card__notes {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--season-line-strong);
+  background: var(--season-surface-muted);
+  color: var(--season-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.schedule-match-card__notes strong {
+  flex: 0 0 auto;
+  color: var(--season-ink);
+  font-weight: 900;
+}
+
+.match-result-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+}
+
+.match-result-card__heading {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.match-result-card__eyebrow {
+  color: var(--season-blue-700);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 10px;
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: 0.13em;
+}
+
+.match-result-card__heading strong {
+  color: var(--season-navy-950);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.match-result-card__heading > span:last-child,
+.match-result-card__note,
+.match-result-card__empty {
+  color: var(--season-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.match-result-card__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.match-result-card__toggle {
+  min-height: 44px !important;
+  padding: 9px 12px !important;
+  border: 1px solid var(--season-line-strong) !important;
+  border-radius: 2px !important;
+  background: var(--season-surface) !important;
+  color: var(--season-navy-900) !important;
+  box-shadow: none !important;
+  font-size: 12px !important;
+}
+
+.match-result-card__body {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px 16px;
+  border-top: 1px solid var(--season-line);
+  background: var(--season-surface-muted);
+}
+
+.match-result-card__summary-grid,
+.match-result-card__table-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.match-result-summary,
+.match-result-stat-table {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+  border: 1px solid var(--season-line);
+  border-radius: 2px;
+  background: var(--season-surface);
+  padding: 12px;
+}
+
+.match-result-summary__title,
+.match-result-stat-table > header strong {
+  color: var(--season-navy-950);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.match-result-summary__metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(50px, 1fr));
+  gap: 0;
+  margin: 0;
+  border: 1px solid var(--season-line);
+}
+
+.match-result-summary__metrics > div {
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  border-right: 1px solid var(--season-line);
+  text-align: center;
+}
+
+.match-result-summary__metrics > div:last-child {
+  border-right: 0;
+}
+
+.match-result-summary__metrics dt {
+  color: var(--season-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.match-result-summary__metrics dd {
+  margin: 0;
+  color: var(--season-navy-900);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.match-result-stat-table > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.match-result-stat-table > header span {
+  color: var(--season-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.match-result-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--season-line);
+  scrollbar-color: var(--season-line-strong) transparent;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.match-result-table {
+  width: 100%;
+  min-width: 600px;
+  border-collapse: separate !important;
+  border-spacing: 0;
+  color: var(--season-ink);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.match-result-table--line-score {
+  min-width: 520px;
+}
+
+.match-result-table--batting {
+  min-width: 660px;
+}
+
+.match-result-table th,
+.match-result-table td {
+  min-width: 46px;
+  padding: 8px 7px !important;
+  border-right: 1px solid var(--season-line);
+  border-bottom: 1px solid var(--season-line);
+  background: var(--season-surface);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.match-result-table th {
+  background: var(--match-result-heading-background) !important;
+  color: #ffffff !important;
+  font-weight: 850;
+}
+
+.match-result-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.match-result-table th:last-child,
+.match-result-table td:last-child {
+  border-right: 0;
+}
+
+.match-result-table tbody tr:nth-child(even) td {
+  background: var(--season-surface-muted);
+}
+
+.match-result-table__leading,
+.match-result-table__player {
+  position: sticky;
+  z-index: 2;
+}
+
+.match-result-table__leading {
+  left: 0;
+  min-width: 46px !important;
+}
+
+.match-result-table__player {
+  left: 0;
+  min-width: 110px !important;
+  color: var(--season-navy-900);
+  font-weight: 900;
+  text-align: left !important;
+}
+
+.match-result-table--batting .match-result-table__player {
+  left: 46px;
+}
+
+:root[data-theme='dark'] .match-result-card {
+  --match-result-heading-background: #153a6b;
+}
+
+@media (max-width: 720px) {
+  .schedule-match-card__header {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .schedule-match-card__identity h3 {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .schedule-match-card__identity h3 span:last-child {
+    text-align: right;
+  }
+
+  .schedule-match-card__result {
+    width: 100%;
+    grid-template-columns: 1fr auto auto auto;
+  }
+
+  .schedule-match-card__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .schedule-match-card__actions .season-action {
+    width: 100%;
+  }
+
+  .schedule-board__pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .schedule-board__pagination > div {
+    justify-content: stretch;
+  }
+
+  .schedule-board__pagination .season-action {
+    flex: 1 1 auto;
+  }
+
+  .match-result-card__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .match-result-card__actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .match-result-card__summary-grid,
+  .match-result-card__table-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .match-result-summary__metrics {
+    grid-template-columns: repeat(5, minmax(54px, 1fr));
+    overflow-x: auto;
+  }
+}

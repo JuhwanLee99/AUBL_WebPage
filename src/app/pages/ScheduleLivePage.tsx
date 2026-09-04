@@ -1,10 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { useNavigate } from 'react-router-dom';
+import IndependentScoreboardPanel from '../../features/scoreboard/components/IndependentScoreboardPanel';
+import {
+  PageHero,
+  SectionHeader,
+  SeasonBadge,
+  SeasonButton,
+  SeasonLinkButton,
+} from '../../shared/components/season';
 import { firestore } from '../../shared/firebase/client';
 import { useDemoStore } from '../../shared/state/demoStore';
 import type { MatchSchedule } from '../../shared/state/demoStore';
-import IndependentScoreboardPanel from '../../features/scoreboard/components/IndependentScoreboardPanel';
+import './SchedulePublicPages.css';
 
 function safeMatchTime(value: unknown): number {
   if (typeof value !== 'string') return 0;
@@ -12,12 +20,26 @@ function safeMatchTime(value: unknown): number {
   return Number.isNaN(time) ? 0 : time;
 }
 
+const formatMatchMeta = (match: MatchSchedule) => {
+  const date = new Date(match.startTime);
+  const dateLabel = Number.isNaN(date.getTime())
+    ? '일정 미정'
+    : new Intl.DateTimeFormat('ko-KR', {
+        month: 'long',
+        day: 'numeric',
+        weekday: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }).format(date);
+  return `${dateLabel} · ${match.venue || '장소 미정'}`;
+};
+
 export default function ScheduleLivePage() {
   const { state, actions } = useDemoStore();
   const navigate = useNavigate();
   const [liveMatchesRealtime, setLiveMatchesRealtime] = useState<MatchSchedule[]>([]);
 
-  // 라이브 경기 계산
   const liveMatches = useMemo(() => {
     const source = liveMatchesRealtime.length ? liveMatchesRealtime : state.matches;
     return source
@@ -25,14 +47,15 @@ export default function ScheduleLivePage() {
       .sort((a, b) => safeMatchTime(a.startTime) - safeMatchTime(b.startTime));
   }, [liveMatchesRealtime, state.matches]);
 
-  // 전체 일정 로드
   useEffect(() => {
     void actions.loadFullSchedule();
   }, [actions]);
 
-  // 실시간 진행 중인 경기 구독
   useEffect(() => {
-    const liveQuery = query(collection(firestore, 'matches'), where('status', '==', 'inProgress'));
+    const liveQuery = query(
+      collection(firestore, 'matches'),
+      where('status', '==', 'inProgress'),
+    );
     const unsub = onSnapshot(
       liveQuery,
       (snap) => {
@@ -42,8 +65,11 @@ export default function ScheduleLivePage() {
         }));
         setLiveMatchesRealtime(
           incoming
-            .filter((m) => !m.deleted)
-            .sort((a, b) => safeMatchTime(a.startTime || '') - safeMatchTime(b.startTime || '')) as MatchSchedule[],
+            .filter((match) => !match.deleted)
+            .sort(
+              (a, b) =>
+                safeMatchTime(a.startTime || '') - safeMatchTime(b.startTime || ''),
+            ) as MatchSchedule[],
         );
       },
       (error) => {
@@ -54,157 +80,87 @@ export default function ScheduleLivePage() {
     return unsub;
   }, []);
 
+  const openMatch = (matchId: string) => {
+    actions.selectMatch(matchId);
+    navigate(`/scoreboard-text/${matchId}`);
+  };
+
   return (
-    <div className="schedule-page schedule-page--live" style={{ display: 'grid', gap: '24px', padding: '0 0 40px' }}>
-      {/* 헤더 */}
-      <header className="schedule-page__hero" style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-        <div>
-          <span className="schedule-page__eyebrow">2026 SEASON · LIVE CENTER</span>
-          <h1 style={{ fontSize: '32px', fontWeight: 900, margin: 0, color: '#f8fafc' }}>
-            실시간 경기 전광판
-          </h1>
-          <p style={{ color: '#94a3b8', margin: '8px 0 0', fontSize: '15px' }}>
-            진행 중인 모든 경기의 전광판을 한눈에 확인하세요
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-          <button
-            type="button"
-            onClick={() => navigate('/schedule')}
-            style={{
-              padding: '12px 16px',
-              borderRadius: '12px',
-              border: '1px solid rgba(148,163,184,0.4)',
-              background: 'rgba(255,255,255,0.04)',
-              color: '#e2e8f0',
-              fontWeight: 800,
-              cursor: 'pointer',
-              fontSize: '14px',
-            }}
-          >
-            전체 일정 보기
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/')}
-            style={{
-              padding: '12px 16px',
-              borderRadius: '12px',
-              border: '1px solid rgba(148,163,184,0.4)',
-              background: 'rgba(255,255,255,0.04)',
-              color: '#e2e8f0',
-              fontWeight: 800,
-              cursor: 'pointer',
-              fontSize: '14px',
-            }}
-          >
-            홈으로
-          </button>
-        </div>
-      </header>
-
-      {liveMatches.length === 0 ? (
-        <div
-          className="schedule-empty"
-          style={{
-            borderRadius: '18px',
-            padding: '80px 20px',
-            border: '1px solid rgba(148,163,184,0.25)',
-            background: 'linear-gradient(145deg, rgba(15,23,42,0.92), rgba(15,23,42,0.75))',
-            textAlign: 'center',
-          }}
-        >
-          <div style={{ fontSize: '64px', marginBottom: '20px' }}>⚾</div>
-          <div style={{ fontSize: '24px', fontWeight: 800, color: '#e2e8f0', marginBottom: '12px' }}>
-            진행 중인 경기가 없습니다
+    <div className="schedule-public schedule-public--live">
+      <PageHero
+        eyebrow="2026 SEASON · LIVE CENTER"
+        title="실시간 경기 전광판"
+        description={<p>진행 중인 모든 경기의 전광판을 한 화면에서 확인할 수 있습니다.</p>}
+        actions={
+          <>
+            <SeasonLinkButton to="/schedule" variant="secondary">
+              전체 일정 보기
+            </SeasonLinkButton>
+            <SeasonLinkButton to="/" variant="ghost">
+              홈으로
+            </SeasonLinkButton>
+          </>
+        }
+        aside={
+          <div className="schedule-public__hero-aside" aria-label="실시간 경기 수">
+            <span>LIVE GAMES</span>
+            <strong>{liveMatches.length}</strong>
+            <small>현재 진행 중</small>
           </div>
-          <p style={{ color: '#94a3b8', fontSize: '16px', margin: 0 }}>
-            경기가 시작되면 실시간 전광판이 표시됩니다
-          </p>
-        </div>
-      ) : (
-        <div
-          className="schedule-live-grid"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: liveMatches.length === 1 ? '1fr' : 'repeat(auto-fit, minmax(min(100%, 600px), 1fr))',
-            gap: '24px',
-          }}
-        >
-          {liveMatches.map((match) => {
-            // 각 경기마다 임시로 선택하여 전광판 표시
-            return (
-              <div
-                key={match.id}
-                className="schedule-live-card"
-                style={{
-                  borderRadius: '16px',
-                  overflow: 'hidden',
-                  border: '2px solid rgba(56, 189, 248, 0.3)',
-                  background: '#050505',
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-                }}
-                onClick={() => {
-                  actions.selectMatch(match.id);
-                  navigate('/scoreboard-text/' + match.id);
-                }}
-              >
-                {/* 경기 정보 헤더 */}
-                <div
-                  className="schedule-live-card__heading"
-                  style={{
-                    padding: '12px 16px',
-                    background: 'linear-gradient(90deg, rgba(56, 189, 248, 0.15), rgba(99, 102, 241, 0.10))',
-                    borderBottom: '1px solid rgba(56, 189, 248, 0.2)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span
-                      style={{
-                        padding: '4px 10px',
-                        borderRadius: '999px',
-                        background: 'rgba(248, 113, 113, 0.2)',
-                        color: '#fca5a5',
-                        fontWeight: 900,
-                        fontSize: '11px',
-                        letterSpacing: '0.08em',
-                        border: '1px solid rgba(248, 113, 113, 0.4)',
-                      }}
-                    >
-                      LIVE
-                    </span>
-                    <span style={{ color: '#cbd5e1', fontWeight: 700, fontSize: '13px' }}>
-                      {match.awayTeamName} vs {match.homeTeamName}
-                    </span>
-                  </div>
-                  {match.notes && (
-                    <span
-                      style={{
-                        padding: '4px 8px',
-                        borderRadius: '6px',
-                        background: 'rgba(34, 197, 94, 0.14)',
-                        color: '#86efac',
-                        fontWeight: 800,
-                        fontSize: '11px',
-                      }}
-                    >
-                      {match.notes}
-                    </span>
-                  )}
-                </div>
+        }
+      />
 
-                {/* 전광판 */}
+      <section className="schedule-public__board schedule-public__live-board" aria-labelledby="live-board-title">
+        <SectionHeader
+          eyebrow="LIVE SCOREBOARD"
+          title="진행 중인 경기"
+          description="경기 카드를 선택하면 해당 경기의 문자중계 상세 화면으로 이동합니다."
+          headingId="live-board-title"
+          action={<SeasonBadge tone={liveMatches.length ? 'blue' : 'muted'}>{liveMatches.length} 경기</SeasonBadge>}
+        />
+
+        {liveMatches.length === 0 ? (
+          <div className="schedule-public__empty schedule-public__empty--large" role="status">
+            <span className="schedule-public__empty-mark" aria-hidden="true">AUBL</span>
+            <strong>진행 중인 경기가 없습니다.</strong>
+            <span>경기가 시작되면 실시간 전광판이 이곳에 표시됩니다.</span>
+          </div>
+        ) : (
+          <div className={`schedule-public__live-grid${liveMatches.length === 1 ? ' is-single' : ''}`}>
+            {liveMatches.map((match) => (
+              <article
+                key={match.id}
+                className="schedule-public__live-card"
+                onClick={() => openMatch(match.id)}
+              >
+                <header className="schedule-public__live-heading">
+                  <div>
+                    <SeasonBadge tone="blue">LIVE</SeasonBadge>
+                    <div>
+                      <strong>{match.awayTeamName} vs {match.homeTeamName}</strong>
+                      <span>{formatMatchMeta(match)}</span>
+                    </div>
+                  </div>
+                  <div>
+                    {match.notes ? <SeasonBadge tone="muted">{match.notes}</SeasonBadge> : null}
+                    <SeasonButton
+                      variant="secondary"
+                      size="compact"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openMatch(match.id);
+                      }}
+                    >
+                      중계 보기
+                    </SeasonButton>
+                  </div>
+                </header>
+
                 <div
-                  style={{
-                    cursor: 'pointer',
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    actions.selectMatch(match.id);
-                    navigate('/scoreboard-text/' + match.id);
+                  className="schedule-public__scoreboard-preview"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openMatch(match.id);
                   }}
                 >
                   <IndependentScoreboardPanel
@@ -215,11 +171,11 @@ export default function ScheduleLivePage() {
                     }}
                   />
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
