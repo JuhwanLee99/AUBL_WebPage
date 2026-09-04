@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import gsap from 'gsap';
+import './UserManualPage.css';
 
 /* ─── 타입 ─── */
 
 type ManualSection = {
   id: string;
   title: string;
-  icon: string;
-  accent: string;
   items: ManualItem[];
 };
 
@@ -34,8 +33,6 @@ const WEB_GUEST_SECTIONS: ManualSection[] = [
   {
     id: 'web-guest-main',
     title: '메인 및 리그 정보',
-    icon: '🏠',
-    accent: '#60A5FA',
     items: [
       {
         heading: '랜딩 페이지 (/)',
@@ -71,8 +68,6 @@ const WEB_GUEST_SECTIONS: ManualSection[] = [
   {
     id: 'web-guest-schedule',
     title: '경기 일정 및 결과',
-    icon: '📅',
-    accent: '#22C55E',
     items: [
       { heading: '경기 일정 (/schedule)', bullets: ['전체 일정을 리스트/캘린더 기반으로 탐색합니다.'] },
       { heading: '라이브 일정 (/schedule/live)', bullets: ['현재 진행 중인 경기만 모아서 확인합니다.'] },
@@ -84,8 +79,6 @@ const WEB_GUEST_SECTIONS: ManualSection[] = [
   {
     id: 'web-guest-records',
     title: '순위 및 기록실',
-    icon: '📊',
-    accent: '#F97316',
     items: [
       {
         heading: '기록 허브 (/records)',
@@ -103,8 +96,6 @@ const WEB_GUEST_SECTIONS: ManualSection[] = [
   {
     id: 'web-guest-live',
     title: '경기 중계 시청',
-    icon: '📺',
-    accent: '#A855F7',
     items: [
       { heading: '스코어보드 (/scoreboard)', bullets: ['라이브 점수, 이닝, BSO(볼-스트라이크-아웃), 라인스코어를 실시간으로 확인합니다.'] },
       { heading: '문자 중계 (/scoreboard-text)', bullets: ['텍스트 기반으로 실시간 경기 상황을 확인합니다.'] },
@@ -117,8 +108,6 @@ const WEB_MEMBER_SECTIONS: ManualSection[] = [
   {
     id: 'web-member-auth',
     title: '로그인 및 계정 관리',
-    icon: '🔐',
-    accent: '#60A5FA',
     items: [
       {
         heading: '로그인/회원가입 (/login)',
@@ -137,8 +126,6 @@ const WEB_MEMBER_SECTIONS: ManualSection[] = [
   {
     id: 'web-member-community',
     title: '커뮤니티 이용',
-    icon: '💬',
-    accent: '#22C55E',
     items: [
       { heading: '커뮤니티 메인 (/community)', bullets: ['공지, 건의/문의, 선수 등록, 갤러리 최근 글을 한눈에 확인합니다.'] },
       { heading: '공지 목록 (/community/notices)', bullets: ['카테고리(일반/경기공지/징계/긴급) 기반으로 공지를 확인합니다.'] },
@@ -175,8 +162,6 @@ const WEB_MEMBER_SECTIONS: ManualSection[] = [
   {
     id: 'web-member-team',
     title: '팀 상세 및 팀 공지',
-    icon: '⚾',
-    accent: '#F97316',
     items: [
       { heading: '팀 상세 (/teams/:teamId)', bullets: ['팀 소개, 로스터, 팀 공지를 확인합니다.'] },
       {
@@ -192,8 +177,6 @@ const WEB_MEMBER_SECTIONS: ManualSection[] = [
   {
     id: 'web-member-coach',
     title: '감독(Coach) 팀 홈 관리',
-    icon: '👨‍💼',
-    accent: '#A855F7',
     items: [
       { heading: '팀 브랜딩/소개 관리', bullets: ['엠블럼(로고) URL 변경, 짧은 소개/상세 소개/연혁 수정'] },
       { heading: '팀 일정 운영 관리', bullets: ['팀 홈에서 예정/진행 경기 및 최근 결과 빠르게 확인', '전체 일정(/schedule)·결과(/schedule/results) 화면에서 관리'] },
@@ -210,8 +193,6 @@ const WEB_ADMIN_SECTIONS: ManualSection[] = [
   {
     id: 'web-admin-panel',
     title: '관리자 패널 (/admin)',
-    icon: '🛡️',
-    accent: '#EF4444',
     items: [
       { heading: '랜딩 관리 (/admin/landing)', bullets: ['LIVE INFO 티커, 메인 히어로 문구, 스냅샷 카드 등을 편집합니다.'] },
       { heading: '리그 소개 관리 (/admin/intro)', bullets: ['소개/히스토리/구조/포스트시즌 등 소개 콘텐츠를 편집합니다.'] },
@@ -225,8 +206,6 @@ const WEB_ADMIN_SECTIONS: ManualSection[] = [
   {
     id: 'web-admin-community',
     title: '공지 및 건의/문의 관리',
-    icon: '💬',
-    accent: '#22C55E',
     items: [
       {
         heading: '공지사항 작성 (/community/notices/new)',
@@ -249,8 +228,6 @@ const WEB_ADMIN_SECTIONS: ManualSection[] = [
   {
     id: 'web-admin-schedule',
     title: '경기 일정 관리',
-    icon: '📋',
-    accent: '#F97316',
     items: [
       {
         heading: '일정 관리 (/schedule/manage)',
@@ -261,8 +238,6 @@ const WEB_ADMIN_SECTIONS: ManualSection[] = [
   {
     id: 'web-admin-game-edit',
     title: '경기 기록 수정 (/admin/games)',
-    icon: '✏️',
-    accent: '#F59E0B',
     items: [
       {
         heading: '경기 목록 (/admin/games)',
@@ -301,8 +276,6 @@ const WEB_ADMIN_SECTIONS: ManualSection[] = [
   {
     id: 'web-admin-scorekeeper',
     title: '전자 기록지 작성',
-    icon: '📝',
-    accent: '#22C55E',
     items: [
       {
         heading: '기록지 (/scorekeeper) — PC/태블릿 가로 모드 권장',
@@ -319,8 +292,6 @@ const WEB_ADMIN_SECTIONS: ManualSection[] = [
   {
     id: 'web-admin-live',
     title: '라이브 방송 제어',
-    icon: '🎬',
-    accent: '#A855F7',
     items: [
       {
         heading: '스코어보드 / 문자중계 / 오버레이',
@@ -362,8 +333,6 @@ const APP_GUEST_SECTIONS: ManualSection[] = [
   {
     id: 'app-guest-main',
     title: '메인 및 리그 정보',
-    icon: '🏠',
-    accent: '#60A5FA',
     items: [
       {
         heading: '홈 탭',
@@ -388,8 +357,6 @@ const APP_GUEST_SECTIONS: ManualSection[] = [
   {
     id: 'app-guest-schedule',
     title: '경기 일정 및 결과',
-    icon: '📅',
-    accent: '#22C55E',
     items: [
       {
         heading: '일정 탭',
@@ -410,8 +377,6 @@ const APP_GUEST_SECTIONS: ManualSection[] = [
   {
     id: 'app-guest-records',
     title: '순위 및 기록실',
-    icon: '📊',
-    accent: '#F97316',
     items: [
       {
         heading: '기록 탭',
@@ -426,8 +391,6 @@ const APP_GUEST_SECTIONS: ManualSection[] = [
   {
     id: 'app-guest-live',
     title: '경기 중계 시청',
-    icon: '📺',
-    accent: '#A855F7',
     items: [
       {
         heading: '문자중계',
@@ -444,8 +407,6 @@ const APP_MEMBER_SECTIONS: ManualSection[] = [
   {
     id: 'app-member-auth',
     title: '로그인 및 계정 관리',
-    icon: '🔐',
-    accent: '#60A5FA',
     items: [
       {
         heading: '첫 실행 온보딩',
@@ -470,8 +431,6 @@ const APP_MEMBER_SECTIONS: ManualSection[] = [
   {
     id: 'app-member-community',
     title: '커뮤니티 이용',
-    icon: '💬',
-    accent: '#22C55E',
     items: [
       {
         heading: '공지사항',
@@ -507,8 +466,6 @@ const APP_MEMBER_SECTIONS: ManualSection[] = [
   {
     id: 'app-member-team',
     title: '팀 상세 및 팀 공지',
-    icon: '⚾',
-    accent: '#F97316',
     items: [
       {
         heading: '팀 상세',
@@ -527,8 +484,6 @@ const APP_MEMBER_SECTIONS: ManualSection[] = [
   {
     id: 'app-member-notification',
     title: '알림 설정',
-    icon: '🔔',
-    accent: '#FBBF24',
     items: [
       {
         heading: '더보기 > 알림 설정',
@@ -545,8 +500,6 @@ const APP_MEMBER_SECTIONS: ManualSection[] = [
   {
     id: 'app-member-coach',
     title: '감독(Coach) 팀 홈 관리',
-    icon: '👨‍💼',
-    accent: '#A855F7',
     items: [
       { heading: '팀 브랜딩/소개', bullets: ['웹 팀 홈에서 로고 변경, 팀 설명 추가/수정'] },
       { heading: '팀 일정 운영', bullets: ['앱에서 예정/진행/최근 경기 확인', '웹 일정 화면으로 이동해 일정 운영'] },
@@ -560,8 +513,6 @@ const APP_ADMIN_SECTIONS: ManualSection[] = [
   {
     id: 'app-admin-menu',
     title: '관리자 메뉴',
-    icon: '🛡️',
-    accent: '#EF4444',
     items: [
       {
         heading: '더보기 > 관리자 섹션',
@@ -572,8 +523,6 @@ const APP_ADMIN_SECTIONS: ManualSection[] = [
   {
     id: 'app-admin-community',
     title: '건의/문의 처리 상태 관리',
-    icon: '💬',
-    accent: '#22C55E',
     items: [
       {
         heading: '건의/문의 상세 화면 (관리자)',
@@ -588,8 +537,6 @@ const APP_ADMIN_SECTIONS: ManualSection[] = [
   {
     id: 'app-admin-schedule',
     title: '경기 일정 관리',
-    icon: '📋',
-    accent: '#F97316',
     items: [
       {
         heading: '더보기 > 일정 관리',
@@ -600,8 +547,6 @@ const APP_ADMIN_SECTIONS: ManualSection[] = [
   {
     id: 'app-admin-panel',
     title: '관리자 패널',
-    icon: '⚙️',
-    accent: '#60A5FA',
     items: [
       {
         heading: '더보기 > 관리자 패널',
@@ -612,8 +557,6 @@ const APP_ADMIN_SECTIONS: ManualSection[] = [
   {
     id: 'app-admin-game-edit',
     title: '경기 기록 수정 (/admin/games)',
-    icon: '✏️',
-    accent: '#F59E0B',
     items: [
       {
         heading: '더보기 > 관리자 패널 > 경기 기록 수정',
@@ -630,8 +573,6 @@ const APP_ADMIN_SECTIONS: ManualSection[] = [
   {
     id: 'app-admin-scorekeeper',
     title: '전자 기록지 작성',
-    icon: '📝',
-    accent: '#22C55E',
     items: [
       {
         heading: '더보기 > 기록원',
@@ -648,8 +589,6 @@ const APP_ADMIN_SECTIONS: ManualSection[] = [
   {
     id: 'app-admin-live',
     title: '라이브 방송 제어',
-    icon: '🎬',
-    accent: '#A855F7',
     items: [
       {
         heading: '더보기 > 스코어보드',
@@ -702,20 +641,18 @@ const TROUBLESHOOTING_MAP: Record<PlatformTab, TroubleshootItem[]> = {
   '앱': APP_TROUBLESHOOTING,
 };
 
-const PLATFORM_META: Record<PlatformTab, { badge: string; title: string; description: string; note: string; gradient: string }> = {
+const PLATFORM_META: Record<PlatformTab, { badge: string; title: string; description: string; note: string }> = {
   '웹': {
     badge: 'AUBL · WEB MANUAL',
     title: 'AUBL 웹 플랫폼 사용 설명서',
     description: '방문자, 일반 회원, 관리자/기록원별로 웹에서 사용 가능한 기능을 안내합니다.',
     note: '브라우저 권장: 최신 Chrome, Safari, Edge',
-    gradient: 'radial-gradient(circle at 10% 20%, rgba(96,165,250,0.14), transparent 30%), radial-gradient(circle at 88% 5%, rgba(34,197,94,0.12), transparent 24%), linear-gradient(140deg, #0a1a3f 0%, #0f2f8f 100%)',
   },
   '앱': {
     badge: 'AUBL · APP MANUAL',
     title: 'AUBL 앱 사용 설명서',
     description: '방문자, 일반 회원, 관리자/기록원별로 앱에서 사용 가능한 기능을 안내합니다.',
     note: '하단 탭: 홈 · 팀 · 일정 · 기록 · 커뮤니티 · 더보기 | 일부 관리 기능은 WebView로 연결',
-    gradient: 'radial-gradient(circle at 10% 20%, rgba(34,197,94,0.14), transparent 30%), radial-gradient(circle at 88% 5%, rgba(168,85,247,0.12), transparent 24%), linear-gradient(140deg, #0a1a3f 0%, #1e3a5f 100%)',
   },
 };
 
@@ -723,24 +660,8 @@ const PLATFORM_META: Record<PlatformTab, { badge: string; title: string; descrip
 
 function ScreenshotSlot({ label }: { label: string }) {
   return (
-    <div
-      style={{
-        width: '100%',
-        aspectRatio: '16/9',
-        borderRadius: '12px',
-        border: '2px dashed rgba(148,163,184,0.3)',
-        background: 'rgba(255,255,255,0.02)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '8px',
-        color: '#64748B',
-        fontSize: '13px',
-        marginTop: '12px',
-      }}
-    >
-      <span style={{ fontSize: '28px', opacity: 0.5 }}>🖼️</span>
+    <div className="manual-screenshot">
+      <span className="manual-screenshot__eyebrow">SCREENSHOT</span>
       <span>스크린샷: {label}</span>
     </div>
   );
@@ -754,6 +675,11 @@ function SectionAccordion({ section }: { section: ManualSection }) {
 
   useEffect(() => {
     if (!bodyRef.current) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      bodyRef.current.style.height = open ? 'auto' : '0px';
+      bodyRef.current.style.opacity = open ? '1' : '0';
+      return;
+    }
     if (open) {
       gsap.fromTo(bodyRef.current, { height: 0, opacity: 0 }, { height: 'auto', opacity: 1, duration: 0.35, ease: 'power2.out' });
     } else {
@@ -762,70 +688,38 @@ function SectionAccordion({ section }: { section: ManualSection }) {
   }, [open]);
 
   return (
-    <div
-      style={{
-        borderRadius: '16px',
-        border: `1px solid ${open ? section.accent + '55' : 'rgba(148,163,184,0.2)'}`,
-        background: open ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.01)',
-        transition: 'border-color 0.3s, background 0.3s',
-        overflow: 'hidden',
-      }}
-    >
+    <div className={`manual-accordion${open ? ' is-open' : ''}`}>
       <button
+        type="button"
         onClick={() => setOpen((v) => !v)}
-        style={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '12px',
-          padding: '18px 20px',
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          color: '#e2e8f0',
-          textAlign: 'left',
-        }}
+        className="manual-accordion__trigger"
+        aria-expanded={open}
+        aria-controls={`manual-section-${section.id}`}
       >
-        <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ fontSize: '18px' }}>{section.icon}</span>
-          <span style={{ fontWeight: 800, fontSize: 'clamp(15px, 4vw, 17px)' }}>{section.title}</span>
+        <span className="manual-accordion__title">
+          <span className="manual-accordion__marker" aria-hidden="true" />
+          <span>{section.title}</span>
         </span>
-        <span
-          style={{
-            fontSize: '18px',
-            fontWeight: 700,
-            color: '#94a3b8',
-            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
-            transition: 'transform 0.3s',
-            flexShrink: 0,
-          }}
-        >
+        <span className="manual-accordion__chevron" aria-hidden="true">
           ▾
         </span>
       </button>
 
-      <div ref={bodyRef} style={{ height: 0, opacity: 0, overflow: 'hidden' }}>
-        <div style={{ display: 'grid', gap: '20px', padding: '0 20px 20px' }}>
+      <div
+        id={`manual-section-${section.id}`}
+        ref={bodyRef}
+        className="manual-accordion__body"
+        aria-hidden={!open}
+        style={{ height: 0, opacity: 0 }}
+      >
+        <div className="manual-accordion__content">
           {section.items.map((item) => (
-            <div key={item.heading}>
-              <p style={{ margin: 0, fontWeight: 800, fontSize: '15px', color: section.accent, marginBottom: '8px' }}>
-                {item.heading}
-              </p>
-              <div style={{ display: 'grid', gap: '4px' }}>
+            <div key={item.heading} className="manual-topic">
+              <h3>{item.heading}</h3>
+              <div className="manual-topic__bullets">
                 {item.bullets.map((bullet, i) => (
-                  <p
-                    key={i}
-                    style={{
-                      margin: 0,
-                      color: '#cbd5e1',
-                      lineHeight: 1.7,
-                      fontSize: 'clamp(13px, 3.4vw, 14px)',
-                      paddingLeft: '12px',
-                      position: 'relative',
-                    }}
-                  >
-                    <span style={{ position: 'absolute', left: 0, color: section.accent }}>•</span>
+                  <p key={i}>
+                    <span aria-hidden="true">•</span>
                     {bullet}
                   </p>
                 ))}
@@ -834,7 +728,7 @@ function SectionAccordion({ section }: { section: ManualSection }) {
                 <img
                   src={item.screenshot}
                   alt={item.heading}
-                  style={{ width: '100%', borderRadius: '12px', marginTop: '12px', border: '1px solid rgba(148,163,184,0.2)' }}
+                  className="manual-topic__image"
                 />
               ) : (
                 <ScreenshotSlot label={item.heading} />
@@ -855,6 +749,7 @@ export default function UserManualPage() {
   const pageRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
     const ctx = gsap.context(() => {
       const blocks = pageRef.current?.querySelectorAll('.manual-chunk');
       if (blocks) {
@@ -865,6 +760,7 @@ export default function UserManualPage() {
   }, []);
 
   useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
     const ctx = gsap.context(() => {
       const sections = pageRef.current?.querySelectorAll('.manual-section');
       if (sections) {
@@ -879,88 +775,31 @@ export default function UserManualPage() {
   const troubleshooting = TROUBLESHOOTING_MAP[platform];
 
   return (
-    <div className="season-content-page manual-page" style={{ display: 'grid', gap: '28px' }} ref={pageRef}>
+    <div className="season-content-page manual-page" ref={pageRef}>
       {/* ── 헤더 ── */}
-      <section
-        className="manual-chunk"
-        style={{
-          display: 'grid',
-          gap: '14px',
-          padding: 'clamp(24px, 6vw, 34px)',
-          borderRadius: 'var(--surface-radius-lg, 24px)',
-          background: meta.gradient,
-          border: '1px solid rgba(148,163,184,0.25)',
-          boxShadow: '0 24px 60px rgba(0,0,0,0.35)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          <span
-            style={{
-              padding: '8px 12px',
-              borderRadius: '999px',
-              fontWeight: 800,
-              letterSpacing: '0.05em',
-              background: 'rgba(96,165,250,0.16)',
-              color: '#bfdbfe',
-              border: '1px solid rgba(96,165,250,0.35)',
-              fontSize: 'clamp(11px, 2.8vw, 12px)',
-            }}
-          >
-            {meta.badge}
-          </span>
-        </div>
-        <h2 style={{ margin: 0, fontSize: 'clamp(22px, 5.5vw, 32px)', lineHeight: 1.25, fontWeight: 900 }}>
-          {meta.title}
-        </h2>
-        <p style={{ margin: 0, color: '#cbd5e1', lineHeight: 1.7, maxWidth: '800px', fontSize: 'clamp(14px, 3.6vw, 15px)' }}>
-          {meta.description}
-        </p>
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-          <span style={{ color: '#94a3b8', fontSize: '12px' }}>{meta.note}</span>
-        </div>
-        <Link
-          to="/"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            color: '#93c5fd',
-            fontWeight: 700,
-            fontSize: 'clamp(13px, 3.4vw, 14px)',
-          }}
-        >
+      <section className="manual-chunk manual-hero">
+        <p className="manual-eyebrow">{meta.badge}</p>
+        <h1>{meta.title}</h1>
+        <p className="manual-hero__description">{meta.description}</p>
+        <p className="manual-hero__note">{meta.note}</p>
+        <Link to="/" className="manual-back-link">
           ← 메인으로 돌아가기
         </Link>
       </section>
 
       {/* ── 플랫폼 전환 탭 ── */}
-      <section className="manual-chunk">
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+      <section className="manual-chunk manual-navigation" aria-label="설명서 범위 선택">
+        <div className="manual-tabs" aria-label="플랫폼 선택">
           {PLATFORM_TABS.map((tab) => {
             const isActive = platform === tab;
-            const icon = tab === '웹' ? '🌐' : '📱';
-            const color = tab === '웹' ? '#60A5FA' : '#22C55E';
             return (
               <button
+                type="button"
                 key={tab}
                 onClick={() => { setPlatform(tab); setActiveTab('방문자'); }}
-                style={{
-                  padding: '12px 24px',
-                  borderRadius: '14px',
-                  border: `2px solid ${isActive ? color : 'rgba(148,163,184,0.2)'}`,
-                  background: isActive ? color + '18' : 'rgba(255,255,255,0.02)',
-                  color: isActive ? color : '#94a3b8',
-                  fontWeight: 800,
-                  fontSize: '16px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  boxShadow: isActive ? `0 0 20px ${color}20` : 'none',
-                }}
+                className={`manual-tab manual-tab--platform${isActive ? ' is-active' : ''}`}
+                aria-pressed={isActive}
               >
-                <span style={{ fontSize: '20px' }}>{icon}</span>
                 {tab === '웹' ? '웹 플랫폼' : '앱 (Android / iOS)'}
               </button>
             );
@@ -968,31 +807,17 @@ export default function UserManualPage() {
         </div>
 
         {/* ── 역할 탭 ── */}
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <div className="manual-tabs manual-tabs--roles" aria-label="사용자 역할 선택">
           {ROLE_TABS.map((tab) => {
             const isActive = activeTab === tab;
-            const colors: Record<RoleTab, string> = { '방문자': '#60A5FA', '일반 회원': '#22C55E', '관리자/기록원': '#EF4444' };
-            const icons: Record<RoleTab, string> = { '방문자': '👥', '일반 회원': '👤', '관리자/기록원': '🛡️' };
             return (
               <button
+                type="button"
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                style={{
-                  padding: '10px 18px',
-                  borderRadius: '12px',
-                  border: `1px solid ${isActive ? colors[tab] + '88' : 'rgba(148,163,184,0.2)'}`,
-                  background: isActive ? colors[tab] + '18' : 'rgba(255,255,255,0.02)',
-                  color: isActive ? colors[tab] : '#94a3b8',
-                  fontWeight: isActive ? 800 : 600,
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
+                className={`manual-tab${isActive ? ' is-active' : ''}`}
+                aria-pressed={isActive}
               >
-                <span>{icons[tab]}</span>
                 {tab}
               </button>
             );
@@ -1001,7 +826,7 @@ export default function UserManualPage() {
       </section>
 
       {/* ── 본문 섹션 ── */}
-      <section className="manual-chunk" style={{ display: 'grid', gap: '12px' }}>
+      <section className="manual-chunk manual-sections" aria-label={`${platform} ${activeTab} 기능 안내`}>
         {sections.map((section) => (
           <div key={section.id} className="manual-section">
             <SectionAccordion section={section} />
@@ -1010,55 +835,24 @@ export default function UserManualPage() {
       </section>
 
       {/* ── 문제 해결 ── */}
-      <section
-        className="manual-chunk"
-        style={{
-          display: 'grid',
-          gap: '14px',
-          padding: '24px',
-          borderRadius: '18px',
-          border: '1px solid rgba(148,163,184,0.2)',
-          background: 'rgba(255,255,255,0.02)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#cbd5e1' }}>
-          <span style={{ fontSize: '18px' }}>🔧</span>
-          <p style={{ margin: 0, fontWeight: 800, fontSize: '17px' }}>문제 해결</p>
+      <section className="manual-chunk manual-troubleshooting">
+        <div className="manual-troubleshooting__header">
+          <p className="manual-eyebrow">TROUBLESHOOTING</p>
+          <h2>문제 해결</h2>
         </div>
         {troubleshooting.map((item) => (
-          <div
-            key={item.title}
-            style={{ padding: '16px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(148,163,184,0.15)' }}
-          >
-            <p style={{ margin: '0 0 8px', fontWeight: 700, color: '#e2e8f0', fontSize: '14px' }}>{item.title}</p>
-            {item.steps.map((step, i) => (
-              <p
-                key={i}
-                style={{ margin: '0 0 4px', color: '#94a3b8', fontSize: '13px', paddingLeft: '18px', position: 'relative', lineHeight: 1.6 }}
-              >
-                <span style={{ position: 'absolute', left: 0, fontWeight: 700, color: '#60A5FA' }}>{i + 1}.</span>
-                {step}
-              </p>
-            ))}
+          <div key={item.title} className="manual-troubleshooting__card">
+            <h3>{item.title}</h3>
+            <ol>
+              {item.steps.map((step, i) => <li key={i}>{step}</li>)}
+            </ol>
           </div>
         ))}
       </section>
 
       {/* ── 푸터 ── */}
-      <section
-        className="manual-chunk"
-        style={{
-          padding: '20px 24px',
-          borderRadius: '14px',
-          border: '1px solid rgba(148,163,184,0.15)',
-          background: 'rgba(255,255,255,0.02)',
-          color: '#64748B',
-          fontSize: 'clamp(12px, 3vw, 13px)',
-          lineHeight: 1.7,
-          textAlign: 'center',
-        }}
-      >
-        <p style={{ margin: 0 }}>
+      <section className="manual-chunk manual-footer-note">
+        <p>
           문서 버전: 2026-02-18 ·{platform === '웹' ? '일부 관리 기능은 데스크톱 또는 태블릿 가로 모드를 권장합니다.' : '일부 관리 기능은 앱 내 WebView로 웹 관리 화면에 연결됩니다.'}
         </p>
       </section>

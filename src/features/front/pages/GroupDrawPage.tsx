@@ -3,6 +3,7 @@ import html2canvas from 'html2canvas';
 import { GROUP_LETTERS, GROUP_COLORS } from '@shared/lib/teamGroups';
 import type { GroupLetter } from '@shared/lib/teamGroups';
 import { SEEDED_TEAMS } from '@shared/lib/teamSeeds';
+import './GroupDrawPage.css';
 
 const SEED_COLORS: Record<number, string> = {
   1: '#f59e0b',
@@ -197,10 +198,11 @@ export default function GroupDrawPage() {
   const seedColor = activeSeed !== null ? SEED_COLORS[activeSeed] : '#94a3b8';
 
   return (
-    <div style={{ display: 'grid', gap: '22px' }}>
+    <div className="group-draw-page" style={{ display: 'grid', gap: '22px' }}>
 
       {/* ── 헤더 ── */}
       <section
+        className="group-draw-page__hero"
         style={{
           padding: 'clamp(20px, 5vw, 30px) clamp(20px, 5vw, 32px)',
           borderRadius: '20px',
@@ -213,11 +215,11 @@ export default function GroupDrawPage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', flexWrap: 'wrap' }}>
-              <span style={{ padding: '5px 12px', borderRadius: '999px', fontWeight: 800, background: 'rgba(168,85,247,0.18)', color: '#d8b4fe', border: '1px solid rgba(168,85,247,0.35)', fontSize: '12px', letterSpacing: '0.05em' }}>
+              <span style={{ padding: '5px 12px', borderRadius: '4px', fontWeight: 800, background: 'var(--season-blue-100)', color: 'var(--draw-accent)', border: '1px solid var(--season-line)', fontSize: '12px', letterSpacing: '0.05em' }}>
                 AUBL · 2026 조추첨
               </span>
               {isComplete && (
-                <span style={{ padding: '5px 12px', borderRadius: '999px', fontWeight: 800, background: 'rgba(52,211,153,0.18)', color: '#34d399', border: '1px solid rgba(52,211,153,0.38)', fontSize: '12px' }}>
+                <span style={{ padding: '5px 12px', borderRadius: '4px', fontWeight: 800, background: 'color-mix(in srgb, var(--draw-success) 10%, var(--season-surface))', color: 'var(--draw-success)', border: '1px solid color-mix(in srgb, var(--draw-success) 38%, var(--season-line))', fontSize: '12px' }}>
                   전체 편성 완료
                 </span>
               )}
@@ -230,8 +232,8 @@ export default function GroupDrawPage() {
           {/* 진행 현황 */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '160px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 700 }}>전체 진행</span>
-              <span style={{ fontSize: '13px', fontWeight: 900, color: '#94a3b8' }}>{assignedCount} / {totalTeams}</span>
+              <span style={{ fontSize: '12px', color: 'var(--draw-muted)', fontWeight: 700 }}>전체 진행</span>
+              <span style={{ fontSize: '13px', fontWeight: 900, color: 'var(--draw-text-soft)' }}>{assignedCount} / {totalTeams}</span>
             </div>
             <div style={{ height: '7px', borderRadius: '999px', background: 'rgba(148,163,184,0.15)', overflow: 'hidden' }}>
               <div
@@ -250,7 +252,7 @@ export default function GroupDrawPage() {
                 style={{
                   alignSelf: 'flex-end', padding: '5px 10px', borderRadius: '8px',
                   fontWeight: 800, fontSize: '11px',
-                  background: 'rgba(248,113,113,0.1)', color: '#fca5a5',
+                  background: 'color-mix(in srgb, var(--draw-danger) 9%, var(--season-surface))', color: 'var(--draw-danger)',
                   border: '1px solid rgba(248,113,113,0.28)', cursor: 'pointer',
                 }}
               >
@@ -263,6 +265,7 @@ export default function GroupDrawPage() {
 
       {/* ── 신규 가입팀 입력 ── */}
       <section
+        className="group-draw-page__newcomers"
         style={{
           padding: '16px 20px', borderRadius: '14px',
           background: 'rgba(168,85,247,0.05)', border: '1px solid rgba(168,85,247,0.18)',
@@ -270,21 +273,22 @@ export default function GroupDrawPage() {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
           <span style={{ width: '7px', height: '7px', borderRadius: '999px', background: SEED_COLORS[6], flexShrink: 0 }} />
-          <span style={{ fontWeight: 800, fontSize: '14px', color: '#d8b4fe' }}>당일 신규 가입팀 (6시드)</span>
-          <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>최대 2팀</span>
+          <span style={{ fontWeight: 800, fontSize: '14px', color: 'var(--draw-accent)' }}>당일 신규 가입팀 (6시드)</span>
+          <span style={{ fontSize: '12px', color: 'var(--draw-muted)', fontWeight: 600 }}>최대 2팀</span>
         </div>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           {[{ val: newcomer1, set: setNewcomer1, label: '신규팀 1' }, { val: newcomer2, set: setNewcomer2, label: '신규팀 2' }].map(({ val, set, label }) => (
             <input
               key={label}
               type="text"
+              aria-label={`${label} 학교명`}
               placeholder={`${label} 학교명`}
               value={val}
               onChange={(e) => set(e.target.value)}
               style={{
                 flex: '1 1 200px', padding: '10px 14px', borderRadius: '10px',
                 background: 'rgba(255,255,255,0.05)', border: '1.5px solid rgba(168,85,247,0.28)',
-                color: '#e2e8f0', fontSize: '14px', fontWeight: 700, outline: 'none', fontFamily: 'inherit',
+                color: 'var(--draw-text)', fontSize: '14px', fontWeight: 700, outline: 'none', fontFamily: 'inherit',
               }}
             />
           ))}
@@ -308,7 +312,7 @@ export default function GroupDrawPage() {
                 style={{
                   padding: '12px 18px', borderRadius: '14px', fontWeight: 900, fontSize: '14px',
                   background: isActive ? `${c}22` : isDone ? 'rgba(52,211,153,0.08)' : 'rgba(255,255,255,0.04)',
-                  color: isActive ? c : isDone ? '#34d399' : '#64748b',
+                  color: isActive ? c : isDone ? 'var(--draw-success)' : 'var(--draw-muted)',
                   border: isActive ? `2px solid ${c}65` : isDone ? '1.5px solid rgba(52,211,153,0.3)' : '1.5px solid rgba(148,163,184,0.18)',
                   cursor: 'pointer', transition: 'all 160ms ease',
                   boxShadow: isActive ? `0 0 18px ${c}22` : 'none',
@@ -327,7 +331,7 @@ export default function GroupDrawPage() {
       {/* ── 메인 뷰 ── */}
       {activeSeed !== null ? (
         /* ── 시드 추첨 뷰 (2단 분할) ── */
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '18px', alignItems: 'start' }}>
+        <div className="group-draw-page__workspace" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '18px', alignItems: 'start' }}>
 
           {/* 왼쪽: 선택된 시드 팀 목록 */}
           <section>
@@ -359,13 +363,13 @@ export default function GroupDrawPage() {
                   >
                     {selected.name}
                   </span>
-                  <span style={{ color: '#64748b', fontSize: '12px', fontWeight: 600 }}>선택됨</span>
+                  <span style={{ color: 'var(--draw-muted)', fontSize: '12px', fontWeight: 600 }}>선택됨</span>
                   <button
                     type="button"
                     onClick={() => setSelected(null)}
                     style={{
                       padding: '5px 9px', borderRadius: '7px', fontSize: '12px', fontWeight: 800,
-                      background: 'rgba(148,163,184,0.12)', color: '#94a3b8',
+                      background: 'rgba(148,163,184,0.12)', color: 'var(--draw-text-soft)',
                       border: '1px solid rgba(148,163,184,0.22)', cursor: 'pointer',
                     }}
                   >
@@ -373,7 +377,7 @@ export default function GroupDrawPage() {
                   </button>
                 </div>
               ) : (
-                <span style={{ color: '#475569', fontSize: '13px', fontWeight: 600 }}>
+                <span style={{ color: 'var(--draw-muted)', fontSize: '13px', fontWeight: 600 }}>
                   {activeSeedDone ? '이 시드 편성 완료' : '팀을 클릭해 선택하세요'}
                 </span>
               )}
@@ -408,7 +412,7 @@ export default function GroupDrawPage() {
                       <span
                         style={{
                           flexShrink: 0, width: '36px', height: '36px', borderRadius: '10px',
-                          background: `${seedColor}18`, color: isSelected ? seedColor : '#94a3b8',
+                          background: `${seedColor}18`, color: isSelected ? seedColor : 'var(--draw-text-soft)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           fontWeight: 900, fontSize: '16px',
                           border: `1.5px solid ${seedColor}25`,
@@ -420,7 +424,7 @@ export default function GroupDrawPage() {
                     <span
                       style={{
                         flex: 1, fontSize: 'clamp(14px, 2.2vw, 17px)', fontWeight: 800,
-                        color: isSelected ? seedColor : '#e2e8f0',
+                        color: isSelected ? seedColor : 'var(--draw-text)',
                         letterSpacing: '-0.01em',
                       }}
                     >
@@ -455,7 +459,7 @@ export default function GroupDrawPage() {
                       width: '100%', padding: '14px', borderRadius: '13px',
                       fontWeight: 900, fontSize: '15px',
                       background: 'linear-gradient(120deg, rgba(52,211,153,0.2), rgba(16,185,129,0.2))',
-                      color: '#34d399', border: '1.5px solid rgba(52,211,153,0.4)',
+                      color: 'var(--draw-success)', border: '1.5px solid rgba(52,211,153,0.4)',
                       cursor: 'pointer',
                     }}
                   >
@@ -465,7 +469,7 @@ export default function GroupDrawPage() {
                   <div
                     style={{
                       padding: '14px', borderRadius: '13px', textAlign: 'center',
-                      fontWeight: 900, fontSize: '15px', color: '#34d399',
+                      fontWeight: 900, fontSize: '15px', color: 'var(--draw-success)',
                       background: 'rgba(52,211,153,0.1)', border: '1.5px solid rgba(52,211,153,0.35)',
                     }}
                   >
@@ -477,10 +481,10 @@ export default function GroupDrawPage() {
           </section>
 
           {/* 오른쪽: 조 편성 패널 */}
-          <section ref={cardsRef} style={{ padding: '0 16px' }}>
+          <section ref={cardsRef} className="group-draw-page__groups" style={{ padding: '0 16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '14px', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: '#e2e8f0' }}>조 편성</h2>
+                <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: 'var(--draw-text)' }}>조 편성</h2>
                 {selected && (
                   <span
                     style={{
@@ -500,7 +504,7 @@ export default function GroupDrawPage() {
                   style={{
                     padding: '7px 14px', borderRadius: '10px',
                     fontWeight: 800, fontSize: '12px',
-                    background: 'rgba(52,211,153,0.1)', color: '#34d399',
+                    background: 'rgba(52,211,153,0.1)', color: 'var(--draw-success)',
                     border: '1.5px solid rgba(52,211,153,0.3)', cursor: 'pointer',
                   }}
                 >
@@ -518,6 +522,7 @@ export default function GroupDrawPage() {
                 return (
                   <div
                     key={group}
+                    className="group-draw-page__group-target"
                     onClick={() => handleGroupClick(group)}
                     style={{
                       padding: '16px 18px', borderRadius: '16px',
@@ -549,11 +554,25 @@ export default function GroupDrawPage() {
                       </div>
                       <div>
                         <p style={{ margin: 0, fontWeight: 900, fontSize: '16px', color: gc }}>{group}조</p>
-                        <p style={{ margin: 0, fontSize: '11px', color: '#475569', fontWeight: 600 }}>
+                        <p style={{ margin: 0, fontSize: '11px', color: 'var(--draw-muted)', fontWeight: 600 }}>
                           {assignedTeams.length}팀
-                          {isTarget && <span style={{ color: gc, marginLeft: '4px' }}>← 클릭 배정</span>}
+                          {isTarget && <span style={{ color: gc, marginLeft: '4px' }}>· 배정 가능</span>}
                         </p>
                       </div>
+                      {isTarget && (
+                        <button
+                          type="button"
+                          className="group-draw-page__assign"
+                          aria-label={`${selected?.name ?? '선택한 팀'}을 ${group}조에 배정`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleGroupClick(group);
+                          }}
+                          style={{ color: gc, borderColor: `${gc}65`, background: `${gc}18` }}
+                        >
+                          배정
+                        </button>
+                      )}
                     </div>
 
                     {/* 배정된 팀 */}
@@ -579,15 +598,16 @@ export default function GroupDrawPage() {
                           >
                             {team.seed}
                           </span>
-                          <span style={{ flex: 1, fontSize: '13px', fontWeight: 900, color: '#e2e8f0', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <span style={{ flex: 1, fontSize: '13px', fontWeight: 900, color: 'var(--draw-text)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {team.name}
                           </span>
                           <button
                             type="button"
+                            aria-label={`${team.name} 배정 취소`}
                             onClick={(e) => { e.stopPropagation(); handleRemove(group, team.name); }}
                             style={{
                               flexShrink: 0, width: '16px', height: '16px', borderRadius: '4px',
-                              background: 'rgba(248,113,113,0.12)', color: '#fca5a5',
+                              background: 'rgba(248,113,113,0.12)', color: 'var(--draw-danger)',
                               border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: 900,
                               display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
                             }}
@@ -600,7 +620,7 @@ export default function GroupDrawPage() {
                         <div
                           style={{
                             padding: '12px 8px', textAlign: 'center',
-                            color: isTarget ? gc : '#2a3547',
+                            color: isTarget ? gc : 'var(--draw-placeholder)',
                             fontSize: '12px', fontWeight: 700, borderRadius: '8px',
                             border: isTarget ? `1.5px dashed ${gc}50` : '1.5px dashed rgba(148,163,184,0.1)',
                             transition: 'all 200ms ease',
@@ -619,13 +639,14 @@ export default function GroupDrawPage() {
       ) : (
         /* ── 시드 미선택 개요 화면 ── */
         <section
+          className="group-draw-page__overview"
           style={{
             padding: '28px', borderRadius: '18px',
             background: 'rgba(255,255,255,0.02)',
             border: '1px solid rgba(148,163,184,0.12)',
           }}
         >
-          <p style={{ margin: '0 0 20px', fontWeight: 900, fontSize: '17px', color: '#94a3b8' }}>
+          <p style={{ margin: '0 0 20px', fontWeight: 900, fontSize: '17px', color: 'var(--draw-text-soft)' }}>
             위에서 추첨할 시드를 선택하세요
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px' }}>
@@ -647,10 +668,10 @@ export default function GroupDrawPage() {
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <span style={{ fontWeight: 900, fontSize: '15px', color: isDone ? '#34d399' : c }}>
+                    <span style={{ fontWeight: 900, fontSize: '15px', color: isDone ? 'var(--draw-success)' : c }}>
                       {SEED_LABELS[seed]}
                     </span>
-                    {isDone && <span style={{ color: '#34d399', fontSize: '14px' }}>✓</span>}
+                    {isDone && <span style={{ color: 'var(--draw-success)', fontSize: '14px' }}>✓</span>}
                   </div>
                   <div style={{ height: '5px', borderRadius: '999px', background: 'rgba(148,163,184,0.15)', overflow: 'hidden' }}>
                     <div
@@ -661,7 +682,7 @@ export default function GroupDrawPage() {
                       }}
                     />
                   </div>
-                  <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
+                  <p style={{ margin: '6px 0 0', fontSize: '12px', color: 'var(--draw-muted)', fontWeight: 600 }}>
                     {doneCount} / {seedTeams.length} 배정 완료
                   </p>
                 </button>
@@ -675,6 +696,7 @@ export default function GroupDrawPage() {
       {assignedCount > 0 && (
         <section
           ref={summaryRef}
+          className="group-draw-page__summary"
           style={{
             padding: '22px', borderRadius: '16px',
             background: 'rgba(255,255,255,0.02)',
@@ -683,7 +705,7 @@ export default function GroupDrawPage() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
-            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 900, color: '#e2e8f0' }}>편성 결과 요약</h3>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 900, color: 'var(--draw-text)' }}>편성 결과 요약</h3>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
                 type="button"
@@ -691,7 +713,7 @@ export default function GroupDrawPage() {
                 style={{
                   padding: '8px 14px', borderRadius: '10px',
                   fontWeight: 800, fontSize: '12px',
-                  background: 'rgba(96,165,250,0.1)', color: '#93c5fd',
+                  background: 'rgba(96,165,250,0.1)', color: 'var(--draw-accent)',
                   border: '1.5px solid rgba(96,165,250,0.28)', cursor: 'pointer',
                 }}
               >
@@ -703,7 +725,7 @@ export default function GroupDrawPage() {
                 style={{
                   padding: '8px 14px', borderRadius: '10px',
                   fontWeight: 800, fontSize: '12px',
-                  background: 'rgba(168,85,247,0.1)', color: '#d8b4fe',
+                  background: 'rgba(168,85,247,0.1)', color: 'var(--draw-accent)',
                   border: '1.5px solid rgba(168,85,247,0.28)', cursor: 'pointer',
                 }}
               >
@@ -714,7 +736,7 @@ export default function GroupDrawPage() {
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 4px' }}>
             <thead>
               <tr>
-                <th style={{ textAlign: 'left', padding: '10px 14px', color: '#475569', fontWeight: 800, fontSize: '14px', borderBottom: '1px solid rgba(148,163,184,0.13)', whiteSpace: 'nowrap' }}>시드</th>
+                <th style={{ textAlign: 'left', padding: '10px 14px', color: 'var(--draw-muted)', fontWeight: 800, fontSize: '14px', borderBottom: '1px solid rgba(148,163,184,0.13)', whiteSpace: 'nowrap' }}>시드</th>
                 {GROUP_LETTERS.map((g) => (
                   <th key={g} style={{ padding: '10px 3px', color: GROUP_COLORS[g], fontWeight: 900, fontSize: '17px', borderBottom: `1px solid ${GROUP_COLORS[g]}28`, textAlign: 'center', whiteSpace: 'nowrap' }}>
                     {g}조
@@ -736,8 +758,8 @@ export default function GroupDrawPage() {
                     {GROUP_LETTERS.map((g) => {
                       const team = groups[g].find((t) => t.seed === seed);
                       return (
-                        <td key={g} style={{ padding: '7px 3px', textAlign: 'center', color: '#e2e8f0', fontWeight: 900, fontSize: '18px', lineHeight: 1.35 }}>
-                          {team?.name ?? <span style={{ color: '#2a3547' }}>—</span>}
+                        <td key={g} style={{ padding: '7px 3px', textAlign: 'center', color: 'var(--draw-text)', fontWeight: 900, fontSize: '18px', lineHeight: 1.35 }}>
+                          {team?.name ?? <span style={{ color: 'var(--draw-placeholder)' }}>—</span>}
                         </td>
                       );
                     })}
@@ -750,15 +772,18 @@ export default function GroupDrawPage() {
       )}
 
       {/* ── 안내 ── */}
-      <section style={{ padding: '14px 18px', borderRadius: '11px', border: '1px solid rgba(148,163,184,0.1)', background: 'rgba(255,255,255,0.015)', color: '#475569', fontSize: '12px', lineHeight: 1.7 }}>
+      <section className="group-draw-page__notice" style={{ padding: '14px 18px', borderRadius: '11px', border: '1px solid rgba(148,163,184,0.1)', background: 'rgba(255,255,255,0.015)', color: 'var(--draw-muted)', fontSize: '12px', lineHeight: 1.7 }}>
         <p style={{ margin: 0 }}>
-          <strong style={{ color: '#64748b' }}>안내</strong> — 조추첨식 현장 수동 편성 페이지입니다. 시드 배정은 2026 AUBL 파워랭킹 기준이며, 편성 결과는 저장되지 않습니다.
+          <strong style={{ color: 'var(--draw-text-soft)' }}>안내</strong> — 조추첨식 현장 수동 편성 페이지입니다. 시드 배정은 2026 AUBL 파워랭킹 기준이며, 편성 결과는 저장되지 않습니다.
         </p>
       </section>
 
       {/* ── 배정 알림 팝업 ── */}
       {notif && (
         <div
+          className="group-draw-page__notification-layer"
+          role="status"
+          aria-live="polite"
           style={{
             position: 'fixed', inset: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -769,6 +794,7 @@ export default function GroupDrawPage() {
           }}
         >
           <div
+            className="group-draw-page__notification"
             style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px',
               padding: 'clamp(40px, 6vw, 64px) clamp(48px, 8vw, 96px)',
@@ -808,7 +834,7 @@ export default function GroupDrawPage() {
             </div>
 
             {/* 화살표 */}
-            <div style={{ fontSize: '28px', color: '#334155', lineHeight: 1 }}>↓</div>
+            <div style={{ fontSize: '28px', color: 'var(--draw-text-soft)', lineHeight: 1 }}>↓</div>
 
             {/* 조 배정 */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>

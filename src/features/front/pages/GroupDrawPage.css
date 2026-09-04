@@ -1,0 +1,147 @@
+.group-draw-page {
+  --draw-text: var(--season-ink);
+  --draw-text-soft: var(--season-navy-900);
+  --draw-muted: var(--season-muted);
+  --draw-placeholder: var(--season-line-strong);
+  --draw-line: var(--season-line);
+  --draw-input: var(--season-surface);
+  --draw-accent: var(--season-blue-700);
+  --draw-success: var(--season-success);
+  --draw-danger: var(--season-danger);
+
+  width: 100%;
+  padding: clamp(12px, 2.4vw, 24px);
+  border: 1px solid var(--draw-line);
+  border-radius: 4px;
+  background: var(--season-canvas);
+  color: var(--draw-text);
+}
+
+:root[data-theme='dark'] .group-draw-page {
+  --draw-text: #f5f7ff;
+  --draw-text-soft: #c8d4e8;
+  --draw-muted: #afbdd4;
+  --draw-placeholder: #8494ae;
+  --draw-line: rgba(175, 189, 212, 0.3);
+  --draw-input: rgba(255, 255, 255, 0.09);
+  --draw-accent: var(--season-blue-700);
+  --draw-success: var(--season-success);
+  --draw-danger: var(--season-danger);
+  background:
+    radial-gradient(circle at 4% 12%, rgba(249, 115, 22, 0.08), transparent 26%),
+    radial-gradient(circle at 96% 4%, rgba(168, 85, 247, 0.09), transparent 24%),
+    #061126;
+}
+
+.group-draw-page__hero {
+  border: 1px solid var(--season-line) !important;
+  border-top: 4px solid var(--season-primary-fill) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  box-shadow: none !important;
+}
+
+.group-draw-page__newcomers,
+.group-draw-page__overview,
+.group-draw-page__summary,
+.group-draw-page__notice {
+  border-color: var(--season-line) !important;
+  border-radius: 4px !important;
+  background: var(--season-surface) !important;
+  box-shadow: none !important;
+}
+
+.group-draw-page__hero,
+.group-draw-page__newcomers,
+.group-draw-page__overview,
+.group-draw-page__summary,
+.group-draw-page__notice {
+  color: var(--draw-text);
+}
+
+.group-draw-page button,
+.group-draw-page a,
+.group-draw-page input {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.group-draw-page input {
+  border-color: var(--draw-line) !important;
+  background: var(--draw-input) !important;
+  color: var(--draw-text) !important;
+  caret-color: var(--draw-text);
+}
+
+.group-draw-page input::placeholder {
+  color: var(--draw-muted);
+  opacity: 1;
+}
+
+.group-draw-page button:focus-visible,
+.group-draw-page a:focus-visible,
+.group-draw-page input:focus-visible,
+.group-draw-page__assign:focus-visible {
+  outline: 3px solid #fbbf24 !important;
+  outline-offset: 3px !important;
+}
+
+.group-draw-page__assign {
+  margin-left: auto;
+  padding: 8px 12px;
+  border: 1px solid;
+  border-radius: 4px;
+  box-shadow: none;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.group-draw-page__notification-layer,
+.group-draw-page__notification {
+  color: var(--draw-text);
+}
+
+.group-draw-page__notification {
+  --draw-text-soft: #c3cde0;
+}
+
+@media (max-width: 820px) {
+  .group-draw-page__workspace {
+    grid-template-columns: 1fr !important;
+  }
+
+  .group-draw-page__groups {
+    padding-inline: 0 !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .group-draw-page {
+    padding: 10px;
+  }
+
+  .group-draw-page__group-target {
+    padding: 14px !important;
+  }
+
+  .group-draw-page__summary {
+    padding: 16px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .group-draw-page,
+  .group-draw-page *,
+  .group-draw-page *::before,
+  .group-draw-page *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .group-draw-page button:hover,
+  .group-draw-page a:hover {
+    transform: none !important;
+  }
+}
