@@ -39,6 +39,35 @@ test('warns when a tie crosses a qualification boundary', () => {
   assert.ok(result.warnings.some((entry) => entry.code === 'BOUNDARY_TIE'));
 });
 
+test('blocks player rows whose collected stat cells are empty', () => {
+  const candidate = completeCandidate();
+  candidate.groups.A.batters.IN = [{
+    playerName: '테스트 타자',
+    teamName: 'A-1',
+    stats: { 타석: null, 타수: null, 총안타: null, 타율: null },
+  }];
+
+  const result = validateCandidate(candidate);
+  assert.equal(result.valid, false);
+  assert.ok(result.blockingErrors.some((entry) => entry.code === 'PLAYER_STATS_EMPTY'));
+
+  candidate.groups.A.batters.IN[0].stats = { 타석: 0, 타수: 0, 총안타: 0, 타율: 0 };
+  assert.equal(validateCandidate(candidate).valid, true);
+});
+
+test('blocks negative player statistics', () => {
+  const candidate = completeCandidate();
+  candidate.groups.A.pitchers.OUT = [{
+    playerName: '테스트 투수',
+    teamName: 'A-1',
+    stats: { 이닝: 1, 실점: -1, ERA: 0 },
+  }];
+
+  const result = validateCandidate(candidate);
+  assert.equal(result.valid, false);
+  assert.ok(result.blockingErrors.some((entry) => entry.code === 'PLAYER_STATS_RANGE'));
+});
+
 test('blocks an incomplete completed-game collection', () => {
   const candidate = completeCandidate();
   for (const group of Object.values(candidate.groups)) {

@@ -11,6 +11,26 @@ function detectBoundaryTie(rows, boundary) {
   return rows[boundary - 1]?.rank === rows[boundary]?.rank;
 }
 
+function validatePlayerStats(player, kind, path, blockingErrors) {
+  const values = Object.values(player.stats || {});
+  const numericValues = values.filter((value) => typeof value === 'number' && Number.isFinite(value));
+  if (numericValues.length === 0) {
+    blockingErrors.push(issue(
+      'PLAYER_STATS_EMPTY',
+      `${kind === 'batters' ? '타자' : '투수'} 기록 수치가 비어 있습니다. 표 열 파싱을 확인하세요.`,
+      `${path}.stats`,
+    ));
+    return;
+  }
+  if (numericValues.some((value) => value < 0)) {
+    blockingErrors.push(issue(
+      'PLAYER_STATS_RANGE',
+      `${kind === 'batters' ? '타자' : '투수'} 기록에는 음수가 포함될 수 없습니다.`,
+      `${path}.stats`,
+    ));
+  }
+}
+
 export function validateCandidate(candidate) {
   const blockingErrors = [];
   const warnings = [];
@@ -58,6 +78,7 @@ export function validateCandidate(candidate) {
           if (!groupTeams.has(normalizeText(player.teamName).toLocaleLowerCase('ko-KR'))) {
             blockingErrors.push(issue('PLAYER_TEAM', '선수의 팀이 해당 조 순위표에 없습니다.', path));
           }
+          validatePlayerStats(player, kind, path, blockingErrors);
         }
       }
     }
