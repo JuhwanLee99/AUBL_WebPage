@@ -18,9 +18,9 @@ class _RulesScreenState extends State<RulesScreen> {
   Map<String, dynamic>? _content;
   bool _loading = true;
   String _searchQuery = '';
-  List<String> _searchTerms = const [];
+  List<String> _searchTerms = [];
   RegExp? _highlightRegex;
-  List<GlobalKey> _searchResultAnchors = const [];
+  List<GlobalKey> _searchResultAnchors = [];
   int _currentResultIndex = -1;
 
   bool get _hasSearchQuery => _searchTerms.isNotEmpty;
@@ -152,9 +152,9 @@ class _RulesScreenState extends State<RulesScreen> {
     final spans = <TextSpan>[];
     var cursor = 0;
     final highlightStyle = baseStyle.copyWith(
-      backgroundColor: AppTheme.yellow500.withValues(alpha: 0.35),
+      backgroundColor: context.aublColors.warning.withValues(alpha: 0.35),
       fontWeight: FontWeight.w700,
-      color: Colors.white,
+      color: context.aublColors.ink,
     );
 
     for (final match in matches) {
@@ -192,7 +192,7 @@ class _RulesScreenState extends State<RulesScreen> {
     if (rawBody is String && rawBody.isNotEmpty) {
       return [rawBody];
     }
-    return const [];
+    return [];
   }
 
   bool _matchesFirestoreArticle(dynamic article) {
@@ -246,9 +246,9 @@ class _RulesScreenState extends State<RulesScreen> {
             width: 44,
             height: 50,
             decoration: BoxDecoration(
-              color: AppTheme.slate800,
+              color: context.aublColors.surface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.slate700),
+              border: Border.all(color: context.aublColors.line),
             ),
             child: Column(
               children: [
@@ -256,20 +256,20 @@ class _RulesScreenState extends State<RulesScreen> {
                   child: IconButton(
                     onPressed: canNavigate ? () => _moveSearchResult(-1) : null,
                     icon: const Icon(Icons.keyboard_arrow_up, size: 18),
-                    color: AppTheme.slate200,
-                    disabledColor: AppTheme.slate600,
+                    color: context.aublColors.ink,
+                    disabledColor: context.aublColors.lineStrong,
                     padding: EdgeInsets.zero,
                     visualDensity: VisualDensity.compact,
                   ),
                 ),
-                const Divider(
-                    height: 1, thickness: 0.8, color: AppTheme.slate700),
+                Divider(
+                    height: 1, thickness: 0.8, color: context.aublColors.line),
                 Expanded(
                   child: IconButton(
                     onPressed: canNavigate ? () => _moveSearchResult(1) : null,
                     icon: const Icon(Icons.keyboard_arrow_down, size: 18),
-                    color: AppTheme.slate200,
-                    disabledColor: AppTheme.slate600,
+                    color: context.aublColors.ink,
+                    disabledColor: context.aublColors.lineStrong,
                     padding: EdgeInsets.zero,
                     visualDensity: VisualDensity.compact,
                   ),
@@ -281,8 +281,8 @@ class _RulesScreenState extends State<RulesScreen> {
             const SizedBox(width: 8),
             Text(
               positionLabel,
-              style: const TextStyle(
-                color: AppTheme.slate400,
+              style: TextStyle(
+                color: context.aublColors.muted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
@@ -304,8 +304,8 @@ class _RulesScreenState extends State<RulesScreen> {
       padding: const EdgeInsets.only(bottom: 10),
       child: Text(
         text,
-        style: const TextStyle(
-          color: AppTheme.slate400,
+        style: TextStyle(
+          color: context.aublColors.muted,
           fontSize: 12,
           fontWeight: FontWeight.w500,
         ),
@@ -318,12 +318,12 @@ class _RulesScreenState extends State<RulesScreen> {
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.slate800,
+        color: context.aublColors.surface,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: const Text(
+      child: Text(
         '일치하는 회칙 항목이 없습니다. 다른 키워드로 검색해 주세요.',
-        style: TextStyle(color: AppTheme.slate400, fontSize: 13),
+        style: TextStyle(color: context.aublColors.muted, fontSize: 13),
       ),
     );
   }
@@ -335,9 +335,9 @@ class _RulesScreenState extends State<RulesScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _content == null
-              ? const Center(
+              ? Center(
                   child: Text('콘텐츠를 불러올 수 없습니다.',
-                      style: TextStyle(color: AppTheme.slate500)))
+                      style: TextStyle(color: context.aublColors.muted)))
               : _buildContent(),
     );
   }
@@ -382,20 +382,20 @@ class _RulesScreenState extends State<RulesScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.slate800,
+        color: context.aublColors.surface,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.history, size: 16, color: AppTheme.orange500),
-              SizedBox(width: 8),
+              Icon(Icons.history, size: 16, color: context.aublColors.warning),
+              const SizedBox(width: 8),
               Text(
                 '주최 순서',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: context.aublColors.ink,
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                 ),
@@ -409,13 +409,13 @@ class _RulesScreenState extends State<RulesScreen> {
             children: hostOrderEntries.map((entry) {
               final index = entry.key + 1;
               final name = entry.value;
-              const indexStyle = TextStyle(
-                color: AppTheme.orange500,
+              final indexStyle = TextStyle(
+                color: context.aublColors.warning,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               );
-              const valueStyle = TextStyle(
-                color: AppTheme.slate200,
+              final valueStyle = TextStyle(
+                color: context.aublColors.ink,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               );
@@ -423,10 +423,10 @@ class _RulesScreenState extends State<RulesScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                 decoration: BoxDecoration(
-                  color: AppTheme.orange500.withValues(alpha: 0.14),
+                  color: context.aublColors.warning.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: AppTheme.orange500.withValues(alpha: 0.35),
+                    color: context.aublColors.warning.withValues(alpha: 0.35),
                   ),
                 ),
                 child: RichText(
@@ -452,16 +452,16 @@ class _RulesScreenState extends State<RulesScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.slate800,
+        color: context.aublColors.surface,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             '부칙',
             style: TextStyle(
-              color: AppTheme.slate200,
+              color: context.aublColors.ink,
               fontSize: 13,
               fontWeight: FontWeight.w700,
             ),
@@ -469,8 +469,8 @@ class _RulesScreenState extends State<RulesScreen> {
           const SizedBox(height: 4),
           _buildHighlightedText(
             appendixText,
-            const TextStyle(
-              color: AppTheme.slate400,
+            TextStyle(
+              color: context.aublColors.muted,
               fontSize: 13,
               height: 1.6,
             ),
@@ -505,7 +505,7 @@ class _RulesScreenState extends State<RulesScreen> {
       if (chapter is! Map) continue;
       final ch = Map<String, dynamic>.from(chapter);
       final title = ch['title']?.toString() ?? '';
-      final articles = (ch['articles'] as List<dynamic>?) ?? const <dynamic>[];
+      final articles = (ch['articles'] as List<dynamic>?) ?? <dynamic>[];
       final chapterTitleMatched = _matchesQueryInFields([title]);
       final visibleArticles = (!_hasSearchQuery || chapterTitleMatched)
           ? articles
@@ -524,7 +524,7 @@ class _RulesScreenState extends State<RulesScreen> {
           key: _hasSearchQuery ? chapterAnchor : null,
           margin: const EdgeInsets.only(bottom: 8),
           decoration: BoxDecoration(
-            color: AppTheme.slate800,
+            color: context.aublColors.surface,
             borderRadius: BorderRadius.circular(12),
           ),
           child: ExpansionTile(
@@ -532,7 +532,8 @@ class _RulesScreenState extends State<RulesScreen> {
             initiallyExpanded: _hasSearchQuery,
             title: _buildHighlightedText(
               title,
-              const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+              TextStyle(
+                  color: context.aublColors.ink, fontWeight: FontWeight.w500),
             ),
             childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             children: visibleArticles.map((article) {
@@ -548,8 +549,8 @@ class _RulesScreenState extends State<RulesScreen> {
                       if (aTitle.isNotEmpty)
                         _buildHighlightedText(
                           aTitle,
-                          const TextStyle(
-                            color: AppTheme.blue400,
+                          TextStyle(
+                            color: context.aublColors.cobalt,
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                           ),
@@ -562,8 +563,8 @@ class _RulesScreenState extends State<RulesScreen> {
                           padding: const EdgeInsets.only(top: 2),
                           child: _buildHighlightedText(
                             line,
-                            const TextStyle(
-                              color: AppTheme.slate300,
+                            TextStyle(
+                              color: context.aublColors.ink,
                               fontSize: 13,
                               height: 1.5,
                             ),
@@ -579,7 +580,7 @@ class _RulesScreenState extends State<RulesScreen> {
                   padding: const EdgeInsets.only(bottom: 4),
                   child: _buildHighlightedText(
                     article,
-                    const TextStyle(color: AppTheme.slate300, fontSize: 13),
+                    TextStyle(color: context.aublColors.ink, fontSize: 13),
                   ),
                 );
               }
@@ -624,8 +625,8 @@ class _RulesScreenState extends State<RulesScreen> {
               padding: const EdgeInsets.only(bottom: 16),
               child: _buildHighlightedText(
                 headerBadge,
-                const TextStyle(
-                  color: AppTheme.blue400,
+                TextStyle(
+                  color: context.aublColors.cobalt,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -693,7 +694,7 @@ class _RulesScreenState extends State<RulesScreen> {
           key: _hasSearchQuery ? chapterAnchor : null,
           margin: const EdgeInsets.only(bottom: 8),
           decoration: BoxDecoration(
-            color: AppTheme.slate800,
+            color: context.aublColors.surface,
             borderRadius: BorderRadius.circular(12),
           ),
           child: ExpansionTile(
@@ -701,7 +702,8 @@ class _RulesScreenState extends State<RulesScreen> {
             initiallyExpanded: _hasSearchQuery,
             title: _buildHighlightedText(
               chapter.title,
-              const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+              TextStyle(
+                  color: context.aublColors.ink, fontWeight: FontWeight.w500),
             ),
             childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             children: visibleArticles.map((article) {
@@ -727,8 +729,8 @@ class _RulesScreenState extends State<RulesScreen> {
                         padding: const EdgeInsets.only(top: 2),
                         child: _buildHighlightedText(
                           line,
-                          const TextStyle(
-                            color: AppTheme.slate300,
+                          TextStyle(
+                            color: context.aublColors.ink,
                             fontSize: 13,
                             height: 1.5,
                           ),
@@ -790,7 +792,7 @@ class _RulesScreenState extends State<RulesScreen> {
 }
 
 class _RulesListBuildResult {
-  const _RulesListBuildResult({
+  _RulesListBuildResult({
     required this.listView,
     required this.resultAnchors,
   });

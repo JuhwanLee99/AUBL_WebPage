@@ -58,14 +58,14 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
   bool get _canEdit => _user?.uid == _post.uid || _isAdmin;
 
   Color _platformColor(String p) =>
-      p == 'app' ? const Color(0xFF818CF8) : const Color(0xFF34D399);
+      p == 'app' ? context.aublColors.cobalt : context.aublColors.success;
 
   Color _categoryColor(String cat) => switch (cat) {
-        '기능 개선' => AppTheme.blue400,
-        '버그 신고' => const Color(0xFFF87171),
-        '사용 문의' => const Color(0xFF4ADE80),
-        '경기/기록 오류' => const Color(0xFFFB923C),
-        _ => AppTheme.slate400,
+        '기능 개선' => context.aublColors.cobalt,
+        '버그 신고' => context.aublColors.danger,
+        '사용 문의' => context.aublColors.success,
+        '경기/기록 오류' => context.aublColors.warning,
+        _ => context.aublColors.muted,
       };
 
   String _currentUserLabel(User user) {
@@ -178,17 +178,18 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.slate800,
-        title: const Text('삭제 확인', style: TextStyle(color: Colors.white)),
-        content: const Text('게시글을 삭제하시겠습니까?',
-            style: TextStyle(color: AppTheme.slate300)),
+        backgroundColor: context.aublColors.surface,
+        title: Text('삭제 확인', style: TextStyle(color: context.aublColors.ink)),
+        content: Text('게시글을 삭제하시겠습니까?',
+            style: TextStyle(color: context.aublColors.ink)),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('취소')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('삭제', style: TextStyle(color: Color(0xFFF87171))),
+            child:
+                Text('삭제', style: TextStyle(color: context.aublColors.danger)),
           ),
         ],
       ),
@@ -225,13 +226,14 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
               },
             ),
             IconButton(
-              icon: const Icon(Icons.delete_outline, color: Color(0xFFF87171)),
+              icon:
+                  Icon(Icons.delete_outline, color: context.aublColors.danger),
               onPressed: _deletePost,
             ),
           ],
           if (canModeratePost)
             PopupMenuButton<_InquiryModerationAction>(
-              icon: const E911EmergencyIcon(color: Color(0xFFE3E3E3)),
+              icon: E911EmergencyIcon(color: context.aublColors.muted),
               onSelected: (action) {
                 _handleModerationAction(
                   action: action,
@@ -243,12 +245,12 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
                       '${_post.title}\n${deltaToPreviewText(_post.content)}',
                 );
               },
-              itemBuilder: (context) => const [
-                PopupMenuItem(
+              itemBuilder: (context) => [
+                const PopupMenuItem(
                   value: _InquiryModerationAction.report,
                   child: Text('게시글 신고'),
                 ),
-                PopupMenuItem(
+                const PopupMenuItem(
                   value: _InquiryModerationAction.block,
                   child: Text('작성자 차단'),
                 ),
@@ -261,7 +263,7 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
             ? Stream.value(<String>{})
             : _moderationService.watchBlockedUserIds(viewer.uid),
         builder: (context, blockedSnapshot) {
-          final blockedUserIds = blockedSnapshot.data ?? const <String>{};
+          final blockedUserIds = blockedSnapshot.data ?? <String>{};
           final isPostBlocked = blockedUserIds.contains(_post.uid);
 
           return Column(
@@ -271,30 +273,30 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
                   padding: const EdgeInsets.all(16),
                   children: [
                     if (isPostBlocked)
-                      const Center(
+                      Center(
                         child: Padding(
-                          padding: EdgeInsets.symmetric(vertical: 48),
+                          padding: const EdgeInsets.symmetric(vertical: 48),
                           child: Column(
                             children: [
                               Icon(
                                 Icons.block,
                                 size: 56,
-                                color: AppTheme.slate500,
+                                color: context.aublColors.muted,
                               ),
-                              SizedBox(height: 16),
+                              const SizedBox(height: 16),
                               Text(
                                 '차단한 사용자의 게시글입니다.',
                                 style: TextStyle(
-                                  color: Colors.white,
+                                  color: context.aublColors.ink,
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
-                              SizedBox(height: 8),
+                              const SizedBox(height: 8),
                               Text(
                                 '계정 화면에서 차단을 해제하면 다시 볼 수 있습니다.',
                                 style: TextStyle(
-                                  color: AppTheme.slate500,
+                                  color: context.aublColors.muted,
                                   fontSize: 13,
                                 ),
                               ),
@@ -303,23 +305,24 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
                         ),
                       )
                     else if (!_isAccessible)
-                      const Center(
+                      Center(
                         child: Padding(
-                          padding: EdgeInsets.symmetric(vertical: 48),
+                          padding: const EdgeInsets.symmetric(vertical: 48),
                           child: Column(
                             children: [
                               Icon(Icons.lock_outline,
-                                  size: 56, color: AppTheme.slate500),
-                              SizedBox(height: 16),
+                                  size: 56, color: context.aublColors.muted),
+                              const SizedBox(height: 16),
                               Text('비밀글입니다.',
                                   style: TextStyle(
-                                      color: Colors.white,
+                                      color: context.aublColors.ink,
                                       fontSize: 18,
                                       fontWeight: FontWeight.w700)),
-                              SizedBox(height: 8),
+                              const SizedBox(height: 8),
                               Text('작성자와 관리자만 열람할 수 있습니다.',
                                   style: TextStyle(
-                                      color: AppTheme.slate500, fontSize: 13)),
+                                      color: context.aublColors.muted,
+                                      fontSize: 13)),
                             ],
                           ),
                         ),
@@ -339,41 +342,41 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
                           else
                             _badge(_post.status, _statusColor(_post.status)),
                           if (_post.isPrivate)
-                            const Icon(Icons.lock_outline,
-                                size: 14, color: AppTheme.slate500),
+                            Icon(Icons.lock_outline,
+                                size: 14, color: context.aublColors.muted),
                         ],
                       ),
                       const SizedBox(height: 12),
                       Text(_post.title,
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white)),
+                              color: context.aublColors.ink)),
                       const SizedBox(height: 6),
                       Text(
                         '${_post.author} · ${timeago.format(DateTime.fromMillisecondsSinceEpoch(_post.createdAt), locale: 'ko')}',
-                        style: const TextStyle(
-                            color: AppTheme.slate500, fontSize: 12),
+                        style: TextStyle(
+                            color: context.aublColors.muted, fontSize: 12),
                       ),
                       const Divider(height: 28),
                       RichTextViewer(
                           content: _post.content,
                           fontSize: 14,
-                          color: AppTheme.slate300,
+                          color: context.aublColors.ink,
                           lineHeight: 1.7),
                       const SizedBox(height: 32),
-                      const Text(
+                      Text(
                         '댓글',
                         style: TextStyle(
-                            color: Colors.white,
+                            color: context.aublColors.ink,
                             fontSize: 15,
                             fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 4),
-                      const Text(
+                      Text(
                         '게시글/댓글 우측 메뉴에서 신고 또는 차단할 수 있습니다.',
-                        style:
-                            TextStyle(color: AppTheme.slate500, fontSize: 11),
+                        style: TextStyle(
+                            color: context.aublColors.muted, fontSize: 11),
                       ),
                       const SizedBox(height: 10),
                       StreamBuilder<List<InquiryComment>>(
@@ -383,10 +386,11 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
                               .where((c) => !blockedUserIds.contains(c.uid))
                               .toList();
                           if (comments.isEmpty) {
-                            return const Text(
+                            return Text(
                               '아직 댓글이 없습니다.',
                               style: TextStyle(
-                                  color: AppTheme.slate500, fontSize: 13),
+                                  color: context.aublColors.muted,
+                                  fontSize: 13),
                             );
                           }
                           return Column(
@@ -407,8 +411,8 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
                                     Row(
                                       children: [
                                         Text(c.author,
-                                            style: const TextStyle(
-                                                color: Colors.white,
+                                            style: TextStyle(
+                                                color: context.aublColors.ink,
                                                 fontSize: 13,
                                                 fontWeight: FontWeight.w500)),
                                         const SizedBox(width: 8),
@@ -418,8 +422,8 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
                                                   .fromMillisecondsSinceEpoch(
                                                       c.createdAt),
                                               locale: 'ko'),
-                                          style: const TextStyle(
-                                              color: AppTheme.slate500,
+                                          style: TextStyle(
+                                              color: context.aublColors.muted,
                                               fontSize: 11),
                                         ),
                                         if (showMenu) ...[
@@ -427,9 +431,9 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
                                           PopupMenuButton<
                                               _InquiryModerationAction>(
                                             padding: EdgeInsets.zero,
-                                            icon: const E911EmergencyIcon(
+                                            icon: E911EmergencyIcon(
                                               size: 18,
-                                              color: Color(0xFFE3E3E3),
+                                              color: context.aublColors.muted,
                                             ),
                                             onSelected: (action) {
                                               if (action ==
@@ -469,14 +473,14 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
                                                   items.add(
                                                       const PopupMenuDivider());
                                                 }
-                                                items.addAll(const [
-                                                  PopupMenuItem(
+                                                items.addAll([
+                                                  const PopupMenuItem(
                                                     value:
                                                         _InquiryModerationAction
                                                             .report,
                                                     child: Text('댓글 신고'),
                                                   ),
-                                                  PopupMenuItem(
+                                                  const PopupMenuItem(
                                                     value:
                                                         _InquiryModerationAction
                                                             .block,
@@ -494,7 +498,7 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
                                     RichTextViewer(
                                         content: c.content,
                                         fontSize: 13,
-                                        color: AppTheme.slate300),
+                                        color: context.aublColors.ink),
                                   ],
                                 ),
                               );
@@ -509,9 +513,10 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
               if (_isAccessible && !isPostBlocked)
                 Container(
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                  decoration: const BoxDecoration(
-                    color: AppTheme.slate800,
-                    border: Border(top: BorderSide(color: AppTheme.slate700)),
+                  decoration: BoxDecoration(
+                    color: context.aublColors.surface,
+                    border:
+                        Border(top: BorderSide(color: context.aublColors.line)),
                   ),
                   child: SafeArea(
                     top: false,
@@ -526,25 +531,25 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 12, vertical: 18),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF1e293b),
+                                  color: context.aublColors.surface,
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
-                                      color: const Color(0xFF334155)),
+                                      color: context.aublColors.line),
                                 ),
-                                child: const Text(
+                                child: Text(
                                   '로그인이 필요합니다.',
                                   style: TextStyle(
-                                    color: AppTheme.slate400,
+                                    color: context.aublColors.muted,
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ),
                               const SizedBox(height: 6),
-                              const Align(
+                              Align(
                                 alignment: Alignment.centerRight,
-                                child:
-                                    Icon(Icons.send, color: AppTheme.slate600),
+                                child: Icon(Icons.send,
+                                    color: context.aublColors.lineStrong),
                               ),
                             ],
                           )
@@ -563,8 +568,8 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: IconButton(
-                                  icon: const Icon(Icons.send,
-                                      color: AppTheme.blue400),
+                                  icon: Icon(Icons.send,
+                                      color: context.aublColors.cobalt),
                                   onPressed: _postComment,
                                 ),
                               ),
@@ -580,10 +585,10 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
   }
 
   Color _statusColor(String status) => switch (status) {
-        '미처리' => const Color(0xFFF87171),
-        '처리 중' => const Color(0xFFFBBF24),
-        '처리 완료' => const Color(0xFF4ADE80),
-        _ => AppTheme.slate400,
+        '미처리' => context.aublColors.danger,
+        '처리 중' => context.aublColors.warning,
+        '처리 완료' => context.aublColors.success,
+        _ => context.aublColors.muted,
       };
 
   Widget _buildStatusDropdown() {
@@ -593,22 +598,22 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
       onTap: () async {
         final selected = await showModalBottomSheet<String>(
           context: context,
-          backgroundColor: AppTheme.slate800,
+          backgroundColor: context.aublColors.surface,
           builder: (ctx) => Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Padding(
-                padding: EdgeInsets.all(16),
+              Padding(
+                padding: const EdgeInsets.all(16),
                 child: Text('처리 상태 변경',
                     style: TextStyle(
-                        color: Colors.white,
+                        color: context.aublColors.ink,
                         fontWeight: FontWeight.w700,
                         fontSize: 15)),
               ),
               ...InquiryPost.statuses.map((s) => ListTile(
                     title: Text(s, style: TextStyle(color: _statusColor(s))),
                     trailing: s == current
-                        ? const Icon(Icons.check, color: Colors.white)
+                        ? Icon(Icons.check, color: context.aublColors.ink)
                         : null,
                     onTap: () => Navigator.pop(ctx, s),
                   )),

@@ -26,23 +26,22 @@ class _AccountScreenState extends State<AccountScreen> {
   bool _loading = true;
   bool _deleting = false;
   bool _isAdmin = false;
-  bool _isScorer = false;
   String _roleLabel = '일반';
   String _roleDetail = '사용자';
 
   Color _roleAccent() {
-    if (_isAdmin) return AppTheme.blue500;
+    if (_isAdmin) return context.aublColors.cobalt;
     switch (_roleLabel) {
       case '기록원':
-        return AppTheme.orange500;
+        return context.aublColors.warning;
       case '감독':
-        return const Color(0xFFF97316);
+        return context.aublColors.navy;
       case '스태프':
-        return const Color(0xFF22C55E);
+        return context.aublColors.success;
       case '선수':
-        return const Color(0xFF38BDF8);
+        return context.aublColors.cobalt;
       default:
-        return AppTheme.slate600;
+        return context.aublColors.lineStrong;
     }
   }
 
@@ -61,7 +60,6 @@ class _AccountScreenState extends State<AccountScreen> {
     try {
       final token = await user.getIdTokenResult(true);
       final admin = token.claims?['admin'] == true;
-      var scorer = false;
       String roleLabel = '일반';
       String roleDetail = '사용자';
 
@@ -75,7 +73,6 @@ class _AccountScreenState extends State<AccountScreen> {
             .get();
         final data = roleDoc.data();
         if (roleDoc.exists && data?['role'] == 'scorer') {
-          scorer = true;
           roleLabel = '기록원';
           roleDetail = '기록/중계';
         } else if (roleDoc.exists && data?['role'] == 'coach') {
@@ -106,7 +103,6 @@ class _AccountScreenState extends State<AccountScreen> {
       if (mounted) {
         setState(() {
           _isAdmin = admin;
-          _isScorer = scorer;
           _roleLabel = roleLabel;
           _roleDetail = roleDetail;
           _loading = false;
@@ -226,7 +222,7 @@ class _AccountScreenState extends State<AccountScreen> {
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
               style: FilledButton.styleFrom(
-                backgroundColor: AppTheme.red500,
+                backgroundColor: context.aublColors.danger,
                 foregroundColor: Colors.white,
               ),
               child: const Text('탈퇴 진행'),
@@ -280,11 +276,11 @@ class _AccountScreenState extends State<AccountScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.person_outline,
-                          size: 48, color: AppTheme.slate500),
+                      Icon(Icons.person_outline,
+                          size: 48, color: context.aublColors.muted),
                       const SizedBox(height: 16),
-                      const Text('로그인이 필요합니다.',
-                          style: TextStyle(color: AppTheme.slate400)),
+                      Text('로그인이 필요합니다.',
+                          style: TextStyle(color: context.aublColors.muted)),
                       const SizedBox(height: 16),
                       ElevatedButton.icon(
                         onPressed: () async {
@@ -308,9 +304,9 @@ class _AccountScreenState extends State<AccountScreen> {
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: AppTheme.slate800,
+                        color: context.aublColors.surface,
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppTheme.slate700),
+                        border: Border.all(color: context.aublColors.line),
                       ),
                       child: Column(
                         children: [
@@ -326,8 +322,8 @@ class _AccountScreenState extends State<AccountScreen> {
                           const SizedBox(height: 12),
                           Text(
                             user.email ?? '-',
-                            style: const TextStyle(
-                                color: Colors.white,
+                            style: TextStyle(
+                                color: context.aublColors.ink,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w500),
                           ),
@@ -336,28 +332,17 @@ class _AccountScreenState extends State<AccountScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 12, vertical: 4),
                             decoration: BoxDecoration(
-                              gradient: _isAdmin
-                                  ? const LinearGradient(colors: [
-                                      AppTheme.blue500,
-                                      Color(0xFF8B5CF6),
-                                    ])
-                                  : _isScorer
-                                      ? const LinearGradient(colors: [
-                                          AppTheme.orange500,
-                                          AppTheme.amber400,
-                                        ])
-                                      : null,
-                              color: (_isAdmin || _isScorer)
-                                  ? null
-                                  : _roleAccent().withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(12),
+                              color: _roleAccent().withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
                               border: Border.all(
                                   color: _roleAccent().withValues(alpha: 0.5)),
                             ),
                             child: Text(
                               _roleLabel,
-                              style: const TextStyle(
-                                  color: Colors.white, fontSize: 12),
+                              style: TextStyle(
+                                  color: _roleAccent(),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800),
                             ),
                           ),
                         ],
@@ -392,11 +377,12 @@ class _AccountScreenState extends State<AccountScreen> {
                       width: double.infinity,
                       child: OutlinedButton.icon(
                         onPressed: _logout,
-                        icon: const Icon(Icons.logout, color: AppTheme.red500),
-                        label: const Text('로그아웃',
-                            style: TextStyle(color: AppTheme.red500)),
+                        icon: Icon(Icons.logout,
+                            color: context.aublColors.danger),
+                        label: Text('로그아웃',
+                            style: TextStyle(color: context.aublColors.danger)),
                         style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: AppTheme.red500),
+                          side: BorderSide(color: context.aublColors.danger),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
                       ),
@@ -406,12 +392,13 @@ class _AccountScreenState extends State<AccountScreen> {
                       width: double.infinity,
                       child: OutlinedButton.icon(
                         onPressed: _openAccountDeletionUrl,
-                        icon: const Icon(Icons.open_in_new,
-                            color: AppTheme.slate300),
-                        label: const Text('웹에서 계정 삭제 안내 열기',
-                            style: TextStyle(color: AppTheme.slate300)),
+                        icon: Icon(Icons.open_in_new,
+                            color: context.aublColors.ink),
+                        label: Text('웹에서 계정 삭제 안내 열기',
+                            style: TextStyle(color: context.aublColors.ink)),
                         style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: AppTheme.slate600),
+                          side:
+                              BorderSide(color: context.aublColors.lineStrong),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
                       ),
@@ -433,18 +420,18 @@ class _AccountScreenState extends State<AccountScreen> {
                             : const Icon(Icons.person_remove),
                         label: Text(_deleting ? '탈퇴 처리 중...' : '회원 탈퇴'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.red500,
+                          backgroundColor: context.aublColors.danger,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
                       ),
                     ),
                     const SizedBox(height: 10),
-                    const Text(
+                    Text(
                       '회원 탈퇴 시 인증 계정과 기본 프로필 데이터가 삭제됩니다.\n'
                       '커뮤니티 게시물은 운영 정책에 따라 일부 유지될 수 있습니다.',
                       style: TextStyle(
-                        color: AppTheme.slate500,
+                        color: context.aublColors.muted,
                         fontSize: 12,
                         height: 1.5,
                       ),
@@ -458,26 +445,26 @@ class _AccountScreenState extends State<AccountScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.slate800.withValues(alpha: 0.8),
+        color: context.aublColors.surface.withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.slate700),
+        border: Border.all(color: context.aublColors.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             '차단한 사용자',
             style: TextStyle(
-              color: Colors.white,
+              color: context.aublColors.ink,
               fontSize: 15,
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             '차단하면 해당 사용자의 게시글과 댓글이 커뮤니티에서 즉시 숨겨집니다.',
             style: TextStyle(
-              color: AppTheme.slate400,
+              color: context.aublColors.muted,
               fontSize: 12,
               height: 1.5,
             ),
@@ -486,12 +473,12 @@ class _AccountScreenState extends State<AccountScreen> {
           StreamBuilder<List<BlockedUserEntry>>(
             stream: _moderationService.watchBlockedUsers(user.uid),
             builder: (context, snapshot) {
-              final blockedUsers = snapshot.data ?? const <BlockedUserEntry>[];
+              final blockedUsers = snapshot.data ?? <BlockedUserEntry>[];
               if (blockedUsers.isEmpty) {
-                return const Text(
+                return Text(
                   '현재 차단한 사용자가 없습니다.',
                   style: TextStyle(
-                    color: AppTheme.slate500,
+                    color: context.aublColors.muted,
                     fontSize: 12,
                   ),
                 );
@@ -504,9 +491,9 @@ class _AccountScreenState extends State<AccountScreen> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     decoration: BoxDecoration(
-                      color: AppTheme.slate900.withValues(alpha: 0.45),
+                      color: context.aublColors.canvas.withValues(alpha: 0.45),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppTheme.slate700),
+                      border: Border.all(color: context.aublColors.line),
                     ),
                     child: Row(
                       children: [
@@ -516,8 +503,8 @@ class _AccountScreenState extends State<AccountScreen> {
                             children: [
                               Text(
                                 entry.label,
-                                style: const TextStyle(
-                                  color: Colors.white,
+                                style: TextStyle(
+                                  color: context.aublColors.ink,
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -525,8 +512,8 @@ class _AccountScreenState extends State<AccountScreen> {
                               const SizedBox(height: 2),
                               Text(
                                 entry.uid,
-                                style: const TextStyle(
-                                  color: AppTheme.slate500,
+                                style: TextStyle(
+                                  color: context.aublColors.muted,
                                   fontSize: 11,
                                 ),
                                 overflow: TextOverflow.ellipsis,
@@ -547,10 +534,10 @@ class _AccountScreenState extends State<AccountScreen> {
                               ),
                             );
                           },
-                          child: const Text(
+                          child: Text(
                             '차단 해제',
                             style: TextStyle(
-                              color: AppTheme.blue400,
+                              color: context.aublColors.cobalt,
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
                             ),
@@ -577,11 +564,12 @@ class _AccountScreenState extends State<AccountScreen> {
           SizedBox(
             width: 90,
             child: Text(label,
-                style: const TextStyle(color: AppTheme.slate500, fontSize: 13)),
+                style:
+                    TextStyle(color: context.aublColors.muted, fontSize: 13)),
           ),
           Expanded(
             child: Text(value,
-                style: const TextStyle(color: AppTheme.slate300, fontSize: 13)),
+                style: TextStyle(color: context.aublColors.ink, fontSize: 13)),
           ),
         ],
       ),

@@ -18,7 +18,7 @@ class OnboardingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.slate900,
+      backgroundColor: context.aublColors.canvas,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -31,29 +31,30 @@ class OnboardingScreen extends StatelessWidget {
                 fit: BoxFit.contain,
               ),
               const SizedBox(height: 24),
-              const Text(
+              Text(
                 'AUBL',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: context.aublColors.navyStrong,
+                  fontFamily: 'BarlowCondensed',
                   fontSize: 32,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 2,
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 '전국대학아마추어야구연합회',
                 style: TextStyle(
-                  color: AppTheme.slate400,
+                  color: context.aublColors.muted,
                   fontSize: 14,
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
+              Text(
                 '경기 일정, 기록, 문자중계를\n한곳에서 확인하세요',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: AppTheme.slate300,
+                  color: context.aublColors.ink,
                   fontSize: 16,
                   height: 1.5,
                 ),
@@ -65,7 +66,7 @@ class OnboardingScreen extends StatelessWidget {
                 child: ElevatedButton(
                   onPressed: () => _handleLogin(context),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.blue500,
+                    backgroundColor: context.aublColors.cobalt,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -85,11 +86,11 @@ class OnboardingScreen extends StatelessWidget {
                 child: TextButton(
                   onPressed: onComplete,
                   style: TextButton.styleFrom(
-                    foregroundColor: AppTheme.slate400,
+                    foregroundColor: context.aublColors.muted,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                       side: BorderSide(
-                        color: AppTheme.slate700.withValues(alpha: 0.5),
+                        color: context.aublColors.line.withValues(alpha: 0.5),
                       ),
                     ),
                     textStyle: const TextStyle(

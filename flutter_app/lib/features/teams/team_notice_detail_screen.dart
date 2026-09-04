@@ -171,7 +171,7 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
             ? Stream.value(<String>{})
             : _moderationService.watchBlockedUserIds(user.uid),
         builder: (context, blockedSnapshot) {
-          final blockedUserIds = blockedSnapshot.data ?? const <String>{};
+          final blockedUserIds = blockedSnapshot.data ?? <String>{};
 
           return Column(
             children: [
@@ -181,10 +181,10 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
                   children: [
                     Text(
                       widget.notice.title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: context.aublColors.ink,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -192,8 +192,8 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
                       children: [
                         Text(
                           widget.notice.createdByName ?? '',
-                          style: const TextStyle(
-                              color: AppTheme.slate400, fontSize: 13),
+                          style: TextStyle(
+                              color: context.aublColors.muted, fontSize: 13),
                         ),
                         const SizedBox(width: 8),
                         Text(
@@ -202,8 +202,8 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
                                 widget.notice.createdAt),
                             locale: 'ko',
                           ),
-                          style: const TextStyle(
-                              color: AppTheme.slate500, fontSize: 12),
+                          style: TextStyle(
+                              color: context.aublColors.muted, fontSize: 12),
                         ),
                       ],
                     ),
@@ -211,20 +211,21 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
                     RichTextViewer(
                         content: widget.notice.content,
                         fontSize: 14,
-                        color: AppTheme.slate300),
+                        color: context.aublColors.ink),
                     const SizedBox(height: 24),
-                    const Text(
+                    Text(
                       '댓글',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: context.aublColors.ink,
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
+                    Text(
                       '댓글 우측 메뉴에서 신고 또는 차단할 수 있습니다.',
-                      style: TextStyle(color: AppTheme.slate500, fontSize: 11),
+                      style: TextStyle(
+                          color: context.aublColors.muted, fontSize: 11),
                     ),
                     const SizedBox(height: 8),
                     StreamBuilder<List<NoticeComment>>(
@@ -235,19 +236,21 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
                           final err = snap.error;
                           if (err is FirebaseException &&
                               err.code == 'permission-denied') {
-                            return const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 16),
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
                               child: Text(
                                 '댓글은 해당 팀 선수/감독만 열람할 수 있습니다.',
-                                style: TextStyle(color: AppTheme.red500),
+                                style:
+                                    TextStyle(color: context.aublColors.danger),
                               ),
                             );
                           }
-                          return const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 16),
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
                             child: Text(
                               '댓글을 불러오지 못했습니다.',
-                              style: TextStyle(color: AppTheme.red500),
+                              style:
+                                  TextStyle(color: context.aublColors.danger),
                             ),
                           );
                         }
@@ -257,10 +260,11 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
                                 !blockedUserIds.contains(comment.uid))
                             .toList();
                         if (comments.isEmpty) {
-                          return const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 16),
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
                             child: Text('아직 댓글이 없습니다.',
-                                style: TextStyle(color: AppTheme.slate500)),
+                                style:
+                                    TextStyle(color: context.aublColors.muted)),
                           );
                         }
 
@@ -305,9 +309,10 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
               ),
               Container(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                decoration: const BoxDecoration(
-                  color: AppTheme.slate800,
-                  border: Border(top: BorderSide(color: AppTheme.slate700)),
+                decoration: BoxDecoration(
+                  color: context.aublColors.surface,
+                  border:
+                      Border(top: BorderSide(color: context.aublColors.line)),
                 ),
                 child: SafeArea(
                   top: false,
@@ -321,24 +326,25 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 18),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF1e293b),
+                                color: context.aublColors.surface,
                                 borderRadius: BorderRadius.circular(10),
                                 border:
-                                    Border.all(color: const Color(0xFF334155)),
+                                    Border.all(color: context.aublColors.line),
                               ),
-                              child: const Text(
+                              child: Text(
                                 '로그인이 필요합니다.',
                                 style: TextStyle(
-                                  color: AppTheme.slate400,
+                                  color: context.aublColors.muted,
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ),
                             const SizedBox(height: 6),
-                            const Align(
+                            Align(
                               alignment: Alignment.centerRight,
-                              child: Icon(Icons.send, color: AppTheme.slate600),
+                              child: Icon(Icons.send,
+                                  color: context.aublColors.lineStrong),
                             ),
                           ],
                         )
@@ -351,17 +357,17 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
                                 padding: const EdgeInsets.only(bottom: 4),
                                 child: Row(
                                   children: [
-                                    const Text('답글 작성 중',
+                                    Text('답글 작성 중',
                                         style: TextStyle(
-                                            color: AppTheme.blue400,
+                                            color: context.aublColors.cobalt,
                                             fontSize: 12)),
                                     const Spacer(),
                                     GestureDetector(
                                       onTap: () =>
                                           setState(() => _replyToId = null),
-                                      child: const Text('취소',
+                                      child: Text('취소',
                                           style: TextStyle(
-                                              color: AppTheme.slate400,
+                                              color: context.aublColors.muted,
                                               fontSize: 12)),
                                     ),
                                   ],
@@ -378,8 +384,8 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
                             Align(
                               alignment: Alignment.centerRight,
                               child: IconButton(
-                                icon: const Icon(Icons.send,
-                                    color: AppTheme.blue400),
+                                icon: Icon(Icons.send,
+                                    color: context.aublColors.cobalt),
                                 onPressed: _postComment,
                               ),
                             ),
@@ -432,8 +438,8 @@ class _CommentTile extends StatelessWidget {
           Row(
             children: [
               Text(comment.author,
-                  style: const TextStyle(
-                      color: Colors.white,
+                  style: TextStyle(
+                      color: context.aublColors.ink,
                       fontSize: 13,
                       fontWeight: FontWeight.w500)),
               const SizedBox(width: 8),
@@ -441,15 +447,15 @@ class _CommentTile extends StatelessWidget {
                 timeago.format(
                     DateTime.fromMillisecondsSinceEpoch(comment.createdAt),
                     locale: 'ko'),
-                style: const TextStyle(color: AppTheme.slate500, fontSize: 11),
+                style: TextStyle(color: context.aublColors.muted, fontSize: 11),
               ),
               if (showMenu) ...[
                 const Spacer(),
                 PopupMenuButton<_TeamNoticeModerationAction>(
                   padding: EdgeInsets.zero,
-                  icon: const E911EmergencyIcon(
+                  icon: E911EmergencyIcon(
                     size: 18,
-                    color: Color(0xFFE3E3E3),
+                    color: context.aublColors.muted,
                   ),
                   onSelected: (action) => onAction?.call(action, comment),
                   itemBuilder: (context) {
@@ -467,12 +473,12 @@ class _CommentTile extends StatelessWidget {
                       if (items.isNotEmpty) {
                         items.add(const PopupMenuDivider());
                       }
-                      items.addAll(const [
-                        PopupMenuItem(
+                      items.addAll([
+                        const PopupMenuItem(
                           value: _TeamNoticeModerationAction.report,
                           child: Text('댓글 신고'),
                         ),
-                        PopupMenuItem(
+                        const PopupMenuItem(
                           value: _TeamNoticeModerationAction.block,
                           child: Text('작성자 차단'),
                         ),
@@ -486,7 +492,9 @@ class _CommentTile extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           RichTextViewer(
-              content: comment.content, fontSize: 13, color: AppTheme.slate300),
+              content: comment.content,
+              fontSize: 13,
+              color: context.aublColors.ink),
           const SizedBox(height: 4),
           Row(
             children: [
@@ -497,13 +505,15 @@ class _CommentTile extends StatelessWidget {
                     Icon(
                       isLiked ? Icons.favorite : Icons.favorite_border,
                       size: 14,
-                      color: isLiked ? AppTheme.red500 : AppTheme.slate500,
+                      color: isLiked
+                          ? context.aublColors.danger
+                          : context.aublColors.muted,
                     ),
                     if (comment.likeCount > 0) ...[
                       const SizedBox(width: 2),
                       Text('${comment.likeCount}',
-                          style: const TextStyle(
-                              color: AppTheme.slate500, fontSize: 11)),
+                          style: TextStyle(
+                              color: context.aublColors.muted, fontSize: 11)),
                     ],
                   ],
                 ),
@@ -511,8 +521,9 @@ class _CommentTile extends StatelessWidget {
               const SizedBox(width: 16),
               GestureDetector(
                 onTap: onReply,
-                child: const Text('답글',
-                    style: TextStyle(color: AppTheme.slate500, fontSize: 11)),
+                child: Text('답글',
+                    style: TextStyle(
+                        color: context.aublColors.muted, fontSize: 11)),
               ),
             ],
           ),
@@ -530,8 +541,8 @@ class _CommentTile extends StatelessWidget {
                               Row(
                                 children: [
                                   Text(r.author,
-                                      style: const TextStyle(
-                                          color: Colors.white,
+                                      style: TextStyle(
+                                          color: context.aublColors.ink,
                                           fontSize: 12,
                                           fontWeight: FontWeight.w500)),
                                   const SizedBox(width: 6),
@@ -540,8 +551,9 @@ class _CommentTile extends StatelessWidget {
                                         DateTime.fromMillisecondsSinceEpoch(
                                             r.createdAt),
                                         locale: 'ko'),
-                                    style: const TextStyle(
-                                        color: AppTheme.slate500, fontSize: 10),
+                                    style: TextStyle(
+                                        color: context.aublColors.muted,
+                                        fontSize: 10),
                                   ),
                                   const Spacer(),
                                   if ((r.uid == currentUid || canManage) ||
@@ -551,9 +563,9 @@ class _CommentTile extends StatelessWidget {
                                     PopupMenuButton<
                                         _TeamNoticeModerationAction>(
                                       padding: EdgeInsets.zero,
-                                      icon: const E911EmergencyIcon(
+                                      icon: E911EmergencyIcon(
                                         size: 16,
-                                        color: Color(0xFFE3E3E3),
+                                        color: context.aublColors.muted,
                                       ),
                                       onSelected: (action) =>
                                           onAction?.call(action, r),
@@ -580,13 +592,13 @@ class _CommentTile extends StatelessWidget {
                                           if (items.isNotEmpty) {
                                             items.add(const PopupMenuDivider());
                                           }
-                                          items.addAll(const [
-                                            PopupMenuItem(
+                                          items.addAll([
+                                            const PopupMenuItem(
                                               value: _TeamNoticeModerationAction
                                                   .report,
                                               child: Text('댓글 신고'),
                                             ),
-                                            PopupMenuItem(
+                                            const PopupMenuItem(
                                               value: _TeamNoticeModerationAction
                                                   .block,
                                               child: Text('작성자 차단'),
@@ -602,7 +614,7 @@ class _CommentTile extends StatelessWidget {
                               RichTextViewer(
                                   content: r.content,
                                   fontSize: 12,
-                                  color: AppTheme.slate400),
+                                  color: context.aublColors.muted),
                             ],
                           ),
                         ))

@@ -15,24 +15,24 @@ class PredictionScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.analytics_outlined,
-                  size: 64, color: AppTheme.blue400),
+              Icon(Icons.analytics_outlined,
+                  size: 64, color: context.aublColors.cobalt),
               const SizedBox(height: 24),
-              const Text(
+              Text(
                 '승부예측 랩',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: context.aublColors.ink,
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 'AUBL의 경기 결과를 예측하는 AI 모델을 준비 중입니다.\n'
                 '팀 전력 분석, 라인업 예측, 실시간 승률 업데이트 등\n'
                 '다양한 기능을 곧 만나보실 수 있습니다.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppTheme.slate400, fontSize: 14),
+                style: TextStyle(color: context.aublColors.muted, fontSize: 14),
               ),
               const SizedBox(height: 32),
 
@@ -48,14 +48,15 @@ class PredictionScreen extends StatelessWidget {
                               width: 28,
                               height: 28,
                               decoration: BoxDecoration(
-                                color: AppTheme.blue500.withValues(alpha: 0.15),
+                                color: context.aublColors.cobalt
+                                    .withValues(alpha: 0.15),
                                 shape: BoxShape.circle,
                               ),
                               child: Center(
                                 child: Text(
                                   '${e.key + 1}',
-                                  style: const TextStyle(
-                                      color: AppTheme.blue400,
+                                  style: TextStyle(
+                                      color: context.aublColors.cobalt,
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600),
                                 ),
@@ -63,8 +64,9 @@ class PredictionScreen extends StatelessWidget {
                             ),
                             const SizedBox(width: 12),
                             Text(e.value,
-                                style: const TextStyle(
-                                    color: AppTheme.slate300, fontSize: 14)),
+                                style: TextStyle(
+                                    color: context.aublColors.ink,
+                                    fontSize: 14)),
                           ],
                         ),
                       )),

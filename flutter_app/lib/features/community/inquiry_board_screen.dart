@@ -6,7 +6,6 @@ import '../../core/models/inquiry_post.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/services/moderation_service.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/widgets/background_logo.dart';
 import 'inquiry_detail_screen.dart';
 import 'inquiry_write_screen.dart';
 
@@ -26,8 +25,8 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
   String _categoryFilter = '전체';
   String _statusFilter = '전체';
 
-  static const _platforms = ['전체', '앱', '웹'];
-  static const _categories = [
+  static final _platforms = ['전체', '앱', '웹'];
+  static final _categories = [
     '전체',
     '기능 개선',
     '버그 신고',
@@ -35,7 +34,7 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
     '경기/기록 오류',
     '기타'
   ];
-  static const _statuses = ['전체', '미처리', '처리 중', '처리 완료'];
+  static final _statuses = ['전체', '미처리', '처리 중', '처리 완료'];
 
   @override
   void initState() {
@@ -79,15 +78,16 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
     return user.uid == post.uid;
   }
 
-  Color _platformColor(String platform) =>
-      platform == 'app' ? const Color(0xFF818CF8) : const Color(0xFF34D399);
+  Color _platformColor(String platform) => platform == 'app'
+      ? context.aublColors.cobalt
+      : context.aublColors.success;
 
   Color _categoryColor(String cat) => switch (cat) {
-        '기능 개선' => AppTheme.blue400,
-        '버그 신고' => const Color(0xFFF87171),
-        '사용 문의' => const Color(0xFF4ADE80),
-        '경기/기록 오류' => const Color(0xFFFB923C),
-        _ => AppTheme.slate400,
+        '기능 개선' => context.aublColors.cobalt,
+        '버그 신고' => context.aublColors.danger,
+        '사용 문의' => context.aublColors.success,
+        '경기/기록 오류' => context.aublColors.warning,
+        _ => context.aublColors.muted,
       };
 
   @override
@@ -117,12 +117,11 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
             ? Stream.value(<String>{})
             : _moderationService.watchBlockedUserIds(currentUid),
         builder: (context, blockedSnapshot) {
-          final blockedUserIds = blockedSnapshot.data ?? const <String>{};
+          final blockedUserIds = blockedSnapshot.data ?? <String>{};
           final filtered = _filtered(blockedUserIds);
 
           return Stack(
             children: [
-              const BackgroundLogo(saturation: 0.85),
               _loading
                   ? const Center(child: CircularProgressIndicator())
                   : RefreshIndicator(
@@ -135,17 +134,18 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
                               width: double.infinity,
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: AppTheme.blue500.withValues(alpha: 0.15),
+                                color: context.aublColors.cobalt
+                                    .withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(10),
                                 border: Border.all(
-                                  color:
-                                      AppTheme.blue500.withValues(alpha: 0.35),
+                                  color: context.aublColors.cobalt
+                                      .withValues(alpha: 0.35),
                                 ),
                               ),
-                              child: const Text(
+                              child: Text(
                                 '첨부파일 업로드는 현재 지원하지 않습니다. 스크린샷 등 파일이 필요한 경우 구글 드라이브 등 외부 링크를 본문에 첨부하거나, 게시글 작성 후 aublcau@gmail.com으로 전송해 주세요.',
                                 style: TextStyle(
-                                  color: AppTheme.blue400,
+                                  color: context.aublColors.cobalt,
                                   fontSize: 12,
                                   height: 1.6,
                                   fontWeight: FontWeight.w600,
@@ -167,18 +167,20 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
                                 horizontal: 16, vertical: 4),
                             child: Text(
                               '${filtered.length}개 게시글',
-                              style: const TextStyle(
-                                  color: AppTheme.slate500, fontSize: 12),
+                              style: TextStyle(
+                                  color: context.aublColors.muted,
+                                  fontSize: 12),
                             ),
                           ),
 
                           // ── 목록 ──
                           if (filtered.isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.all(32),
+                            Padding(
+                              padding: const EdgeInsets.all(32),
                               child: Center(
                                 child: Text('게시글이 없습니다.',
-                                    style: TextStyle(color: AppTheme.slate500)),
+                                    style: TextStyle(
+                                        color: context.aublColors.muted)),
                               ),
                             )
                           else
@@ -193,7 +195,7 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 12, vertical: 3),
                                 child: Material(
-                                  color: AppTheme.slate800.withValues(
+                                  color: context.aublColors.surface.withValues(
                                       alpha: accessible ? 0.5 : 0.3),
                                   borderRadius: BorderRadius.circular(10),
                                   child: InkWell(
@@ -234,14 +236,16 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
                                                   _statusColor(post.status)),
                                               if (post.isPrivate) ...[
                                                 const SizedBox(width: 6),
-                                                const Icon(Icons.lock_outline,
+                                                Icon(Icons.lock_outline,
                                                     size: 13,
-                                                    color: AppTheme.slate500),
+                                                    color: context
+                                                        .aublColors.muted),
                                               ],
                                               const Spacer(),
                                               Text(ago,
-                                                  style: const TextStyle(
-                                                      color: AppTheme.slate500,
+                                                  style: TextStyle(
+                                                      color: context
+                                                          .aublColors.muted,
                                                       fontSize: 11)),
                                             ],
                                           ),
@@ -253,8 +257,8 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
                                                 : post.title,
                                             style: TextStyle(
                                               color: accessible
-                                                  ? Colors.white
-                                                  : AppTheme.slate500,
+                                                  ? context.aublColors.ink
+                                                  : context.aublColors.muted,
                                               fontSize: 14,
                                               fontWeight: FontWeight.w600,
                                             ),
@@ -266,8 +270,9 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
                                             const SizedBox(height: 2),
                                             Text(
                                               post.author,
-                                              style: const TextStyle(
-                                                  color: AppTheme.slate500,
+                                              style: TextStyle(
+                                                  color:
+                                                      context.aublColors.muted,
                                                   fontSize: 12),
                                             ),
                                           ],
@@ -303,13 +308,16 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
             child: ChoiceChip(
               label: Text(item,
                   style: TextStyle(
-                      color: isSelected ? Colors.white : AppTheme.slate400,
+                      color:
+                          isSelected ? Colors.white : context.aublColors.muted,
                       fontSize: 12)),
               selected: isSelected,
-              selectedColor: AppTheme.blue500,
-              backgroundColor: AppTheme.slate800,
+              selectedColor: context.aublColors.cobalt,
+              backgroundColor: context.aublColors.surface,
               side: BorderSide(
-                  color: isSelected ? AppTheme.blue500 : AppTheme.slate700),
+                  color: isSelected
+                      ? context.aublColors.cobalt
+                      : context.aublColors.line),
               onSelected: (_) => onSelect(item),
             ),
           );
@@ -335,8 +343,9 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
                       color: isSelected ? Colors.white : color, fontSize: 12)),
               selected: isSelected,
               selectedColor: color,
-              backgroundColor: AppTheme.slate800,
-              side: BorderSide(color: isSelected ? color : AppTheme.slate700),
+              backgroundColor: context.aublColors.surface,
+              side: BorderSide(
+                  color: isSelected ? color : context.aublColors.line),
               onSelected: (_) => setState(() => _statusFilter = s),
             ),
           );
@@ -346,10 +355,10 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
   }
 
   Color _statusColor(String status) => switch (status) {
-        '미처리' => const Color(0xFFF87171),
-        '처리 중' => const Color(0xFFFBBF24),
-        '처리 완료' => const Color(0xFF4ADE80),
-        _ => AppTheme.slate400,
+        '미처리' => context.aublColors.danger,
+        '처리 중' => context.aublColors.warning,
+        '처리 완료' => context.aublColors.success,
+        _ => context.aublColors.muted,
       };
 
   Widget _badge(String label, Color color) {

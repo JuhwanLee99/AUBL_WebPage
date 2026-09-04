@@ -27,7 +27,7 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
   bool _isPrivate = false;
   bool _submitting = false;
 
-  static const _categories = ['기능 개선', '버그 신고', '사용 문의', '경기/기록 오류', '기타'];
+  static final _categories = ['기능 개선', '버그 신고', '사용 문의', '경기/기록 오류', '기타'];
 
   bool get _isEditMode => widget.editPost != null;
 
@@ -116,7 +116,9 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
                 : Text(
                     _isEditMode ? '수정' : '완료',
                     style: TextStyle(
-                      color: canSubmit ? AppTheme.blue400 : AppTheme.slate500,
+                      color: canSubmit
+                          ? context.aublColors.cobalt
+                          : context.aublColors.muted,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -132,15 +134,15 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppTheme.blue500.withValues(alpha: 0.15),
+                color: context.aublColors.cobalt.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
-                border:
-                    Border.all(color: AppTheme.blue500.withValues(alpha: 0.35)),
+                border: Border.all(
+                    color: context.aublColors.cobalt.withValues(alpha: 0.35)),
               ),
-              child: const Text(
+              child: Text(
                 '첨부파일 업로드는 현재 지원하지 않습니다.\n스크린샷 등 파일이 필요한 경우 구글 드라이브 등 외부 링크를 본문에 첨부하거나, 게시글 작성 후 aublcau@gmail.com으로 전송해 주세요.',
                 style: TextStyle(
-                  color: AppTheme.blue400,
+                  color: context.aublColors.cobalt,
                   fontSize: 12,
                   height: 1.6,
                   fontWeight: FontWeight.w600,
@@ -154,9 +156,9 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
             const SizedBox(height: 8),
             Row(
               children: [
-                _platformBtn('app', '앱', const Color(0xFF818CF8)),
+                _platformBtn('app', '앱', context.aublColors.cobalt),
                 const SizedBox(width: 8),
-                _platformBtn('web', '웹', const Color(0xFF34D399)),
+                _platformBtn('web', '웹', context.aublColors.success),
               ],
             ),
             const SizedBox(height: 16),
@@ -166,13 +168,13 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               initialValue: _category,
-              dropdownColor: AppTheme.slate800,
+              dropdownColor: context.aublColors.surface,
               decoration: _inputDecoration('분류를 선택하세요'),
               items: _categories
                   .map((c) => DropdownMenuItem(
                         value: c,
                         child: Text(c,
-                            style: const TextStyle(color: Colors.white)),
+                            style: TextStyle(color: context.aublColors.ink)),
                       ))
                   .toList(),
               onChanged: (v) => setState(() => _category = v!),
@@ -185,7 +187,7 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
             TextField(
               controller: _titleCtrl,
               maxLength: 100,
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(color: context.aublColors.ink),
               decoration: _inputDecoration('제목을 입력하세요'),
               onChanged: (_) => setState(() {}),
             ),
@@ -205,24 +207,28 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
             // ── 비밀글 ──
             Container(
               decoration: BoxDecoration(
-                color: AppTheme.slate800.withValues(alpha: 0.6),
+                color: context.aublColors.surface.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.slate700),
+                border: Border.all(color: context.aublColors.line),
               ),
               child: SwitchListTile(
                 value: _isPrivate,
                 onChanged: (v) => setState(() => _isPrivate = v),
-                activeThumbColor: AppTheme.blue400,
-                title: const Text('비밀글',
+                activeThumbColor: context.aublColors.cobalt,
+                title: Text('비밀글',
                     style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w600)),
-                subtitle: const Text(
+                        color: context.aublColors.ink,
+                        fontWeight: FontWeight.w600)),
+                subtitle: Text(
                   '작성자와 관리자만 내용을 볼 수 있습니다',
-                  style: TextStyle(color: AppTheme.slate500, fontSize: 12),
+                  style:
+                      TextStyle(color: context.aublColors.muted, fontSize: 12),
                 ),
                 secondary: Icon(
                   _isPrivate ? Icons.lock : Icons.lock_open,
-                  color: _isPrivate ? AppTheme.blue400 : AppTheme.slate500,
+                  color: _isPrivate
+                      ? context.aublColors.cobalt
+                      : context.aublColors.muted,
                 ),
               ),
             ),
@@ -234,8 +240,8 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
 
   Widget _sectionLabel(String label) => Text(
         label,
-        style: const TextStyle(
-            color: AppTheme.slate400,
+        style: TextStyle(
+            color: context.aublColors.muted,
             fontSize: 13,
             fontWeight: FontWeight.w700),
       );
@@ -248,16 +254,18 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? color.withValues(alpha: 0.2) : AppTheme.slate800,
+          color: selected
+              ? color.withValues(alpha: 0.2)
+              : context.aublColors.surface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-              color: selected ? color : AppTheme.slate700,
+              color: selected ? color : context.aublColors.line,
               width: selected ? 1.5 : 1),
         ),
         child: Text(
           label,
           style: TextStyle(
-              color: selected ? color : AppTheme.slate400,
+              color: selected ? color : context.aublColors.muted,
               fontWeight: FontWeight.w700),
         ),
       ),
@@ -266,22 +274,22 @@ class _InquiryWriteScreenState extends State<InquiryWriteScreen> {
 
   InputDecoration _inputDecoration(String hint) => InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(color: AppTheme.slate500),
+        hintStyle: TextStyle(color: context.aublColors.muted),
         filled: true,
-        fillColor: AppTheme.slate800.withValues(alpha: 0.6),
+        fillColor: context.aublColors.surface.withValues(alpha: 0.6),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppTheme.slate700),
+          borderSide: BorderSide(color: context.aublColors.line),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppTheme.slate700),
+          borderSide: BorderSide(color: context.aublColors.line),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppTheme.blue500),
+          borderSide: BorderSide(color: context.aublColors.cobalt),
         ),
       );
 }

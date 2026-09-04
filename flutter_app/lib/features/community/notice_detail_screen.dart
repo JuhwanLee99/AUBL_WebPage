@@ -36,7 +36,7 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
   late Notice _notice;
   bool _isAdmin = false;
 
-  static const List<String> _writeCategories = [
+  static final List<String> _writeCategories = [
     '일반',
     '심판/기록원 모집',
     '징계',
@@ -206,7 +206,7 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => Dialog(
-          backgroundColor: AppTheme.slate800,
+          backgroundColor: context.aublColors.surface,
           insetPadding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
           child: SingleChildScrollView(
@@ -215,10 +215,10 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   '공지 수정',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: context.aublColors.ink,
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
                   ),
@@ -233,7 +233,7 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
                     if (v != null) setDialogState(() => category = v);
                   },
                   decoration: const InputDecoration(labelText: '카테고리'),
-                  dropdownColor: AppTheme.slate700,
+                  dropdownColor: context.aublColors.line,
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -248,9 +248,10 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
                   minHeight: 160,
                 ),
                 const SizedBox(height: 6),
-                const Text(
+                Text(
                   '이미지/동영상은 툴바 버튼으로 URL을 입력하여 삽입할 수 있습니다.',
-                  style: TextStyle(color: AppTheme.slate500, fontSize: 11),
+                  style:
+                      TextStyle(color: context.aublColors.muted, fontSize: 11),
                 ),
                 const SizedBox(height: 4),
                 CheckboxListTile(
@@ -280,7 +281,7 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
                     const SizedBox(width: 8),
                     FilledButton(
                       style: FilledButton.styleFrom(
-                        disabledBackgroundColor: AppTheme.slate700,
+                        disabledBackgroundColor: context.aublColors.line,
                       ),
                       onPressed: saving
                           ? null
@@ -345,11 +346,11 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.slate800,
-        title: const Text('공지 삭제', style: TextStyle(color: Colors.white)),
-        content: const Text(
+        backgroundColor: context.aublColors.surface,
+        title: Text('공지 삭제', style: TextStyle(color: context.aublColors.ink)),
+        content: Text(
           '이 공지를 삭제하시겠습니까?',
-          style: TextStyle(color: AppTheme.slate300),
+          style: TextStyle(color: context.aublColors.ink),
         ),
         actions: [
           TextButton(
@@ -358,7 +359,8 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('삭제', style: TextStyle(color: AppTheme.red500)),
+            child:
+                Text('삭제', style: TextStyle(color: context.aublColors.danger)),
           ),
         ],
       ),
@@ -395,13 +397,14 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
               onPressed: _showEditNoticeDialog,
             ),
             IconButton(
-              icon: const Icon(Icons.delete_outline, color: AppTheme.red500),
+              icon:
+                  Icon(Icons.delete_outline, color: context.aublColors.danger),
               onPressed: _deleteNotice,
             ),
           ],
           if (canReportNotice)
             PopupMenuButton<_NoticeModerationAction>(
-              icon: const E911EmergencyIcon(color: Color(0xFFE3E3E3)),
+              icon: E911EmergencyIcon(color: context.aublColors.muted),
               onSelected: (action) {
                 _handleModerationAction(
                   action: action,
@@ -432,7 +435,7 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
             ? Stream.value(<String>{})
             : _moderationService.watchBlockedUserIds(user.uid),
         builder: (context, blockedSnapshot) {
-          final blockedUserIds = blockedSnapshot.data ?? const <String>{};
+          final blockedUserIds = blockedSnapshot.data ?? <String>{};
           final isNoticeBlocked = blockedUserIds.contains(n.uid);
 
           return Column(
@@ -442,30 +445,30 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
                   padding: const EdgeInsets.all(16),
                   children: [
                     if (isNoticeBlocked)
-                      const Center(
+                      Center(
                         child: Padding(
-                          padding: EdgeInsets.symmetric(vertical: 48),
+                          padding: const EdgeInsets.symmetric(vertical: 48),
                           child: Column(
                             children: [
                               Icon(
                                 Icons.block,
                                 size: 56,
-                                color: AppTheme.slate500,
+                                color: context.aublColors.muted,
                               ),
-                              SizedBox(height: 16),
+                              const SizedBox(height: 16),
                               Text(
                                 '차단한 사용자의 게시글입니다.',
                                 style: TextStyle(
-                                  color: Colors.white,
+                                  color: context.aublColors.ink,
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
-                              SizedBox(height: 8),
+                              const SizedBox(height: 8),
                               Text(
                                 '계정 화면에서 차단을 해제하면 다시 볼 수 있습니다.',
                                 style: TextStyle(
-                                  color: AppTheme.slate500,
+                                  color: context.aublColors.muted,
                                   fontSize: 13,
                                 ),
                               ),
@@ -475,34 +478,34 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
                       )
                     else ...[
                       Text(n.title,
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white)),
+                              color: context.aublColors.ink)),
                       const SizedBox(height: 8),
                       Text(
                         '${n.author} · ${timeago.format(DateTime.fromMillisecondsSinceEpoch(n.createdAt), locale: 'ko')}',
-                        style: const TextStyle(
-                            color: AppTheme.slate500, fontSize: 13),
+                        style: TextStyle(
+                            color: context.aublColors.muted, fontSize: 13),
                       ),
                       const Divider(height: 24),
                       RichTextViewer(
                         content: n.content,
                         fontSize: 14,
-                        color: AppTheme.slate300,
+                        color: context.aublColors.ink,
                       ),
                       const SizedBox(height: 24),
                       if (n.allowComments) ...[
-                        const Text('댓글',
+                        Text('댓글',
                             style: TextStyle(
-                                color: Colors.white,
+                                color: context.aublColors.ink,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600)),
                         const SizedBox(height: 4),
-                        const Text(
+                        Text(
                           '게시글/댓글 우측 메뉴에서 신고 또는 차단할 수 있습니다.',
-                          style:
-                              TextStyle(color: AppTheme.slate500, fontSize: 11),
+                          style: TextStyle(
+                              color: context.aublColors.muted, fontSize: 11),
                         ),
                         const SizedBox(height: 8),
                         StreamBuilder<List<NoticeComment>>(
@@ -513,8 +516,9 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
                                     !blockedUserIds.contains(comment.uid))
                                 .toList();
                             if (comments.isEmpty) {
-                              return const Text('아직 댓글이 없습니다.',
-                                  style: TextStyle(color: AppTheme.slate500));
+                              return Text('아직 댓글이 없습니다.',
+                                  style: TextStyle(
+                                      color: context.aublColors.muted));
                             }
                             return Column(
                               children: comments.map((c) {
@@ -535,8 +539,8 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
                                       Row(
                                         children: [
                                           Text(c.author,
-                                              style: const TextStyle(
-                                                  color: Colors.white,
+                                              style: TextStyle(
+                                                  color: context.aublColors.ink,
                                                   fontSize: 13,
                                                   fontWeight: FontWeight.w500)),
                                           const SizedBox(width: 8),
@@ -546,8 +550,8 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
                                                     .fromMillisecondsSinceEpoch(
                                                         c.createdAt),
                                                 locale: 'ko'),
-                                            style: const TextStyle(
-                                                color: AppTheme.slate500,
+                                            style: TextStyle(
+                                                color: context.aublColors.muted,
                                                 fontSize: 11),
                                           ),
                                           if (showMenu) ...[
@@ -555,9 +559,9 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
                                             PopupMenuButton<
                                                 _NoticeModerationAction>(
                                               padding: EdgeInsets.zero,
-                                              icon: const E911EmergencyIcon(
+                                              icon: E911EmergencyIcon(
                                                 size: 18,
-                                                color: Color(0xFFE3E3E3),
+                                                color: context.aublColors.muted,
                                               ),
                                               onSelected: (action) {
                                                 if (action ==
@@ -598,14 +602,14 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
                                                     items.add(
                                                         const PopupMenuDivider());
                                                   }
-                                                  items.addAll(const [
-                                                    PopupMenuItem(
+                                                  items.addAll([
+                                                    const PopupMenuItem(
                                                       value:
                                                           _NoticeModerationAction
                                                               .report,
                                                       child: Text('댓글 신고'),
                                                     ),
-                                                    PopupMenuItem(
+                                                    const PopupMenuItem(
                                                       value:
                                                           _NoticeModerationAction
                                                               .block,
@@ -623,7 +627,7 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
                                       RichTextViewer(
                                         content: c.content,
                                         fontSize: 13,
-                                        color: AppTheme.slate300,
+                                        color: context.aublColors.ink,
                                       ),
                                     ],
                                   ),
@@ -640,9 +644,10 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
               if (n.allowComments && !isNoticeBlocked)
                 Container(
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                  decoration: const BoxDecoration(
-                    color: AppTheme.slate800,
-                    border: Border(top: BorderSide(color: AppTheme.slate700)),
+                  decoration: BoxDecoration(
+                    color: context.aublColors.surface,
+                    border:
+                        Border(top: BorderSide(color: context.aublColors.line)),
                   ),
                   child: SafeArea(
                     top: false,
@@ -657,25 +662,25 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 12, vertical: 18),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF1e293b),
+                                  color: context.aublColors.surface,
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
-                                      color: const Color(0xFF334155)),
+                                      color: context.aublColors.line),
                                 ),
-                                child: const Text(
+                                child: Text(
                                   '로그인이 필요합니다.',
                                   style: TextStyle(
-                                    color: AppTheme.slate400,
+                                    color: context.aublColors.muted,
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ),
                               const SizedBox(height: 6),
-                              const Align(
+                              Align(
                                 alignment: Alignment.centerRight,
-                                child:
-                                    Icon(Icons.send, color: AppTheme.slate600),
+                                child: Icon(Icons.send,
+                                    color: context.aublColors.lineStrong),
                               ),
                             ],
                           )
@@ -694,8 +699,8 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: IconButton(
-                                  icon: const Icon(Icons.send,
-                                      color: AppTheme.blue400),
+                                  icon: Icon(Icons.send,
+                                      color: context.aublColors.cobalt),
                                   onPressed: _postComment,
                                 ),
                               ),

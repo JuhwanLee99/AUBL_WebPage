@@ -15,7 +15,7 @@ class MaintenanceScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.slate900,
+      backgroundColor: context.aublColors.canvas,
       body: SafeArea(
         child: Center(
           child: Padding(
@@ -25,10 +25,10 @@ class MaintenanceScreen extends StatelessWidget {
               children: [
                 const Text('🔧', style: TextStyle(fontSize: 56)),
                 const SizedBox(height: 24),
-                const Text(
+                Text(
                   '서비스 점검 중',
                   style: TextStyle(
-                    color: AppTheme.slate200,
+                    color: context.aublColors.ink,
                     fontSize: 24,
                     fontWeight: FontWeight.w900,
                   ),
@@ -37,8 +37,8 @@ class MaintenanceScreen extends StatelessWidget {
                 Text(
                   message.replaceAll(r'\n', '\n'),
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: AppTheme.slate400,
+                  style: TextStyle(
+                    color: context.aublColors.muted,
                     fontSize: 14,
                     height: 1.7,
                   ),
@@ -51,23 +51,23 @@ class MaintenanceScreen extends StatelessWidget {
                       vertical: 12,
                     ),
                     decoration: BoxDecoration(
-                      color: AppTheme.slate800,
+                      color: context.aublColors.surface,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppTheme.slate700),
+                      border: Border.all(color: context.aublColors.line),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.schedule_rounded,
-                          color: AppTheme.slate400,
+                          color: context.aublColors.muted,
                           size: 16,
                         ),
                         const SizedBox(width: 8),
                         Text(
                           '서비스 재개 예정: $resumeDate',
-                          style: const TextStyle(
-                            color: AppTheme.slate300,
+                          style: TextStyle(
+                            color: context.aublColors.ink,
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
                           ),

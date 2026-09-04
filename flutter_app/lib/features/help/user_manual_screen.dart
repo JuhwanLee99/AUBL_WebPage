@@ -8,7 +8,7 @@ import '../../core/theme/app_theme.dart';
 class _ManualItem {
   final String heading;
   final List<String> bullets;
-  const _ManualItem({
+  _ManualItem({
     required this.heading,
     required this.bullets,
   });
@@ -17,13 +17,11 @@ class _ManualItem {
 class _ManualSection {
   final String title;
   final IconData icon;
-  final Color accent;
   final List<_ManualItem> items;
 
-  const _ManualSection({
+  _ManualSection({
     required this.title,
     required this.icon,
-    required this.accent,
     required this.items,
   });
 }
@@ -38,10 +36,9 @@ const _roleIcons = [
 ];
 
 final _guestSections = <_ManualSection>[
-  const _ManualSection(
+  _ManualSection(
     title: '메인 및 리그 정보',
     icon: Icons.home_outlined,
-    accent: AppTheme.blue400,
     items: [
       _ManualItem(
         heading: '홈 탭',
@@ -65,10 +62,9 @@ final _guestSections = <_ManualSection>[
       ),
     ],
   ),
-  const _ManualSection(
+  _ManualSection(
     title: '경기 일정 및 결과',
     icon: Icons.calendar_today,
-    accent: AppTheme.green500,
     items: [
       _ManualItem(
         heading: '일정 탭',
@@ -88,10 +84,9 @@ final _guestSections = <_ManualSection>[
       ),
     ],
   ),
-  const _ManualSection(
+  _ManualSection(
     title: '순위 및 기록실',
     icon: Icons.bar_chart,
-    accent: AppTheme.orange500,
     items: [
       _ManualItem(
         heading: '기록 탭',
@@ -103,10 +98,9 @@ final _guestSections = <_ManualSection>[
       ),
     ],
   ),
-  const _ManualSection(
+  _ManualSection(
     title: '경기 중계 시청',
     icon: Icons.live_tv,
-    accent: AppTheme.purple500,
     items: [
       _ManualItem(
         heading: '문자중계',
@@ -120,10 +114,9 @@ final _guestSections = <_ManualSection>[
 ];
 
 final _memberSections = <_ManualSection>[
-  const _ManualSection(
+  _ManualSection(
     title: '로그인 및 계정 관리',
     icon: Icons.lock_outline,
-    accent: AppTheme.blue400,
     items: [
       _ManualItem(
         heading: '첫 실행 온보딩',
@@ -150,10 +143,9 @@ final _memberSections = <_ManualSection>[
       ),
     ],
   ),
-  const _ManualSection(
+  _ManualSection(
     title: '커뮤니티 이용',
     icon: Icons.forum_outlined,
-    accent: AppTheme.green500,
     items: [
       _ManualItem(
         heading: '공지사항',
@@ -194,10 +186,9 @@ final _memberSections = <_ManualSection>[
       ),
     ],
   ),
-  const _ManualSection(
+  _ManualSection(
     title: '팀 상세 및 팀 공지',
     icon: Icons.sports_baseball,
-    accent: AppTheme.orange500,
     items: [
       _ManualItem(
         heading: '팀 상세',
@@ -217,10 +208,9 @@ final _memberSections = <_ManualSection>[
       ),
     ],
   ),
-  const _ManualSection(
+  _ManualSection(
     title: '알림 설정',
     icon: Icons.notifications_outlined,
-    accent: AppTheme.amber400,
     items: [
       _ManualItem(
         heading: '더보기 > 알림 설정',
@@ -234,10 +224,9 @@ final _memberSections = <_ManualSection>[
       ),
     ],
   ),
-  const _ManualSection(
+  _ManualSection(
     title: '감독(Coach) 팀 홈 관리',
     icon: Icons.manage_accounts,
-    accent: AppTheme.purple500,
     items: [
       _ManualItem(
         heading: '팀 브랜딩/소개',
@@ -271,10 +260,9 @@ final _memberSections = <_ManualSection>[
 ];
 
 final _adminSections = <_ManualSection>[
-  const _ManualSection(
+  _ManualSection(
     title: '관리자 메뉴',
     icon: Icons.admin_panel_settings,
-    accent: Colors.red,
     items: [
       _ManualItem(
         heading: '더보기 > 관리자 섹션',
@@ -285,10 +273,9 @@ final _adminSections = <_ManualSection>[
       ),
     ],
   ),
-  const _ManualSection(
+  _ManualSection(
     title: '경기 일정 관리',
     icon: Icons.edit_calendar,
-    accent: AppTheme.orange500,
     items: [
       _ManualItem(
         heading: '더보기 > 일정 관리',
@@ -300,10 +287,9 @@ final _adminSections = <_ManualSection>[
       ),
     ],
   ),
-  const _ManualSection(
+  _ManualSection(
     title: '관리자 패널',
     icon: Icons.settings,
-    accent: AppTheme.blue400,
     items: [
       _ManualItem(
         heading: '더보기 > 관리자 패널',
@@ -316,10 +302,9 @@ final _adminSections = <_ManualSection>[
       ),
     ],
   ),
-  const _ManualSection(
+  _ManualSection(
     title: '경기 기록 수정',
     icon: Icons.edit_note,
-    accent: AppTheme.amber400,
     items: [
       _ManualItem(
         heading: '더보기 > 경기 기록 수정',
@@ -333,10 +318,9 @@ final _adminSections = <_ManualSection>[
       ),
     ],
   ),
-  const _ManualSection(
+  _ManualSection(
     title: '전자 기록지 작성',
     icon: Icons.fact_check,
-    accent: AppTheme.green500,
     items: [
       _ManualItem(
         heading: '더보기 > 기록원',
@@ -350,10 +334,9 @@ final _adminSections = <_ManualSection>[
       ),
     ],
   ),
-  const _ManualSection(
+  _ManualSection(
     title: '라이브 방송 제어',
     icon: Icons.cast,
-    accent: AppTheme.purple500,
     items: [
       _ManualItem(
         heading: '더보기 > 스코어보드',
@@ -461,11 +444,11 @@ class _UserManualScreenState extends State<UserManualScreen>
                 controller: _tabCtrl,
                 onTap: (_) => setState(() {}),
                 isScrollable: false,
-                labelColor: AppTheme.blue400,
-                unselectedLabelColor: AppTheme.slate400,
-                indicatorColor: AppTheme.blue400,
+                labelColor: context.aublColors.cobalt,
+                unselectedLabelColor: context.aublColors.muted,
+                indicatorColor: context.aublColors.cobalt,
                 indicatorSize: TabBarIndicatorSize.label,
-                dividerColor: AppTheme.slate700,
+                dividerColor: context.aublColors.line,
                 tabs: List.generate(
                     3,
                     (i) => Tab(
@@ -522,16 +505,18 @@ class _UserManualScreenState extends State<UserManualScreen>
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: AppTheme.slate800,
+                  color: context.aublColors.surface,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                      color: AppTheme.slate700.withValues(alpha: 0.5)),
+                      color: context.aublColors.line.withValues(alpha: 0.5)),
                 ),
-                child: const Text(
+                child: Text(
                   '문서 버전: 2026-03-04\n앱 구조: 하단 탭 홈 · 팀 · 일정 · 기록 · 커뮤니티 · 더보기\n일부 관리 기능은 WebView로 웹 관리 화면에 연결됩니다.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                      color: AppTheme.slate500, fontSize: 11, height: 1.6),
+                      color: context.aublColors.muted,
+                      fontSize: 11,
+                      height: 1.6),
                 ),
               ),
             ),
@@ -547,12 +532,9 @@ class _UserManualScreenState extends State<UserManualScreen>
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(
           20, MediaQuery.of(context).padding.top + 16, 20, 28),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF0a1a3f), Color(0xFF0f2f8f), Color(0xFF0a1a3f)],
-        ),
+      decoration: BoxDecoration(
+        color: context.aublColors.surface,
+        border: Border(bottom: BorderSide(color: context.aublColors.line)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -561,12 +543,12 @@ class _UserManualScreenState extends State<UserManualScreen>
             children: [
               GestureDetector(
                 onTap: () => Navigator.of(context).pop(),
-                child: const Icon(Icons.arrow_back, color: Colors.white),
+                child: Icon(Icons.arrow_back, color: context.aublColors.ink),
               ),
               const SizedBox(width: 12),
-              const Text('사용 설명서',
+              Text('사용 설명서',
                   style: TextStyle(
-                      color: Colors.white,
+                      color: context.aublColors.ink,
                       fontSize: 18,
                       fontWeight: FontWeight.w600)),
             ],
@@ -575,34 +557,34 @@ class _UserManualScreenState extends State<UserManualScreen>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: AppTheme.blue400.withValues(alpha: 0.15),
+              color: context.aublColors.cobalt.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(12),
-              border:
-                  Border.all(color: AppTheme.blue400.withValues(alpha: 0.3)),
+              border: Border.all(
+                  color: context.aublColors.cobalt.withValues(alpha: 0.3)),
             ),
-            child: const Text(
+            child: Text(
               'AUBL · USER MANUAL',
               style: TextStyle(
-                  color: AppTheme.blue400,
+                  color: context.aublColors.cobalt,
                   fontSize: 11,
                   fontWeight: FontWeight.w600),
             ),
           ),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             'AUBL 앱 사용 설명서',
             style: TextStyle(
-              color: Colors.white,
+              color: context.aublColors.ink,
               fontSize: 22,
               fontWeight: FontWeight.w800,
               height: 1.3,
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             '방문자, 일반 회원, 관리자/기록원별로 사용 가능한 기능을 안내합니다. 탭을 전환하여 역할별 가이드를 확인하세요.',
-            style:
-                TextStyle(color: AppTheme.slate300, fontSize: 13, height: 1.6),
+            style: TextStyle(
+                color: context.aublColors.ink, fontSize: 13, height: 1.6),
           ),
         ],
       ),
@@ -614,13 +596,14 @@ class _UserManualScreenState extends State<UserManualScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Row(
+        Row(
           children: [
-            Icon(Icons.build_outlined, size: 16, color: AppTheme.amber400),
-            SizedBox(width: 8),
+            const Icon(Icons.build_outlined,
+                size: 16, color: AppTheme.amber400),
+            const SizedBox(width: 8),
             Text('문제 해결',
                 style: TextStyle(
-                    color: Colors.white,
+                    color: context.aublColors.ink,
                     fontSize: 16,
                     fontWeight: FontWeight.w700)),
           ],
@@ -630,17 +613,17 @@ class _UserManualScreenState extends State<UserManualScreen>
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppTheme.slate800,
+                color: context.aublColors.surface,
                 borderRadius: BorderRadius.circular(12),
-                border:
-                    Border.all(color: AppTheme.slate700.withValues(alpha: 0.5)),
+                border: Border.all(
+                    color: context.aublColors.line.withValues(alpha: 0.5)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(item.title,
-                      style: const TextStyle(
-                          color: Colors.white,
+                      style: TextStyle(
+                          color: context.aublColors.ink,
                           fontSize: 14,
                           fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
@@ -653,16 +636,16 @@ class _UserManualScreenState extends State<UserManualScreen>
                               width: 20,
                               child: Text(
                                 '${e.key + 1}.',
-                                style: const TextStyle(
-                                    color: AppTheme.blue400,
+                                style: TextStyle(
+                                    color: context.aublColors.cobalt,
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600),
                               ),
                             ),
                             Expanded(
                               child: Text(e.value,
-                                  style: const TextStyle(
-                                      color: AppTheme.slate300,
+                                  style: TextStyle(
+                                      color: context.aublColors.ink,
                                       fontSize: 13,
                                       height: 1.5)),
                             ),
@@ -696,21 +679,23 @@ class _SectionCardState extends State<_SectionCard> {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: _expanded ? s.accent.withValues(alpha: 0.06) : AppTheme.slate800,
+        color: _expanded
+            ? context.aublColors.cobalt.withValues(alpha: 0.06)
+            : context.aublColors.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: _expanded
-              ? s.accent.withValues(alpha: 0.3)
-              : AppTheme.slate700.withValues(alpha: 0.5),
+              ? context.aublColors.cobalt.withValues(alpha: 0.3)
+              : context.aublColors.line.withValues(alpha: 0.5),
         ),
       ),
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          leading: Icon(s.icon, color: s.accent, size: 22),
+          leading: Icon(s.icon, color: context.aublColors.cobalt, size: 22),
           title: Text(s.title,
-              style: const TextStyle(
-                  color: Colors.white,
+              style: TextStyle(
+                  color: context.aublColors.ink,
                   fontSize: 15,
                   fontWeight: FontWeight.w700)),
           initiallyExpanded: false,
@@ -723,7 +708,7 @@ class _SectionCardState extends State<_SectionCard> {
                 const SizedBox(height: 12),
                 Text(item.heading,
                     style: TextStyle(
-                        color: s.accent,
+                        color: context.aublColors.cobalt,
                         fontSize: 14,
                         fontWeight: FontWeight.w700)),
                 const SizedBox(height: 6),
@@ -733,11 +718,13 @@ class _SectionCardState extends State<_SectionCard> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('• ',
-                              style: TextStyle(color: s.accent, fontSize: 13)),
+                              style: TextStyle(
+                                  color: context.aublColors.cobalt,
+                                  fontSize: 13)),
                           Expanded(
                             child: Text(b,
-                                style: const TextStyle(
-                                    color: AppTheme.slate300,
+                                style: TextStyle(
+                                    color: context.aublColors.ink,
                                     fontSize: 13,
                                     height: 1.5)),
                           ),
@@ -769,22 +756,24 @@ class _ScreenshotPlaceholder extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: AppTheme.slate700.withValues(alpha: 0.5),
+          color: context.aublColors.line.withValues(alpha: 0.5),
           style: BorderStyle.solid,
           strokeAlign: BorderSide.strokeAlignInside,
         ),
-        color: AppTheme.slate900.withValues(alpha: 0.6),
+        color: context.aublColors.canvas.withValues(alpha: 0.6),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.image_outlined,
-              size: 28, color: AppTheme.slate600.withValues(alpha: 0.7)),
+              size: 28,
+              color: context.aublColors.lineStrong.withValues(alpha: 0.7)),
           const SizedBox(height: 6),
           Text(
             '스크린샷: $label',
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppTheme.slate600, fontSize: 11),
+            style:
+                TextStyle(color: context.aublColors.lineStrong, fontSize: 11),
           ),
         ],
       ),
@@ -809,7 +798,7 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
   Widget build(
       BuildContext context, double shrinkOffset, bool overlapsContent) {
     return Container(
-      color: AppTheme.slate900,
+      color: context.aublColors.canvas,
       child: tabBar,
     );
   }

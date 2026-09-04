@@ -12,6 +12,7 @@ class MemberCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.aublColors;
     final roleLabel = switch (member.role) {
       'coach' => '감독',
       'staff' => '스태프',
@@ -20,7 +21,7 @@ class MemberCard extends StatelessWidget {
 
     return ListTile(
       leading: CircleAvatar(
-        backgroundColor: AppTheme.slate700,
+        backgroundColor: colors.surfaceMuted,
         backgroundImage:
             member.profileImageUrl != null && member.profileImageUrl!.isNotEmpty
                 ? CachedNetworkImageProvider(
@@ -31,7 +32,8 @@ class MemberCard extends StatelessWidget {
         child: member.profileImageUrl == null || member.profileImageUrl!.isEmpty
             ? Text(
                 member.name.isNotEmpty ? member.name[0] : '?',
-                style: const TextStyle(color: Colors.white),
+                style:
+                    TextStyle(color: colors.navy, fontWeight: FontWeight.w800),
               )
             : null,
       ),
@@ -39,36 +41,33 @@ class MemberCard extends StatelessWidget {
         children: [
           Text(
             member.name,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
           ),
           if (member.number != null) ...[
             const SizedBox(width: 6),
             Text(
               '#${member.number}',
-              style: const TextStyle(color: AppTheme.slate400, fontSize: 12),
+              style: TextStyle(color: colors.muted, fontSize: 12),
             ),
           ],
         ],
       ),
       subtitle: Row(
         children: [
-          Text(roleLabel,
-              style: const TextStyle(color: AppTheme.slate400, fontSize: 12)),
+          Text(roleLabel, style: TextStyle(color: colors.muted, fontSize: 12)),
           if (member.position != null && member.position!.isNotEmpty) ...[
-            const Text(' · ',
-                style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
+            Text(' · ', style: TextStyle(color: colors.muted, fontSize: 12)),
             Text(member.position!,
-                style: const TextStyle(color: AppTheme.slate400, fontSize: 12)),
+                style: TextStyle(color: colors.muted, fontSize: 12)),
           ],
           if (member.bats != null) ...[
-            const Text(' · ',
-                style: TextStyle(color: AppTheme.slate500, fontSize: 12)),
+            Text(' · ', style: TextStyle(color: colors.muted, fontSize: 12)),
             Text('타:${member.bats}',
-                style: const TextStyle(color: AppTheme.slate500, fontSize: 11)),
+                style: TextStyle(color: colors.muted, fontSize: 11)),
           ],
           if (member.throws_ != null) ...[
             Text(' 투:${member.throws_}',
-                style: const TextStyle(color: AppTheme.slate500, fontSize: 11)),
+                style: TextStyle(color: colors.muted, fontSize: 11)),
           ],
         ],
       ),

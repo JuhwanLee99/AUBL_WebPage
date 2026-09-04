@@ -117,13 +117,13 @@ class _PlayerRegistrationWriteScreenState
     if (_writableCategories.isEmpty) {
       return Scaffold(
         appBar: AppBar(title: const Text('선수 등록 게시판')),
-        body: const Center(
+        body: Center(
           child: Padding(
-            padding: EdgeInsets.all(24),
+            padding: const EdgeInsets.all(24),
             child: Text(
               '글쓰기 권한이 없습니다.\n선수 등록: 관리자 / 유니폼 등록: 감독·관리자',
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppTheme.slate400, height: 1.6),
+              style: TextStyle(color: context.aublColors.muted, height: 1.6),
             ),
           ),
         ),
@@ -145,7 +145,9 @@ class _PlayerRegistrationWriteScreenState
                 : Text(
                     _isEditMode ? '수정' : '완료',
                     style: TextStyle(
-                      color: canSubmit ? AppTheme.blue400 : AppTheme.slate500,
+                      color: canSubmit
+                          ? context.aublColors.cobalt
+                          : context.aublColors.muted,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -161,15 +163,15 @@ class _PlayerRegistrationWriteScreenState
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppTheme.blue500.withValues(alpha: 0.15),
+                color: context.aublColors.cobalt.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
-                border:
-                    Border.all(color: AppTheme.blue500.withValues(alpha: 0.35)),
+                border: Border.all(
+                    color: context.aublColors.cobalt.withValues(alpha: 0.35)),
               ),
-              child: const Text(
+              child: Text(
                 '작성 권한\n- 선수 등록: 관리자\n- 유니폼 등록: 감독/관리자',
                 style: TextStyle(
-                  color: AppTheme.blue400,
+                  color: context.aublColors.cobalt,
                   fontSize: 12,
                   height: 1.6,
                   fontWeight: FontWeight.w600,
@@ -181,13 +183,13 @@ class _PlayerRegistrationWriteScreenState
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               initialValue: _category,
-              dropdownColor: AppTheme.slate800,
+              dropdownColor: context.aublColors.surface,
               decoration: _inputDecoration('분류를 선택하세요'),
               items: _writableCategories
                   .map((c) => DropdownMenuItem(
                         value: c,
                         child: Text(c,
-                            style: const TextStyle(color: Colors.white)),
+                            style: TextStyle(color: context.aublColors.ink)),
                       ))
                   .toList(),
               onChanged: (v) => setState(() => _category = v!),
@@ -198,7 +200,7 @@ class _PlayerRegistrationWriteScreenState
             TextField(
               controller: _titleCtrl,
               maxLength: 100,
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(color: context.aublColors.ink),
               decoration: _inputDecoration('제목을 입력하세요'),
               onChanged: (_) => setState(() {}),
             ),
@@ -219,8 +221,8 @@ class _PlayerRegistrationWriteScreenState
 
   Widget _sectionLabel(String label) => Text(
         label,
-        style: const TextStyle(
-          color: AppTheme.slate400,
+        style: TextStyle(
+          color: context.aublColors.muted,
           fontSize: 13,
           fontWeight: FontWeight.w700,
         ),
@@ -228,22 +230,22 @@ class _PlayerRegistrationWriteScreenState
 
   InputDecoration _inputDecoration(String hint) => InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(color: AppTheme.slate500),
+        hintStyle: TextStyle(color: context.aublColors.muted),
         filled: true,
-        fillColor: AppTheme.slate800.withValues(alpha: 0.6),
+        fillColor: context.aublColors.surface.withValues(alpha: 0.6),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppTheme.slate700),
+          borderSide: BorderSide(color: context.aublColors.line),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppTheme.slate700),
+          borderSide: BorderSide(color: context.aublColors.line),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppTheme.blue500),
+          borderSide: BorderSide(color: context.aublColors.cobalt),
         ),
       );
 }

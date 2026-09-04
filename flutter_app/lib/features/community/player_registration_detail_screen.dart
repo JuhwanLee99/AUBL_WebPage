@@ -58,9 +58,9 @@ class _PlayerRegistrationDetailScreenState
   }
 
   Color _categoryColor(String category) => switch (category) {
-        '선수 등록' => const Color(0xFFF87171),
-        '유니폼 등록' => const Color(0xFF34D399),
-        _ => AppTheme.slate400,
+        '선수 등록' => context.aublColors.danger,
+        '유니폼 등록' => context.aublColors.success,
+        _ => context.aublColors.muted,
       };
 
   String _currentUserLabel(User user) {
@@ -146,11 +146,11 @@ class _PlayerRegistrationDetailScreenState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.slate800,
-        title: const Text('삭제 확인', style: TextStyle(color: Colors.white)),
-        content: const Text(
+        backgroundColor: context.aublColors.surface,
+        title: Text('삭제 확인', style: TextStyle(color: context.aublColors.ink)),
+        content: Text(
           '게시글을 삭제하시겠습니까?',
-          style: TextStyle(color: AppTheme.slate300),
+          style: TextStyle(color: context.aublColors.ink),
         ),
         actions: [
           TextButton(
@@ -159,7 +159,8 @@ class _PlayerRegistrationDetailScreenState
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('삭제', style: TextStyle(color: Color(0xFFF87171))),
+            child:
+                Text('삭제', style: TextStyle(color: context.aublColors.danger)),
           ),
         ],
       ),
@@ -206,20 +207,21 @@ class _PlayerRegistrationDetailScreenState
               },
             ),
             IconButton(
-              icon: const Icon(Icons.delete_outline, color: Color(0xFFF87171)),
+              icon:
+                  Icon(Icons.delete_outline, color: context.aublColors.danger),
               onPressed: _deletePost,
             ),
           ],
           if (canModeratePost)
             PopupMenuButton<_PlayerRegModerationAction>(
-              icon: const E911EmergencyIcon(color: Color(0xFFE3E3E3)),
+              icon: E911EmergencyIcon(color: context.aublColors.muted),
               onSelected: _handleModerationAction,
-              itemBuilder: (context) => const [
-                PopupMenuItem(
+              itemBuilder: (context) => [
+                const PopupMenuItem(
                   value: _PlayerRegModerationAction.report,
                   child: Text('게시글 신고'),
                 ),
-                PopupMenuItem(
+                const PopupMenuItem(
                   value: _PlayerRegModerationAction.block,
                   child: Text('작성자 차단'),
                 ),
@@ -232,35 +234,35 @@ class _PlayerRegistrationDetailScreenState
             ? Stream.value(<String>{})
             : _moderationService.watchBlockedUserIds(user.uid),
         builder: (context, blockedSnapshot) {
-          final blockedUserIds = blockedSnapshot.data ?? const <String>{};
+          final blockedUserIds = blockedSnapshot.data ?? <String>{};
           final isPostBlocked = blockedUserIds.contains(_post.uid);
 
           if (isPostBlocked) {
-            return const Center(
+            return Center(
               child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 48),
+                padding: const EdgeInsets.symmetric(vertical: 48),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
                       Icons.block,
                       size: 56,
-                      color: AppTheme.slate500,
+                      color: context.aublColors.muted,
                     ),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
                     Text(
                       '차단한 사용자의 게시글입니다.',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: context.aublColors.ink,
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    SizedBox(height: 8),
+                    const SizedBox(height: 8),
                     Text(
                       '계정 화면에서 차단을 해제하면 다시 볼 수 있습니다.',
                       style: TextStyle(
-                        color: AppTheme.slate500,
+                        color: context.aublColors.muted,
                         fontSize: 13,
                       ),
                     ),
@@ -284,27 +286,27 @@ class _PlayerRegistrationDetailScreenState
               const SizedBox(height: 12),
               Text(
                 _post.title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: context.aublColors.ink,
                 ),
               ),
               const SizedBox(height: 6),
               Text(
                 '${_post.author} · ${timeago.format(DateTime.fromMillisecondsSinceEpoch(_post.createdAt), locale: 'ko')}',
-                style: const TextStyle(color: AppTheme.slate500, fontSize: 12),
+                style: TextStyle(color: context.aublColors.muted, fontSize: 12),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 '우측 상단 메뉴에서 게시글 신고 또는 작성자 차단이 가능합니다.',
-                style: TextStyle(color: AppTheme.slate500, fontSize: 11),
+                style: TextStyle(color: context.aublColors.muted, fontSize: 11),
               ),
               const Divider(height: 28),
               RichTextViewer(
                 content: _post.content,
                 fontSize: 14,
-                color: AppTheme.slate300,
+                color: context.aublColors.ink,
                 lineHeight: 1.7,
               ),
             ],

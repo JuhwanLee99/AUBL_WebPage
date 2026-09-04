@@ -190,6 +190,7 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
                                     builder: (_) => TeamDetailScreen(
                                       teamId: teamId,
                                       teamName: entry.name,
+                                      groupCode: entry.group,
                                     ),
                                   ),
                                 );

@@ -18,21 +18,22 @@ class SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.aublColors;
     return Padding(
-      padding: padding ?? const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding:
+          padding ?? const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 18, color: AppTheme.blue400),
+            Icon(icon, size: 19, color: colors.cobalt),
             const SizedBox(width: 8),
           ],
           Text(
             title,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.w800),
           ),
           const Spacer(),
           if (trailing != null) trailing!,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/season_components.dart';
 
 const _kSections = [
   _Section('1. 개인정보의 수집 항목 및 수집 방법', [
@@ -74,111 +75,57 @@ class PrivacyScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // 헤더
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF0a1a3f), Color(0xFF0f2f8f)],
-              ),
-              borderRadius: BorderRadius.circular(16),
-              border:
-                  Border.all(color: AppTheme.slate500.withValues(alpha: 0.25)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppTheme.blue400.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                        color: AppTheme.blue400.withValues(alpha: 0.35)),
-                  ),
-                  child: const Text(
-                    'PRIVACY POLICY',
-                    style: TextStyle(
-                      color: Color(0xFFbfdbfe),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  '개인정보 처리방침',
-                  style: TextStyle(
-                    color: Color(0xFFf1f5f9),
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  '전국대학아마추어야구연합회(AUBL)는 이용자의 개인정보를 중요시하며, '
-                  '「개인정보 보호법」을 준수합니다. '
-                  '본 방침은 AUBL이 제공하는 모바일 앱 및 웹 서비스에 적용됩니다.',
-                  style: TextStyle(
-                    color: AppTheme.slate400,
-                    fontSize: 13,
-                    height: 1.7,
-                  ),
-                ),
-              ],
-            ),
+          SeasonPageHero(
+            eyebrow: 'PRIVACY POLICY',
+            title: Text('개인정보 처리방침',
+                style: Theme.of(context).textTheme.headlineSmall),
+            description:
+                '전국대학아마추어야구연합회(AUBL)는 개인정보 보호법을 준수하며, 이 방침은 모바일 앱과 웹 서비스에 적용됩니다.',
           ),
           const SizedBox(height: 16),
 
           // 섹션들
           for (final section in _kSections) ...[
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppTheme.slate800.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(16),
-                border:
-                    Border.all(color: AppTheme.slate700.withValues(alpha: 0.5)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    section.title,
-                    style: const TextStyle(
-                      color: Color(0xFFe2e8f0),
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  for (final item in section.items)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('  \u2022  ',
-                              style: TextStyle(
-                                  color: AppTheme.slate500, fontSize: 13)),
-                          Expanded(
-                            child: Text(
-                              item,
-                              style: const TextStyle(
-                                color: AppTheme.slate400,
-                                fontSize: 13,
-                                height: 1.7,
-                              ),
-                            ),
-                          ),
-                        ],
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      section.title,
+                      style: TextStyle(
+                        color: context.aublColors.ink,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
-                ],
+                    const SizedBox(height: 10),
+                    for (final item in section.items)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('  \u2022  ',
+                                style: TextStyle(
+                                    color: context.aublColors.muted,
+                                    fontSize: 13)),
+                            Expanded(
+                              child: Text(
+                                item,
+                                style: TextStyle(
+                                  color: context.aublColors.muted,
+                                  fontSize: 13,
+                                  height: 1.7,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 10),

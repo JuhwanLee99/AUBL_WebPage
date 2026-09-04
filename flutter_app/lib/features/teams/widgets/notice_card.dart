@@ -11,32 +11,34 @@ class NoticeCard extends StatelessWidget {
   final TeamNotice notice;
   final VoidCallback? onTap;
 
-  Color get _categoryColor => switch (notice.category) {
-        '긴급' => AppTheme.red500,
-        '경기' => AppTheme.blue500,
-        '훈련' => AppTheme.green500,
-        _ => AppTheme.slate500,
+  Color _categoryColor(BuildContext context) => switch (notice.category) {
+        '긴급' => context.aublColors.danger,
+        '경기' => context.aublColors.cobalt,
+        '훈련' => context.aublColors.success,
+        _ => context.aublColors.muted,
       };
 
-  Widget _buildAttachmentBadge({
+  Widget _buildAttachmentBadge(
+    BuildContext context, {
     required IconData icon,
     required String label,
   }) {
+    final colors = context.aublColors;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: AppTheme.slate700.withValues(alpha: 0.5),
+        color: colors.surfaceMuted,
         borderRadius: BorderRadius.circular(4),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: AppTheme.slate400),
+          Icon(icon, size: 12, color: colors.muted),
           const SizedBox(width: 3),
           Text(
             label,
-            style: const TextStyle(
-              color: AppTheme.slate400,
+            style: TextStyle(
+              color: colors.muted,
               fontSize: 10,
               fontWeight: FontWeight.w500,
             ),
@@ -48,6 +50,8 @@ class NoticeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.aublColors;
+    final categoryColor = _categoryColor(context);
     final dateTime = DateTime.fromMillisecondsSinceEpoch(notice.createdAt);
     final ago = timeago.format(dateTime, locale: 'ko');
     final attachment = summarizeDeltaAttachments(notice.content);
@@ -55,7 +59,7 @@ class NoticeCard extends StatelessWidget {
     return ListTile(
       onTap: onTap,
       leading: notice.pinned
-          ? const Icon(Icons.push_pin, size: 16, color: AppTheme.amber400)
+          ? Icon(Icons.push_pin, size: 16, color: colors.warning)
           : null,
       title: Row(
         children: [
@@ -63,13 +67,13 @@ class NoticeCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
             margin: const EdgeInsets.only(right: 8),
             decoration: BoxDecoration(
-              color: _categoryColor.withValues(alpha: 0.15),
+              color: categoryColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
               notice.category,
               style: TextStyle(
-                color: _categoryColor,
+                color: categoryColor,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
@@ -78,7 +82,7 @@ class NoticeCard extends StatelessWidget {
           Expanded(
             child: Text(
               notice.title,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -91,7 +95,7 @@ class NoticeCard extends StatelessWidget {
         children: [
           Text(
             ago,
-            style: const TextStyle(color: AppTheme.slate500, fontSize: 12),
+            style: TextStyle(color: colors.muted, fontSize: 12),
           ),
           if (attachment.hasAny) ...[
             const SizedBox(height: 4),
@@ -101,16 +105,19 @@ class NoticeCard extends StatelessWidget {
               children: [
                 if (attachment.hasImage)
                   _buildAttachmentBadge(
+                    context,
                     icon: Icons.image_outlined,
                     label: '이미지',
                   ),
                 if (attachment.hasVideo)
                   _buildAttachmentBadge(
+                    context,
                     icon: Icons.videocam_outlined,
                     label: '동영상',
                   ),
                 if (attachment.hasLink)
                   _buildAttachmentBadge(
+                    context,
                     icon: Icons.link,
                     label: '링크',
                   ),
@@ -119,8 +126,7 @@ class NoticeCard extends StatelessWidget {
           ],
         ],
       ),
-      trailing: const Icon(Icons.chevron_right,
-          size: 18, color: AppTheme.slate500),
+      trailing: Icon(Icons.chevron_right, size: 18, color: colors.muted),
       dense: true,
     );
   }

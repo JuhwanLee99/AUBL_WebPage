@@ -84,7 +84,7 @@ class _IntroScreenState extends State<IntroScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('추가 정보', Icons.article, AppTheme.slate300),
+        _sectionTitle('추가 정보', Icons.article, context.aublColors.ink),
         const SizedBox(height: 10),
         ...sections.map((section) {
           final sec = section as Map<String, dynamic>;
@@ -106,8 +106,8 @@ class _IntroScreenState extends State<IntroScreen> {
                   childrenPadding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
                   title: Text(
                     title,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: context.aublColors.ink,
                       fontWeight: FontWeight.w700,
                       fontSize: 15,
                     ),
@@ -118,8 +118,8 @@ class _IntroScreenState extends State<IntroScreen> {
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Text(
                           body,
-                          style: const TextStyle(
-                            color: AppTheme.slate300,
+                          style: TextStyle(
+                            color: context.aublColors.ink,
                             fontSize: 13,
                             height: 1.55,
                           ),
@@ -143,19 +143,23 @@ class _IntroScreenState extends State<IntroScreen> {
 
   // ── 히어로 ──
   Widget _buildHero(Map<String, dynamic> intro) {
-    final heroAccent = _mutedAccent(AppTheme.blue400, 0.5);
+    final heroAccent = _mutedAccent(context.aublColors.cobalt, 0.5);
     final heroTagline = intro['tagline'] as String? ?? 'AUBL · LEAGUE INTRO';
-    final heroSubtitle = intro['heroSubtitle'] as String? ??
-        '46th AUBL · Hosted by Chung-Ang University (Seoul)';
-    final heroTitle = intro['heroTitle'] as String? ??
-        '순수 아마추어 대학 야구의 46년 — 2026년, 중앙대학교(서울)와 함께 새로운 도약을 준비합니다.';
-    final heroDescription = intro['heroDescription'] as String? ??
-        '1981년 출범한 전국대학아마추어야구연합회(AUBL)는 엘리트 선수 중심이 아닌 '
-            '일반 대학생들의 땀방울로 성장했습니다. 2026 시즌은 중앙대학교(서울)가 주최를 '
-            '맡아 조별 예선과 으뜸·버금 토너먼트를 통해 리그의 전통과 혁신을 모두 보여줄 예정입니다.';
+    final heroSubtitle = _normalizeSeasonCopy(
+      intro['heroSubtitle'] as String? ?? '46TH AUBL · 2026 연합회교 중앙대학교(서울)',
+    );
+    final heroTitle = _normalizeSeasonCopy(
+      intro['heroTitle'] as String? ??
+          '순수 아마추어 대학 야구의 46년 — 2026년, 중앙대학교(서울)와 함께 새로운 도약을 준비합니다.',
+    );
+    final heroDescription = _normalizeSeasonCopy(
+      intro['heroDescription'] as String? ??
+          '1981년 출범한 전국대학아마추어야구연합회(AUBL)는 일반 대학생들의 땀방울로 성장했습니다. '
+              '2026 시즌 연합회교 중앙대학교(서울)와 함께 조별 예선과 으뜸·버금 토너먼트를 운영합니다.',
+    );
 
-    const heroMetrics = [
-      ('2026 HOST', '중앙대학교(서울)', '제46회 AUBL 운영'),
+    final heroMetrics = [
+      ('2026 연합회교', '중앙대학교(서울)', '제46회 AUBL 운영'),
       ('참가 규모', '약 40개 대학', 'A~H조 조별 예선 후 으뜸·버금'),
       ('핵심 가치', '실시간 기록 · 중계 · 디지털화', '모바일 친화 기록/중계로 정보 접근성 강화'),
     ];
@@ -164,49 +168,12 @@ class _IntroScreenState extends State<IntroScreen> {
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(
           20, MediaQuery.of(context).padding.top + 16, 20, 28),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF0A142E), Color(0xFF122349), Color(0xFF0A142E)],
-        ),
+      decoration: BoxDecoration(
+        color: context.aublColors.surface,
+        border: Border(bottom: BorderSide(color: context.aublColors.line)),
       ),
       child: Stack(
         children: [
-          Positioned(
-            top: -30,
-            right: -30,
-            child: Container(
-              width: 140,
-              height: 140,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    AppTheme.blue500.withValues(alpha: 0.08),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: -20,
-            left: -20,
-            child: Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    AppTheme.purple500.withValues(alpha: 0.06),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -218,24 +185,24 @@ class _IntroScreenState extends State<IntroScreen> {
                     child: Ink(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.08),
+                        color: context.aublColors.ink.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.18),
+                          color: context.aublColors.ink.withValues(alpha: 0.18),
                         ),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.arrow_back,
-                        color: Colors.white,
+                        color: context.aublColors.ink,
                         size: 20,
                       ),
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Text(
+                  Text(
                     '리그 소개',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: context.aublColors.ink,
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
                     ),
@@ -251,8 +218,8 @@ class _IntroScreenState extends State<IntroScreen> {
               const SizedBox(height: 6),
               Text(
                 heroSubtitle,
-                style: const TextStyle(
-                  color: AppTheme.slate400,
+                style: TextStyle(
+                  color: context.aublColors.muted,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -260,8 +227,8 @@ class _IntroScreenState extends State<IntroScreen> {
               const SizedBox(height: 14),
               Text(
                 heroTitle,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: context.aublColors.ink,
                   fontSize: 21,
                   fontWeight: FontWeight.w800,
                   height: 1.3,
@@ -270,8 +237,8 @@ class _IntroScreenState extends State<IntroScreen> {
               const SizedBox(height: 10),
               Text(
                 heroDescription,
-                style: const TextStyle(
-                  color: AppTheme.slate300,
+                style: TextStyle(
+                  color: context.aublColors.ink,
                   fontSize: 13,
                   height: 1.62,
                 ),
@@ -331,16 +298,16 @@ class _IntroScreenState extends State<IntroScreen> {
     required String note,
   }) {
     return _buildSurfaceCard(
-      borderColor: AppTheme.slate600,
+      borderColor: context.aublColors.lineStrong,
       borderOpacity: 0.4,
-      backgroundColor: Colors.white.withValues(alpha: 0.02),
+      backgroundColor: context.aublColors.surfaceMuted,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(
-              color: AppTheme.slate500,
+            style: TextStyle(
+              color: context.aublColors.muted,
               fontSize: 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.5,
@@ -349,8 +316,8 @@ class _IntroScreenState extends State<IntroScreen> {
           const SizedBox(height: 4),
           Text(
             value,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.aublColors.ink,
               fontSize: 18,
               fontWeight: FontWeight.w800,
             ),
@@ -358,8 +325,8 @@ class _IntroScreenState extends State<IntroScreen> {
           const SizedBox(height: 2),
           Text(
             note,
-            style: const TextStyle(
-              color: AppTheme.slate300,
+            style: TextStyle(
+              color: context.aublColors.ink,
               fontSize: 13,
               fontWeight: FontWeight.w500,
             ),
@@ -370,7 +337,15 @@ class _IntroScreenState extends State<IntroScreen> {
   }
 
   Color _mutedAccent(Color color, [double blendWithSlate = 0.35]) {
-    return Color.lerp(color, AppTheme.slate300, blendWithSlate) ?? color;
+    return Color.lerp(color, context.aublColors.ink, blendWithSlate) ?? color;
+  }
+
+  String _normalizeSeasonCopy(String value) {
+    return value
+        .replaceAll(RegExp(r'HOSTED BY', caseSensitive: false), '2026 연합회교')
+        .replaceAll(RegExp(r'HOST UNIVERSITY', caseSensitive: false), '연합회교')
+        .replaceAll('호스트 대학', '연합회교')
+        .replaceAll('호스트', '연합회교');
   }
 
   Widget _buildSurfaceCard({
@@ -381,8 +356,9 @@ class _IntroScreenState extends State<IntroScreen> {
     EdgeInsetsGeometry padding = const EdgeInsets.all(14),
     Gradient? gradient,
   }) {
-    final resolvedBorderColor = borderColor ?? AppTheme.slate700;
-    final resolvedBackgroundColor = backgroundColor ?? AppTheme.slate800;
+    final resolvedBorderColor = borderColor ?? context.aublColors.line;
+    final resolvedBackgroundColor =
+        backgroundColor ?? context.aublColors.surface;
 
     return Container(
       width: double.infinity,
@@ -399,17 +375,17 @@ class _IntroScreenState extends State<IntroScreen> {
     );
   }
 
-  Widget _buildBulletText(String text,
-      {Color bulletColor = AppTheme.slate400}) {
+  Widget _buildBulletText(String text, {Color? bulletColor}) {
+    final resolvedBulletColor = bulletColor ?? context.aublColors.muted;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('• ', style: TextStyle(color: bulletColor, fontSize: 13)),
+        Text('• ', style: TextStyle(color: resolvedBulletColor, fontSize: 13)),
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(
-              color: AppTheme.slate300,
+            style: TextStyle(
+              color: context.aublColors.ink,
               fontSize: 13,
               height: 1.5,
             ),
@@ -427,17 +403,17 @@ class _IntroScreenState extends State<IntroScreen> {
           width: 26,
           height: 26,
           decoration: BoxDecoration(
-            color: AppTheme.slate700.withValues(alpha: 0.65),
+            color: context.aublColors.line.withValues(alpha: 0.65),
             borderRadius: BorderRadius.circular(8),
-            border:
-                Border.all(color: AppTheme.slate500.withValues(alpha: 0.25)),
+            border: Border.all(
+                color: context.aublColors.muted.withValues(alpha: 0.25)),
           ),
-          child: Icon(icon, size: 15, color: AppTheme.slate300),
+          child: Icon(icon, size: 15, color: context.aublColors.ink),
         ),
         const SizedBox(width: 10),
         Text(title,
-            style: const TextStyle(
-                color: Colors.white,
+            style: TextStyle(
+                color: context.aublColors.ink,
                 fontSize: 16,
                 fontWeight: FontWeight.w700)),
         const SizedBox(width: 8),
@@ -458,30 +434,25 @@ class _IntroScreenState extends State<IntroScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('회장단 인사말', Icons.record_voice_over, AppTheme.orange500),
+        _sectionTitle(
+            '회장단 인사말', Icons.record_voice_over, context.aublColors.warning),
         const SizedBox(height: 10),
         _buildSurfaceCard(
           padding: const EdgeInsets.all(16),
-          borderColor: AppTheme.slate600,
+          borderColor: context.aublColors.lineStrong,
           borderOpacity: 0.52,
-          gradient: LinearGradient(
-            colors: [
-              AppTheme.slate700.withValues(alpha: 0.24),
-              AppTheme.slate800,
-            ],
-          ),
-          child: const Column(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 '"변화와 혁신, 그리고 변하지 않는 열정으로"',
                 style: TextStyle(
-                    color: AppTheme.slate200,
+                    color: context.aublColors.ink,
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                     fontStyle: FontStyle.italic),
               ),
-              SizedBox(height: 10),
+              const SizedBox(height: 10),
               Text(
                 '존경하는 야구 가족 여러분, 안녕하십니까. 2026년 제46대 '
                 '전국대학아마추어야구연합회(AUBL) 회장을 맡게 된 '
@@ -491,29 +462,29 @@ class _IntroScreenState extends State<IntroScreen> {
                 '안전한 리그"를 목표로, 경기는 치열하게 그러나 끝나면 서로의 '
                 '어깨를 두드려주는 대학 야구의 낭만을 지켜가겠습니다.',
                 style: TextStyle(
-                  color: AppTheme.slate300,
+                  color: context.aublColors.ink,
                   fontSize: 13,
                   height: 1.62,
                 ),
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               Text(
                 '2026 시즌은 웹 플랫폼 고도화의 해입니다. 선수들이 자신의 기록과 '
                 '일정을 언제 어디서나 확인할 수 있도록 실시간 기록과 중계를 '
                 '강화하고, 모든 운영진이 여러분의 땀방울이 헛되지 않도록 최선을 '
                 '다하겠습니다. 부상 없는 즐거운 시즌이 되길 바랍니다.',
                 style: TextStyle(
-                  color: AppTheme.slate300,
+                  color: context.aublColors.ink,
                   fontSize: 13,
                   height: 1.62,
                 ),
               ),
-              SizedBox(height: 10),
+              const SizedBox(height: 10),
               Align(
                 alignment: Alignment.centerRight,
                 child: Text('제46대 전국대학아마추어야구연합회장 정흥영',
                     style: TextStyle(
-                      color: AppTheme.slate500,
+                      color: context.aublColors.muted,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     )),
@@ -527,34 +498,34 @@ class _IntroScreenState extends State<IntroScreen> {
 
   // ── 역사와 유산 ──
   Widget _buildHistorySection() {
-    const milestones = [
+    final milestones = [
       (
         '1981',
         'Since 1981',
         '1981년 대학생들의 작은 교류전으로 출발해 45년을 이어온 '
             '국내 유일 순수 대학 아마추어 야구 리그.',
-        AppTheme.blue400
+        context.aublColors.cobalt
       ),
       (
         'Dynasties',
         'Dynasties',
         '한국외국어대학교(서울)와 동국대학교(L.A.E)가 각각 통산 8회 '
             '우승으로 최다 우승 기록을 보유하며 리그의 역사를 이끌어왔습니다.',
-        AppTheme.purple500
+        context.aublColors.cobalt
       ),
       (
         '2025-2026',
         '2025 → 2026',
         '2025년 아주대 주최 시즌을 지나 2026년에는 중앙대학교(서울)가 '
             '호스트를 맡아 8개 조 예선과 으뜸·버금 토너먼트로 리그를 운영합니다.',
-        AppTheme.green500
+        context.aublColors.success
       ),
     ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('역사와 유산', Icons.history_edu, AppTheme.blue400),
+        _sectionTitle('역사와 유산', Icons.history_edu, context.aublColors.cobalt),
         const SizedBox(height: 10),
         ...milestones.map((m) {
           final (year, title, desc, color) = m;
@@ -562,7 +533,7 @@ class _IntroScreenState extends State<IntroScreen> {
           return Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: _buildSurfaceCard(
-              borderColor: AppTheme.slate600,
+              borderColor: context.aublColors.lineStrong,
               borderOpacity: 0.55,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -586,8 +557,8 @@ class _IntroScreenState extends State<IntroScreen> {
                   const SizedBox(height: 9),
                   Text(
                     title,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: context.aublColors.ink,
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                     ),
@@ -595,8 +566,8 @@ class _IntroScreenState extends State<IntroScreen> {
                   const SizedBox(height: 4),
                   Text(
                     desc,
-                    style: const TextStyle(
-                      color: AppTheme.slate400,
+                    style: TextStyle(
+                      color: context.aublColors.muted,
                       fontSize: 12,
                       height: 1.5,
                     ),
@@ -612,8 +583,8 @@ class _IntroScreenState extends State<IntroScreen> {
 
   // ── 조직 구성 ──
   Widget _buildOrganizationSection() {
-    const roles = [
-      ('주최 (2026)', '중앙대학교(서울)', '46주년 시즌 운영 전권을 위임받은 호스트 대학'),
+    final roles = [
+      ('연합회교 (2026)', '중앙대학교(서울)', '46주년 시즌 운영을 맡은 연합회교'),
       ('회장단', '회장 정흥영 · 기록부장 이주환', '실시간 기록 · 중계 · 디지털화, 웹 개발을 기록부가 주도'),
       ('감사', '연 2회 회계 감사', '주최 외 제3의 대학(차기 주최 등)이 상·하반기 2회 진행'),
     ];
@@ -621,14 +592,15 @@ class _IntroScreenState extends State<IntroScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('조직 구성', Icons.corporate_fare, AppTheme.green500),
+        _sectionTitle(
+            '조직 구성', Icons.corporate_fare, context.aublColors.success),
         const SizedBox(height: 10),
         ...roles.map((r) {
           final (label, value, detail) = r;
           return Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: _buildSurfaceCard(
-              borderColor: AppTheme.slate600,
+              borderColor: context.aublColors.lineStrong,
               borderOpacity: 0.55,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -636,7 +608,7 @@ class _IntroScreenState extends State<IntroScreen> {
                   Text(
                     label,
                     style: TextStyle(
-                      color: _mutedAccent(AppTheme.green500, 0.35),
+                      color: _mutedAccent(context.aublColors.success, 0.35),
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0.5,
@@ -645,8 +617,8 @@ class _IntroScreenState extends State<IntroScreen> {
                   const SizedBox(height: 6),
                   Text(
                     value,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: context.aublColors.ink,
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
                     ),
@@ -654,8 +626,8 @@ class _IntroScreenState extends State<IntroScreen> {
                   const SizedBox(height: 5),
                   Text(
                     detail,
-                    style: const TextStyle(
-                      color: AppTheme.slate400,
+                    style: TextStyle(
+                      color: context.aublColors.muted,
                       fontSize: 12,
                       height: 1.5,
                     ),
@@ -671,7 +643,7 @@ class _IntroScreenState extends State<IntroScreen> {
 
   // ── 리그 구조 · 규정 요약 ──
   Widget _buildLeagueStructure() {
-    const cards = [
+    final cards = [
       (
         '회원 자격',
         [
@@ -702,22 +674,23 @@ class _IntroScreenState extends State<IntroScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('리그 구조 · 규정 요약', Icons.menu_book, AppTheme.orange500),
+        _sectionTitle(
+            '리그 구조 · 규정 요약', Icons.menu_book, context.aublColors.warning),
         const SizedBox(height: 10),
         ...cards.map((card) {
           final (title, points) = card;
           return Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: _buildSurfaceCard(
-              borderColor: AppTheme.slate600,
+              borderColor: context.aublColors.lineStrong,
               borderOpacity: 0.55,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: context.aublColors.ink,
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
                     ),
@@ -727,7 +700,8 @@ class _IntroScreenState extends State<IntroScreen> {
                         padding: const EdgeInsets.only(bottom: 4),
                         child: _buildBulletText(
                           p,
-                          bulletColor: _mutedAccent(AppTheme.orange500, 0.28),
+                          bulletColor:
+                              _mutedAccent(context.aublColors.warning, 0.28),
                         ),
                       )),
                 ],
@@ -741,7 +715,7 @@ class _IntroScreenState extends State<IntroScreen> {
 
   // ── 2026 포스트시즌 스냅샷 ──
   Widget _buildPostseason() {
-    const blocks = [
+    final blocks = [
       (
         '으뜸 4강',
         '2026.01.25 예정',
@@ -758,7 +732,7 @@ class _IntroScreenState extends State<IntroScreen> {
           '한국공학대 Winners vs 한국외대 글로벌 Union',
           '경희대 서울 Braves vs 인하대 Biryong',
         ],
-        AppTheme.purple500,
+        context.aublColors.cobalt,
       ),
     ];
 
@@ -766,7 +740,7 @@ class _IntroScreenState extends State<IntroScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionTitle(
-            '2026 포스트시즌 스냅샷', Icons.military_tech, AppTheme.purple500),
+            '2026 포스트시즌 스냅샷', Icons.military_tech, context.aublColors.cobalt),
         const SizedBox(height: 10),
         ...blocks.map((block) {
           final (title, date, matchups, color) = block;
@@ -775,15 +749,15 @@ class _IntroScreenState extends State<IntroScreen> {
             padding: const EdgeInsets.only(bottom: 10),
             child: _buildSurfaceCard(
               padding: const EdgeInsets.all(16),
-              borderColor: AppTheme.slate600,
+              borderColor: context.aublColors.lineStrong,
               borderOpacity: 0.55,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: context.aublColors.ink,
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
                     ),
@@ -816,24 +790,25 @@ class _IntroScreenState extends State<IntroScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle(
-            '참가 팀 (${teamGroups.length}팀)', Icons.groups, AppTheme.blue400),
+        _sectionTitle('참가 팀 (${teamGroups.length}팀)', Icons.groups,
+            context.aublColors.cobalt),
         const SizedBox(height: 10),
         _buildSurfaceCard(
           child: Wrap(
             spacing: 8,
             runSpacing: 8,
             children: teamGroups.map((entry) {
-              final color = groupColors[entry.group] ?? AppTheme.blue400;
+              final color =
+                  groupColors[entry.group] ?? context.aublColors.cobalt;
               final accent = _mutedAccent(color, 0.25);
               return Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: AppTheme.slate700.withValues(alpha: 0.28),
+                  color: context.aublColors.line.withValues(alpha: 0.28),
                   borderRadius: BorderRadius.circular(9),
                   border: Border.all(
-                      color: AppTheme.slate500.withValues(alpha: 0.24)),
+                      color: context.aublColors.muted.withValues(alpha: 0.24)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -849,13 +824,14 @@ class _IntroScreenState extends State<IntroScreen> {
                     const SizedBox(width: 6),
                     Text(
                       entry.name,
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      style: TextStyle(
+                          color: context.aublColors.ink, fontSize: 12),
                     ),
                     const SizedBox(width: 5),
                     Text(
                       '${entry.group}조',
-                      style: const TextStyle(
-                        color: AppTheme.slate400,
+                      style: TextStyle(
+                        color: context.aublColors.muted,
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
                       ),
