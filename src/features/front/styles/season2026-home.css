@@ -836,7 +836,7 @@
   background: var(--s26-white);
   border-bottom: 1px solid var(--s26-line);
   color: var(--s26-muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   height: 34px;
   letter-spacing: 0.08em;
@@ -855,7 +855,7 @@
   background: var(--s26-white);
   border-bottom: 1px solid var(--s26-line);
   border-right: 1px solid var(--s26-line);
-  height: 116px;
+  height: 132px;
   padding: 0;
   vertical-align: top;
 }
@@ -882,8 +882,8 @@
   font: inherit;
   gap: 8px;
   height: 100%;
-  min-height: 116px;
-  padding: 8px;
+  min-height: 132px;
+  padding: 9px;
   text-align: left;
   width: 100%;
 }
@@ -920,21 +920,21 @@
 
 .s26-calendar__day-heading > b {
   color: var(--s26-navy);
-  font-size: 14px;
+  font-size: 15px;
   font-variant-numeric: tabular-nums;
   font-weight: 950;
 }
 
 .s26-calendar__day-heading > em {
   color: var(--s26-blue);
-  font-size: 9px;
+  font-size: 10px;
   font-style: normal;
   font-weight: 900;
 }
 
 .s26-calendar__day-heading > small {
   color: var(--s26-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   margin-left: auto;
   white-space: nowrap;
@@ -951,7 +951,7 @@
   display: grid;
   gap: 2px;
   min-width: 0;
-  padding: 3px 0 3px 6px;
+  padding: 4px 0 4px 7px;
 }
 
 .s26-calendar__preview.is-live {
@@ -979,7 +979,7 @@
 .s26-calendar__preview > small,
 .s26-calendar__previews > small {
   color: var(--s26-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 850;
   line-height: 1.25;
@@ -991,7 +991,7 @@
 
 .s26-calendar__preview > strong {
   color: var(--s26-ink);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 850;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1549,7 +1549,7 @@
   }
 
   .s26-calendar__table th {
-    font-size: 9px;
+    font-size: 10px;
     height: 30px;
   }
 
@@ -1576,7 +1576,7 @@
   }
 
   .s26-calendar__day-heading > small {
-    font-size: 9px;
+    font-size: 11px;
     margin-left: 0;
   }
 
