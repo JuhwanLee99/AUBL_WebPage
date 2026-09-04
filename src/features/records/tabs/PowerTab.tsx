@@ -23,7 +23,7 @@ export default function PowerTab({ rows, loading, error, rankingYear }: PowerTab
       <div style={tableTitleStyle}>파워랭킹 ({rankingYear ?? '-'})</div>
 
       {loading && <p style={emptyTextStyle}>파워랭킹을 계산된 집계 API에서 불러오는 중입니다...</p>}
-      {error && <p style={{ ...emptyTextStyle, color: '#f87171' }}>오류: {error}</p>}
+      {error && <p style={{ ...emptyTextStyle, color: 'var(--season-danger)' }}>오류: {error}</p>}
 
       {!loading && !error && (
         <div style={{ overflowX: 'auto' }}>

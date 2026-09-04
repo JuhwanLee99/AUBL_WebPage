@@ -263,7 +263,7 @@ export default function BattersTab({
   const numericCellStyle = (key: BatterSortKey, align: 'left' | 'center' = 'center') => ({
     ...tdStyle(align),
     ...(BATTER_NUMERIC_SORT_KEYS.has(key) && sortKey === key
-      ? { color: '#f472b6', fontWeight: 800 }
+      ? { color: 'var(--season-blue-700)', fontWeight: 800 }
       : {}),
   });
 
@@ -279,7 +279,7 @@ export default function BattersTab({
       >
         <TopFivePanel
           title="타자 TOP 5 (규정 IN)"
-          accent="#ec4899"
+          accent="var(--season-navy-900)"
           rows={topRows}
           emptyMessage="타자 데이터가 없습니다."
           sortLabel="기준"
@@ -303,16 +303,23 @@ export default function BattersTab({
                     <th
                       key={column.key}
                       onClick={() => handleSort(column.key)}
+                      onKeyDown={(event) => {
+                        if (event.key !== 'Enter' && event.key !== ' ') return;
+                        event.preventDefault();
+                        handleSort(column.key);
+                      }}
+                      tabIndex={0}
+                      aria-sort={active ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                       style={{
                         ...thStyle(column.align),
                         cursor: 'pointer',
-                        color: active ? '#f472b6' : '#94a3b8',
+                        color: active ? 'var(--season-blue-700)' : 'var(--season-muted)',
                         userSelect: 'none',
                       }}
                       title="클릭: 컬럼 정렬"
                     >
                       {column.label}
-                      {arrow}
+                      <span aria-hidden="true">{arrow}</span>
                     </th>
                   );
                 })}

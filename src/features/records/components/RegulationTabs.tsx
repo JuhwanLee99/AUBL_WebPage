@@ -12,7 +12,7 @@ const OPTIONS: Array<{ value: Exclude<RecordRegulation, 'ALL'>; label: string }>
 
 export default function RegulationTabs({ value, onChange }: RegulationTabsProps) {
   return (
-    <div style={{ display: 'flex', gap: '8px', padding: '12px 16px', borderBottom: '1px solid rgba(148,163,184,0.2)' }}>
+    <div style={{ display: 'flex', gap: '8px', padding: '12px 16px', borderBottom: '1px solid var(--season-line)' }}>
       {OPTIONS.map((option) => {
         const active = option.value === value;
         return (
@@ -21,11 +21,12 @@ export default function RegulationTabs({ value, onChange }: RegulationTabsProps)
             type="button"
             onClick={() => onChange(option.value)}
             style={{
-              borderRadius: '999px',
-              border: active ? '1px solid rgba(96,165,250,0.7)' : '1px solid rgba(148,163,184,0.35)',
-              background: active ? 'rgba(59,130,246,0.2)' : 'rgba(15,23,42,0.6)',
-              color: active ? '#dbeafe' : '#cbd5e1',
-              padding: '8px 12px',
+              minHeight: '44px',
+              borderRadius: '2px',
+              border: active ? '1px solid var(--season-primary-fill)' : '1px solid var(--season-line-strong)',
+              background: active ? 'var(--season-primary-fill)' : 'var(--season-surface)',
+              color: active ? 'var(--season-on-primary)' : 'var(--season-ink)',
+              padding: '9px 14px',
               fontWeight: 800,
               fontSize: '12px',
               cursor: 'pointer',

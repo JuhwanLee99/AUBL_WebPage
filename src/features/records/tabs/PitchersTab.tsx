@@ -259,7 +259,7 @@ export default function PitchersTab({
   const numericCellStyle = (key: PitcherSortKey, align: 'left' | 'center' = 'center') => ({
     ...tdStyle(align),
     ...(PITCHER_NUMERIC_SORT_KEYS.has(key) && sortKey === key
-      ? { color: '#60a5fa', fontWeight: 800 }
+      ? { color: 'var(--season-blue-700)', fontWeight: 800 }
       : {}),
   });
 
@@ -275,7 +275,7 @@ export default function PitchersTab({
       >
         <TopFivePanel
           title="투수 TOP 5 (규정 IN)"
-          accent="#60a5fa"
+          accent="var(--season-blue-700)"
           rows={topRows}
           emptyMessage="투수 데이터가 없습니다."
           sortLabel="기준"
@@ -299,16 +299,23 @@ export default function PitchersTab({
                     <th
                       key={column.key}
                       onClick={() => handleSort(column.key)}
+                      onKeyDown={(event) => {
+                        if (event.key !== 'Enter' && event.key !== ' ') return;
+                        event.preventDefault();
+                        handleSort(column.key);
+                      }}
+                      tabIndex={0}
+                      aria-sort={active ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                       style={{
                         ...thStyle(column.align),
                         cursor: 'pointer',
-                        color: active ? '#60a5fa' : '#94a3b8',
+                        color: active ? 'var(--season-blue-700)' : 'var(--season-muted)',
                         userSelect: 'none',
                       }}
                       title="클릭: 컬럼 정렬"
                     >
                       {column.label}
-                      {arrow}
+                      <span aria-hidden="true">{arrow}</span>
                     </th>
                   );
                 })}

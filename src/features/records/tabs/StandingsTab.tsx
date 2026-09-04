@@ -183,7 +183,7 @@ export default function StandingsTab({
   const numericCellStyle = (key: StandingsSortKey, align: 'left' | 'center' = 'center') => ({
     ...tdStyle(align),
     ...(STANDINGS_NUMERIC_SORT_KEYS.has(key) && sortKey === key
-      ? { color: '#34d399', fontWeight: 800 }
+      ? { color: 'var(--season-blue-700)', fontWeight: 800 }
       : {}),
   });
 
@@ -202,16 +202,23 @@ export default function StandingsTab({
                     <th
                       key={column.key}
                       onClick={() => handleSort(column.key)}
+                      onKeyDown={(event) => {
+                        if (event.key !== 'Enter' && event.key !== ' ') return;
+                        event.preventDefault();
+                        handleSort(column.key);
+                      }}
+                      tabIndex={0}
+                      aria-sort={active ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                       style={{
                         ...thStyle(column.align),
                         cursor: 'pointer',
-                        color: active ? '#34d399' : '#94a3b8',
+                        color: active ? 'var(--season-blue-700)' : 'var(--season-muted)',
                         userSelect: 'none',
                       }}
                       title="클릭: 컬럼 정렬"
                     >
                       {column.label}
-                      {arrow}
+                      <span aria-hidden="true">{arrow}</span>
                     </th>
                   );
                 })}

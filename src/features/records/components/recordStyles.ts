@@ -41,19 +41,24 @@ export const labelStyle: CSSProperties = {
 export function selectStyle(minWidth: string): CSSProperties {
   return {
     minWidth,
-    borderRadius: '10px',
+    minHeight: '44px',
+    borderRadius: '2px',
     border: '1px solid var(--season-line)',
     background: 'var(--season-surface)',
     color: 'var(--season-ink)',
-    padding: '8px 10px',
+    padding: '9px 12px',
     fontWeight: 800,
   };
 }
 
 export function quickLinkStyle(color: string, background: string, border: string): CSSProperties {
   return {
-    padding: '10px 12px',
-    borderRadius: '10px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '44px',
+    padding: '10px 14px',
+    borderRadius: '2px',
     border: `1px solid ${border}`,
     background,
     color,
@@ -67,7 +72,7 @@ export function noticeCardStyle(color: string): CSSProperties {
     padding: '30px',
     textAlign: 'center',
     color,
-    borderRadius: '14px',
+    borderRadius: '4px',
     border: '1px solid var(--season-line)',
     background: 'var(--season-surface)',
     fontWeight: 700,
@@ -75,7 +80,7 @@ export function noticeCardStyle(color: string): CSSProperties {
 }
 
 export const tableCardStyle: CSSProperties = {
-  borderRadius: '18px',
+  borderRadius: '4px',
   border: '1px solid var(--season-line)',
   overflow: 'hidden',
   background: 'var(--season-surface)',

@@ -31,16 +31,16 @@ export default function TopFivePanel({
   return (
     <div
       style={{
-        borderRadius: '16px',
-        border: '1px solid rgba(148,163,184,0.2)',
-        background: 'rgba(15,23,42,0.55)',
+        borderRadius: '4px',
+        border: '1px solid var(--season-line)',
+        background: 'var(--season-surface)',
         overflow: 'hidden',
       }}
     >
       <div
         style={{
           padding: '14px 16px',
-          borderBottom: '1px solid rgba(148,163,184,0.15)',
+          borderBottom: '2px solid var(--season-navy-900)',
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
@@ -48,17 +48,18 @@ export default function TopFivePanel({
       >
         <span style={{ fontWeight: 900, color: accent }}>{title}</span>
         {canSort && (
-          <label style={{ marginLeft: 'auto', display: 'inline-flex', gap: '8px', alignItems: 'center', color: '#94a3b8', fontSize: '12px', fontWeight: 700 }}>
+          <label style={{ marginLeft: 'auto', display: 'inline-flex', gap: '8px', alignItems: 'center', color: 'var(--season-muted)', fontSize: '12px', fontWeight: 700 }}>
             {sortLabel ?? 'SORT'}
             <select
               value={sortValue}
               onChange={(e) => onSortChange?.(e.target.value)}
               style={{
-                borderRadius: '8px',
-                border: '1px solid rgba(148,163,184,0.35)',
-                background: '#0f172a',
-                color: '#e2e8f0',
-                padding: '5px 8px',
+                minHeight: '44px',
+                borderRadius: '2px',
+                border: '1px solid var(--season-line-strong)',
+                background: 'var(--season-surface)',
+                color: 'var(--season-ink)',
+                padding: '8px 10px',
                 fontWeight: 700,
                 fontSize: '12px',
               }}
@@ -72,7 +73,7 @@ export default function TopFivePanel({
           </label>
         )}
       </div>
-      {rows.length === 0 && <p style={{ margin: 0, padding: '18px', color: '#94a3b8' }}>{emptyMessage}</p>}
+      {rows.length === 0 && <p style={{ margin: 0, padding: '18px', color: 'var(--season-muted)' }}>{emptyMessage}</p>}
       {rows.map((row) => (
         <div
           key={row.id}
@@ -81,16 +82,16 @@ export default function TopFivePanel({
             gridTemplateColumns: '50px 1fr',
             gap: '12px',
             padding: '12px 16px',
-            borderTop: '1px solid rgba(148,163,184,0.1)',
+            borderTop: '1px solid var(--season-line)',
           }}
         >
-          <div style={{ fontWeight: 900, color: '#cbd5e1' }}>{row.rank}</div>
+          <div style={{ fontWeight: 900, color: 'var(--season-blue-700)' }}>{row.rank}</div>
           <div style={{ display: 'grid', gap: '4px' }}>
-            <Link to={row.link} style={{ color: '#e2e8f0', fontWeight: 800, textDecoration: 'none' }}>
+            <Link to={row.link} style={{ color: 'var(--season-ink)', fontWeight: 800, textDecoration: 'none' }}>
               {row.name}
             </Link>
-            <span style={{ color: '#94a3b8', fontSize: '12px' }}>{row.team}</span>
-            <span style={{ color: '#cbd5e1', fontSize: '13px' }}>{row.value}</span>
+            <span style={{ color: 'var(--season-muted)', fontSize: '12px' }}>{row.team}</span>
+            <span style={{ color: 'var(--season-ink)', fontSize: '13px' }}>{row.value}</span>
           </div>
         </div>
       ))}

@@ -808,11 +808,14 @@ export default function RecordPage() {
           <Link
             to="/records/player"
             style={{
-              borderRadius: '999px',
-              border: '1px solid rgba(148,163,184,0.35)',
-              background: 'rgba(15,23,42,0.6)',
-              color: '#cbd5e1',
-              padding: '8px 14px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              minHeight: '44px',
+              borderRadius: '2px',
+              border: '1px solid var(--season-line-strong)',
+              background: 'var(--season-surface)',
+              color: 'var(--season-ink)',
+              padding: '9px 14px',
               fontWeight: 800,
               fontSize: '13px',
               textDecoration: 'none',
@@ -853,13 +856,13 @@ export default function RecordPage() {
               <>
                 <Link
                   to="/records/player"
-                  style={quickLinkStyle('#e2e8f0', 'rgba(148,163,184,0.2)', 'rgba(148,163,184,0.36)')}
+                  style={quickLinkStyle('var(--season-ink)', 'var(--season-surface)', 'var(--season-line-strong)')}
                 >
                   선수 상세
                 </Link>
                 <Link
                   to="/prediction"
-                  style={quickLinkStyle('#a7f3d0', 'rgba(16,185,129,0.14)', 'rgba(16,185,129,0.35)')}
+                  style={quickLinkStyle('var(--season-blue-700)', 'var(--season-blue-100)', 'var(--season-blue-600)')}
                 >
                   승부예측
                 </Link>
@@ -870,19 +873,19 @@ export default function RecordPage() {
       />
 
       {(initializing || loading) && (
-        <section className="record-hub-section" style={noticeCardStyle('#94a3b8')}>
+        <section className="record-hub-section" style={noticeCardStyle('var(--season-muted)')}>
           데이터를 불러오는 중입니다...
         </section>
       )}
 
       {error && (
-        <section className="record-hub-section" style={noticeCardStyle('#f87171')}>
+        <section className="record-hub-section" style={noticeCardStyle('var(--season-danger)')}>
           오류: {error}
         </section>
       )}
 
       {!error && warning && (
-        <section className="record-hub-section" style={noticeCardStyle('#facc15')}>
+        <section className="record-hub-section" style={noticeCardStyle('var(--season-warning)')}>
           {warning}
         </section>
       )}

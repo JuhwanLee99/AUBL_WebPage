@@ -60,7 +60,7 @@ export default function OverviewTab({
       >
         <TopFivePanel
           title="타자 TOP 5 (규정 IN)"
-          accent="#ec4899"
+          accent="var(--season-navy-900)"
           rows={topBatters}
           emptyMessage="타자 데이터가 없습니다."
           sortLabel="기준"
@@ -70,7 +70,7 @@ export default function OverviewTab({
         />
         <TopFivePanel
           title="투수 TOP 5 (규정 IN)"
-          accent="#60a5fa"
+          accent="var(--season-blue-700)"
           rows={topPitchers}
           emptyMessage="투수 데이터가 없습니다."
           sortLabel="기준"
@@ -88,9 +88,10 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div
       style={{
         padding: '14px',
-        borderRadius: '14px',
-        border: '1px solid rgba(148,163,184,0.22)',
-        background: 'rgba(255,255,255,0.02)',
+        borderRadius: '4px',
+        border: '1px solid var(--season-line)',
+        borderTop: '3px solid var(--season-blue-600)',
+        background: 'var(--season-surface)',
       }}
     >
       <p style={metricLabelStyle}>{label}</p>
@@ -101,14 +102,14 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 const metricLabelStyle: CSSProperties = {
   margin: 0,
-  color: '#94a3b8',
+  color: 'var(--season-muted)',
   fontWeight: 800,
   fontSize: '12px',
 };
 
 const metricValueStyle: CSSProperties = {
   margin: '6px 0 0',
-  color: '#e2e8f0',
+  color: 'var(--season-navy-950)',
   fontWeight: 900,
   fontSize: '22px',
 };
