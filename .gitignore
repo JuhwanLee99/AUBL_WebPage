@@ -69,8 +69,13 @@ flutter_app/ios/Flutter/Generated.xcconfig
 flutter_app/android/app/google-services.json
 flutter_app/ios/Runner/GoogleService-Info.plist
 
-# Flutter env configs
-flutter_app/env/
+# Flutter environment files below are public endpoint configuration only.
+# Keep local overrides ignored while versioning reproducible build profiles.
+flutter_app/env/*
+!flutter_app/env/README.md
+!flutter_app/env/dev.json
+!flutter_app/env/stage.json
+!flutter_app/env/prod.json
 
 # Data exports
 flutter_app/*.csv

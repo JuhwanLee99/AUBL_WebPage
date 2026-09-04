@@ -11,13 +11,23 @@ class BackendApiService {
   BackendApiService({
     http.Client? client,
     Future<String?> Function()? tokenProvider,
+    String? baseUrl,
   })  : _client = client ?? http.Client(),
-        _tokenProvider = tokenProvider ?? _defaultTokenProvider;
+        _tokenProvider = tokenProvider ?? _defaultTokenProvider,
+        _baseUrl = (baseUrl ??
+                (AppConfig.backendApiUrl.isNotEmpty
+                    ? AppConfig.backendApiUrl
+                    : client != null
+                        ? 'https://api.test'
+                        : ''))
+            .replaceAll(
+          RegExp(r'/+$'),
+          '',
+        );
 
   final http.Client _client;
   final Future<String?> Function() _tokenProvider;
-
-  String get _baseUrl => AppConfig.backendApiUrl;
+  final String _baseUrl;
 
   Future<Map<String, String>> _authHeaders() async {
     final token = await _tokenProvider();
@@ -32,6 +42,7 @@ class BackendApiService {
   }
 
   Future<dynamic> _get(String path, {Map<String, String>? query}) async {
+    _ensureBaseUrl();
     final uri = Uri.parse('$_baseUrl$path').replace(queryParameters: query);
     final headers = await _authHeaders();
     final res = await _client.get(uri, headers: headers);
@@ -44,6 +55,7 @@ class BackendApiService {
   }
 
   Future<dynamic> _patch(String path, {Map<String, String>? query}) async {
+    _ensureBaseUrl();
     final uri = Uri.parse('$_baseUrl$path').replace(queryParameters: query);
     final headers = await _authHeaders();
     final res = await _client.patch(uri, headers: headers);
@@ -53,6 +65,14 @@ class BackendApiService {
     }
     if (res.body.isEmpty) return null;
     return jsonDecode(res.body);
+  }
+
+  void _ensureBaseUrl() {
+    if (_baseUrl.isNotEmpty) return;
+    throw StateError(
+      'AUBL_BACKEND_API_URL이 없습니다. '
+      '--dart-define-from-file=env/<profile>.json으로 실행하세요.',
+    );
   }
 
   bool _isNotFoundError(Object err) =>

@@ -4,9 +4,9 @@
 Flutter 네이티브 UI와 WebView를 결합한 하이브리드 아키텍처로 구성되어 있으며,
 실시간 경기 정보, 팀 관리, 커뮤니티, 푸시 알림 등 리그 운영에 필요한 핵심 기능을 제공합니다.
 
-**버전:** 1.0.0
+**버전:** 1.1.0+16
 **플랫폼:** Android / iOS
-**Flutter SDK:** 3.4.0+
+**Flutter SDK:** 3.41.6 / Dart 3.11.4
 
 ---
 
@@ -261,6 +261,7 @@ flutter_app/lib/
 |----|------|------|
 | `AUBL_ENV` | 실행 환경 | `dev`, `stage`, `prod` |
 | `AUBL_WEB_BASE_URL` | 웹 서비스 베이스 URL | `https://aubl.club` |
+| `AUBL_BACKEND_API_URL` | Spring/MariaDB 공개 API URL(필수) | `https://api.aubl.club` |
 | `AUBL_AUTH_BRIDGE_URL` | 토큰 교환 Cloud Function URL | `https://...cloudfunctions.net/exchange_web_id_token` |
 | `AUBL_ACCOUNT_DELETION_URL` | 외부 계정 삭제 안내 URL | `https://aubl.club/account-deletion` |
 
@@ -280,6 +281,7 @@ flutter run --dart-define-from-file=env/prod.json
 flutter run \
   --dart-define=AUBL_ENV=dev \
   --dart-define=AUBL_WEB_BASE_URL=https://aubl.club \
+  --dart-define=AUBL_BACKEND_API_URL=https://api.aubl.club \
   --dart-define=AUBL_AUTH_BRIDGE_URL=https://...cloudfunctions.net/exchange_web_id_token \
   --dart-define=AUBL_ACCOUNT_DELETION_URL=https://aubl.club/account-deletion
 ```
@@ -332,8 +334,8 @@ dart run tool/layer_dependency_checker.dart
 ```bash
 cd flutter_app
 flutter build ios --release --no-codesign \
-  --build-name=1.0.2 \
-  --build-number=10 \
+  --build-name=1.1.0 \
+  --build-number=16 \
   --dart-define-from-file=env/prod.json
 ```
 

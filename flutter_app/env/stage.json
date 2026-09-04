@@ -1,0 +1,7 @@
+{
+  "AUBL_ENV": "stage",
+  "AUBL_WEB_BASE_URL": "https://aubl.club",
+  "AUBL_BACKEND_API_URL": "https://api.aubl.club",
+  "AUBL_AUTH_BRIDGE_URL": "https://asia-northeast3-aubl-backup.cloudfunctions.net/exchange_web_id_token",
+  "AUBL_ACCOUNT_DELETION_URL": "https://aubl.club/account-deletion"
+}

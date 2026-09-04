@@ -11,7 +11,6 @@ class AppConfig {
 
   static const String backendApiUrl = String.fromEnvironment(
     'AUBL_BACKEND_API_URL',
-    defaultValue: 'https://api.aubl.club',
   );
 
   static const String authBridgeUrl = String.fromEnvironment(
