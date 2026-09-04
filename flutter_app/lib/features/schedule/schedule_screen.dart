@@ -14,15 +14,18 @@ import '../../core/services/public_season_repository.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/kst_clock.dart';
 import '../../core/widgets/season_components.dart';
+import 'widgets/schedule_controls.dart';
+
+enum ScheduleHubTab { schedule, groups, live, practice }
 
 class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({super.key});
 
   @override
-  State<ScheduleScreen> createState() => _ScheduleScreenState();
+  ScheduleScreenState createState() => ScheduleScreenState();
 }
 
-class _ScheduleScreenState extends State<ScheduleScreen>
+class ScheduleScreenState extends State<ScheduleScreen>
     with SingleTickerProviderStateMixin {
   final PublicSeasonRepository _seasonRepository = PublicSeasonRepository();
   final FirestoreService _firestore = FirestoreService();
@@ -43,6 +46,8 @@ class _ScheduleScreenState extends State<ScheduleScreen>
   String _query = '';
   bool _loading = true;
   bool _groupLoading = false;
+  int _monthRequestSerial = 0;
+  int _groupRequestSerial = 0;
   String? _error;
   bool _usingCachedSeasonData = false;
   DateTime? _seasonCacheTime;
@@ -84,7 +89,14 @@ class _ScheduleScreenState extends State<ScheduleScreen>
     }
   }
 
+  void switchToTabIndex(int index) {
+    if (index < 0 || index >= _tabController.length) return;
+    _tabController.animateTo(index);
+  }
+
   Future<void> _loadInitial({bool showLoading = true}) async {
+    final requestSerial = ++_monthRequestSerial;
+    final requestedMonth = _monthStart(_visibleMonth);
     if (showLoading && mounted) setState(() => _loading = true);
     try {
       final overviewResult = await _seasonRepository.loadOverview();
@@ -92,7 +104,7 @@ class _ScheduleScreenState extends State<ScheduleScreen>
       final games = await _fetchMonth(
         overview.seasonId,
         overview.sourceFreshness.publishedRevision,
-        _visibleMonth,
+        requestedMonth,
       );
       List<Match> practice = const [];
       try {
@@ -100,7 +112,7 @@ class _ScheduleScreenState extends State<ScheduleScreen>
             .where((match) => match.isPractice)
             .toList();
       } catch (_) {}
-      if (!mounted) return;
+      if (!mounted || requestSerial != _monthRequestSerial) return;
       setState(() {
         _seasonId = overview.seasonId;
         _overview = overview;
@@ -112,7 +124,7 @@ class _ScheduleScreenState extends State<ScheduleScreen>
         _error = null;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || requestSerial != _monthRequestSerial) return;
       setState(() {
         _loading = false;
         _error = '공식 경기 데이터를 불러오지 못했습니다.';
@@ -139,6 +151,7 @@ class _ScheduleScreenState extends State<ScheduleScreen>
     final seasonId = _seasonId;
     if (seasonId == null) return;
     final next = DateTime(_visibleMonth.year, _visibleMonth.month + delta, 1);
+    final requestSerial = ++_monthRequestSerial;
     setState(() {
       _visibleMonth = next;
       _selectedDate = next;
@@ -150,13 +163,14 @@ class _ScheduleScreenState extends State<ScheduleScreen>
         _overview?.sourceFreshness.publishedRevision,
         next,
       );
-      if (!mounted) return;
+      if (!mounted || requestSerial != _monthRequestSerial) return;
       setState(() {
         _monthGames = games.data;
         _loading = false;
+        _error = null;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || requestSerial != _monthRequestSerial) return;
       setState(() {
         _monthGames = const [];
         _loading = false;
@@ -167,23 +181,27 @@ class _ScheduleScreenState extends State<ScheduleScreen>
 
   Future<void> _loadGroupGames() async {
     final seasonId = _seasonId;
-    if (seasonId == null || _groupLoading) return;
+    if (seasonId == null) return;
+    final requestSerial = ++_groupRequestSerial;
+    final requestedFilter = _groupFilter;
     setState(() => _groupLoading = true);
     try {
-      final isGroup = RegExp(r'^[A-H]$').hasMatch(_groupFilter);
+      final isGroup = RegExp(r'^[A-H]$').hasMatch(requestedFilter);
       final games = await _seasonRepository.loadGames(
         seasonId: seasonId,
         revision: _overview?.sourceFreshness.publishedRevision,
-        group: isGroup ? _groupFilter : null,
-        qualification: isGroup ? null : _groupFilter,
+        group: isGroup ? requestedFilter : null,
+        qualification: isGroup ? null : requestedFilter,
       );
-      if (!mounted) return;
+      if (!mounted || requestSerial != _groupRequestSerial) return;
       setState(() => _groupGames = games.data);
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || requestSerial != _groupRequestSerial) return;
       setState(() => _groupGames = const []);
     } finally {
-      if (mounted) setState(() => _groupLoading = false);
+      if (mounted && requestSerial == _groupRequestSerial) {
+        setState(() => _groupLoading = false);
+      }
     }
   }
 
@@ -234,124 +252,133 @@ class _ScheduleScreenState extends State<ScheduleScreen>
 
   Widget _buildScheduleTab() {
     final games = _filteredMonthGames();
-    return RefreshIndicator(
+    return _buildTabScroll(
       onRefresh: () => _loadInitial(showLoading: false),
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
-        children: [
-          const SeasonPageHero(
-            eyebrow: '2026 AUBL GAME CENTER',
-            title: Text('일정과 결과'),
-            description: '공식 게시된 경기만 월별·상태별로 확인할 수 있습니다.',
+      children: [
+        const SeasonPageHero(
+          eyebrow: '2026 AUBL GAME CENTER',
+          title: Text('일정과 결과'),
+          description: '공식 게시된 경기만 월별·상태별로 확인할 수 있습니다.',
+        ),
+        const SizedBox(height: 20),
+        if (_overview != null) ...[
+          DataFreshnessCard(
+            freshness: _overview!.sourceFreshness,
+            fromCache: _usingCachedSeasonData,
+            cachedAt: _seasonCacheTime,
           ),
-          const SizedBox(height: 16),
-          if (_overview != null) ...[
-            DataFreshnessCard(
-              freshness: _overview!.sourceFreshness,
-              fromCache: _usingCachedSeasonData,
-              cachedAt: _seasonCacheTime,
-            ),
-            const SizedBox(height: 12),
-          ],
-          _MonthNavigator(
-            month: _visibleMonth,
-            onPrevious: () => _changeMonth(-1),
-            onToday: () {
-              setState(() {
-                _visibleMonth = _monthStart(KstClock.now());
-                _selectedDate = KstClock.today();
-              });
-              _loadInitial(showLoading: false);
-            },
-            onNext: () => _changeMonth(1),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _searchController,
-            onChanged: (value) => setState(() => _query = value.trim()),
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.search),
-              hintText: '팀 또는 구장 검색',
-            ),
-          ),
-          const SizedBox(height: 10),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _statusChip(null, '전체'),
-                _statusChip(PublicGameStatus.scheduled, '예정'),
-                _statusChip(PublicGameStatus.inProgress, '진행 중'),
-                _statusChip(PublicGameStatus.completed, '종료'),
-                _statusChip(PublicGameStatus.canceled, '취소'),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          SegmentedButton<MatchViewMode>(
-            segments: const [
-              ButtonSegment(
-                value: MatchViewMode.list,
-                icon: Icon(Icons.view_agenda_outlined),
-                label: Text('목록'),
+          const SizedBox(height: 20),
+        ],
+        SeasonSectionPanel(
+          eyebrow: 'FIND A GAME',
+          title: '경기 찾기',
+          description: '월과 상태를 고른 뒤 팀명 또는 구장으로 좁혀보세요.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ScheduleMonthNavigator(
+                month: _visibleMonth,
+                onPrevious: () => _changeMonth(-1),
+                onToday: () {
+                  setState(() {
+                    _visibleMonth = _monthStart(KstClock.now());
+                    _selectedDate = KstClock.today();
+                  });
+                  _loadInitial(showLoading: false);
+                },
+                onNext: () => _changeMonth(1),
               ),
-              ButtonSegment(
-                value: MatchViewMode.calendar,
-                icon: Icon(Icons.calendar_month_outlined),
-                label: Text('달력'),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _searchController,
+                onChanged: (value) => setState(() => _query = value.trim()),
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search),
+                  hintText: '팀 또는 구장 검색',
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '경기 상태',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: context.aublColors.muted,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _statusChip(null, '전체'),
+                  _statusChip(PublicGameStatus.scheduled, '예정'),
+                  _statusChip(PublicGameStatus.inProgress, '진행 중'),
+                  _statusChip(PublicGameStatus.completed, '종료'),
+                  _statusChip(PublicGameStatus.canceled, '취소'),
+                ],
               ),
             ],
-            selected: {_viewMode},
-            onSelectionChanged: (selection) =>
-                setState(() => _viewMode = selection.first),
           ),
-          const SizedBox(height: 14),
-          if (_loading)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(36),
-                child: CircularProgressIndicator(),
-              ),
-            )
-          else if (_error != null && _monthGames.isEmpty)
-            SeasonStatePanel(
-              icon: Icons.cloud_off_outlined,
-              title: '경기 정보를 확인할 수 없습니다',
-              message: _error!,
-              action: SeasonActionButton(
-                label: '다시 시도',
-                onPressed: _loadInitial,
-                style: SeasonActionStyle.secondary,
-              ),
-            )
-          else if (_viewMode == MatchViewMode.calendar)
-            _ScheduleCalendar(
-              month: _visibleMonth,
-              selectedDate: _selectedDate,
-              games: games,
-              onDateSelected: (date) => setState(() => _selectedDate = date),
-              onGameTap: _openPublicGame,
-            )
-          else
-            _PublicGameList(
-              games: games,
-              emptyMessage: '조건에 맞는 경기가 없습니다.',
-              onTap: _openPublicGame,
-            ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 20),
+        SeasonSectionPanel(
+          eyebrow: 'OFFICIAL GAMES',
+          title: _viewMode == MatchViewMode.calendar ? '달력 보기' : '목록 보기',
+          description: '${games.length}경기 · 활성 UniquePlay revision 기준',
+          action: _ViewModeSelector(
+            value: _viewMode,
+            onChanged: (value) => setState(() => _viewMode = value),
+          ),
+          child: AnimatedSwitcher(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 180),
+            child: _loading
+                ? const Center(
+                    key: ValueKey('loading'),
+                    child: Padding(
+                      padding: EdgeInsets.all(36),
+                      child: CircularProgressIndicator(),
+                    ),
+                  )
+                : _error != null && _monthGames.isEmpty
+                ? SeasonStatePanel(
+                    key: const ValueKey('error'),
+                    icon: Icons.cloud_off_outlined,
+                    title: '경기 정보를 확인할 수 없습니다',
+                    message: _error!,
+                    action: SeasonActionButton(
+                      label: '다시 시도',
+                      onPressed: _loadInitial,
+                      style: SeasonActionStyle.secondary,
+                    ),
+                  )
+                : _viewMode == MatchViewMode.calendar
+                ? _ScheduleCalendar(
+                    key: const ValueKey('calendar'),
+                    month: _visibleMonth,
+                    selectedDate: _selectedDate,
+                    games: games,
+                    onDateSelected: (date) =>
+                        setState(() => _selectedDate = date),
+                    onGameTap: _openPublicGame,
+                  )
+                : _PublicGameList(
+                    key: const ValueKey('list'),
+                    games: games,
+                    emptyMessage: '조건에 맞는 경기가 없습니다.',
+                    onTap: _openPublicGame,
+                  ),
+          ),
+        ),
+      ],
     );
   }
 
   Widget _statusChip(PublicGameStatus? status, String label) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: _statusFilter == status,
-        onSelected: (_) => setState(() => _statusFilter = status),
-      ),
+    return ChoiceChip(
+      label: Text(label),
+      selected: _statusFilter == status,
+      onSelected: (_) => setState(() => _statusFilter = status),
     );
   }
 
@@ -377,104 +404,88 @@ class _ScheduleScreenState extends State<ScheduleScreen>
     final overview = isGroup
         ? _overview?.groups.where((row) => row.groupCode == _groupFilter)
         : null;
-    final selectedGroup =
-        overview == null || overview.isEmpty ? null : overview.first;
+    final selectedGroup = overview == null || overview.isEmpty
+        ? null
+        : overview.first;
     final tierTeams = isGroup ? const <GroupStanding>[] : _tierStandings();
 
-    return RefreshIndicator(
+    return _buildTabScroll(
       onRefresh: () async {
         await _loadInitial(showLoading: false);
         await _loadGroupGames();
       },
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
-        children: [
-          const SeasonPageHero(
-            eyebrow: '2026 AUBL GROUPS',
-            title: Text('조별 현황'),
-            description: 'A~H조 순위와 으뜸·버금 진출 상태를 공식 판정 기준으로 표시합니다.',
+      children: [
+        const SeasonPageHero(
+          eyebrow: '2026 AUBL GROUPS',
+          title: Text('조별 현황'),
+          description: 'A~H조 순위와 으뜸·버금 진출 상태를 공식 판정 기준으로 표시합니다.',
+        ),
+        const SizedBox(height: 20),
+        SeasonSectionPanel(
+          eyebrow: 'FILTER',
+          title: '조·진출 권역 선택',
+          description: '예선 조와 진출 권역을 구분해 확인할 수 있습니다.',
+          child: ScheduleGroupSelector(
+            value: _groupFilter,
+            onChanged: (value) {
+              setState(() {
+                _groupFilter = value;
+                _groupGames = const [];
+              });
+              _loadGroupGames();
+            },
           ),
-          const SizedBox(height: 14),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (final value in const [
-                  'A',
-                  'B',
-                  'C',
-                  'D',
-                  'E',
-                  'F',
-                  'G',
-                  'H',
-                  'EUTTEUM',
-                  'BEOGEUM',
-                ])
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(switch (value) {
-                        'EUTTEUM' => '으뜸',
-                        'BEOGEUM' => '버금',
-                        _ => '$value조',
-                      }),
-                      selected: _groupFilter == value,
-                      onSelected: (_) {
-                        setState(() {
-                          _groupFilter = value;
-                          _groupGames = const [];
-                        });
-                        _loadGroupGames();
-                      },
-                    ),
+        ),
+        const SizedBox(height: 20),
+        SeasonSectionPanel(
+          eyebrow: isGroup ? 'GROUP STANDINGS' : 'QUALIFICATION',
+          title: isGroup
+              ? '$_groupFilter조 순위'
+              : _groupFilter == 'EUTTEUM'
+              ? '으뜸권 현황'
+              : '버금권 현황',
+          description: isGroup
+              ? '공식 승패와 관리자 판정이 반영된 순위입니다.'
+              : '각 조의 공식 진출 상태를 기준으로 모았습니다.',
+          child: isGroup && selectedGroup != null
+              ? _GroupStandingCard(group: selectedGroup)
+              : !isGroup && tierTeams.isNotEmpty
+              ? _QualificationTeamsCard(
+                  title: _groupFilter == 'EUTTEUM' ? '으뜸권' : '버금권',
+                  teams: tierTeams,
+                )
+              : _loading
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(30),
+                    child: CircularProgressIndicator(),
                   ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          if (isGroup && selectedGroup != null)
-            _GroupStandingCard(group: selectedGroup)
-          else if (!isGroup && tierTeams.isNotEmpty)
-            _QualificationTeamsCard(
-              title: _groupFilter == 'EUTTEUM' ? '으뜸권' : '버금권',
-              teams: tierTeams,
-            )
-          else if (_loading)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(30),
-                child: CircularProgressIndicator(),
-              ),
-            )
-          else
-            const SeasonStatePanel(
-              icon: Icons.table_rows_outlined,
-              title: '순위가 아직 게시되지 않았습니다',
-              message: '공식 조별 현황이 게시되면 이곳에서 확인할 수 있습니다.',
-            ),
-          const SizedBox(height: 22),
-          const SeasonSectionHeader(
-            title: '해당 경기',
-            description: '활성 UniquePlay revision의 경기만 표시합니다.',
-          ),
-          const SizedBox(height: 10),
-          if (_groupLoading)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: CircularProgressIndicator(),
-              ),
-            )
-          else
-            _PublicGameList(
-              games: _groupGames,
-              emptyMessage: '해당 조건의 경기가 없습니다.',
-              onTap: _openPublicGame,
-            ),
-        ],
-      ),
+                )
+              : const SeasonStatePanel(
+                  icon: Icons.table_rows_outlined,
+                  title: '순위가 아직 게시되지 않았습니다',
+                  message: '공식 조별 현황이 게시되면 이곳에서 확인할 수 있습니다.',
+                ),
+        ),
+        const SizedBox(height: 20),
+        SeasonSectionPanel(
+          eyebrow: 'OFFICIAL GAMES',
+          title: '해당 경기',
+          description: '활성 UniquePlay revision의 경기만 표시합니다.',
+          child: _groupLoading
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              : _PublicGameList(
+                  games: _groupGames,
+                  emptyMessage: '해당 조건의 경기가 없습니다.',
+                  onTap: _openPublicGame,
+                ),
+        ),
+      ],
     );
   }
 
@@ -505,136 +516,152 @@ class _ScheduleScreenState extends State<ScheduleScreen>
       stream: _firestore.watchLiveMatches(),
       builder: (context, snapshot) {
         final liveProjection = snapshot.data ?? const <Match>[];
-        return RefreshIndicator(
+        return _buildTabScroll(
           onRefresh: () => _loadInitial(showLoading: false),
-          child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
-            children: [
-              const SeasonPageHero(
-                eyebrow: 'AUBL LIVE',
-                title: Text('라이브 경기'),
-                description: '진행 중인 경기를 우선 표시하고 없으면 가까운 예정 경기를 안내합니다.',
-              ),
-              const SizedBox(height: 14),
-              if (liveProjection.isNotEmpty)
-                for (final game in liveProjection) ...[
-                  _PracticeMatchCard(
-                    match: game,
-                    label: 'LIVE',
-                    onTap: () => _openPracticeGame(game),
-                  ),
-                  const SizedBox(height: 10),
-                ]
-              else if (apiLive.isNotEmpty)
-                _PublicGameList(
-                  games: apiLive,
-                  emptyMessage: '',
-                  onTap: _openPublicGame,
-                )
-              else ...[
-                const SeasonStatePanel(
-                  icon: Icons.sports_baseball_outlined,
-                  title: '현재 진행 중인 경기가 없습니다',
-                  message: '가장 가까운 예정 경기를 확인해 주세요.',
-                ),
-                if (upcoming.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  const SeasonSectionHeader(title: '가까운 예정 경기'),
-                  const SizedBox(height: 10),
-                  _PublicGameList(
-                    games: upcoming,
-                    emptyMessage: '',
-                    onTap: _openPublicGame,
-                  ),
-                ],
-              ],
-            ],
-          ),
+          children: [
+            const SeasonPageHero(
+              eyebrow: 'AUBL LIVE',
+              title: Text('라이브 경기'),
+              description: '진행 중인 경기를 우선 표시하고 없으면 가까운 예정 경기를 안내합니다.',
+            ),
+            const SizedBox(height: 20),
+            SeasonSectionPanel(
+              eyebrow: 'NOW PLAYING',
+              title: liveProjection.isNotEmpty || apiLive.isNotEmpty
+                  ? '진행 중인 경기'
+                  : '라이브 대기',
+              description: '경기 카드를 누르면 문자중계 또는 상세 화면으로 이동합니다.',
+              child: liveProjection.isNotEmpty
+                  ? Column(
+                      children: [
+                        for (
+                          var index = 0;
+                          index < liveProjection.length;
+                          index++
+                        ) ...[
+                          _PracticeMatchCard(
+                            match: liveProjection[index],
+                            label: 'LIVE',
+                            onTap: () =>
+                                _openPracticeGame(liveProjection[index]),
+                          ),
+                          if (index != liveProjection.length - 1)
+                            const SizedBox(height: 10),
+                        ],
+                      ],
+                    )
+                  : apiLive.isNotEmpty
+                  ? _PublicGameList(
+                      games: apiLive,
+                      emptyMessage: '',
+                      onTap: _openPublicGame,
+                    )
+                  : Column(
+                      children: [
+                        const SeasonStatePanel(
+                          icon: Icons.sports_baseball_outlined,
+                          title: '현재 진행 중인 경기가 없습니다',
+                          message: '가장 가까운 예정 경기를 확인해 주세요.',
+                        ),
+                        if (upcoming.isNotEmpty) ...[
+                          const SizedBox(height: 20),
+                          const SeasonSectionHeader(
+                            eyebrow: 'UP NEXT',
+                            title: '가까운 예정 경기',
+                          ),
+                          const SizedBox(height: 12),
+                          _PublicGameList(
+                            games: upcoming,
+                            emptyMessage: '',
+                            onTap: _openPublicGame,
+                          ),
+                        ],
+                      ],
+                    ),
+            ),
+          ],
         );
       },
     );
   }
 
   Widget _buildPracticeTab() {
-    return RefreshIndicator(
+    return _buildTabScroll(
       onRefresh: () => _loadInitial(showLoading: false),
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
-        children: [
-          const SeasonPageHero(
-            eyebrow: 'AUBL PRACTICE',
-            title: Text('연습경기'),
-            description: 'AUBL 운영자가 등록한 연습경기입니다. 공식 시즌 집계에는 합산하지 않습니다.',
-          ),
-          const SizedBox(height: 14),
-          if (_practiceGames.isEmpty)
-            const SeasonStatePanel(
-              icon: Icons.event_outlined,
-              title: '등록된 연습경기가 없습니다',
-              message: '새 연습경기가 등록되면 이곳에 표시됩니다.',
-            )
-          else
-            for (final game in _practiceGames) ...[
-              _PracticeMatchCard(
-                match: game,
-                label: game.isLive ? 'LIVE' : '연습',
-                onTap: () => _openPracticeGame(game),
-              ),
-              const SizedBox(height: 10),
-            ],
-        ],
-      ),
+      children: [
+        const SeasonPageHero(
+          eyebrow: 'AUBL PRACTICE',
+          title: Text('연습경기'),
+          description: 'AUBL 운영자가 등록한 연습경기입니다. 공식 시즌 집계에는 합산하지 않습니다.',
+        ),
+        const SizedBox(height: 20),
+        SeasonSectionPanel(
+          eyebrow: 'PRACTICE GAMES',
+          title: '등록된 연습경기',
+          description: '${_practiceGames.length}경기 · 공식 시즌 집계 제외',
+          child: _practiceGames.isEmpty
+              ? const SeasonStatePanel(
+                  icon: Icons.event_outlined,
+                  title: '등록된 연습경기가 없습니다',
+                  message: '새 연습경기가 등록되면 이곳에 표시됩니다.',
+                )
+              : Column(
+                  children: [
+                    for (
+                      var index = 0;
+                      index < _practiceGames.length;
+                      index++
+                    ) ...[
+                      _PracticeMatchCard(
+                        match: _practiceGames[index],
+                        label: _practiceGames[index].isLive ? 'LIVE' : '연습',
+                        onTap: () => _openPracticeGame(_practiceGames[index]),
+                      ),
+                      if (index != _practiceGames.length - 1)
+                        const SizedBox(height: 10),
+                    ],
+                  ],
+                ),
+        ),
+      ],
     );
   }
-}
 
-class _MonthNavigator extends StatelessWidget {
-  const _MonthNavigator({
-    required this.month,
-    required this.onPrevious,
-    required this.onToday,
-    required this.onNext,
-  });
-
-  final DateTime month;
-  final VoidCallback onPrevious;
-  final VoidCallback onToday;
-  final VoidCallback onNext;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        child: Row(
-          children: [
-            IconButton(
-                tooltip: '이전 달',
-                onPressed: onPrevious,
-                icon: const Icon(Icons.chevron_left)),
-            Expanded(
-              child: Text(
-                DateFormat('yyyy년 M월').format(month),
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleMedium,
+  Widget _buildTabScroll({
+    required Future<void> Function() onRefresh,
+    required List<Widget> children,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final gutter = constraints.maxWidth >= 600 ? 24.0 : 12.0;
+        return RefreshIndicator(
+          onRefresh: onRefresh,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(gutter, 14, gutter, 36),
+                sliver: SliverToBoxAdapter(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1120),
+                      child: Column(children: children),
+                    ),
+                  ),
+                ),
               ),
-            ),
-            TextButton(onPressed: onToday, child: const Text('오늘')),
-            IconButton(
-                tooltip: '다음 달',
-                onPressed: onNext,
-                icon: const Icon(Icons.chevron_right)),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
 
 class _PublicGameList extends StatelessWidget {
   const _PublicGameList({
+    super.key,
     required this.games,
     required this.emptyMessage,
     required this.onTap,
@@ -656,10 +683,7 @@ class _PublicGameList extends StatelessWidget {
     return Column(
       children: [
         for (var index = 0; index < games.length; index++) ...[
-          PublicMatchCard(
-            game: games[index],
-            onTap: () => onTap(games[index]),
-          ),
+          PublicMatchCard(game: games[index], onTap: () => onTap(games[index])),
           if (index != games.length - 1) const SizedBox(height: 10),
         ],
       ],
@@ -667,8 +691,37 @@ class _PublicGameList extends StatelessWidget {
   }
 }
 
+class _ViewModeSelector extends StatelessWidget {
+  const _ViewModeSelector({required this.value, required this.onChanged});
+
+  final MatchViewMode value;
+  final ValueChanged<MatchViewMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<MatchViewMode>(
+      showSelectedIcon: false,
+      segments: const [
+        ButtonSegment(
+          value: MatchViewMode.list,
+          icon: Icon(Icons.view_agenda_outlined, size: 18),
+          label: Text('목록'),
+        ),
+        ButtonSegment(
+          value: MatchViewMode.calendar,
+          icon: Icon(Icons.calendar_month_outlined, size: 18),
+          label: Text('달력'),
+        ),
+      ],
+      selected: {value},
+      onSelectionChanged: (selection) => onChanged(selection.first),
+    );
+  }
+}
+
 class _ScheduleCalendar extends StatelessWidget {
   const _ScheduleCalendar({
+    super.key,
     required this.month,
     required this.selectedDate,
     required this.games,
@@ -683,118 +736,77 @@ class _ScheduleCalendar extends StatelessWidget {
   final ValueChanged<PublicGame> onGameTap;
 
   List<PublicGame> _on(DateTime date) => games.where((game) {
-        final gameDate = game.gameDate ?? game.startTime;
-        return gameDate != null && KstClock.isSameDay(gameDate, date);
-      }).toList();
+    final gameDate = game.gameDate ?? game.startTime;
+    return gameDate != null && KstClock.isSameDay(gameDate, date);
+  }).toList();
 
   @override
   Widget build(BuildContext context) {
     final colors = context.aublColors;
-    final first = _monthStart(month);
-    final days = DateTime(first.year, first.month + 1, 0).day;
-    final leading = first.weekday - DateTime.monday;
-    final cells = ((leading + days + 6) ~/ 7) * 7;
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
     final agenda = _on(selectedDate);
-    return Column(
+    final calendar = ScheduleMonthGrid(
+      month: month,
+      selectedDate: selectedDate,
+      eventCountForDate: (date) => _on(date).length,
+      onDateSelected: onDateSelected,
+    );
+
+    final agendaPanel = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: Column(
-              children: [
-                Row(
-                  children: ['월', '화', '수', '목', '금', '토', '일']
-                      .map(
-                        (day) => Expanded(
-                          child: Text(
-                            day,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: colors.muted,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-                const SizedBox(height: 6),
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: cells,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 7,
-                    childAspectRatio: 0.82,
-                  ),
-                  itemBuilder: (context, index) {
-                    final day = index - leading + 1;
-                    if (day < 1 || day > days) return const SizedBox.shrink();
-                    final date = DateTime(first.year, first.month, day);
-                    final count = _on(date).length;
-                    final selected = KstClock.isSameDay(date, selectedDate);
-                    return Semantics(
-                      button: true,
-                      selected: selected,
-                      label: '$day일, 경기 $count개',
-                      child: InkWell(
-                        onTap: () => onDateSelected(date),
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          margin: const EdgeInsets.all(2),
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          decoration: BoxDecoration(
-                            color: selected
-                                ? colors.cobalt.withValues(alpha: 0.13)
-                                : null,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: selected ? colors.cobalt : colors.line,
-                            ),
-                          ),
-                          child: Column(
-                            children: [
-                              Text('$day',
-                                  style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w800)),
-                              const Spacer(),
-                              if (count > 0)
-                                Text(
-                                  '$count경기',
-                                  style: TextStyle(
-                                    color: colors.cobalt,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
+        Text(
+          'SELECTED DATE',
+          style: TextStyle(
+            color: colors.cobalt,
+            fontFamily: 'BarlowCondensed',
+            fontSize: 11,
+            fontStyle: FontStyle.italic,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.6,
           ),
         ),
-        const SizedBox(height: 14),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            DateFormat('M월 d일 EEEE', 'ko').format(selectedDate),
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
+        const SizedBox(height: 5),
+        Text(
+          DateFormat('M월 d일 EEEE', 'ko').format(selectedDate),
+          style: Theme.of(context).textTheme.titleLarge,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
+        Text(
+          agenda.isEmpty ? '예정된 경기가 없습니다.' : '${agenda.length}경기가 있습니다.',
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: colors.muted),
+        ),
+        const SizedBox(height: 12),
         _PublicGameList(
           games: agenda,
           emptyMessage: '이 날짜에는 경기가 없습니다.',
           onTap: onGameTap,
         ),
       ],
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useTwoPane =
+            MediaQuery.sizeOf(context).width >= 768 &&
+            constraints.maxWidth >= 620 &&
+            textScale < 1.6;
+        if (!useTwoPane) {
+          return Column(
+            children: [calendar, const SizedBox(height: 18), agendaPanel],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(flex: 6, child: calendar),
+            const SizedBox(width: 22),
+            Expanded(flex: 5, child: agendaPanel),
+          ],
+        );
+      },
     );
   }
 }
@@ -806,28 +818,26 @@ class _GroupStandingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    final colors = context.aublColors;
+    return Container(
+      clipBehavior: Clip.hardEdge,
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border.all(color: colors.line),
+        borderRadius: BorderRadius.circular(4),
+      ),
       child: Column(
         children: [
+          Container(height: 4, color: colors.cobalt),
           Padding(
             padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                Text('${group.groupCode}조',
-                    style: Theme.of(context).textTheme.titleMedium),
-                const Spacer(),
-                Text(
-                  '${group.completedGameCount}경기 완료',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: context.aublColors.muted),
-                ),
-              ],
+            child: _StandingCardHeader(
+              title: '${group.groupCode}조',
+              detail: '${group.completedGameCount}경기 완료',
             ),
           ),
           for (var index = 0; index < group.standings.length; index++) ...[
-            if (index > 0) Divider(height: 1, color: context.aublColors.line),
+            Divider(height: 1, color: colors.line),
             _StandingTile(row: group.standings[index]),
           ],
         ],
@@ -844,23 +854,71 @@ class _QualificationTeamsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    final colors = context.aublColors;
+    return Container(
+      clipBehavior: Clip.hardEdge,
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border.all(color: colors.line),
+        borderRadius: BorderRadius.circular(4),
+      ),
       child: Column(
         children: [
+          Container(height: 4, color: colors.cobalt),
           Padding(
             padding: const EdgeInsets.all(14),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child:
-                  Text(title, style: Theme.of(context).textTheme.titleMedium),
+            child: _StandingCardHeader(
+              title: title,
+              detail: '${teams.length}팀',
             ),
           ),
           for (var index = 0; index < teams.length; index++) ...[
-            if (index > 0) Divider(height: 1, color: context.aublColors.line),
+            Divider(height: 1, color: colors.line),
             _StandingTile(row: teams[index]),
           ],
         ],
       ),
+    );
+  }
+}
+
+class _StandingCardHeader extends StatelessWidget {
+  const _StandingCardHeader({required this.title, required this.detail});
+
+  final String title;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    if (textScale >= 1.3) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(
+            detail,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: context.aublColors.muted),
+          ),
+        ],
+      );
+    }
+    return Row(
+      children: [
+        Expanded(
+          child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          detail,
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: context.aublColors.muted),
+        ),
+      ],
     );
   }
 }
@@ -872,49 +930,75 @@ class _StandingTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 28,
-            child: Text(
-              '${row.rank}',
-              style: TextStyle(
-                color: context.aublColors.navy,
-                fontFamily: 'BarlowCondensed',
-                fontSize: 20,
-                fontWeight: FontWeight.w900,
-              ),
+    final colors = context.aublColors;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final textScale = MediaQuery.textScalerOf(context).scale(1);
+        final stackStatus = constraints.maxWidth < 440 || textScale >= 1.3;
+        final rank = SizedBox(
+          width: 34,
+          child: Text(
+            '${row.rank}',
+            style: TextStyle(
+              color: colors.navy,
+              fontFamily: 'BarlowCondensed',
+              fontSize: 22,
+              fontStyle: FontStyle.italic,
+              fontWeight: FontWeight.w900,
             ),
           ),
-          Expanded(
-            child: Column(
+        );
+        final team = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              row.teamName,
+              maxLines: stackStatus ? 2 : 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '${row.groupCode}조 · ${row.wins}승 ${row.ties}무 ${row.losses}패',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: colors.muted),
+            ),
+          ],
+        );
+        final status = SeasonStatusBadge(
+          label: row.qualificationState.label,
+          tone: row.qualificationState == QualificationState.tiePending
+              ? SeasonBadgeTone.warning
+              : SeasonBadgeTone.navy,
+        );
+
+        return MergeSemantics(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(row.teamName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall),
-                Text(
-                  '${row.groupCode}조 · ${row.wins}승 ${row.ties}무 ${row.losses}패',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: context.aublColors.muted),
+                rank,
+                Expanded(
+                  child: stackStatus
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [team, const SizedBox(height: 8), status],
+                        )
+                      : Row(
+                          children: [
+                            Expanded(child: team),
+                            const SizedBox(width: 10),
+                            status,
+                          ],
+                        ),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          SeasonStatusBadge(
-            label: row.qualificationState.label,
-            tone: row.qualificationState == QualificationState.tiePending
-                ? SeasonBadgeTone.warning
-                : SeasonBadgeTone.navy,
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -933,16 +1017,27 @@ class _PracticeMatchCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final start = KstClock.tryParseApi(match.startTime);
-    return Card(
+    final colors = context.aublColors;
+    final scoreVisible = match.homeScore != null || match.awayScore != null;
+    return Container(
+      clipBehavior: Clip.hardEdge,
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: colors.line),
+      ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(4),
         child: Padding(
-          padding: const EdgeInsets.all(15),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+              Wrap(
+                spacing: 10,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   SeasonStatusBadge(
                     label: label,
@@ -950,33 +1045,136 @@ class _PracticeMatchCard extends StatelessWidget {
                         ? SeasonBadgeTone.danger
                         : SeasonBadgeTone.muted,
                   ),
-                  const Spacer(),
                   Text(
                     start == null
                         ? '시간 미정'
                         : DateFormat('M.d(E) HH:mm', 'ko').format(start),
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: context.aublColors.muted),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colors.muted,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              Text('${match.awayTeamName}  vs  ${match.homeTeamName}',
-                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 14),
+              _PracticeMatchup(
+                awayTeamName: match.awayTeamName,
+                homeTeamName: match.homeTeamName,
+                awayScore: scoreVisible ? match.awayScore : null,
+                homeScore: scoreVisible ? match.homeScore : null,
+              ),
               if (match.venue?.isNotEmpty == true) ...[
-                const SizedBox(height: 6),
-                Text(match.venue!,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: context.aublColors.muted)),
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.only(top: 10),
+                  decoration: BoxDecoration(
+                    border: Border(top: BorderSide(color: colors.line)),
+                  ),
+                  child: Text(
+                    match.venue!,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: colors.muted),
+                  ),
+                ),
               ],
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _PracticeMatchup extends StatelessWidget {
+  const _PracticeMatchup({
+    required this.awayTeamName,
+    required this.homeTeamName,
+    required this.awayScore,
+    required this.homeScore,
+  });
+
+  final String awayTeamName;
+  final String homeTeamName;
+  final int? awayScore;
+  final int? homeScore;
+
+  @override
+  Widget build(BuildContext context) {
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final stack = textScale >= 1.6;
+
+    Widget team(String name, int? score, CrossAxisAlignment alignment) {
+      return Column(
+        crossAxisAlignment: alignment,
+        children: [
+          Text(
+            name,
+            maxLines: stack ? 2 : 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: alignment == CrossAxisAlignment.end
+                ? TextAlign.right
+                : TextAlign.left,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          if (score != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              '$score',
+              style: TextStyle(
+                color: context.aublColors.navyStrong,
+                fontFamily: 'BarlowCondensed',
+                fontSize: 28,
+                fontStyle: FontStyle.italic,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ],
+      );
+    }
+
+    if (stack) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          team(awayTeamName, awayScore, CrossAxisAlignment.start),
+          const SizedBox(height: 8),
+          Text(
+            'VS',
+            style: TextStyle(
+              color: context.aublColors.cobalt,
+              fontFamily: 'BarlowCondensed',
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          team(homeTeamName, homeScore, CrossAxisAlignment.start),
+        ],
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: team(awayTeamName, awayScore, CrossAxisAlignment.end)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          child: Text(
+            'VS',
+            style: TextStyle(
+              color: context.aublColors.cobalt,
+              fontFamily: 'BarlowCondensed',
+              fontStyle: FontStyle.italic,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        Expanded(
+          child: team(homeTeamName, homeScore, CrossAxisAlignment.start),
+        ),
+      ],
     );
   }
 }

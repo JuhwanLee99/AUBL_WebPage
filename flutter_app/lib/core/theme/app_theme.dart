@@ -150,13 +150,13 @@ class AppTheme {
     muted: Color(0xFFA8B8CF),
     line: Color(0xFF29476F),
     lineStrong: Color(0xFF42628D),
-    navy: Color(0xFF8DB9FB),
-    navyStrong: Color(0xFFE7EEF9),
+    navy: Color(0xFFD8E7FF),
+    navyStrong: Color(0xFFF3F7FF),
     cobalt: Color(0xFF6EA7F5),
     focus: Color(0xFF8AB9FF),
-    success: Color(0xFF4BC69D),
-    warning: Color(0xFFE7B75C),
-    danger: Color(0xFFFF8195),
+    success: Color(0xFF65D8AE),
+    warning: Color(0xFFF3BD61),
+    danger: Color(0xFFFF899B),
   );
 
   static ThemeData get light => _build(Brightness.light, lightColors);
@@ -166,12 +166,12 @@ class AppTheme {
     final isDark = brightness == Brightness.dark;
     final scheme = ColorScheme(
       brightness: brightness,
-      primary: isDark ? const Color(0xFF6EA7F5) : navy900,
-      onPrimary: isDark ? navy950 : Colors.white,
-      secondary: isDark ? const Color(0xFF8DB9FB) : blue600,
+      primary: isDark ? const Color(0xFF285FA9) : navy900,
+      onPrimary: Colors.white,
+      secondary: isDark ? const Color(0xFF6EA7F5) : blue600,
       onSecondary: isDark ? navy950 : Colors.white,
       error: colors.danger,
-      onError: Colors.white,
+      onError: isDark ? navy950 : Colors.white,
       surface: colors.surface,
       onSurface: colors.ink,
       outline: colors.line,
@@ -196,18 +196,94 @@ class AppTheme {
       textTheme: base.textTheme
           .apply(bodyColor: colors.ink, displayColor: colors.ink)
           .copyWith(
-            headlineLarge: base.textTheme.headlineLarge
-                ?.copyWith(fontWeight: FontWeight.w800),
-            headlineMedium: base.textTheme.headlineMedium
-                ?.copyWith(fontWeight: FontWeight.w800),
-            headlineSmall: base.textTheme.headlineSmall
-                ?.copyWith(fontWeight: FontWeight.w700),
-            titleLarge: base.textTheme.titleLarge
-                ?.copyWith(fontWeight: FontWeight.w700),
-            titleMedium: base.textTheme.titleMedium
-                ?.copyWith(fontWeight: FontWeight.w700),
-            labelLarge: base.textTheme.labelLarge
-                ?.copyWith(fontWeight: FontWeight.w700),
+            headlineLarge: TextStyle(
+              color: colors.navyStrong,
+              fontFamily: 'Pretendard',
+              fontSize: 40,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -1.8,
+              height: 1.04,
+            ),
+            headlineMedium: TextStyle(
+              color: colors.navyStrong,
+              fontFamily: 'Pretendard',
+              fontSize: 34,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -1.35,
+              height: 1.08,
+            ),
+            headlineSmall: TextStyle(
+              color: colors.navyStrong,
+              fontFamily: 'Pretendard',
+              fontSize: 27,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.9,
+              height: 1.12,
+            ),
+            titleLarge: TextStyle(
+              color: colors.navyStrong,
+              fontFamily: 'Pretendard',
+              fontSize: 23,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.65,
+              height: 1.16,
+            ),
+            titleMedium: TextStyle(
+              color: colors.ink,
+              fontFamily: 'Pretendard',
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.25,
+              height: 1.3,
+            ),
+            titleSmall: TextStyle(
+              color: colors.ink,
+              fontFamily: 'Pretendard',
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.1,
+              height: 1.35,
+            ),
+            bodyLarge: TextStyle(
+              color: colors.ink,
+              fontFamily: 'Pretendard',
+              fontSize: 16,
+              height: 1.65,
+            ),
+            bodyMedium: TextStyle(
+              color: colors.ink,
+              fontFamily: 'Pretendard',
+              fontSize: 14,
+              height: 1.6,
+            ),
+            bodySmall: TextStyle(
+              color: colors.muted,
+              fontFamily: 'Pretendard',
+              fontSize: 12,
+              height: 1.5,
+            ),
+            labelLarge: TextStyle(
+              color: colors.ink,
+              fontFamily: 'Pretendard',
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.1,
+            ),
+            labelMedium: TextStyle(
+              color: colors.ink,
+              fontFamily: 'Pretendard',
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              height: 1.3,
+            ),
+            labelSmall: TextStyle(
+              color: colors.muted,
+              fontFamily: 'Pretendard',
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              height: 1.2,
+              letterSpacing: 0.4,
+            ),
           ),
       appBarTheme: AppBarTheme(
         backgroundColor: colors.canvas,
@@ -230,7 +306,7 @@ class AppTheme {
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(4),
           side: BorderSide(color: colors.line),
         ),
       ),
@@ -241,8 +317,12 @@ class AppTheme {
         backgroundColor: colors.surface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        indicatorColor:
-            isDark ? const Color(0xFF1B3B66) : const Color(0xFFDCEAFE),
+        indicatorColor: isDark
+            ? const Color(0xFF1B3B66)
+            : const Color(0xFFDCEAFE),
+        indicatorShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(6),
+        ),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           return TextStyle(
             color: states.contains(WidgetState.selected)
@@ -265,11 +345,16 @@ class AppTheme {
       ),
       chipTheme: ChipThemeData(
         backgroundColor: colors.surfaceMuted,
-        selectedColor:
-            isDark ? const Color(0xFF1B3B66) : const Color(0xFFDCEAFE),
-        labelStyle: TextStyle(color: colors.ink, fontSize: 13),
+        selectedColor: isDark
+            ? const Color(0xFF1B3B66)
+            : const Color(0xFFDCEAFE),
+        labelStyle: TextStyle(
+          color: colors.ink,
+          fontFamily: 'Pretendard',
+          fontSize: 13,
+        ),
         side: BorderSide(color: colors.line),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
       ),
       tabBarTheme: TabBarThemeData(
@@ -277,65 +362,96 @@ class AppTheme {
         unselectedLabelColor: colors.muted,
         indicatorColor: colors.cobalt,
         dividerColor: colors.line,
-        labelStyle: const TextStyle(fontWeight: FontWeight.w800),
+        labelStyle: const TextStyle(
+          fontFamily: 'Pretendard',
+          fontWeight: FontWeight.w800,
+        ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: colors.surface,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(4),
           borderSide: BorderSide(color: colors.line),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(4),
           borderSide: BorderSide(color: colors.line),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(4),
           borderSide: BorderSide(color: colors.focus, width: 2),
         ),
         hintStyle: TextStyle(color: colors.muted),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 13,
+        ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: isDark ? const Color(0xFF285FA9) : navy900,
           foregroundColor: Colors.white,
           minimumSize: const Size(44, 44),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          textStyle: const TextStyle(fontWeight: FontWeight.w800),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          textStyle: const TextStyle(
+            fontFamily: 'Pretendard',
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            height: 1.2,
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: colors.navy,
           minimumSize: const Size(44, 44),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           side: BorderSide(color: colors.lineStrong),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          textStyle: const TextStyle(fontWeight: FontWeight.w800),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          textStyle: const TextStyle(
+            fontFamily: 'Pretendard',
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            height: 1.2,
+          ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: colors.cobalt,
           minimumSize: const Size(44, 44),
-          textStyle: const TextStyle(fontWeight: FontWeight.w800),
+          textStyle: const TextStyle(
+            fontFamily: 'Pretendard',
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: ButtonStyle(
+          minimumSize: const WidgetStatePropertyAll(Size(44, 44)),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
+          ),
+          side: WidgetStatePropertyAll(BorderSide(color: colors.lineStrong)),
+          textStyle: const WidgetStatePropertyAll(
+            TextStyle(fontFamily: 'Pretendard', fontWeight: FontWeight.w800),
+          ),
         ),
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: colors.surface,
         surfaceTintColor: Colors.transparent,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
         ),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: colors.surface,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: isDark ? const Color(0xFF285FA9) : navy900,
@@ -352,8 +468,9 @@ class AppTheme {
       statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
       statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
       systemNavigationBarColor: isDark ? darkColors.canvas : lightColors.canvas,
-      systemNavigationBarIconBrightness:
-          isDark ? Brightness.light : Brightness.dark,
+      systemNavigationBarIconBrightness: isDark
+          ? Brightness.light
+          : Brightness.dark,
       systemNavigationBarDividerColor: Colors.transparent,
     );
   }

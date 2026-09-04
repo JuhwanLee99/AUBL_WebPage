@@ -26,6 +26,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   final _refreshNotifier = ValueNotifier<int>(0);
   final GlobalKey<RecordsScreenState> _recordsKey =
       GlobalKey<RecordsScreenState>();
+  final GlobalKey<ScheduleScreenState> _scheduleKey =
+      GlobalKey<ScheduleScreenState>();
   final GlobalKey<CommunityScreenState> _communityKey =
       GlobalKey<CommunityScreenState>();
 
@@ -128,16 +130,26 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       openEmbeddedWebView: _openEmbeddedWebView,
       closeEmbeddedWebView: _closeEmbeddedWebView,
       refreshNotifier: _refreshNotifier,
-      switchTab: (destination, {recordsTabIndex}) {
+      switchTab: (destination, {recordsTabIndex, scheduleTabIndex}) {
         if (hasOverlay) _closeEmbeddedWebView();
         if (recordsTabIndex != null) {
           _recordsKey.currentState?.switchToTabIndex(recordsTabIndex);
+        }
+        if (scheduleTabIndex != null) {
+          _scheduleKey.currentState?.switchToTabIndex(scheduleTabIndex);
         }
         setState(() => _currentDestination = destination);
       },
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final useRail = constraints.maxWidth >= 840;
+          final useRail = AppNavigationBreakpoints.useRail(
+            constraints.maxWidth,
+            height: constraints.maxHeight,
+          );
+          final useExpandedRail = AppNavigationBreakpoints.useExpandedRail(
+            constraints.maxWidth,
+            height: constraints.maxHeight,
+          );
           final hideNavigation = hasOverlay && _overlayFullscreen;
           final content = Stack(
             children: [
@@ -148,7 +160,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   children: [
                     const HomeScreen(),
                     const TeamHubScreen(),
-                    const ScheduleScreen(),
+                    ScheduleScreen(key: _scheduleKey),
                     RecordsScreen(key: _recordsKey),
                     CommunityScreen(key: _communityKey),
                     const MoreScreen(),
@@ -187,6 +199,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                       children: [
                         FloatingDestinationRail(
                           current: _currentDestination,
+                          expanded: useExpandedRail,
                           onSelected: select,
                         ),
                         Expanded(child: content),

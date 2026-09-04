@@ -48,6 +48,7 @@ void main() {
                     PublicMatchCard(game: _game, onTap: _noop),
                     const SizedBox(height: 12),
                     const SeasonActionButton(
+                      key: Key('test-action'),
                       label: '경기 상세',
                       icon: Icons.arrow_forward,
                       onPressed: _noop,
@@ -60,11 +61,26 @@ void main() {
         );
         await tester.pump();
 
-        expect(tester.takeException(), isNull);
-        expect(
-          tester.getSize(find.widgetWithText(FilledButton, '경기 상세')).height,
-          greaterThanOrEqualTo(44),
+        final renderError = tester.takeException();
+        if (renderError case final FlutterError error) {
+          fail(
+            error.diagnostics
+                .map((diagnostic) => diagnostic.toStringDeep())
+                .join('\n'),
+          );
+        }
+        expect(renderError, isNull);
+        await tester.scrollUntilVisible(
+          find.byKey(const Key('test-action')),
+          240,
+          scrollable: find.byType(Scrollable).first,
         );
+        final action = find.descendant(
+          of: find.byKey(const Key('test-action')),
+          matching: find.byType(FilledButton),
+        );
+        expect(action, findsOneWidget);
+        expect(tester.getSize(action).height, greaterThanOrEqualTo(44));
       },
     );
   }
@@ -89,6 +105,61 @@ void main() {
 
     expect(find.bySemanticsLabel(RegExp('PLAY BALL')), findsWidgets);
     semantics.dispose();
+  });
+
+  testWidgets('each shared component fits 390px at 1.3x in isolation', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final cases = <(String, Widget)>[
+      (
+        'hero',
+        const SeasonPageHero(
+          eyebrow: '2026 AUBL SEASON',
+          title: Text('우리의 청춘은 이번에도 PLAY BALL'),
+          description: '46TH AUBL · 2026 연합회교 중앙대학교(서울)',
+        ),
+      ),
+      (
+        'freshness',
+        DataFreshnessCard(
+          freshness: _freshness,
+          fromCache: true,
+          cachedAt: DateTime.utc(2026, 9, 4, 1),
+        ),
+      ),
+      ('match', PublicMatchCard(game: _game, onTap: _noop)),
+      (
+        'action',
+        const SeasonActionButton(
+          label: '경기 상세',
+          icon: Icons.arrow_forward,
+          onPressed: _noop,
+        ),
+      ),
+    ];
+    for (final (name, widget) in cases) {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(390, 844),
+              textScaler: TextScaler.linear(1.3),
+            ),
+            child: Scaffold(
+              body: Padding(padding: const EdgeInsets.all(16), child: widget),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(tester.takeException(), isNull, reason: name);
+    }
   });
 }
 
