@@ -56,6 +56,22 @@ void main() {
       expect(viewModel.sortMode, TeamHubSortMode.group);
     });
 
+    test('published season teams replace the legacy directory', () {
+      final viewModel = TeamHubViewModel(
+        dataSource: _FakeTeamHubDataSource({}),
+      );
+
+      viewModel.setSeasonTeams(const [
+        TeamGroupEntry(name: '시즌 팀 B', group: 'B'),
+        TeamGroupEntry(name: '시즌 팀 A', group: 'A'),
+        TeamGroupEntry(name: '시즌 팀 A', group: 'A'),
+        TeamGroupEntry(name: '잘못된 팀', group: 'Z'),
+      ]);
+
+      final teams = viewModel.filteredTeams();
+      expect(teams.map((team) => team.name), ['시즌 팀 A', '시즌 팀 B']);
+    });
+
     test('encodes team id using URI encoding', () {
       final viewModel = TeamHubViewModel(
         dataSource: _FakeTeamHubDataSource({}),

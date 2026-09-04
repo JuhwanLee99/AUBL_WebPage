@@ -13,11 +13,27 @@ class TeamHubViewModel {
   String? _selectedGroup;
   TeamHubSortMode _sortMode = TeamHubSortMode.group;
   Map<String, String> _emblemByTeamId = {};
+  List<TeamGroupEntry> _seasonTeams = teamGroups;
 
   String get searchQuery => _searchQuery;
   String? get selectedGroup => _selectedGroup;
   TeamHubSortMode get sortMode => _sortMode;
   Map<String, String> get emblemByTeamId => _emblemByTeamId;
+
+  /// Replaces the legacy static directory with the currently published season
+  /// membership. The static list remains the offline/older-season fallback.
+  void setSeasonTeams(List<TeamGroupEntry> value) {
+    final deduplicated = <String, TeamGroupEntry>{};
+    for (final team in value) {
+      final name = team.name.trim();
+      final group = team.group.trim().toUpperCase();
+      if (name.isEmpty || !groupLetters.contains(group)) continue;
+      deduplicated[name] = TeamGroupEntry(name: name, group: group);
+    }
+    if (deduplicated.isNotEmpty) {
+      _seasonTeams = deduplicated.values.toList(growable: false);
+    }
+  }
 
   Future<void> loadEmblems() async {
     try {
@@ -42,7 +58,7 @@ class TeamHubViewModel {
   }
 
   List<TeamGroupEntry> filteredTeams() {
-    var teams = teamGroups.toList();
+    var teams = _seasonTeams.toList();
 
     if (_selectedGroup != null) {
       teams = teams.where((team) => team.group == _selectedGroup).toList();
