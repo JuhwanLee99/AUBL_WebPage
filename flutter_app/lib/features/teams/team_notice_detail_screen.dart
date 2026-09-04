@@ -13,11 +13,7 @@ import '../../core/widgets/editor/rich_text_editor.dart';
 import '../../core/widgets/editor/rich_text_viewer.dart';
 import '../../core/widgets/moderation/moderation_dialogs.dart';
 
-enum _TeamNoticeModerationAction {
-  report,
-  block,
-  delete,
-}
+enum _TeamNoticeModerationAction { report, block, delete }
 
 class TeamNoticeDetailScreen extends StatefulWidget {
   const TeamNoticeDetailScreen({
@@ -70,16 +66,16 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
     final viewer = FirebaseAuth.instance.currentUser;
     if (viewer == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('로그인 후 신고/차단할 수 있습니다.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('로그인 후 신고/차단할 수 있습니다.')));
       return;
     }
     if (comment.uid.isEmpty || comment.uid == viewer.uid) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('본인 계정은 신고하거나 차단할 수 없습니다.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('본인 계정은 신고하거나 차단할 수 없습니다.')));
       return;
     }
 
@@ -129,9 +125,9 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('신고 처리 중 오류가 발생했습니다: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('신고 처리 중 오류가 발생했습니다: $e')));
     }
   }
 
@@ -173,227 +169,285 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
         builder: (context, blockedSnapshot) {
           final blockedUserIds = blockedSnapshot.data ?? <String>{};
 
-          return Column(
-            children: [
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Text(
-                      widget.notice.title,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: context.aublColors.ink,
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final outerInset = constraints.maxWidth > 900
+                  ? (constraints.maxWidth - 900) / 2
+                  : 0.0;
+              return Column(
+                children: [
+                  Expanded(
+                    child: ListView(
+                      padding: EdgeInsets.fromLTRB(
+                        outerInset + 16,
+                        16,
+                        outerInset + 16,
+                        16,
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
                       children: [
                         Text(
-                          widget.notice.createdByName ?? '',
+                          widget.notice.title,
                           style: TextStyle(
-                              color: context.aublColors.muted, fontSize: 13),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          timeago.format(
-                            DateTime.fromMillisecondsSinceEpoch(
-                                widget.notice.createdAt),
-                            locale: 'ko',
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: context.aublColors.ink,
                           ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Text(
+                              widget.notice.createdByName ?? '',
+                              style: TextStyle(
+                                color: context.aublColors.muted,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              timeago.format(
+                                DateTime.fromMillisecondsSinceEpoch(
+                                  widget.notice.createdAt,
+                                ),
+                                locale: 'ko',
+                              ),
+                              style: TextStyle(
+                                color: context.aublColors.muted,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 24),
+                        RichTextViewer(
+                          content: widget.notice.content,
+                          fontSize: 14,
+                          color: context.aublColors.ink,
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          '댓글',
                           style: TextStyle(
-                              color: context.aublColors.muted, fontSize: 12),
+                            color: context.aublColors.ink,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '댓글 우측 메뉴에서 신고 또는 차단할 수 있습니다.',
+                          style: TextStyle(
+                            color: context.aublColors.muted,
+                            fontSize: 11,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        StreamBuilder<List<NoticeComment>>(
+                          stream: _fs.watchTeamNoticeComments(
+                            widget.teamId,
+                            widget.notice.id,
+                          ),
+                          builder: (context, snap) {
+                            if (snap.hasError) {
+                              final err = snap.error;
+                              if (err is FirebaseException &&
+                                  err.code == 'permission-denied') {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                  child: Text(
+                                    '댓글은 해당 팀 선수/감독만 열람할 수 있습니다.',
+                                    style: TextStyle(
+                                      color: context.aublColors.danger,
+                                    ),
+                                  ),
+                                );
+                              }
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
+                                child: Text(
+                                  '댓글을 불러오지 못했습니다.',
+                                  style: TextStyle(
+                                    color: context.aublColors.danger,
+                                  ),
+                                ),
+                              );
+                            }
+
+                            final comments = (snap.data ?? [])
+                                .where(
+                                  (comment) =>
+                                      !blockedUserIds.contains(comment.uid),
+                                )
+                                .toList();
+                            if (comments.isEmpty) {
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
+                                child: Text(
+                                  '아직 댓글이 없습니다.',
+                                  style: TextStyle(
+                                    color: context.aublColors.muted,
+                                  ),
+                                ),
+                              );
+                            }
+
+                            final topLevel = comments
+                                .where((c) => c.parentId == null)
+                                .toList();
+                            return Column(
+                              children: topLevel.map((comment) {
+                                final replies = comments
+                                    .where((c) => c.parentId == comment.id)
+                                    .toList();
+                                return _CommentTile(
+                                  comment: comment,
+                                  replies: replies,
+                                  currentUid:
+                                      FirebaseAuth.instance.currentUser?.uid ??
+                                      '',
+                                  onReply: () =>
+                                      setState(() => _replyToId = comment.id),
+                                  onLike: () {
+                                    final currentUser =
+                                        FirebaseAuth.instance.currentUser;
+                                    if (currentUser == null) return;
+                                    _fs.toggleCommentLike(
+                                      widget.teamId,
+                                      widget.notice.id,
+                                      comment.id,
+                                      currentUser.uid,
+                                    );
+                                  },
+                                  canManage: widget.canManage,
+                                  onAction: (action, targetComment) =>
+                                      _handleCommentModeration(
+                                        action: action,
+                                        comment: targetComment,
+                                      ),
+                                );
+                              }).toList(),
+                            );
+                          },
                         ),
                       ],
                     ),
-                    const Divider(height: 24),
-                    RichTextViewer(
-                        content: widget.notice.content,
-                        fontSize: 14,
-                        color: context.aublColors.ink),
-                    const SizedBox(height: 24),
-                    Text(
-                      '댓글',
-                      style: TextStyle(
-                        color: context.aublColors.ink,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
+                  ),
+                  Container(
+                    padding: EdgeInsets.fromLTRB(
+                      outerInset + 12,
+                      8,
+                      outerInset + 12,
+                      8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: context.aublColors.surface,
+                      border: Border(
+                        top: BorderSide(color: context.aublColors.line),
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '댓글 우측 메뉴에서 신고 또는 차단할 수 있습니다.',
-                      style: TextStyle(
-                          color: context.aublColors.muted, fontSize: 11),
-                    ),
-                    const SizedBox(height: 8),
-                    StreamBuilder<List<NoticeComment>>(
-                      stream: _fs.watchTeamNoticeComments(
-                          widget.teamId, widget.notice.id),
-                      builder: (context, snap) {
-                        if (snap.hasError) {
-                          final err = snap.error;
-                          if (err is FirebaseException &&
-                              err.code == 'permission-denied') {
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              child: Text(
-                                '댓글은 해당 팀 선수/감독만 열람할 수 있습니다.',
-                                style:
-                                    TextStyle(color: context.aublColors.danger),
-                              ),
-                            );
-                          }
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            child: Text(
-                              '댓글을 불러오지 못했습니다.',
-                              style:
-                                  TextStyle(color: context.aublColors.danger),
-                            ),
-                          );
-                        }
-
-                        final comments = (snap.data ?? [])
-                            .where((comment) =>
-                                !blockedUserIds.contains(comment.uid))
-                            .toList();
-                        if (comments.isEmpty) {
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            child: Text('아직 댓글이 없습니다.',
-                                style:
-                                    TextStyle(color: context.aublColors.muted)),
-                          );
-                        }
-
-                        final topLevel =
-                            comments.where((c) => c.parentId == null).toList();
-                        return Column(
-                          children: topLevel.map((comment) {
-                            final replies = comments
-                                .where((c) => c.parentId == comment.id)
-                                .toList();
-                            return _CommentTile(
-                              comment: comment,
-                              replies: replies,
-                              currentUid:
-                                  FirebaseAuth.instance.currentUser?.uid ?? '',
-                              onReply: () =>
-                                  setState(() => _replyToId = comment.id),
-                              onLike: () {
-                                final currentUser =
-                                    FirebaseAuth.instance.currentUser;
-                                if (currentUser == null) return;
-                                _fs.toggleCommentLike(
-                                  widget.teamId,
-                                  widget.notice.id,
-                                  comment.id,
-                                  currentUser.uid,
-                                );
-                              },
-                              canManage: widget.canManage,
-                              onAction: (action, targetComment) =>
-                                  _handleCommentModeration(
-                                action: action,
-                                comment: targetComment,
-                              ),
-                            );
-                          }).toList(),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                decoration: BoxDecoration(
-                  color: context.aublColors.surface,
-                  border:
-                      Border(top: BorderSide(color: context.aublColors.line)),
-                ),
-                child: SafeArea(
-                  top: false,
-                  child: user == null
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              constraints: const BoxConstraints(minHeight: 60),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 18),
-                              decoration: BoxDecoration(
-                                color: context.aublColors.surface,
-                                borderRadius: BorderRadius.circular(10),
-                                border:
-                                    Border.all(color: context.aublColors.line),
-                              ),
-                              child: Text(
-                                '로그인이 필요합니다.',
-                                style: TextStyle(
-                                  color: context.aublColors.muted,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: Icon(Icons.send,
-                                  color: context.aublColors.lineStrong),
-                            ),
-                          ],
-                        )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (_replyToId != null)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 4),
-                                child: Row(
-                                  children: [
-                                    Text('답글 작성 중',
-                                        style: TextStyle(
-                                            color: context.aublColors.cobalt,
-                                            fontSize: 12)),
-                                    const Spacer(),
-                                    GestureDetector(
-                                      onTap: () =>
-                                          setState(() => _replyToId = null),
-                                      child: Text('취소',
-                                          style: TextStyle(
-                                              color: context.aublColors.muted,
-                                              fontSize: 12)),
+                    child: SafeArea(
+                      top: false,
+                      child: user == null
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  constraints: const BoxConstraints(
+                                    minHeight: 60,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 18,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: context.aublColors.surface,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: context.aublColors.line,
                                     ),
-                                  ],
+                                  ),
+                                  child: Text(
+                                    '로그인이 필요합니다.',
+                                    style: TextStyle(
+                                      color: context.aublColors.muted,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            RichTextEditor(
-                              key: ValueKey(_editorKey),
-                              onChanged: (v) => _commentDelta = v,
-                              mini: true,
-                              placeholder: '댓글을 입력하세요...',
-                              minHeight: 60,
+                                const SizedBox(height: 6),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Icon(
+                                    Icons.send,
+                                    color: context.aublColors.lineStrong,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (_replyToId != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 4),
+                                    child: Row(
+                                      children: [
+                                        Text(
+                                          '답글 작성 중',
+                                          style: TextStyle(
+                                            color: context.aublColors.cobalt,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        GestureDetector(
+                                          onTap: () =>
+                                              setState(() => _replyToId = null),
+                                          child: Text(
+                                            '취소',
+                                            style: TextStyle(
+                                              color: context.aublColors.muted,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                RichTextEditor(
+                                  key: ValueKey(_editorKey),
+                                  onChanged: (v) => _commentDelta = v,
+                                  mini: true,
+                                  placeholder: '댓글을 입력하세요...',
+                                  minHeight: 60,
+                                ),
+                                const SizedBox(height: 6),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: IconButton(
+                                    icon: Icon(
+                                      Icons.send,
+                                      color: context.aublColors.cobalt,
+                                    ),
+                                    onPressed: _postComment,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 6),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: IconButton(
-                                icon: Icon(Icons.send,
-                                    color: context.aublColors.cobalt),
-                                onPressed: _postComment,
-                              ),
-                            ),
-                          ],
-                        ),
-                ),
-              ),
-            ],
+                    ),
+                  ),
+                ],
+              );
+            },
           );
         },
       ),
@@ -419,7 +473,10 @@ class _CommentTile extends StatelessWidget {
   final VoidCallback? onReply;
   final VoidCallback? onLike;
   final void Function(
-      _TeamNoticeModerationAction action, NoticeComment comment)? onAction;
+    _TeamNoticeModerationAction action,
+    NoticeComment comment,
+  )?
+  onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -437,16 +494,20 @@ class _CommentTile extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text(comment.author,
-                  style: TextStyle(
-                      color: context.aublColors.ink,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500)),
+              Text(
+                comment.author,
+                style: TextStyle(
+                  color: context.aublColors.ink,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
               const SizedBox(width: 8),
               Text(
                 timeago.format(
-                    DateTime.fromMillisecondsSinceEpoch(comment.createdAt),
-                    locale: 'ko'),
+                  DateTime.fromMillisecondsSinceEpoch(comment.createdAt),
+                  locale: 'ko',
+                ),
                 style: TextStyle(color: context.aublColors.muted, fontSize: 11),
               ),
               if (showMenu) ...[
@@ -492,9 +553,10 @@ class _CommentTile extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           RichTextViewer(
-              content: comment.content,
-              fontSize: 13,
-              color: context.aublColors.ink),
+            content: comment.content,
+            fontSize: 13,
+            color: context.aublColors.ink,
+          ),
           const SizedBox(height: 4),
           Row(
             children: [
@@ -511,9 +573,13 @@ class _CommentTile extends StatelessWidget {
                     ),
                     if (comment.likeCount > 0) ...[
                       const SizedBox(width: 2),
-                      Text('${comment.likeCount}',
-                          style: TextStyle(
-                              color: context.aublColors.muted, fontSize: 11)),
+                      Text(
+                        '${comment.likeCount}',
+                        style: TextStyle(
+                          color: context.aublColors.muted,
+                          fontSize: 11,
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -521,9 +587,13 @@ class _CommentTile extends StatelessWidget {
               const SizedBox(width: 16),
               GestureDetector(
                 onTap: onReply,
-                child: Text('답글',
-                    style: TextStyle(
-                        color: context.aublColors.muted, fontSize: 11)),
+                child: Text(
+                  '답글',
+                  style: TextStyle(
+                    color: context.aublColors.muted,
+                    fontSize: 11,
+                  ),
+                ),
               ),
             ],
           ),
@@ -533,91 +603,103 @@ class _CommentTile extends StatelessWidget {
               padding: const EdgeInsets.only(left: 20, top: 8),
               child: Column(
                 children: replies
-                    .map((r) => Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Text(r.author,
-                                      style: TextStyle(
-                                          color: context.aublColors.ink,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500)),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    timeago.format(
-                                        DateTime.fromMillisecondsSinceEpoch(
-                                            r.createdAt),
-                                        locale: 'ko'),
-                                    style: TextStyle(
-                                        color: context.aublColors.muted,
-                                        fontSize: 10),
+                    .map(
+                      (r) => Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  r.author,
+                                  style: TextStyle(
+                                    color: context.aublColors.ink,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
                                   ),
-                                  const Spacer(),
-                                  if ((r.uid == currentUid || canManage) ||
-                                      (currentUid.isNotEmpty &&
-                                          r.uid.isNotEmpty &&
-                                          r.uid != currentUid))
-                                    PopupMenuButton<
-                                        _TeamNoticeModerationAction>(
-                                      padding: EdgeInsets.zero,
-                                      icon: E911EmergencyIcon(
-                                        size: 16,
-                                        color: context.aublColors.muted,
-                                      ),
-                                      onSelected: (action) =>
-                                          onAction?.call(action, r),
-                                      itemBuilder: (context) {
-                                        final isReplyMine = r.uid == currentUid;
-                                        final canDeleteReply =
-                                            isReplyMine || canManage;
-                                        final canReportReply =
-                                            currentUid.isNotEmpty &&
-                                                r.uid.isNotEmpty &&
-                                                !isReplyMine;
-                                        final items = <PopupMenuEntry<
-                                            _TeamNoticeModerationAction>>[];
-                                        if (canDeleteReply) {
-                                          items.add(
-                                            const PopupMenuItem(
-                                              value: _TeamNoticeModerationAction
-                                                  .delete,
-                                              child: Text('댓글 삭제'),
-                                            ),
-                                          );
-                                        }
-                                        if (canReportReply) {
-                                          if (items.isNotEmpty) {
-                                            items.add(const PopupMenuDivider());
-                                          }
-                                          items.addAll([
-                                            const PopupMenuItem(
-                                              value: _TeamNoticeModerationAction
-                                                  .report,
-                                              child: Text('댓글 신고'),
-                                            ),
-                                            const PopupMenuItem(
-                                              value: _TeamNoticeModerationAction
-                                                  .block,
-                                              child: Text('작성자 차단'),
-                                            ),
-                                          ]);
-                                        }
-                                        return items;
-                                      },
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  timeago.format(
+                                    DateTime.fromMillisecondsSinceEpoch(
+                                      r.createdAt,
                                     ),
-                                ],
-                              ),
-                              const SizedBox(height: 2),
-                              RichTextViewer(
-                                  content: r.content,
-                                  fontSize: 12,
-                                  color: context.aublColors.muted),
-                            ],
-                          ),
-                        ))
+                                    locale: 'ko',
+                                  ),
+                                  style: TextStyle(
+                                    color: context.aublColors.muted,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                                const Spacer(),
+                                if ((r.uid == currentUid || canManage) ||
+                                    (currentUid.isNotEmpty &&
+                                        r.uid.isNotEmpty &&
+                                        r.uid != currentUid))
+                                  PopupMenuButton<_TeamNoticeModerationAction>(
+                                    padding: EdgeInsets.zero,
+                                    icon: E911EmergencyIcon(
+                                      size: 16,
+                                      color: context.aublColors.muted,
+                                    ),
+                                    onSelected: (action) =>
+                                        onAction?.call(action, r),
+                                    itemBuilder: (context) {
+                                      final isReplyMine = r.uid == currentUid;
+                                      final canDeleteReply =
+                                          isReplyMine || canManage;
+                                      final canReportReply =
+                                          currentUid.isNotEmpty &&
+                                          r.uid.isNotEmpty &&
+                                          !isReplyMine;
+                                      final items =
+                                          <
+                                            PopupMenuEntry<
+                                              _TeamNoticeModerationAction
+                                            >
+                                          >[];
+                                      if (canDeleteReply) {
+                                        items.add(
+                                          const PopupMenuItem(
+                                            value: _TeamNoticeModerationAction
+                                                .delete,
+                                            child: Text('댓글 삭제'),
+                                          ),
+                                        );
+                                      }
+                                      if (canReportReply) {
+                                        if (items.isNotEmpty) {
+                                          items.add(const PopupMenuDivider());
+                                        }
+                                        items.addAll([
+                                          const PopupMenuItem(
+                                            value: _TeamNoticeModerationAction
+                                                .report,
+                                            child: Text('댓글 신고'),
+                                          ),
+                                          const PopupMenuItem(
+                                            value: _TeamNoticeModerationAction
+                                                .block,
+                                            child: Text('작성자 차단'),
+                                          ),
+                                        ]);
+                                      }
+                                      return items;
+                                    },
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            RichTextViewer(
+                              content: r.content,
+                              fontSize: 12,
+                              color: context.aublColors.muted,
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
                     .toList(),
               ),
             ),

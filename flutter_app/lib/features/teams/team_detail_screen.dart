@@ -97,8 +97,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     return switch (category) {
       '긴급' => context.aublColors.danger,
       '경기' => context.aublColors.cobalt,
-      '훈련' => context.aublColors.success,
-      _ => context.aublColors.muted,
+      _ => context.aublColors.navy,
     };
   }
 
@@ -144,7 +143,8 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-                backgroundColor: context.aublColors.danger),
+              backgroundColor: context.aublColors.danger,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('삭제'),
           ),
@@ -177,18 +177,22 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
     final upcoming = _matches.where((m) => m.isScheduled || m.isLive).toList();
     final completed = _matches.where((m) => m.isCompleted).toList();
     final wins = completed
-        .where((m) =>
-            (m.homeTeamName == widget.teamName &&
-                (m.homeScore ?? 0) > (m.awayScore ?? 0)) ||
-            (m.awayTeamName == widget.teamName &&
-                (m.awayScore ?? 0) > (m.homeScore ?? 0)))
+        .where(
+          (m) =>
+              (m.homeTeamName == widget.teamName &&
+                  (m.homeScore ?? 0) > (m.awayScore ?? 0)) ||
+              (m.awayTeamName == widget.teamName &&
+                  (m.awayScore ?? 0) > (m.homeScore ?? 0)),
+        )
         .length;
     final losses = completed
-        .where((m) =>
-            (m.homeTeamName == widget.teamName &&
-                (m.homeScore ?? 0) < (m.awayScore ?? 0)) ||
-            (m.awayTeamName == widget.teamName &&
-                (m.awayScore ?? 0) < (m.homeScore ?? 0)))
+        .where(
+          (m) =>
+              (m.homeTeamName == widget.teamName &&
+                  (m.homeScore ?? 0) < (m.awayScore ?? 0)) ||
+              (m.awayTeamName == widget.teamName &&
+                  (m.awayScore ?? 0) < (m.homeScore ?? 0)),
+        )
         .length;
     final draws = completed.length - wins - losses;
 
@@ -196,51 +200,63 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
       appBar: AppBar(title: Text(widget.teamName)),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: () async {
-                await _loadTeam();
-                await _loadMatches();
-              },
-              child: ListView(
-                padding: const EdgeInsets.only(bottom: 32),
-                children: [
-                  // ── 헤더 ──
-                  _buildHeader(wins, losses, draws),
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final outerInset = constraints.maxWidth > 1000
+                    ? (constraints.maxWidth - 1000) / 2
+                    : 0.0;
+                return RefreshIndicator(
+                  onRefresh: () async {
+                    await _loadTeam();
+                    await _loadMatches();
+                  },
+                  child: ListView(
+                    padding: EdgeInsets.fromLTRB(outerInset, 0, outerInset, 32),
+                    children: [
+                      // ── 헤더 ──
+                      _buildHeader(wins, losses, draws),
 
-                  // ── 팀 정보 ──
-                  if (_team != null) _buildTeamInfo(),
+                      // ── 팀 정보 ──
+                      if (_team != null) _buildTeamInfo(),
 
-                  // ── 공지 ──
-                  SectionHeader(
-                    title: '팀 공지',
-                    icon: Icons.campaign,
-                    trailing: _isCoach
-                        ? IconButton(
-                            icon: const Icon(Icons.add, size: 20),
-                            onPressed: _showAddNoticeDialog,
-                          )
-                        : null,
+                      // ── 공지 ──
+                      SectionHeader(
+                        title: '팀 공지',
+                        icon: Icons.campaign,
+                        trailing: _isCoach
+                            ? IconButton(
+                                icon: const Icon(Icons.add, size: 20),
+                                onPressed: _showAddNoticeDialog,
+                              )
+                            : null,
+                      ),
+                      _buildNotices(),
+
+                      // ── 예정/진행 경기 ──
+                      if (upcoming.isNotEmpty) ...[
+                        const SectionHeader(
+                          title: '예정 경기',
+                          icon: Icons.schedule,
+                        ),
+                        ...upcoming.map(_buildMatchTile),
+                      ],
+
+                      // ── 완료 경기 ──
+                      if (completed.isNotEmpty) ...[
+                        const SectionHeader(
+                          title: '최근 결과',
+                          icon: Icons.check_circle,
+                        ),
+                        ...completed.take(5).map(_buildMatchTile),
+                      ],
+
+                      // ── 로스터 ──
+                      const SectionHeader(title: '로스터', icon: Icons.people),
+                      _buildRoster(),
+                    ],
                   ),
-                  _buildNotices(),
-
-                  // ── 예정/진행 경기 ──
-                  if (upcoming.isNotEmpty) ...[
-                    const SectionHeader(title: '예정 경기', icon: Icons.schedule),
-                    ...upcoming.map(_buildMatchTile),
-                  ],
-
-                  // ── 완료 경기 ──
-                  if (completed.isNotEmpty) ...[
-                    const SectionHeader(
-                        title: '최근 결과', icon: Icons.check_circle),
-                    ...completed.take(5).map(_buildMatchTile),
-                  ],
-
-                  // ── 로스터 ──
-                  const SectionHeader(title: '로스터', icon: Icons.people),
-                  _buildRoster(),
-                ],
-              ),
+                );
+              },
             ),
     );
   }
@@ -248,76 +264,122 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
   Widget _buildHeader(int wins, int losses, int draws) {
     final colors = context.aublColors;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              if (_team?.emblemUrl != null && _team!.emblemUrl!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: CachedNetworkImage(
-                    imageUrl: _team!.emblemUrl!,
-                    cacheManager: TeamImageCacheManager.instance,
-                    width: 80,
-                    height: 80,
-                    fit: BoxFit.contain,
-                    errorWidget: (_, __, ___) => Icon(Icons.shield_outlined,
-                        size: 60, color: colors.cobalt),
-                  ),
+        clipBehavior: Clip.antiAlias,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final textScale = MediaQuery.textScalerOf(context).scale(1);
+            final stacked = constraints.maxWidth < 600 || textScale >= 1.3;
+            final emblem = Container(
+              width: stacked ? double.infinity : 154,
+              height: stacked ? 130 : 154,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: colors.surfaceMuted,
+                border: Border(
+                  right: stacked
+                      ? BorderSide.none
+                      : BorderSide(color: colors.line),
+                  bottom: stacked
+                      ? BorderSide(color: colors.line)
+                      : BorderSide.none,
                 ),
-              Text(
-                widget.teamName,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: colors.ink,
-                ),
-                textAlign: TextAlign.center,
               ),
-              if (_groupLabel.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: SeasonStatusBadge(
-                    label: _groupLabel,
-                    tone: SeasonBadgeTone.blue,
-                  ),
-                ),
-              const SizedBox(height: 12),
-              Wrap(
-                alignment: WrapAlignment.center,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
+              child: _team?.emblemUrl != null && _team!.emblemUrl!.isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: _team!.emblemUrl!,
+                      cacheManager: TeamImageCacheManager.instance,
+                      fit: BoxFit.contain,
+                      errorWidget: (_, __, ___) => Icon(
+                        Icons.shield_outlined,
+                        size: 58,
+                        color: colors.cobalt,
+                      ),
+                    )
+                  : Icon(Icons.shield_outlined, size: 58, color: colors.cobalt),
+            );
+            final copy = Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _statChip('$wins승', colors.success),
-                  _statChip('$draws무', colors.muted),
-                  _statChip('$losses패', colors.danger),
                   Text(
-                    '총 ${wins + losses + draws}경기',
-                    style: TextStyle(color: colors.muted, fontSize: 13),
+                    '2026 TEAM PROFILE',
+                    style: TextStyle(
+                      color: colors.cobalt,
+                      fontFamily: 'BarlowCondensed',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    widget.teamName,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  if (_groupLabel.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    SeasonStatusBadge(
+                      label: _groupLabel,
+                      tone: SeasonBadgeTone.blue,
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 18,
+                    runSpacing: 10,
+                    children: [
+                      _statValue('$wins', '승'),
+                      _statValue('$draws', '무'),
+                      _statValue('$losses', '패'),
+                      _statValue('${wins + losses + draws}', '총 경기'),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
+            );
+            if (stacked) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [emblem, copy],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                emblem,
+                Expanded(child: copy),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _statChip(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        label,
-        style:
-            TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600),
+  Widget _statValue(String value, String label) {
+    final colors = context.aublColors;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 54),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              color: colors.navyStrong,
+              fontFamily: 'BarlowCondensed',
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+              height: 1,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(label, style: TextStyle(color: colors.muted, fontSize: 11)),
+        ],
       ),
     );
   }
@@ -401,15 +463,16 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
         final categoryFiltered = _noticeFilter == 'ALL'
             ? sorted
             : sorted
-                .where((notice) => notice.category == _noticeFilter)
-                .toList();
+                  .where((notice) => notice.category == _noticeFilter)
+                  .toList();
         final query = _noticeSearchQuery.trim().toLowerCase();
         final visible = query.isEmpty
             ? categoryFiltered
             : categoryFiltered.where((notice) {
                 final title = notice.title.toLowerCase();
-                final content =
-                    deltaToPreviewText(notice.content).toLowerCase();
+                final content = deltaToPreviewText(
+                  notice.content,
+                ).toLowerCase();
                 final author = (notice.createdByName ?? '').toLowerCase();
                 return title.contains(query) ||
                     content.contains(query) ||
@@ -447,9 +510,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                         selected: selected,
                         showCheckmark: false,
                         selectedColor: color.withValues(alpha: 0.12),
-                        side: BorderSide(
-                          color: selected ? color : colors.line,
-                        ),
+                        side: BorderSide(color: selected ? color : colors.line),
                         onSelected: (_) => setState(() {
                           _noticeFilter = category;
                         }),
@@ -478,8 +539,10 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                             setState(() => _noticeSearchQuery = '');
                           },
                         ),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                 ),
               ),
             ),
@@ -494,7 +557,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   ),
                   decoration: BoxDecoration(
                     color: colors.success.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(4),
                     border: Border.all(
                       color: colors.success.withValues(alpha: 0.4),
                     ),
@@ -520,7 +583,7 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                   ),
                   decoration: BoxDecoration(
                     color: colors.danger.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(4),
                     border: Border.all(
                       color: colors.danger.withValues(alpha: 0.4),
                     ),
@@ -590,12 +653,11 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
                                 child: Text(n.pinned ? '고정 해제' : '공지 고정'),
                               ),
                               OutlinedButton(
-                                onPressed:
-                                    _noticeBusy ? null : () => _deleteNotice(n),
+                                onPressed: _noticeBusy
+                                    ? null
+                                    : () => _deleteNotice(n),
                                 style: OutlinedButton.styleFrom(
-                                  side: BorderSide(
-                                    color: colors.danger,
-                                  ),
+                                  side: BorderSide(color: colors.danger),
                                   foregroundColor: colors.danger,
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 12,
@@ -641,9 +703,10 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
             ? Text(
                 '${myScore ?? 0} - ${opScore ?? 0}',
                 style: TextStyle(
-                    color: colors.navyStrong,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14),
+                  color: colors.navyStrong,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
               )
             : Text(
                 formatMatchStartTime(match.startTime, pattern: 'yyyy-MM-dd') ??
@@ -652,26 +715,32 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
               ),
         onTap: () {
           if (match.isLive) {
-            Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => AppWebViewScreen(
-                path: WebRouteContracts.scoreboardText(match.detailId),
-                title: '문자중계',
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => AppWebViewScreen(
+                  path: WebRouteContracts.scoreboardText(match.detailId),
+                  title: '문자중계',
+                ),
               ),
-            ));
+            );
           } else if (match.isCompleted) {
-            Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => AppWebViewScreen(
-                path: WebRouteContracts.scoreboardText(match.detailId),
-                title: '경기 결과',
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => AppWebViewScreen(
+                  path: WebRouteContracts.scoreboardText(match.detailId),
+                  title: '경기 결과',
+                ),
               ),
-            ));
+            );
           } else {
-            Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => AppWebViewScreen(
-                path: WebRouteContracts.scoreboardText(match.detailId),
-                title: '경기 정보',
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => AppWebViewScreen(
+                  path: WebRouteContracts.scoreboardText(match.detailId),
+                  title: '경기 정보',
+                ),
               ),
-            ));
+            );
           }
         },
       ),
@@ -714,18 +783,17 @@ class _TeamDetailScreenState extends State<TeamDetailScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => Dialog(
-          insetPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '공지 작성',
-                  style: Theme.of(ctx).textTheme.titleLarge,
-                ),
+                Text('공지 작성', style: Theme.of(ctx).textTheme.titleLarge),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: category,

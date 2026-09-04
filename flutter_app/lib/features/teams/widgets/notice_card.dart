@@ -12,11 +12,10 @@ class NoticeCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   Color _categoryColor(BuildContext context) => switch (notice.category) {
-        '긴급' => context.aublColors.danger,
-        '경기' => context.aublColors.cobalt,
-        '훈련' => context.aublColors.success,
-        _ => context.aublColors.muted,
-      };
+    '긴급' => context.aublColors.danger,
+    '경기' => context.aublColors.cobalt,
+    _ => context.aublColors.navy,
+  };
 
   Widget _buildAttachmentBadge(
     BuildContext context, {
@@ -28,7 +27,8 @@ class NoticeCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: colors.surfaceMuted,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: colors.line),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -56,78 +56,114 @@ class NoticeCard extends StatelessWidget {
     final ago = timeago.format(dateTime, locale: 'ko');
     final attachment = summarizeDeltaAttachments(notice.content);
 
-    return ListTile(
-      onTap: onTap,
-      leading: notice.pinned
-          ? Icon(Icons.push_pin, size: 16, color: colors.warning)
-          : null,
-      title: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-            margin: const EdgeInsets.only(right: 8),
-            decoration: BoxDecoration(
-              color: categoryColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              notice.category,
-              style: TextStyle(
-                color: categoryColor,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              notice.title,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            ago,
-            style: TextStyle(color: colors.muted, fontSize: 12),
-          ),
-          if (attachment.hasAny) ...[
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Material(
+        color: colors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+          side: BorderSide(color: colors.line),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(4),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (attachment.hasImage)
-                  _buildAttachmentBadge(
-                    context,
-                    icon: Icons.image_outlined,
-                    label: '이미지',
+                if (notice.pinned) ...[
+                  Icon(Icons.push_pin_outlined, size: 16, color: colors.navy),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: categoryColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(3),
+                              border: Border.all(
+                                color: categoryColor.withValues(alpha: 0.45),
+                              ),
+                            ),
+                            child: Text(
+                              notice.category,
+                              style: TextStyle(
+                                color: categoryColor,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            ago,
+                            style: TextStyle(color: colors.muted, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 7),
+                      Text(
+                        notice.title,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (attachment.hasAny) ...[
+                        const SizedBox(height: 7),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            if (attachment.hasImage)
+                              _buildAttachmentBadge(
+                                context,
+                                icon: Icons.image_outlined,
+                                label: '이미지',
+                              ),
+                            if (attachment.hasVideo)
+                              _buildAttachmentBadge(
+                                context,
+                                icon: Icons.videocam_outlined,
+                                label: '동영상',
+                              ),
+                            if (attachment.hasLink)
+                              _buildAttachmentBadge(
+                                context,
+                                icon: Icons.link,
+                                label: '링크',
+                              ),
+                          ],
+                        ),
+                      ],
+                    ],
                   ),
-                if (attachment.hasVideo)
-                  _buildAttachmentBadge(
-                    context,
-                    icon: Icons.videocam_outlined,
-                    label: '동영상',
-                  ),
-                if (attachment.hasLink)
-                  _buildAttachmentBadge(
-                    context,
-                    icon: Icons.link,
-                    label: '링크',
-                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 18,
+                  color: colors.muted,
+                ),
               ],
             ),
-          ],
-        ],
+          ),
+        ),
       ),
-      trailing: Icon(Icons.chevron_right, size: 18, color: colors.muted),
-      dense: true,
     );
   }
 }

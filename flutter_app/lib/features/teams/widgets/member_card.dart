@@ -19,59 +19,79 @@ class MemberCard extends StatelessWidget {
       _ => '선수',
     };
 
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: colors.surfaceMuted,
-        backgroundImage:
-            member.profileImageUrl != null && member.profileImageUrl!.isNotEmpty
-                ? CachedNetworkImageProvider(
-                    member.profileImageUrl!,
-                    cacheManager: TeamImageCacheManager.instance,
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: colors.line),
+      ),
+      child: ListTile(
+        minTileHeight: 68,
+        leading: Container(
+          width: 44,
+          height: 44,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: colors.surfaceMuted,
+            borderRadius: BorderRadius.circular(3),
+            border: Border.all(color: colors.line),
+            image:
+                member.profileImageUrl != null &&
+                    member.profileImageUrl!.isNotEmpty
+                ? DecorationImage(
+                    image: CachedNetworkImageProvider(
+                      member.profileImageUrl!,
+                      cacheManager: TeamImageCacheManager.instance,
+                    ),
+                    fit: BoxFit.cover,
                   )
                 : null,
-        child: member.profileImageUrl == null || member.profileImageUrl!.isEmpty
-            ? Text(
-                member.name.isNotEmpty ? member.name[0] : '?',
-                style:
-                    TextStyle(color: colors.navy, fontWeight: FontWeight.w800),
-              )
-            : null,
-      ),
-      title: Row(
-        children: [
-          Text(
-            member.name,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
           ),
-          if (member.number != null) ...[
-            const SizedBox(width: 6),
+          child:
+              member.profileImageUrl == null || member.profileImageUrl!.isEmpty
+              ? Center(
+                  child: Text(
+                    member.name.isNotEmpty ? member.name[0] : '?',
+                    style: TextStyle(
+                      color: colors.navy,
+                      fontFamily: 'BarlowCondensed',
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                )
+              : null,
+        ),
+        title: Wrap(
+          spacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
             Text(
-              '#${member.number}',
-              style: TextStyle(color: colors.muted, fontSize: 12),
+              member.name,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
             ),
+            if (member.number != null)
+              Text(
+                '#${member.number}',
+                style: TextStyle(color: colors.cobalt, fontSize: 12),
+              ),
           ],
-        ],
+        ),
+        subtitle: Text(
+          [
+            roleLabel,
+            if (member.position != null && member.position!.isNotEmpty)
+              member.position!,
+            if (member.bats != null) '타:${member.bats}',
+            if (member.throws_ != null) '투:${member.throws_}',
+          ].join(' · '),
+          style: TextStyle(color: colors.muted, fontSize: 12),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        dense: true,
       ),
-      subtitle: Row(
-        children: [
-          Text(roleLabel, style: TextStyle(color: colors.muted, fontSize: 12)),
-          if (member.position != null && member.position!.isNotEmpty) ...[
-            Text(' · ', style: TextStyle(color: colors.muted, fontSize: 12)),
-            Text(member.position!,
-                style: TextStyle(color: colors.muted, fontSize: 12)),
-          ],
-          if (member.bats != null) ...[
-            Text(' · ', style: TextStyle(color: colors.muted, fontSize: 12)),
-            Text('타:${member.bats}',
-                style: TextStyle(color: colors.muted, fontSize: 11)),
-          ],
-          if (member.throws_ != null) ...[
-            Text(' 투:${member.throws_}',
-                style: TextStyle(color: colors.muted, fontSize: 11)),
-          ],
-        ],
-      ),
-      dense: true,
     );
   }
 }

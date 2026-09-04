@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 
 import '../../../core/services/team_image_cache_manager.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/widgets/season_components.dart';
 
 class TeamCard extends StatelessWidget {
   const TeamCard({
@@ -26,53 +25,68 @@ class TeamCard extends StatelessWidget {
     return Semantics(
       button: onTap != null,
       label: '$group조 $name 팀 상세',
-      child: Card(
+      child: Material(
+        color: colors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+          side: BorderSide(color: colors.line),
+        ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
+          borderRadius: BorderRadius.circular(4),
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                Container(
-                  width: 76,
-                  height: 76,
-                  padding: const EdgeInsets.all(10),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 106,
+                height: double.infinity,
+                child: DecoratedBox(
                   decoration: BoxDecoration(
                     color: colors.surfaceMuted,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: colors.line),
+                    border: Border(right: BorderSide(color: colors.line)),
                   ),
-                  child: hasEmblem
-                      ? CachedNetworkImage(
-                          imageUrl: emblemUrl!,
-                          cacheManager: TeamImageCacheManager.instance,
-                          fit: BoxFit.contain,
-                          fadeInDuration: const Duration(milliseconds: 150),
-                          placeholder: (_, __) => Center(
-                            child: SizedBox.square(
-                              dimension: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: colors.cobalt,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: hasEmblem
+                        ? CachedNetworkImage(
+                            imageUrl: emblemUrl!,
+                            cacheManager: TeamImageCacheManager.instance,
+                            fit: BoxFit.contain,
+                            fadeInDuration: const Duration(milliseconds: 150),
+                            placeholder: (_, __) => Center(
+                              child: SizedBox.square(
+                                dimension: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: colors.cobalt,
+                                ),
                               ),
                             ),
-                          ),
-                          errorWidget: (_, __, ___) => _TeamInitial(name: name),
-                        )
-                      : _TeamInitial(name: name),
+                            errorWidget: (_, __, ___) =>
+                                _TeamInitial(name: name),
+                          )
+                        : _TeamInitial(name: name),
+                  ),
                 ),
-                const SizedBox(width: 14),
-                Expanded(
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SeasonStatusBadge(
-                        label: '$group조',
-                        tone: SeasonBadgeTone.blue,
+                      Text(
+                        '$group GROUP',
+                        style: TextStyle(
+                          color: colors.cobalt,
+                          fontFamily: 'BarlowCondensed',
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.1,
+                        ),
                       ),
-                      const SizedBox(height: 9),
+                      const SizedBox(height: 7),
                       Text(
                         name,
                         style: Theme.of(context).textTheme.titleMedium,
@@ -82,9 +96,16 @@ class TeamCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                Icon(Icons.chevron_right_rounded, color: colors.muted),
-              ],
-            ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 18,
+                  color: colors.muted,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -107,7 +128,7 @@ class _TeamInitial extends StatelessWidget {
         style: TextStyle(
           color: colors.navy,
           fontFamily: 'BarlowCondensed',
-          fontSize: 30,
+          fontSize: 34,
           fontWeight: FontWeight.w900,
         ),
       ),
