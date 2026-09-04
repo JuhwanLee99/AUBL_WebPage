@@ -120,27 +120,22 @@ class NotificationService {
           ?.createNotificationChannel(channel);
     }
 
-    String? token;
     if (Platform.isIOS) {
       final apnsToken = await _waitForApnsToken();
-      debugPrint('[NotificationService] APNs token: $apnsToken');
       if (apnsToken == null || apnsToken.isEmpty) {
         debugPrint(
           '[NotificationService] APNs token is not ready yet; '
           'skip initial FCM token fetch.',
         );
       } else {
-        token = await _safeGetFcmToken();
+        await _safeGetFcmToken();
       }
     } else {
-      token = await _safeGetFcmToken();
+      await _safeGetFcmToken();
     }
     debugPrint(
         '[NotificationService] ${Platform.isIOS ? 'iOS' : 'Android'} permission: ${permission.authorizationStatus}');
-    debugPrint('[NotificationService] FCM token: $token');
-    _messaging.onTokenRefresh.listen((nextToken) {
-      debugPrint('[NotificationService] FCM token refreshed: $nextToken');
-    });
+    _messaging.onTokenRefresh.listen((_) {});
 
     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
 
@@ -453,7 +448,8 @@ class NotificationService {
 
     final deltaStartMatch = RegExp(r'\{\\?"ops\\?"\s*:').firstMatch(trimmed);
     final deltaStart = deltaStartMatch?.start ?? 0;
-    final prefix = deltaStart > 0 ? trimmed.substring(0, deltaStart).trim() : '';
+    final prefix =
+        deltaStart > 0 ? trimmed.substring(0, deltaStart).trim() : '';
     final deltaRaw = trimmed.substring(deltaStart).trim();
     final deltaText = _extractDeltaPreviewText(deltaRaw) ??
         _extractDeltaPreviewText(trimmed.replaceAll(r'\"', '"'));
@@ -486,8 +482,8 @@ class NotificationService {
     if (ops == null) {
       final fragments = <String>[];
 
-      final quotedInsertMatches =
-          RegExp(r'"insert"\s*:\s*"((?:\\.|[^"\\])*)"').allMatches(normalizedRaw);
+      final quotedInsertMatches = RegExp(r'"insert"\s*:\s*"((?:\\.|[^"\\])*)"')
+          .allMatches(normalizedRaw);
       for (final m in quotedInsertMatches) {
         final value = m.group(1);
         if (value == null || value.isEmpty) continue;
@@ -497,10 +493,8 @@ class NotificationService {
             fragments.add(unescaped.trim());
           }
         } catch (_) {
-          final fallback = value
-              .replaceAll(r'\n', '\n')
-              .replaceAll(r'\"', '"')
-              .trim();
+          final fallback =
+              value.replaceAll(r'\n', '\n').replaceAll(r'\"', '"').trim();
           if (fallback.isNotEmpty) fragments.add(fallback);
         }
       }

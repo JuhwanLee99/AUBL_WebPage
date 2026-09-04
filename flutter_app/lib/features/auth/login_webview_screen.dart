@@ -334,13 +334,9 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
       _error = null;
     });
 
-    Map<String, dynamic> claims = const <String, dynamic>{};
-    String? expectedNonce;
-
     try {
       final rawNonce = _generateNonce();
       final nonce = _sha256ofString(rawNonce);
-      expectedNonce = nonce;
       final credential = await SignInWithApple.getAppleIDCredential(
         scopes: const [
           AppleIDAuthorizationScopes.email,
@@ -352,7 +348,7 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
       if (identityToken == null || identityToken.isEmpty) {
         throw Exception('Apple identity token이 없습니다.');
       }
-      claims = _decodeJwtClaims(identityToken);
+      final claims = _decodeJwtClaims(identityToken);
       final tokenNonce = claims['nonce']?.toString();
       if (tokenNonce != null && tokenNonce.isNotEmpty && tokenNonce != nonce) {
         throw Exception('Apple nonce 검증 실패');
@@ -375,8 +371,7 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen>
       });
     } on FirebaseAuthException catch (e) {
       debugPrint(
-        'Apple native auth failed: code=${e.code}, msg=${e.message}, '
-        'aud=${claims['aud']}, iss=${claims['iss']}, tokenNonce=${claims['nonce']}, expectedNonce=$expectedNonce',
+        'Apple native auth failed: code=${e.code}, msg=${e.message}',
       );
       if (!mounted) return;
       setState(() {
