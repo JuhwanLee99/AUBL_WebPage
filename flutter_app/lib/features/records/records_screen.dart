@@ -46,6 +46,7 @@ class RecordsScreenState extends State<RecordsScreen>
   int? _seasonId;
 
   RecordsFilterState _filters = const RecordsFilterState();
+  final TextEditingController _searchController = TextEditingController();
 
   bool _initializing = true;
   bool _loading = false;
@@ -84,6 +85,7 @@ class RecordsScreenState extends State<RecordsScreen>
   void dispose() {
     _tabCtrl.removeListener(_onTabChanged);
     _tabCtrl.dispose();
+    _searchController.dispose();
     if (_ownsApi) {
       _api.dispose();
     }
@@ -127,7 +129,8 @@ class RecordsScreenState extends State<RecordsScreen>
   }
 
   List<RecordGroup> get _groupOptions {
-    final groups = _recordFilterOptions?.groups
+    final groups =
+        _recordFilterOptions?.groups
             .map((item) => item.group)
             .toSet()
             .toList() ??
@@ -150,7 +153,8 @@ class RecordsScreenState extends State<RecordsScreen>
   }
 
   List<RecordPlayoffDivision> get _playoffDivisionOptions {
-    final divisions = _recordFilterOptions?.playoffDivisions.toSet().toList() ??
+    final divisions =
+        _recordFilterOptions?.playoffDivisions.toSet().toList() ??
         <RecordPlayoffDivision>[];
     if (divisions.isEmpty) {
       return const [
@@ -164,7 +168,8 @@ class RecordsScreenState extends State<RecordsScreen>
   }
 
   List<RecordRegulation> get _regulationOptions {
-    final regulations = _recordFilterOptions?.regulations.toSet().toList() ??
+    final regulations =
+        _recordFilterOptions?.regulations.toSet().toList() ??
         <RecordRegulation>[];
     if (regulations.isEmpty) {
       return const [RecordRegulation.inRule, RecordRegulation.out];
@@ -190,8 +195,12 @@ class RecordsScreenState extends State<RecordsScreen>
           ]
         : items;
     return normalized
-        .map((item) => _SortItem<BatterRankingSort>(
-            value: item, label: _batterSortLabel(item)))
+        .map(
+          (item) => _SortItem<BatterRankingSort>(
+            value: item,
+            label: _batterSortLabel(item),
+          ),
+        )
         .toList();
   }
 
@@ -210,8 +219,12 @@ class RecordsScreenState extends State<RecordsScreen>
           ]
         : items;
     return normalized
-        .map((item) => _SortItem<PitcherRankingSort>(
-            value: item, label: _pitcherSortLabel(item)))
+        .map(
+          (item) => _SortItem<PitcherRankingSort>(
+            value: item,
+            label: _pitcherSortLabel(item),
+          ),
+        )
         .toList();
   }
 
@@ -310,7 +323,7 @@ class RecordsScreenState extends State<RecordsScreen>
 
     final optionGroups =
         options?.groups.map((item) => item.group).toSet().toList() ??
-            <RecordGroup>[];
+        <RecordGroup>[];
     final allowedGroups = optionGroups.isEmpty
         ? const [
             RecordGroup.all,
@@ -334,7 +347,7 @@ class RecordsScreenState extends State<RecordsScreen>
         ? const [
             RecordPlayoffDivision.all,
             RecordPlayoffDivision.eutteum,
-            RecordPlayoffDivision.beogeum
+            RecordPlayoffDivision.beogeum,
           ]
         : [RecordPlayoffDivision.all, ...optionDivisions];
     if (!allowedDivisions.contains(next.playoffDivision)) {
@@ -345,46 +358,50 @@ class RecordsScreenState extends State<RecordsScreen>
       next = next.copyWith(playoffDivision: RecordPlayoffDivision.all);
     }
 
-    final allowedRegulations = options?.regulations.toSet().toList() ??
+    final allowedRegulations =
+        options?.regulations.toSet().toList() ??
         const [RecordRegulation.inRule, RecordRegulation.out];
     if (!allowedRegulations.contains(next.regulation)) {
-      final fallback = options?.defaultRegulation ??
+      final fallback =
+          options?.defaultRegulation ??
           (allowedRegulations.isEmpty
               ? RecordRegulation.inRule
               : allowedRegulations.first);
       next = next.copyWith(regulation: fallback);
     }
 
-    final allowedBatterSorts = (options?.batterSortOptions ??
-            const [
-              BatterRankingSort.battingAverage,
-              BatterRankingSort.ops,
-              BatterRankingSort.onBasePct,
-              BatterRankingSort.sluggingPct,
-              BatterRankingSort.hits,
-              BatterRankingSort.homeRuns,
-              BatterRankingSort.rbi,
-              BatterRankingSort.gamesPlayed,
-              BatterRankingSort.plateAppearance,
-              BatterRankingSort.stolenBases,
-            ])
-        .toSet();
+    final allowedBatterSorts =
+        (options?.batterSortOptions ??
+                const [
+                  BatterRankingSort.battingAverage,
+                  BatterRankingSort.ops,
+                  BatterRankingSort.onBasePct,
+                  BatterRankingSort.sluggingPct,
+                  BatterRankingSort.hits,
+                  BatterRankingSort.homeRuns,
+                  BatterRankingSort.rbi,
+                  BatterRankingSort.gamesPlayed,
+                  BatterRankingSort.plateAppearance,
+                  BatterRankingSort.stolenBases,
+                ])
+            .toSet();
     if (!allowedBatterSorts.contains(next.topBatterSort)) {
       next = next.copyWith(topBatterSort: allowedBatterSorts.first);
     }
 
-    final allowedPitcherSorts = (options?.pitcherSortOptions ??
-            const [
-              PitcherRankingSort.era,
-              PitcherRankingSort.whip,
-              PitcherRankingSort.strikeouts,
-              PitcherRankingSort.wins,
-              PitcherRankingSort.saves,
-              PitcherRankingSort.inningsPitched,
-              PitcherRankingSort.walksAllowed,
-              PitcherRankingSort.gamesPlayed,
-            ])
-        .toSet();
+    final allowedPitcherSorts =
+        (options?.pitcherSortOptions ??
+                const [
+                  PitcherRankingSort.era,
+                  PitcherRankingSort.whip,
+                  PitcherRankingSort.strikeouts,
+                  PitcherRankingSort.wins,
+                  PitcherRankingSort.saves,
+                  PitcherRankingSort.inningsPitched,
+                  PitcherRankingSort.walksAllowed,
+                  PitcherRankingSort.gamesPlayed,
+                ])
+            .toSet();
     if (!allowedPitcherSorts.contains(next.topPitcherSort)) {
       next = next.copyWith(topPitcherSort: allowedPitcherSorts.first);
     }
@@ -525,6 +542,13 @@ class RecordsScreenState extends State<RecordsScreen>
     }
   }
 
+  Future<void> _applySearchFilter() async {
+    _setState(() {
+      _filters = _filters.copyWith(searchQuery: _searchController.text);
+    });
+    await _reloadRecords();
+  }
+
   Future<void> _loadPowerRankings() async {
     final rankingYear = _filters.rankingYear;
     if (rankingYear == null || rankingYear <= 0) return;
@@ -628,11 +652,7 @@ class RecordsScreenState extends State<RecordsScreen>
 }
 
 class _Banner extends StatelessWidget {
-  const _Banner({
-    required this.icon,
-    required this.tone,
-    required this.text,
-  });
+  const _Banner({required this.icon, required this.tone, required this.text});
 
   final IconData icon;
   final SeasonBadgeTone tone;
@@ -652,7 +672,7 @@ class _Banner extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(4),
         border: Border.all(color: color.withValues(alpha: 0.45)),
       ),
       child: Row(
@@ -660,13 +680,111 @@ class _Banner extends StatelessWidget {
           Icon(icon, color: color, size: 16),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              text,
-              style: TextStyle(color: color, fontSize: 12),
-            ),
+            child: Text(text, style: TextStyle(color: color, fontSize: 12)),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CompactFilterSummary extends StatelessWidget {
+  const _CompactFilterSummary({required this.summary, required this.onPressed});
+
+  final String summary;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.aublColors;
+    final summaryWidget = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '현재 조회 조건',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: colors.cobalt,
+            fontWeight: FontWeight.w900,
+            letterSpacing: .6,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          summary,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: colors.ink,
+            fontWeight: FontWeight.w700,
+            height: 1.35,
+          ),
+        ),
+      ],
+    );
+    final button = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 46),
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: const Icon(Icons.tune, size: 18),
+        label: const Text('검색·필터'),
+      ),
+    );
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 340 || textScale > 1.4) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [summaryWidget, const SizedBox(height: 10), button],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: summaryWidget),
+            const SizedBox(width: 12),
+            button,
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _RecordsRefreshList extends StatelessWidget {
+  const _RecordsRefreshList({required this.onRefresh, required this.children});
+
+  final Future<void> Function() onRefresh;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final horizontalPadding = constraints.maxWidth < 600 ? 12.0 : 20.0;
+        return RefreshIndicator(
+          onRefresh: onRefresh,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              16,
+              horizontalPadding,
+              28,
+            ),
+            children: [
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1180),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: children,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -697,11 +815,8 @@ class _FilterDropdown<T> extends StatelessWidget {
         isExpanded: true,
         initialValue: value,
         decoration: InputDecoration(
-          isDense: true,
           labelText: label,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          constraints: const BoxConstraints(minHeight: 48),
         ),
         items: items,
         onChanged: enabled ? onChanged : null,
@@ -728,51 +843,61 @@ class _RegulationFilter extends StatelessWidget {
         ? const [RecordRegulation.inRule, RecordRegulation.out]
         : available;
     return Container(
-      padding: const EdgeInsets.all(3),
+      constraints: const BoxConstraints(minHeight: 48),
+      padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
         color: colors.surfaceMuted,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(3),
         border: Border.all(color: colors.line),
       ),
       child: Row(
-        children: options
-            .map(
-              (item) => Padding(
-                padding: const EdgeInsets.only(right: 6),
+        children: [
+          for (var index = 0; index < options.length; index++)
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  right: index == options.length - 1 ? 0 : 4,
+                ),
                 child: _regButton(
                   context,
-                  label: item == RecordRegulation.out ? 'OUT' : 'IN',
-                  active: value == item,
-                  onTap: () => onChanged(item),
+                  label: options[index] == RecordRegulation.out
+                      ? '규정 미충족'
+                      : '규정 충족',
+                  active: value == options[index],
+                  onTap: () => onChanged(options[index]),
                 ),
               ),
-            )
-            .toList(),
+            ),
+        ],
       ),
     );
   }
 
-  Widget _regButton(BuildContext context,
-      {required String label,
-      required bool active,
-      required VoidCallback onTap}) {
+  Widget _regButton(
+    BuildContext context, {
+    required String label,
+    required bool active,
+    required VoidCallback onTap,
+  }) {
     final colors = context.aublColors;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(2),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 38, minWidth: 48),
+        constraints: const BoxConstraints(minHeight: 44, minWidth: 72),
         child: Container(
           alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(2),
             color: active ? colors.surface : Colors.transparent,
             border: Border.all(
-                color: active ? colors.lineStrong : Colors.transparent),
+              color: active ? colors.lineStrong : Colors.transparent,
+            ),
           ),
           child: Text(
             label,
+            textAlign: TextAlign.center,
             style: TextStyle(
               color: active ? colors.navy : colors.muted,
               fontSize: 12,
@@ -794,23 +919,35 @@ class _MetricCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.aublColors;
-    return Card(
+    return Container(
+      constraints: const BoxConstraints(minHeight: 104),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: colors.line),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(label,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colors.muted, fontWeight: FontWeight.w700)),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colors.muted,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             const SizedBox(height: 6),
-            Text(value,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: colors.navyStrong,
-                      fontFamily: 'BarlowCondensed',
-                      fontWeight: FontWeight.w900,
-                    )),
+            Text(
+              value,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: colors.navyStrong,
+                fontFamily: 'BarlowCondensed',
+                fontWeight: FontWeight.w900,
+              ),
+            ),
           ],
         ),
       ),
@@ -828,27 +965,42 @@ class _Card extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.aublColors;
-    return Card(
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: colors.line),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium,
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: colors.navyStrong,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                 ),
                 if (hint != null) ...[
-                  const Spacer(),
+                  const SizedBox(width: 12),
                   Text(
                     hint!,
+                    textAlign: TextAlign.end,
                     style: TextStyle(color: colors.muted, fontSize: 11),
                   ),
                 ],
               ],
             ),
+            const SizedBox(height: 9),
+            Container(height: 2, color: colors.navy),
             const SizedBox(height: 10),
             child,
           ],
@@ -911,34 +1063,310 @@ class _TopPlayerTile extends StatelessWidget {
     final colors = context.aublColors;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 28,
-              child: Text('$rank',
+      borderRadius: BorderRadius.circular(2),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 56),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 28,
+                child: Text(
+                  '$rank',
                   style: TextStyle(
-                      color: colors.navy, fontWeight: FontWeight.w900)),
+                    color: colors.navy,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    Text(
+                      team,
+                      style: TextStyle(color: colors.muted, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                value,
+                style: TextStyle(
+                  color: colors.cobalt,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RecordSortChoice {
+  const _RecordSortChoice(this.column, this.label, this.ascendingByDefault);
+
+  final int column;
+  final String label;
+  final bool ascendingByDefault;
+}
+
+class _CompactRankingToolbar extends StatelessWidget {
+  const _CompactRankingToolbar({
+    required this.value,
+    required this.ascending,
+    required this.choices,
+    required this.onSortChanged,
+    required this.onDirectionChanged,
+  });
+
+  final int value;
+  final bool ascending;
+  final List<_RecordSortChoice> choices;
+  final ValueChanged<_RecordSortChoice> onSortChanged;
+  final VoidCallback onDirectionChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.aublColors;
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: colors.surfaceMuted,
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: colors.line),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: DropdownButtonFormField<int>(
+              key: ValueKey<int>(value),
+              initialValue: value,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: '목록 정렬',
+                constraints: BoxConstraints(minHeight: 48),
+              ),
+              items: choices
+                  .map(
+                    (choice) => DropdownMenuItem<int>(
+                      value: choice.column,
+                      child: Text(choice.label),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (next) {
+                if (next == null) return;
+                onSortChanged(
+                  choices.firstWhere((choice) => choice.column == next),
+                );
+              },
             ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(name,
-                      style: const TextStyle(fontWeight: FontWeight.w800)),
-                  Text(team,
-                      style: TextStyle(color: colors.muted, fontSize: 12)),
-                ],
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 48,
+            height: 48,
+            child: Semantics(
+              button: true,
+              label: ascending ? '오름차순, 정렬 방향 바꾸기' : '내림차순, 정렬 방향 바꾸기',
+              child: ExcludeSemantics(
+                child: OutlinedButton(
+                  onPressed: onDirectionChanged,
+                  style: OutlinedButton.styleFrom(padding: EdgeInsets.zero),
+                  child: Icon(
+                    ascending ? Icons.arrow_upward : Icons.arrow_downward,
+                    size: 19,
+                  ),
+                ),
               ),
             ),
-            Text(value,
-                style: TextStyle(
-                    color: colors.cobalt,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900)),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompactStat {
+  const _CompactStat(this.label, this.value);
+
+  final String label;
+  final String value;
+}
+
+class _CompactPlayerRankingRow extends StatelessWidget {
+  const _CompactPlayerRankingRow({
+    required this.rank,
+    required this.name,
+    required this.team,
+    required this.jerseyNumber,
+    required this.primaryLabel,
+    required this.primaryValue,
+    required this.stats,
+    required this.onTap,
+  });
+
+  final int rank;
+  final String name;
+  final String team;
+  final String jerseyNumber;
+  final String primaryLabel;
+  final String primaryValue;
+  final List<_CompactStat> stats;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.aublColors;
+    return Semantics(
+      button: true,
+      excludeSemantics: true,
+      label: '공식 순위 $rank위, $name, $team, $primaryLabel $primaryValue',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(2),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 88),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: colors.line)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 38,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '$rank',
+                          style: const TextStyle(
+                            fontFamily: 'BarlowCondensed',
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        Text(
+                          '공식',
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(color: colors.muted, fontSize: 9),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: colors.ink,
+                            fontWeight: FontWeight.w900,
+                            height: 1.25,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '$team${jerseyNumber.isEmpty ? '' : ' · $jerseyNumber번'}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: colors.muted,
+                            fontSize: 12,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 96),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          primaryLabel,
+                          maxLines: 2,
+                          textAlign: TextAlign.end,
+                          style: TextStyle(
+                            color: colors.muted,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          primaryValue,
+                          maxLines: 1,
+                          style: TextStyle(
+                            color: colors.cobalt,
+                            fontFamily: 'BarlowCondensed',
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.only(left: 38),
+                child: Wrap(
+                  spacing: 14,
+                  runSpacing: 6,
+                  children: stats
+                      .map(
+                        (stat) => Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text: '${stat.label} ',
+                                style: TextStyle(
+                                  color: colors.muted,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              TextSpan(
+                                text: stat.value,
+                                style: TextStyle(
+                                  color: colors.ink,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w900,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -966,22 +1394,22 @@ class _SortDropdown<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 120,
+      width: 144,
       child: DropdownButtonFormField<T>(
         key: ValueKey<Object?>(value),
         isExpanded: true,
         initialValue: value,
-        decoration: InputDecoration(
-          isDense: true,
-          labelText: '기준',
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        decoration: const InputDecoration(
+          labelText: '순위 기준',
+          constraints: BoxConstraints(minHeight: 48),
         ),
         items: items
-            .map((item) => DropdownMenuItem<T>(
+            .map(
+              (item) => DropdownMenuItem<T>(
                 value: item.value,
-                child: Text(item.label, style: const TextStyle(fontSize: 12))))
+                child: Text(item.label, style: const TextStyle(fontSize: 12)),
+              ),
+            )
             .toList(),
         onChanged: (next) {
           if (next == null) return;
@@ -1003,10 +1431,7 @@ class _EmptyState extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.all(18),
       child: Center(
-        child: Text(
-          text,
-          style: TextStyle(color: colors.muted, fontSize: 13),
-        ),
+        child: Text(text, style: TextStyle(color: colors.muted, fontSize: 13)),
       ),
     );
   }
@@ -1015,11 +1440,13 @@ class _EmptyState extends StatelessWidget {
 const _thStyle = TextStyle(fontSize: 12, fontWeight: FontWeight.w800);
 const _cellStyle = TextStyle(fontSize: 12);
 const _linkCellStyle = TextStyle(
-    fontSize: 12,
-    fontWeight: FontWeight.w800,
-    decoration: TextDecoration.underline);
-final _numStyle =
-    _cellStyle.copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
+  fontSize: 12,
+  fontWeight: FontWeight.w800,
+  decoration: TextDecoration.underline,
+);
+final _numStyle = _cellStyle.copyWith(
+  fontFeatures: const [FontFeature.tabularFigures()],
+);
 
 extension _IterableFirstOrNull<T> on Iterable<T> {
   T? get firstOrNull => isEmpty ? null : first;

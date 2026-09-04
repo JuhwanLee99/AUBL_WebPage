@@ -1,6 +1,6 @@
 part of 'records_screen.dart';
 
-const _sortHint = '↕ 컬럼 탭하여 정렬';
+const _sortHint = '표 제목을 눌러 정렬';
 
 // 정렬 활성 여부에 따른 셀 스타일 반환
 TextStyle _cs(int cellIdx, int? sortColIdx) => sortColIdx == cellIdx
@@ -27,225 +27,43 @@ String _roundLabel(String? value) {
   return value ?? '-';
 }
 
+String _regulationLabel(String? value) {
+  return (value ?? 'IN').trim().toUpperCase() == 'OUT' ? '규정 미충족' : '규정 충족';
+}
+
 extension _RecordsScreenSections on RecordsScreenState {
   Widget _buildFilterBar() {
     final colors = context.aublColors;
-    final selectedSeason = _seasons.where((e) => e.id == _seasonId).firstOrNull;
-    final rankingYearOptions = _seasons.map((e) => e.year + 1).toSet().toList()
-      ..sort((a, b) => b.compareTo(a));
-
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: colors.canvas,
+        color: colors.surface,
         border: Border(bottom: BorderSide(color: colors.line)),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          const horizontalPadding = 12.0;
-          const spacing = 8.0;
-          final usableWidth = constraints.maxWidth - horizontalPadding * 2;
+          final compact = constraints.maxWidth < 720;
+          final horizontal = compact ? 12.0 : 20.0;
+          if (compact) {
+            return Padding(
+              padding: EdgeInsets.fromLTRB(horizontal, 10, horizontal, 10),
+              child: _CompactFilterSummary(
+                summary: _filterSummary(),
+                onPressed: _showFilterSheet,
+              ),
+            );
+          }
 
-          final primaryControlWidth = usableWidth < 540
-              ? usableWidth
-              : usableWidth < 980
-                  ? (usableWidth - spacing) / 2
-                  : (usableWidth - spacing * 2) / 3;
-
-          final secondaryControlWidth = usableWidth < 540
-              ? usableWidth
-              : usableWidth < 980
-                  ? (usableWidth - spacing) / 2
-                  : 220.0;
-
-          final searchWidth = usableWidth < 540
-              ? usableWidth
-              : usableWidth < 980
-                  ? (usableWidth - spacing) / 2
-                  : 260.0;
-
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-            child: Column(
-              children: [
-                Wrap(
-                  spacing: spacing,
-                  runSpacing: spacing,
-                  children: [
-                    _FilterDropdown<int>(
-                      label: 'SEASON',
-                      width: primaryControlWidth,
-                      value: _seasonId,
-                      items: _seasons
-                          .map((season) => DropdownMenuItem<int>(
-                                value: season.id,
-                                child:
-                                    Text('${season.year} 시즌 (ID:${season.id})'),
-                              ))
-                          .toList(),
-                      onChanged: (value) {
-                        if (value == null || value == _seasonId) return;
-                        _changeSeason(value, _seasons.first);
-                      },
-                    ),
-                    _FilterDropdown<RecordScope>(
-                      label: '리그/플레이오프',
-                      width: primaryControlWidth,
-                      value: _filters.scope,
-                      items: _scopeOptions
-                          .map((scope) => DropdownMenuItem<RecordScope>(
-                                value: scope,
-                                child: Text(_scopeText(scope)),
-                              ))
-                          .toList(),
-                      onChanged: (value) {
-                        if (value == null || value == _filters.scope) return;
-                        _setState(() {
-                          _filters = _filters.copyWith(
-                            scope: value,
-                            playoffDivision: value != RecordScope.playoff
-                                ? RecordPlayoffDivision.all
-                                : _filters.playoffDivision,
-                          );
-                        });
-                        _reloadRecords();
-                      },
-                    ),
-                    _FilterDropdown<RecordGroup>(
-                      label: '조',
-                      width: primaryControlWidth,
-                      value: _filters.group,
-                      items: _groupOptions
-                          .map((group) => DropdownMenuItem<RecordGroup>(
-                                value: group,
-                                child: Text(_groupText(group)),
-                              ))
-                          .toList(),
-                      onChanged: (value) {
-                        if (value == null || value == _filters.group) return;
-                        _setState(() {
-                          _filters = _filters.copyWith(group: value);
-                        });
-                        _reloadRecords();
-                      },
-                    ),
-                  ],
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1180),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(horizontal, 14, horizontal, 14),
+                child: _buildDetailedFilterControls(
+                  maxWidth:
+                      constraints.maxWidth.clamp(0, 1180) - horizontal * 2,
                 ),
-                const SizedBox(height: spacing),
-                Wrap(
-                  spacing: spacing,
-                  runSpacing: spacing,
-                  children: [
-                    _FilterDropdown<RecordPlayoffDivision>(
-                      label: '플레이오프',
-                      width: secondaryControlWidth,
-                      value: _filters.playoffDivision,
-                      enabled: _playoffFilterEnabled,
-                      items: _playoffDivisionOptions
-                          .map((division) =>
-                              DropdownMenuItem<RecordPlayoffDivision>(
-                                value: division,
-                                child: Text(_playoffDivisionText(division)),
-                              ))
-                          .toList(),
-                      onChanged: (value) {
-                        if (!_playoffFilterEnabled ||
-                            value == null ||
-                            value == _filters.playoffDivision) {
-                          return;
-                        }
-                        _setState(() {
-                          _filters = _filters.copyWith(
-                            playoffDivision: value,
-                            scope: value != RecordPlayoffDivision.all
-                                ? RecordScope.playoff
-                                : _filters.scope,
-                          );
-                        });
-                        _reloadRecords();
-                      },
-                    ),
-                    SizedBox(
-                      width: searchWidth,
-                      child: TextField(
-                        onChanged: (value) => _setState(() {
-                          _filters = _filters.copyWith(searchQuery: value);
-                        }),
-                        style: const TextStyle(fontSize: 13),
-                        decoration: InputDecoration(
-                          isDense: true,
-                          labelText: 'SEARCH',
-                          hintText: '팀/선수 검색',
-                          prefixIcon: const Icon(Icons.search, size: 18),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 10),
-                          border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8)),
-                        ),
-                      ),
-                    ),
-                    if (_tabCtrl.index == RecordsHubTab.pitchers.index ||
-                        _tabCtrl.index == RecordsHubTab.batters.index)
-                      SizedBox(
-                        width: secondaryControlWidth,
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: _RegulationFilter(
-                            value: _filters.regulation,
-                            available: _regulationOptions,
-                            onChanged: (next) {
-                              _setState(() {
-                                _filters = _filters.copyWith(regulation: next);
-                              });
-                              _reloadRecords();
-                            },
-                          ),
-                        ),
-                      ),
-                    if (_tabCtrl.index == RecordsHubTab.power.index) ...[
-                      _FilterDropdown<int>(
-                        label: '기준 시즌',
-                        width: secondaryControlWidth,
-                        value: _filters.rankingYear ??
-                            (selectedSeason?.year ?? 0) + 1,
-                        items: rankingYearOptions
-                            .map((year) => DropdownMenuItem<int>(
-                                value: year, child: Text('$year')))
-                            .toList(),
-                        onChanged: (value) {
-                          if (value == null || value == _filters.rankingYear) {
-                            return;
-                          }
-                          _setState(() {
-                            _filters = _filters.copyWith(rankingYear: value);
-                          });
-                          _loadPowerRankings();
-                        },
-                      ),
-                      _FilterDropdown<int>(
-                        label: 'LIMIT',
-                        width: secondaryControlWidth,
-                        value: _filters.powerLimit,
-                        items: const [
-                          DropdownMenuItem(value: 20, child: Text('20')),
-                          DropdownMenuItem(value: 50, child: Text('50')),
-                          DropdownMenuItem(value: 100, child: Text('100')),
-                          DropdownMenuItem(value: 200, child: Text('200')),
-                        ],
-                        onChanged: (value) {
-                          if (value == null || value == _filters.powerLimit) {
-                            return;
-                          }
-                          _setState(() {
-                            _filters = _filters.copyWith(powerLimit: value);
-                          });
-                          _loadPowerRankings();
-                        },
-                      ),
-                    ],
-                  ],
-                ),
-              ],
+              ),
             ),
           );
         },
@@ -253,8 +71,322 @@ extension _RecordsScreenSections on RecordsScreenState {
     );
   }
 
+  String _filterSummary() {
+    final selectedSeason = _seasons
+        .where((season) => season.id == _seasonId)
+        .firstOrNull;
+    final parts = <String>[
+      if (selectedSeason != null) '${selectedSeason.year} 시즌',
+      _scopeText(_filters.scope),
+      _groupText(_filters.group),
+    ];
+    if (_filters.playoffDivision != RecordPlayoffDivision.all) {
+      parts.add('${_playoffDivisionText(_filters.playoffDivision)}권');
+    }
+    if (_tabCtrl.index == RecordsHubTab.pitchers.index ||
+        _tabCtrl.index == RecordsHubTab.batters.index) {
+      parts.add(
+        _filters.regulation == RecordRegulation.inRule ? '규정 충족' : '규정 미충족',
+      );
+    }
+    if (_tabCtrl.index == RecordsHubTab.power.index) {
+      parts.add('${_filters.rankingYear ?? '-'}년 기준');
+      parts.add('${_filters.powerLimit}개 표시');
+    }
+    if (_filters.searchQuery.trim().isNotEmpty) {
+      parts.add('“${_filters.searchQuery.trim()}” 검색');
+    }
+    return parts.join(' · ');
+  }
+
+  Future<void> _showFilterSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final maxHeight = MediaQuery.sizeOf(context).height * .88;
+          return ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                16,
+                20,
+                20 + MediaQuery.viewInsetsOf(context).bottom,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '기록 검색과 필터',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(sheetContext).pop(),
+                        tooltip: '닫기',
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '선택 조건은 바로 반영되며, 검색어는 ‘검색’을 누르면 적용됩니다.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: context.aublColors.muted,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  LayoutBuilder(
+                    builder: (context, constraints) =>
+                        _buildDetailedFilterControls(
+                          maxWidth: constraints.maxWidth,
+                          refreshOverlay: () {
+                            if (context.mounted) setSheetState(() {});
+                          },
+                        ),
+                  ),
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => Navigator.of(sheetContext).pop(),
+                      child: const Text('완료'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDetailedFilterControls({
+    required double maxWidth,
+    VoidCallback? refreshOverlay,
+  }) {
+    final selectedSeason = _seasons.where((e) => e.id == _seasonId).firstOrNull;
+    final rankingYearOptions = _seasons.map((e) => e.year + 1).toSet().toList()
+      ..sort((a, b) => b.compareTo(a));
+    const spacing = 8.0;
+    final singleColumn = maxWidth < 600;
+    final threeColumnWidth = singleColumn
+        ? maxWidth
+        : maxWidth < 940
+        ? (maxWidth - spacing) / 2
+        : (maxWidth - spacing * 2) / 3;
+    final searchWidth = singleColumn
+        ? maxWidth
+        : maxWidth < 940
+        ? (maxWidth - spacing) / 2
+        : 300.0;
+    final buttonWidth = singleColumn ? maxWidth : 132.0;
+
+    void refresh() => refreshOverlay?.call();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: [
+            _FilterDropdown<int>(
+              label: '시즌',
+              width: threeColumnWidth,
+              value: _seasonId,
+              items: _seasons
+                  .map(
+                    (season) => DropdownMenuItem<int>(
+                      value: season.id,
+                      child: Text('${season.year} 시즌'),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) async {
+                if (value == null || value == _seasonId) return;
+                await _changeSeason(value, _seasons.first);
+                refresh();
+              },
+            ),
+            _FilterDropdown<RecordScope>(
+              label: '대회 범위',
+              width: threeColumnWidth,
+              value: _filters.scope,
+              items: _scopeOptions
+                  .map(
+                    (scope) => DropdownMenuItem<RecordScope>(
+                      value: scope,
+                      child: Text(_scopeText(scope)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value == null || value == _filters.scope) return;
+                _setState(() {
+                  _filters = _filters.copyWith(
+                    scope: value,
+                    playoffDivision: value != RecordScope.playoff
+                        ? RecordPlayoffDivision.all
+                        : _filters.playoffDivision,
+                  );
+                });
+                refresh();
+                _reloadRecords();
+              },
+            ),
+            _FilterDropdown<RecordGroup>(
+              label: '조별 구분',
+              width: threeColumnWidth,
+              value: _filters.group,
+              items: _groupOptions
+                  .map(
+                    (group) => DropdownMenuItem<RecordGroup>(
+                      value: group,
+                      child: Text(_groupText(group)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value == null || value == _filters.group) return;
+                _setState(() => _filters = _filters.copyWith(group: value));
+                refresh();
+                _reloadRecords();
+              },
+            ),
+            _FilterDropdown<RecordPlayoffDivision>(
+              label: '본선 권역',
+              width: threeColumnWidth,
+              value: _filters.playoffDivision,
+              enabled: _playoffFilterEnabled,
+              items: _playoffDivisionOptions
+                  .map(
+                    (division) => DropdownMenuItem<RecordPlayoffDivision>(
+                      value: division,
+                      child: Text(_playoffDivisionText(division)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (!_playoffFilterEnabled ||
+                    value == null ||
+                    value == _filters.playoffDivision) {
+                  return;
+                }
+                _setState(() {
+                  _filters = _filters.copyWith(
+                    playoffDivision: value,
+                    scope: value != RecordPlayoffDivision.all
+                        ? RecordScope.playoff
+                        : _filters.scope,
+                  );
+                });
+                refresh();
+                _reloadRecords();
+              },
+            ),
+            SizedBox(
+              width: searchWidth,
+              child: TextField(
+                key: const ValueKey<String>('records-search-field'),
+                controller: _searchController,
+                onSubmitted: (_) => _applySearchFilter(),
+                decoration: const InputDecoration(
+                  labelText: '팀·선수 검색',
+                  hintText: '이름을 입력하세요',
+                  prefixIcon: Icon(Icons.search, size: 19),
+                ),
+              ),
+            ),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                minWidth: buttonWidth,
+                maxWidth: buttonWidth,
+                minHeight: 48,
+              ),
+              child: FilledButton.icon(
+                onPressed: _applySearchFilter,
+                icon: const Icon(Icons.search, size: 18),
+                label: const Text('검색', textAlign: TextAlign.center),
+              ),
+            ),
+            if (_tabCtrl.index == RecordsHubTab.pitchers.index ||
+                _tabCtrl.index == RecordsHubTab.batters.index)
+              SizedBox(
+                width: singleColumn ? maxWidth : threeColumnWidth,
+                child: _RegulationFilter(
+                  value: _filters.regulation,
+                  available: _regulationOptions,
+                  onChanged: (next) {
+                    _setState(() {
+                      _filters = _filters.copyWith(regulation: next);
+                    });
+                    refresh();
+                    _reloadRecords();
+                  },
+                ),
+              ),
+            if (_tabCtrl.index == RecordsHubTab.power.index) ...[
+              _FilterDropdown<int>(
+                label: '랭킹 기준 연도',
+                width: threeColumnWidth,
+                value: _filters.rankingYear ?? (selectedSeason?.year ?? 0) + 1,
+                items: rankingYearOptions
+                    .map(
+                      (year) => DropdownMenuItem<int>(
+                        value: year,
+                        child: Text('$year년'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value == null || value == _filters.rankingYear) return;
+                  _setState(() {
+                    _filters = _filters.copyWith(rankingYear: value);
+                  });
+                  refresh();
+                  _loadPowerRankings();
+                },
+              ),
+              _FilterDropdown<int>(
+                label: '표시 개수',
+                width: threeColumnWidth,
+                value: _filters.powerLimit,
+                items: const [
+                  DropdownMenuItem(value: 20, child: Text('20개')),
+                  DropdownMenuItem(value: 50, child: Text('50개')),
+                  DropdownMenuItem(value: 100, child: Text('100개')),
+                  DropdownMenuItem(value: 200, child: Text('200개')),
+                ],
+                onChanged: (value) {
+                  if (value == null || value == _filters.powerLimit) return;
+                  _setState(() {
+                    _filters = _filters.copyWith(powerLimit: value);
+                  });
+                  refresh();
+                  _loadPowerRankings();
+                },
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _buildOverviewTab() {
+    final selectedSeason = _seasons.where((e) => e.id == _seasonId).firstOrNull;
     return _RecordsOverviewSection(
+      seasonLabel: selectedSeason == null
+          ? '시즌 기록 허브'
+          : '${selectedSeason.year} 시즌 기록 허브',
       overview: _overview,
       teamStandings: _teamStandings,
       batters: _batters,
@@ -394,12 +526,12 @@ extension _RecordsScreenSections on RecordsScreenState {
 
   String _scopeLabel(String? value) {
     final raw = (value ?? '').trim().toUpperCase();
-    if (raw.contains('PLAYOFF') || raw.contains('포스트')) return 'PLAYOFF';
+    if (raw.contains('PLAYOFF') || raw.contains('포스트')) return '플레이오프';
     if (raw.contains('LEAGUE') ||
         raw.contains('REGULAR') ||
         raw.contains('정규') ||
         raw.contains('리그')) {
-      return 'LEAGUE';
+      return '리그';
     }
     return '-';
   }
@@ -420,6 +552,7 @@ extension _RecordsScreenSections on RecordsScreenState {
 
 class _RecordsOverviewSection extends StatelessWidget {
   const _RecordsOverviewSection({
+    required this.seasonLabel,
     required this.overview,
     required this.teamStandings,
     required this.batters,
@@ -437,6 +570,7 @@ class _RecordsOverviewSection extends StatelessWidget {
     required this.formatTopPitcherValue,
   });
 
+  final String seasonLabel;
   final RecordsOverview? overview;
   final List<TeamRecordStanding> teamStandings;
   final List<BatterRanking> batters;
@@ -458,16 +592,28 @@ class _RecordsOverviewSection extends StatelessWidget {
     final avgWinPct = teamStandings.isEmpty
         ? 0.0
         : teamStandings
-                .map((e) => e.winPct)
-                .fold<double>(0.0, (sum, value) => sum + value) /
-            teamStandings.length;
+                  .map((e) => e.winPct)
+                  .fold<double>(0.0, (sum, value) => sum + value) /
+              teamStandings.length;
 
-    return RefreshIndicator(
+    return _RecordsRefreshList(
       onRefresh: onRefresh,
-      child: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          LayoutBuilder(builder: (context, constraints) {
+      children: [
+        SeasonPageHero(
+          eyebrow: '시즌 기록',
+          title: Text(seasonLabel),
+          description: '팀 순위와 타자·투수 기록을 한곳에서 확인하고, 선수별 상세 기록으로 이어서 살펴볼 수 있습니다.',
+          footer: const Align(
+            alignment: Alignment.centerLeft,
+            child: SeasonStatusBadge(
+              label: '공식 기록',
+              tone: SeasonBadgeTone.blue,
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        LayoutBuilder(
+          builder: (context, constraints) {
             final width = constraints.maxWidth < 520
                 ? (constraints.maxWidth - 10) / 2
                 : (constraints.maxWidth - 30) / 4;
@@ -476,33 +622,42 @@ class _RecordsOverviewSection extends StatelessWidget {
               runSpacing: 10,
               children: [
                 SizedBox(
-                    width: width,
-                    child: _MetricCard(
-                        label: '총 경기',
-                        value: '${overview?.totalGames ?? 0} G')),
+                  width: width,
+                  child: _MetricCard(
+                    label: '총 경기',
+                    value: '${overview?.totalGames ?? 0} G',
+                  ),
+                ),
                 SizedBox(
-                    width: width,
-                    child: _MetricCard(
-                        label: '참여 팀',
-                        value:
-                            '${overview?.totalTeams ?? teamStandings.length} 팀')),
+                  width: width,
+                  child: _MetricCard(
+                    label: '참여 팀',
+                    value: '${overview?.totalTeams ?? teamStandings.length} 팀',
+                  ),
+                ),
                 SizedBox(
-                    width: width,
-                    child: _MetricCard(
-                        label: '평균 승률',
-                        value: '${(avgWinPct * 100).toStringAsFixed(1)}%')),
+                  width: width,
+                  child: _MetricCard(
+                    label: '평균 승률',
+                    value: '${(avgWinPct * 100).toStringAsFixed(1)}%',
+                  ),
+                ),
                 SizedBox(
-                    width: width,
-                    child: _MetricCard(
-                        label: '타자/투수',
-                        value: '${batters.length}/${pitchers.length}')),
+                  width: width,
+                  child: _MetricCard(
+                    label: '타자/투수',
+                    value: '${batters.length}/${pitchers.length}',
+                  ),
+                ),
               ],
             );
-          }),
-          const SizedBox(height: 12),
-          LayoutBuilder(builder: (context, constraints) {
+          },
+        ),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
             final batterPanel = _TopFivePanel<BatterRanking>(
-              title: '타자 TOP 5 (규정 IN)',
+              title: '타자 TOP 5 · 규정 충족',
               rows: topInBatters,
               emptyText: '타자 데이터가 없습니다.',
               sortWidget: _SortDropdown<BatterRankingSort>(
@@ -519,7 +674,7 @@ class _RecordsOverviewSection extends StatelessWidget {
               ),
             );
             final pitcherPanel = _TopFivePanel<PitcherRanking>(
-              title: '투수 TOP 5 (규정 IN)',
+              title: '투수 TOP 5 · 규정 충족',
               rows: topInPitchers,
               emptyText: '투수 데이터가 없습니다.',
               sortWidget: _SortDropdown<PitcherRankingSort>(
@@ -536,20 +691,24 @@ class _RecordsOverviewSection extends StatelessWidget {
               ),
             );
             if (constraints.maxWidth < 720) {
-              return Column(children: [
-                batterPanel,
-                const SizedBox(height: 10),
-                pitcherPanel,
-              ]);
+              return Column(
+                children: [
+                  batterPanel,
+                  const SizedBox(height: 10),
+                  pitcherPanel,
+                ],
+              );
             }
-            return Row(children: [
-              Expanded(child: batterPanel),
-              const SizedBox(width: 10),
-              Expanded(child: pitcherPanel),
-            ]);
-          }),
-        ],
-      ),
+            return Row(
+              children: [
+                Expanded(child: batterPanel),
+                const SizedBox(width: 10),
+                Expanded(child: pitcherPanel),
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 }
@@ -589,6 +748,22 @@ class _RecordsBattersSectionState extends State<_RecordsBattersSection> {
   int? _sortColIdx;
   bool _sortAsc = true;
 
+  static const _compactSorts = [
+    _RecordSortChoice(0, '공식 순위', true),
+    _RecordSortChoice(12, 'OPS', false),
+    _RecordSortChoice(9, '타율', false),
+    _RecordSortChoice(10, '출루율', false),
+    _RecordSortChoice(11, '장타율', false),
+    _RecordSortChoice(13, '홈런', false),
+    _RecordSortChoice(14, '타점', false),
+    _RecordSortChoice(16, '안타', false),
+    _RecordSortChoice(15, '도루', false),
+    _RecordSortChoice(17, '경기 수', false),
+  ];
+
+  int get _compactSortColumn => _sortColIdx ?? 0;
+  bool get _compactSortAscending => _sortColIdx == null ? true : _sortAsc;
+
   void _onSort(int colIdx, bool ascending) {
     setState(() {
       _sortColIdx = colIdx;
@@ -617,8 +792,9 @@ class _RecordsBattersSectionState extends State<_RecordsBattersSection> {
         case 6:
           return (a.regulation ?? '').compareTo(b.regulation ?? '');
         case 7:
-          return (int.tryParse(a.jerseyNumber) ?? 0)
-              .compareTo(int.tryParse(b.jerseyNumber) ?? 0);
+          return (int.tryParse(a.jerseyNumber) ?? 0).compareTo(
+            int.tryParse(b.jerseyNumber) ?? 0,
+          );
         case 8:
           return (a.seasonYear ?? 0).compareTo(b.seasonYear ?? 0);
         case 9:
@@ -648,115 +824,244 @@ class _RecordsBattersSectionState extends State<_RecordsBattersSection> {
     return sorted;
   }
 
+  String _primaryLabel() {
+    return _compactSorts
+        .firstWhere((item) => item.column == _compactSortColumn)
+        .label;
+  }
+
+  String _primaryValue(BatterRanking row) {
+    switch (_compactSortColumn) {
+      case 0:
+        return '${row.rank}위';
+      case 9:
+        return row.battingAverage.toStringAsFixed(3);
+      case 10:
+        return row.onBasePct.toStringAsFixed(3);
+      case 11:
+        return row.sluggingPct.toStringAsFixed(3);
+      case 12:
+        return row.ops.toStringAsFixed(3);
+      case 13:
+        return '${row.homeRuns}';
+      case 14:
+        return '${row.runsBattedIn}';
+      case 15:
+        return '${row.stolenBases}';
+      case 16:
+        return '${row.hits}';
+      case 17:
+        return '${row.gamesPlayed}';
+      default:
+        return row.ops.toStringAsFixed(3);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final batters = _sortedBatters;
-    return RefreshIndicator(
+    return _RecordsRefreshList(
       onRefresh: widget.onRefresh,
-      child: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          _TopFivePanel<BatterRanking>(
-            title: '타자 TOP 5 (규정 IN)',
-            rows: widget.topInBatters,
-            emptyText: '타자 데이터가 없습니다.',
-            sortWidget: _SortDropdown<BatterRankingSort>(
-              value: widget.filters.topBatterSort,
-              items: widget.batterSortItems,
-              onChanged: widget.onBatterSortChanged,
-            ),
-            itemBuilder: (row) => _TopPlayerTile(
-              rank: row.rank,
-              name: row.playerName,
-              team: row.teamName,
-              value: widget.formatTopBatterValue(row),
-              onTap: () => widget.onOpenPlayerDetail(row.playerId),
-            ),
+      children: [
+        _TopFivePanel<BatterRanking>(
+          title: '타자 TOP 5 · 규정 충족',
+          rows: widget.topInBatters,
+          emptyText: '타자 데이터가 없습니다.',
+          sortWidget: _SortDropdown<BatterRankingSort>(
+            value: widget.filters.topBatterSort,
+            items: widget.batterSortItems,
+            onChanged: widget.onBatterSortChanged,
           ),
-          const SizedBox(height: 10),
-          _Card(
-            title: '타자 기록',
-            hint: _sortHint,
-            child: batters.isEmpty
-                ? const _EmptyState(text: '표시할 타자 기록이 없습니다.')
-                : _buildPlayerStatsTable(
-                    statColumns: const [
-                      DataColumn(
-                          label: Text('AVG', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('OBP', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('SLG', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('OPS', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('HR', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('RBI', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('SB', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('H', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('G', style: _thStyle), numeric: true),
-                    ],
-                    sortColumnIndex: _sortColIdx,
-                    sortAscending: _sortAsc,
-                    onSort: _onSort,
-                    rows: batters
-                        .map(
-                          (row) => DataRow(
-                            cells: [
-                              ..._buildPlayerBaseCells(
-                                rank: row.rank,
-                                playerName: row.playerName,
-                                playerId: row.playerId,
-                                teamName: row.teamName,
-                                scope: row.scope,
-                                seasonType: row.seasonType,
-                                partCode: row.partCode,
-                                regulation: row.regulation,
-                                jerseyNumber: row.jerseyNumber,
-                                seasonYear: row.seasonYear,
-                                onOpenPlayerDetail: widget.onOpenPlayerDetail,
-                                scopeLabel: widget.scopeLabel,
-                                divisionLabel: widget.divisionLabel,
-                                groupLabel: widget.groupLabel,
-                                sortColIdx: _sortColIdx,
-                              ),
-                              DataCell(Text(
+          itemBuilder: (row) => _TopPlayerTile(
+            rank: row.rank,
+            name: row.playerName,
+            team: row.teamName,
+            value: widget.formatTopBatterValue(row),
+            onTap: () => widget.onOpenPlayerDetail(row.playerId),
+          ),
+        ),
+        const SizedBox(height: 10),
+        _Card(
+          title: '타자 기록',
+          hint: _sortHint,
+          child: batters.isEmpty
+              ? const _EmptyState(text: '표시할 타자 기록이 없습니다.')
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth < 720) {
+                      return Column(
+                        children: [
+                          _CompactRankingToolbar(
+                            value: _compactSortColumn,
+                            ascending: _compactSortAscending,
+                            choices: _compactSorts,
+                            onSortChanged: (choice) => _onSort(
+                              choice.column,
+                              choice.ascendingByDefault,
+                            ),
+                            onDirectionChanged: () => _onSort(
+                              _compactSortColumn,
+                              !_compactSortAscending,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          ...batters.map(
+                            (row) => _CompactPlayerRankingRow(
+                              rank: row.rank,
+                              name: row.playerName,
+                              team: row.teamName,
+                              jerseyNumber: row.jerseyNumber,
+                              primaryLabel: _primaryLabel(),
+                              primaryValue: _primaryValue(row),
+                              stats: [
+                                _CompactStat(
+                                  'AVG',
                                   row.battingAverage.toStringAsFixed(3),
-                                  style: _ns(9, _sortColIdx))),
-                              DataCell(Text(row.onBasePct.toStringAsFixed(3),
-                                  style: _ns(10, _sortColIdx))),
-                              DataCell(Text(row.sluggingPct.toStringAsFixed(3),
-                                  style: _ns(11, _sortColIdx))),
-                              DataCell(Text(row.ops.toStringAsFixed(3),
-                                  style: _numStyle.copyWith(
+                                ),
+                                _CompactStat('OPS', row.ops.toStringAsFixed(3)),
+                                _CompactStat('HR', '${row.homeRuns}'),
+                                _CompactStat('RBI', '${row.runsBattedIn}'),
+                              ],
+                              onTap: () =>
+                                  widget.onOpenPlayerDetail(row.playerId),
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+                    return _buildPlayerStatsTable(
+                      statColumns: const [
+                        DataColumn(
+                          label: Text('AVG', style: _thStyle),
+                          numeric: true,
+                        ),
+                        DataColumn(
+                          label: Text('OBP', style: _thStyle),
+                          numeric: true,
+                        ),
+                        DataColumn(
+                          label: Text('SLG', style: _thStyle),
+                          numeric: true,
+                        ),
+                        DataColumn(
+                          label: Text('OPS', style: _thStyle),
+                          numeric: true,
+                        ),
+                        DataColumn(
+                          label: Text('HR', style: _thStyle),
+                          numeric: true,
+                        ),
+                        DataColumn(
+                          label: Text('RBI', style: _thStyle),
+                          numeric: true,
+                        ),
+                        DataColumn(
+                          label: Text('SB', style: _thStyle),
+                          numeric: true,
+                        ),
+                        DataColumn(
+                          label: Text('H', style: _thStyle),
+                          numeric: true,
+                        ),
+                        DataColumn(
+                          label: Text('G', style: _thStyle),
+                          numeric: true,
+                        ),
+                      ],
+                      sortColumnIndex: _sortColIdx,
+                      sortAscending: _sortAsc,
+                      onSort: _onSort,
+                      rows: batters
+                          .map(
+                            (row) => DataRow(
+                              cells: [
+                                ..._buildPlayerBaseCells(
+                                  rank: row.rank,
+                                  playerName: row.playerName,
+                                  playerId: row.playerId,
+                                  teamName: row.teamName,
+                                  scope: row.scope,
+                                  seasonType: row.seasonType,
+                                  partCode: row.partCode,
+                                  regulation: row.regulation,
+                                  jerseyNumber: row.jerseyNumber,
+                                  seasonYear: row.seasonYear,
+                                  onOpenPlayerDetail: widget.onOpenPlayerDetail,
+                                  scopeLabel: widget.scopeLabel,
+                                  divisionLabel: widget.divisionLabel,
+                                  groupLabel: widget.groupLabel,
+                                  sortColIdx: _sortColIdx,
+                                ),
+                                DataCell(
+                                  Text(
+                                    row.battingAverage.toStringAsFixed(3),
+                                    style: _ns(9, _sortColIdx),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    row.onBasePct.toStringAsFixed(3),
+                                    style: _ns(10, _sortColIdx),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    row.sluggingPct.toStringAsFixed(3),
+                                    style: _ns(11, _sortColIdx),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    row.ops.toStringAsFixed(3),
+                                    style: _numStyle.copyWith(
                                       color: _sortColIdx == 12
                                           ? null
                                           : context.aublColors.cobalt,
                                       fontWeight: _sortColIdx == 12
                                           ? FontWeight.w700
-                                          : null))),
-                              DataCell(Text('${row.homeRuns}',
-                                  style: _ns(13, _sortColIdx))),
-                              DataCell(Text('${row.runsBattedIn}',
-                                  style: _ns(14, _sortColIdx))),
-                              DataCell(Text('${row.stolenBases}',
-                                  style: _ns(15, _sortColIdx))),
-                              DataCell(Text('${row.hits}',
-                                  style: _ns(16, _sortColIdx))),
-                              DataCell(Text('${row.gamesPlayed}',
-                                  style: _ns(17, _sortColIdx))),
-                            ],
-                          ),
-                        )
-                        .toList(),
-                  ),
-          ),
-        ],
-      ),
+                                          : null,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    '${row.homeRuns}',
+                                    style: _ns(13, _sortColIdx),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    '${row.runsBattedIn}',
+                                    style: _ns(14, _sortColIdx),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    '${row.stolenBases}',
+                                    style: _ns(15, _sortColIdx),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    '${row.hits}',
+                                    style: _ns(16, _sortColIdx),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    '${row.gamesPlayed}',
+                                    style: _ns(17, _sortColIdx),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                          .toList(),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 }
@@ -797,6 +1102,21 @@ class _RecordsPitchersSectionState extends State<_RecordsPitchersSection> {
   int? _sortColIdx;
   bool _sortAsc = true;
 
+  static const _compactSorts = [
+    _RecordSortChoice(0, '공식 순위', true),
+    _RecordSortChoice(9, '평균자책점', true),
+    _RecordSortChoice(11, 'WHIP', true),
+    _RecordSortChoice(12, '탈삼진', false),
+    _RecordSortChoice(14, '승리', false),
+    _RecordSortChoice(15, '세이브', false),
+    _RecordSortChoice(10, '이닝', false),
+    _RecordSortChoice(13, '볼넷', true),
+    _RecordSortChoice(16, '경기 수', false),
+  ];
+
+  int get _compactSortColumn => _sortColIdx ?? 0;
+  bool get _compactSortAscending => _sortColIdx == null ? true : _sortAsc;
+
   void _onSort(int colIdx, bool ascending) {
     setState(() {
       _sortColIdx = colIdx;
@@ -825,8 +1145,9 @@ class _RecordsPitchersSectionState extends State<_RecordsPitchersSection> {
         case 6:
           return (a.regulation ?? '').compareTo(b.regulation ?? '');
         case 7:
-          return (int.tryParse(a.jerseyNumber) ?? 0)
-              .compareTo(int.tryParse(b.jerseyNumber) ?? 0);
+          return (int.tryParse(a.jerseyNumber) ?? 0).compareTo(
+            int.tryParse(b.jerseyNumber) ?? 0,
+          );
         case 8:
           return (a.seasonYear ?? 0).compareTo(b.seasonYear ?? 0);
         case 9:
@@ -856,105 +1177,228 @@ class _RecordsPitchersSectionState extends State<_RecordsPitchersSection> {
     return sorted;
   }
 
+  String _primaryLabel() {
+    return _compactSorts
+        .firstWhere((item) => item.column == _compactSortColumn)
+        .label;
+  }
+
+  String _primaryValue(PitcherRanking row) {
+    switch (_compactSortColumn) {
+      case 0:
+        return '${row.rank}위';
+      case 9:
+        return row.era.toStringAsFixed(2);
+      case 10:
+        return row.inningsPitched.toStringAsFixed(1);
+      case 11:
+        return row.whip.toStringAsFixed(2);
+      case 12:
+        return '${row.strikeouts}';
+      case 13:
+        return '${row.walksAllowed}';
+      case 14:
+        return '${row.wins}-${row.losses}';
+      case 15:
+        return '${row.saves}';
+      case 16:
+        return '${row.gamesPlayed}';
+      default:
+        return row.era.toStringAsFixed(2);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final pitchers = _sortedPitchers;
-    return RefreshIndicator(
+    return _RecordsRefreshList(
       onRefresh: widget.onRefresh,
-      child: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          _TopFivePanel<PitcherRanking>(
-            title: '투수 TOP 5 (규정 IN)',
-            rows: widget.topInPitchers,
-            emptyText: '투수 데이터가 없습니다.',
-            sortWidget: _SortDropdown<PitcherRankingSort>(
-              value: widget.filters.topPitcherSort,
-              items: widget.pitcherSortItems,
-              onChanged: widget.onPitcherSortChanged,
-            ),
-            itemBuilder: (row) => _TopPlayerTile(
-              rank: row.rank,
-              name: row.playerName,
-              team: row.teamName,
-              value: widget.formatTopPitcherValue(row),
-              onTap: () => widget.onOpenPlayerDetail(row.playerId),
-            ),
+      children: [
+        _TopFivePanel<PitcherRanking>(
+          title: '투수 TOP 5 · 규정 충족',
+          rows: widget.topInPitchers,
+          emptyText: '투수 데이터가 없습니다.',
+          sortWidget: _SortDropdown<PitcherRankingSort>(
+            value: widget.filters.topPitcherSort,
+            items: widget.pitcherSortItems,
+            onChanged: widget.onPitcherSortChanged,
           ),
-          const SizedBox(height: 10),
-          _Card(
-            title: '투수 기록',
-            hint: _sortHint,
-            child: pitchers.isEmpty
-                ? const _EmptyState(text: '표시할 투수 기록이 없습니다.')
-                : _buildPlayerStatsTable(
-                    statColumns: const [
-                      DataColumn(
-                          label: Text('ERA', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('IP', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('WHIP', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('K', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('BB', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('W-L', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('SV', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('G', style: _thStyle), numeric: true),
-                    ],
-                    sortColumnIndex: _sortColIdx,
-                    sortAscending: _sortAsc,
-                    onSort: _onSort,
-                    rows: pitchers
-                        .map(
-                          (row) => DataRow(
-                            cells: [
-                              ..._buildPlayerBaseCells(
-                                rank: row.rank,
-                                playerName: row.playerName,
-                                playerId: row.playerId,
-                                teamName: row.teamName,
-                                scope: row.scope,
-                                seasonType: row.seasonType,
-                                partCode: row.partCode,
-                                regulation: row.regulation,
-                                jerseyNumber: row.jerseyNumber,
-                                seasonYear: row.seasonYear,
-                                onOpenPlayerDetail: widget.onOpenPlayerDetail,
-                                scopeLabel: widget.scopeLabel,
-                                divisionLabel: widget.divisionLabel,
-                                groupLabel: widget.groupLabel,
-                                sortColIdx: _sortColIdx,
-                              ),
-                              DataCell(Text(row.era.toStringAsFixed(2),
-                                  style: _ns(9, _sortColIdx))),
-                              DataCell(Text(
-                                  row.inningsPitched.toStringAsFixed(1),
-                                  style: _ns(10, _sortColIdx))),
-                              DataCell(Text(row.whip.toStringAsFixed(2),
-                                  style: _ns(11, _sortColIdx))),
-                              DataCell(Text('${row.strikeouts}',
-                                  style: _ns(12, _sortColIdx))),
-                              DataCell(Text('${row.walksAllowed}',
-                                  style: _ns(13, _sortColIdx))),
-                              DataCell(Text('${row.wins}-${row.losses}',
-                                  style: _cs(14, _sortColIdx))),
-                              DataCell(Text('${row.saves}',
-                                  style: _ns(15, _sortColIdx))),
-                              DataCell(Text('${row.gamesPlayed}',
-                                  style: _ns(16, _sortColIdx))),
-                            ],
+          itemBuilder: (row) => _TopPlayerTile(
+            rank: row.rank,
+            name: row.playerName,
+            team: row.teamName,
+            value: widget.formatTopPitcherValue(row),
+            onTap: () => widget.onOpenPlayerDetail(row.playerId),
+          ),
+        ),
+        const SizedBox(height: 10),
+        _Card(
+          title: '투수 기록',
+          hint: _sortHint,
+          child: pitchers.isEmpty
+              ? const _EmptyState(text: '표시할 투수 기록이 없습니다.')
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth < 720) {
+                      return Column(
+                        children: [
+                          _CompactRankingToolbar(
+                            value: _compactSortColumn,
+                            ascending: _compactSortAscending,
+                            choices: _compactSorts,
+                            onSortChanged: (choice) => _onSort(
+                              choice.column,
+                              choice.ascendingByDefault,
+                            ),
+                            onDirectionChanged: () => _onSort(
+                              _compactSortColumn,
+                              !_compactSortAscending,
+                            ),
                           ),
-                        )
-                        .toList(),
-                  ),
-          ),
-        ],
-      ),
+                          const SizedBox(height: 10),
+                          ...pitchers.map(
+                            (row) => _CompactPlayerRankingRow(
+                              rank: row.rank,
+                              name: row.playerName,
+                              team: row.teamName,
+                              jerseyNumber: row.jerseyNumber,
+                              primaryLabel: _primaryLabel(),
+                              primaryValue: _primaryValue(row),
+                              stats: [
+                                _CompactStat('ERA', row.era.toStringAsFixed(2)),
+                                _CompactStat(
+                                  'IP',
+                                  row.inningsPitched.toStringAsFixed(1),
+                                ),
+                                _CompactStat(
+                                  'WHIP',
+                                  row.whip.toStringAsFixed(2),
+                                ),
+                                _CompactStat('K', '${row.strikeouts}'),
+                              ],
+                              onTap: () =>
+                                  widget.onOpenPlayerDetail(row.playerId),
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+                    return _buildPlayerStatsTable(
+                      statColumns: const [
+                        DataColumn(
+                          label: Text('ERA', style: _thStyle),
+                          numeric: true,
+                        ),
+                        DataColumn(
+                          label: Text('IP', style: _thStyle),
+                          numeric: true,
+                        ),
+                        DataColumn(
+                          label: Text('WHIP', style: _thStyle),
+                          numeric: true,
+                        ),
+                        DataColumn(
+                          label: Text('K', style: _thStyle),
+                          numeric: true,
+                        ),
+                        DataColumn(
+                          label: Text('BB', style: _thStyle),
+                          numeric: true,
+                        ),
+                        DataColumn(
+                          label: Text('W-L', style: _thStyle),
+                          numeric: true,
+                        ),
+                        DataColumn(
+                          label: Text('SV', style: _thStyle),
+                          numeric: true,
+                        ),
+                        DataColumn(
+                          label: Text('G', style: _thStyle),
+                          numeric: true,
+                        ),
+                      ],
+                      sortColumnIndex: _sortColIdx,
+                      sortAscending: _sortAsc,
+                      onSort: _onSort,
+                      rows: pitchers
+                          .map(
+                            (row) => DataRow(
+                              cells: [
+                                ..._buildPlayerBaseCells(
+                                  rank: row.rank,
+                                  playerName: row.playerName,
+                                  playerId: row.playerId,
+                                  teamName: row.teamName,
+                                  scope: row.scope,
+                                  seasonType: row.seasonType,
+                                  partCode: row.partCode,
+                                  regulation: row.regulation,
+                                  jerseyNumber: row.jerseyNumber,
+                                  seasonYear: row.seasonYear,
+                                  onOpenPlayerDetail: widget.onOpenPlayerDetail,
+                                  scopeLabel: widget.scopeLabel,
+                                  divisionLabel: widget.divisionLabel,
+                                  groupLabel: widget.groupLabel,
+                                  sortColIdx: _sortColIdx,
+                                ),
+                                DataCell(
+                                  Text(
+                                    row.era.toStringAsFixed(2),
+                                    style: _ns(9, _sortColIdx),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    row.inningsPitched.toStringAsFixed(1),
+                                    style: _ns(10, _sortColIdx),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    row.whip.toStringAsFixed(2),
+                                    style: _ns(11, _sortColIdx),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    '${row.strikeouts}',
+                                    style: _ns(12, _sortColIdx),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    '${row.walksAllowed}',
+                                    style: _ns(13, _sortColIdx),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    '${row.wins}-${row.losses}',
+                                    style: _cs(14, _sortColIdx),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    '${row.saves}',
+                                    style: _ns(15, _sortColIdx),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    '${row.gamesPlayed}',
+                                    style: _ns(16, _sortColIdx),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                          .toList(),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 }
@@ -968,7 +1412,8 @@ Widget _buildPlayerStatsTable({
 }) {
   final allStatCols = statColumns
       .map(
-          (c) => DataColumn(label: c.label, numeric: c.numeric, onSort: onSort))
+        (c) => DataColumn(label: c.label, numeric: c.numeric, onSort: onSort),
+      )
       .toList();
   return _buildHorizontalDataTable(
     columns: [..._buildBaseColumns(onSort), ...allStatCols],
@@ -988,8 +1433,9 @@ Widget _buildHorizontalDataTable({
     builder: (context) => SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
-        headingRowColor:
-            WidgetStateProperty.all(context.aublColors.surfaceMuted),
+        headingRowColor: WidgetStateProperty.all(
+          context.aublColors.surfaceMuted,
+        ),
         border: TableBorder(
           horizontalInside: BorderSide(color: context.aublColors.line),
         ),
@@ -1037,31 +1483,57 @@ List<DataCell> _buildPlayerBaseCells({
     DataCell(Text(scopeLabel(scope), style: _cs(3, sortColIdx))),
     DataCell(Text(divisionLabel(seasonType), style: _cs(4, sortColIdx))),
     DataCell(Text(groupLabel(partCode), style: _cs(5, sortColIdx))),
+    DataCell(Text(_regulationLabel(regulation), style: _cs(6, sortColIdx))),
     DataCell(
-        Text((regulation ?? 'IN').toUpperCase(), style: _cs(6, sortColIdx))),
-    DataCell(Text(jerseyNumber.isEmpty ? '-' : jerseyNumber,
-        style: _ns(7, sortColIdx))),
+      Text(
+        jerseyNumber.isEmpty ? '-' : jerseyNumber,
+        style: _ns(7, sortColIdx),
+      ),
+    ),
     DataCell(Text('${seasonYear ?? '-'}', style: _ns(8, sortColIdx))),
   ];
 }
 
 List<DataColumn> _buildBaseColumns(void Function(int, bool)? onSort) => [
-      DataColumn(label: const Text('#', style: _thStyle), onSort: onSort),
-      DataColumn(label: const Text('이름', style: _thStyle), onSort: onSort),
-      DataColumn(label: const Text('팀', style: _thStyle), onSort: onSort),
-      DataColumn(label: const Text('구분', style: _thStyle), onSort: onSort),
-      DataColumn(label: const Text('플레이오프', style: _thStyle), onSort: onSort),
-      DataColumn(label: const Text('조', style: _thStyle), onSort: onSort),
-      DataColumn(label: const Text('규정', style: _thStyle), onSort: onSort),
-      DataColumn(
-          label: const Text('등번호', style: _thStyle),
-          numeric: true,
-          onSort: onSort),
-      DataColumn(
-          label: const Text('년도', style: _thStyle),
-          numeric: true,
-          onSort: onSort),
-    ];
+  DataColumn(
+    label: const Text('#', style: _thStyle),
+    onSort: onSort,
+  ),
+  DataColumn(
+    label: const Text('이름', style: _thStyle),
+    onSort: onSort,
+  ),
+  DataColumn(
+    label: const Text('팀', style: _thStyle),
+    onSort: onSort,
+  ),
+  DataColumn(
+    label: const Text('구분', style: _thStyle),
+    onSort: onSort,
+  ),
+  DataColumn(
+    label: const Text('플레이오프', style: _thStyle),
+    onSort: onSort,
+  ),
+  DataColumn(
+    label: const Text('조', style: _thStyle),
+    onSort: onSort,
+  ),
+  DataColumn(
+    label: const Text('규정', style: _thStyle),
+    onSort: onSort,
+  ),
+  DataColumn(
+    label: const Text('등번호', style: _thStyle),
+    numeric: true,
+    onSort: onSort,
+  ),
+  DataColumn(
+    label: const Text('년도', style: _thStyle),
+    numeric: true,
+    onSort: onSort,
+  ),
+];
 
 class _RecordsStandingsSection extends StatefulWidget {
   const _RecordsStandingsSection({
@@ -1144,101 +1616,147 @@ class _RecordsStandingsSectionState extends State<_RecordsStandingsSection> {
 
     final sortedIndices = _sortedIndices;
 
-    return RefreshIndicator(
+    return _RecordsRefreshList(
       onRefresh: widget.onRefresh,
-      child: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          _Card(
-            title: '팀 순위',
-            hint: _sortHint,
-            child: _buildHorizontalDataTable(
-              sortColumnIndex: _sortColIdx,
-              sortAscending: _sortAsc,
-              columns: [
-                DataColumn(
-                    label: const Text('#', style: _thStyle), onSort: _onSort),
-                DataColumn(
-                    label: const Text('팀', style: _thStyle), onSort: _onSort),
-                DataColumn(
-                    label: const Text('구분', style: _thStyle), onSort: _onSort),
-                DataColumn(
-                    label: const Text('플레이오프', style: _thStyle),
-                    onSort: _onSort),
-                DataColumn(
-                    label: const Text('조', style: _thStyle), onSort: _onSort),
-                DataColumn(
-                    label: const Text('경기', style: _thStyle),
-                    numeric: true,
-                    onSort: _onSort),
-                DataColumn(
-                    label: const Text('승-무-패', style: _thStyle),
-                    numeric: true,
-                    onSort: _onSort),
-                DataColumn(
-                    label: const Text('승률', style: _thStyle),
-                    numeric: true,
-                    onSort: _onSort),
-              ],
-              rows: sortedIndices.map((index) {
-                final row = widget.teamStandings[index];
-                final games = row.wins + row.losses + row.ties;
-                return DataRow(
-                  cells: [
-                    DataCell(Text('${index + 1}', style: _ns(0, _sortColIdx))),
-                    DataCell(Text(row.teamName,
-                        style: _sortColIdx == 1
-                            ? _cellStyle.copyWith(fontWeight: FontWeight.w900)
-                            : _cellStyle.copyWith(
-                                fontWeight: FontWeight.w600))),
-                    DataCell(Text(widget.scopeLabel(row.scope),
-                        style: _cs(2, _sortColIdx))),
-                    DataCell(Text(widget.divisionLabel(row.seasonType),
-                        style: _cs(3, _sortColIdx))),
-                    DataCell(Text(widget.groupLabel(row.partCode),
-                        style: _cs(4, _sortColIdx))),
-                    DataCell(Text('$games', style: _ns(5, _sortColIdx))),
-                    DataCell(Text('${row.wins}-${row.ties}-${row.losses}',
-                        style: _ns(6, _sortColIdx))),
-                    DataCell(Text('${(row.winPct * 100).toStringAsFixed(1)}%',
-                        style: _ns(7, _sortColIdx))),
-                  ],
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 10),
-          _Card(
-            title: '플레이오프 스테이지 요약',
-            child: widget.playoffRows.isEmpty
-                ? const _EmptyState(text: '요약할 플레이오프 데이터가 없습니다.')
-                : _buildHorizontalDataTable(
-                    columns: const [
-                      DataColumn(label: Text('구분', style: _thStyle)),
-                      DataColumn(label: Text('라운드', style: _thStyle)),
-                      DataColumn(
-                          label: Text('점수', style: _thStyle), numeric: true),
-                      DataColumn(label: Text('팀', style: _thStyle)),
-                    ],
-                    rows: widget.playoffRows
-                        .map(
-                          (row) => DataRow(
-                            cells: [
-                              DataCell(Text(_tierLabel(row.playoffTier),
-                                  style: _cellStyle)),
-                              DataCell(Text(_roundLabel(row.playoffRound),
-                                  style: _cellStyle)),
-                              DataCell(Text(row.finalsPoints.toStringAsFixed(1),
-                                  style: _numStyle)),
-                              DataCell(Text(row.teamName, style: _cellStyle)),
-                            ],
-                          ),
-                        )
-                        .toList(),
+      children: [
+        _Card(
+          title: '팀 순위',
+          hint: _sortHint,
+          child: _buildHorizontalDataTable(
+            sortColumnIndex: _sortColIdx,
+            sortAscending: _sortAsc,
+            columns: [
+              DataColumn(
+                label: const Text('#', style: _thStyle),
+                onSort: _onSort,
+              ),
+              DataColumn(
+                label: const Text('팀', style: _thStyle),
+                onSort: _onSort,
+              ),
+              DataColumn(
+                label: const Text('구분', style: _thStyle),
+                onSort: _onSort,
+              ),
+              DataColumn(
+                label: const Text('플레이오프', style: _thStyle),
+                onSort: _onSort,
+              ),
+              DataColumn(
+                label: const Text('조', style: _thStyle),
+                onSort: _onSort,
+              ),
+              DataColumn(
+                label: const Text('경기', style: _thStyle),
+                numeric: true,
+                onSort: _onSort,
+              ),
+              DataColumn(
+                label: const Text('승-무-패', style: _thStyle),
+                numeric: true,
+                onSort: _onSort,
+              ),
+              DataColumn(
+                label: const Text('승률', style: _thStyle),
+                numeric: true,
+                onSort: _onSort,
+              ),
+            ],
+            rows: sortedIndices.map((index) {
+              final row = widget.teamStandings[index];
+              final games = row.wins + row.losses + row.ties;
+              return DataRow(
+                cells: [
+                  DataCell(Text('${index + 1}', style: _ns(0, _sortColIdx))),
+                  DataCell(
+                    Text(
+                      row.teamName,
+                      style: _sortColIdx == 1
+                          ? _cellStyle.copyWith(fontWeight: FontWeight.w900)
+                          : _cellStyle.copyWith(fontWeight: FontWeight.w600),
+                    ),
                   ),
+                  DataCell(
+                    Text(
+                      widget.scopeLabel(row.scope),
+                      style: _cs(2, _sortColIdx),
+                    ),
+                  ),
+                  DataCell(
+                    Text(
+                      widget.divisionLabel(row.seasonType),
+                      style: _cs(3, _sortColIdx),
+                    ),
+                  ),
+                  DataCell(
+                    Text(
+                      widget.groupLabel(row.partCode),
+                      style: _cs(4, _sortColIdx),
+                    ),
+                  ),
+                  DataCell(Text('$games', style: _ns(5, _sortColIdx))),
+                  DataCell(
+                    Text(
+                      '${row.wins}-${row.ties}-${row.losses}',
+                      style: _ns(6, _sortColIdx),
+                    ),
+                  ),
+                  DataCell(
+                    Text(
+                      '${(row.winPct * 100).toStringAsFixed(1)}%',
+                      style: _ns(7, _sortColIdx),
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 10),
+        _Card(
+          title: '플레이오프 스테이지 요약',
+          child: widget.playoffRows.isEmpty
+              ? const _EmptyState(text: '요약할 플레이오프 데이터가 없습니다.')
+              : _buildHorizontalDataTable(
+                  columns: const [
+                    DataColumn(label: Text('구분', style: _thStyle)),
+                    DataColumn(label: Text('라운드', style: _thStyle)),
+                    DataColumn(
+                      label: Text('점수', style: _thStyle),
+                      numeric: true,
+                    ),
+                    DataColumn(label: Text('팀', style: _thStyle)),
+                  ],
+                  rows: widget.playoffRows
+                      .map(
+                        (row) => DataRow(
+                          cells: [
+                            DataCell(
+                              Text(
+                                _tierLabel(row.playoffTier),
+                                style: _cellStyle,
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                _roundLabel(row.playoffRound),
+                                style: _cellStyle,
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                row.finalsPoints.toStringAsFixed(1),
+                                style: _numStyle,
+                              ),
+                            ),
+                            DataCell(Text(row.teamName, style: _cellStyle)),
+                          ],
+                        ),
+                      )
+                      .toList(),
+                ),
+        ),
+      ],
     );
   }
 }
@@ -1260,69 +1778,96 @@ class _RecordsPowerSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RefreshIndicator(
+    return _RecordsRefreshList(
       onRefresh: onRefresh,
-      child: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          if (powerLoading)
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: LinearProgressIndicator(minHeight: 1),
-            ),
-          if (powerError != null)
-            _Banner(
-              icon: Icons.error_outline,
-              tone: SeasonBadgeTone.danger,
-              text: powerError!,
-            ),
-          _Card(
-            title: '파워랭킹 (${rankingYear ?? '-'})',
-            child: powerRows.isEmpty && !powerLoading
-                ? const _EmptyState(text: '파워랭킹 데이터가 없습니다.')
-                : _buildHorizontalDataTable(
-                    columns: const [
-                      DataColumn(
-                          label: Text('#', style: _thStyle), numeric: true),
-                      DataColumn(label: Text('팀', style: _thStyle)),
-                      DataColumn(
-                          label: Text('총점', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('Y1', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('Y2', style: _thStyle), numeric: true),
-                      DataColumn(
-                          label: Text('Y3', style: _thStyle), numeric: true),
-                      DataColumn(label: Text('윈도우', style: _thStyle)),
-                      DataColumn(label: Text('버전', style: _thStyle)),
-                    ],
-                    rows: powerRows
-                        .map(
-                          (row) => DataRow(
-                            cells: [
-                              DataCell(Text('${row.rank}', style: _numStyle)),
-                              DataCell(Text(row.teamName, style: _cellStyle)),
-                              DataCell(Text(
-                                  row.weightedScore.toStringAsFixed(1),
-                                  style: _numStyle)),
-                              DataCell(Text(row.y1Score.toStringAsFixed(1),
-                                  style: _numStyle)),
-                              DataCell(Text(row.y2Score.toStringAsFixed(1),
-                                  style: _numStyle)),
-                              DataCell(Text(row.y3Score.toStringAsFixed(1),
-                                  style: _numStyle)),
-                              DataCell(Text(row.windowYears.join(', '),
-                                  style: _cellStyle)),
-                              DataCell(Text(row.calcVersion ?? '-',
-                                  style: _cellStyle)),
-                            ],
-                          ),
-                        )
-                        .toList(),
-                  ),
+      children: [
+        if (powerLoading)
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: LinearProgressIndicator(minHeight: 1),
           ),
-        ],
-      ),
+        if (powerError != null)
+          _Banner(
+            icon: Icons.error_outline,
+            tone: SeasonBadgeTone.danger,
+            text: powerError!,
+          ),
+        _Card(
+          title: '파워랭킹 (${rankingYear ?? '-'})',
+          child: powerRows.isEmpty && !powerLoading
+              ? const _EmptyState(text: '파워랭킹 데이터가 없습니다.')
+              : _buildHorizontalDataTable(
+                  columns: const [
+                    DataColumn(
+                      label: Text('#', style: _thStyle),
+                      numeric: true,
+                    ),
+                    DataColumn(label: Text('팀', style: _thStyle)),
+                    DataColumn(
+                      label: Text('총점', style: _thStyle),
+                      numeric: true,
+                    ),
+                    DataColumn(
+                      label: Text('최근 시즌', style: _thStyle),
+                      numeric: true,
+                    ),
+                    DataColumn(
+                      label: Text('2년 전', style: _thStyle),
+                      numeric: true,
+                    ),
+                    DataColumn(
+                      label: Text('3년 전', style: _thStyle),
+                      numeric: true,
+                    ),
+                    DataColumn(label: Text('산정 시즌', style: _thStyle)),
+                    DataColumn(label: Text('산정 버전', style: _thStyle)),
+                  ],
+                  rows: powerRows
+                      .map(
+                        (row) => DataRow(
+                          cells: [
+                            DataCell(Text('${row.rank}', style: _numStyle)),
+                            DataCell(Text(row.teamName, style: _cellStyle)),
+                            DataCell(
+                              Text(
+                                row.weightedScore.toStringAsFixed(1),
+                                style: _numStyle,
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                row.y1Score.toStringAsFixed(1),
+                                style: _numStyle,
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                row.y2Score.toStringAsFixed(1),
+                                style: _numStyle,
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                row.y3Score.toStringAsFixed(1),
+                                style: _numStyle,
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                row.windowYears.join(', '),
+                                style: _cellStyle,
+                              ),
+                            ),
+                            DataCell(
+                              Text(row.calcVersion ?? '-', style: _cellStyle),
+                            ),
+                          ],
+                        ),
+                      )
+                      .toList(),
+                ),
+        ),
+      ],
     );
   }
 }

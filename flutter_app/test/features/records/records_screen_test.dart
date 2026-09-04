@@ -54,11 +54,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(find.text('선수 검색'), findsOneWidget);
-      expect(find.text('경기별 기록 (Player Logs)'), findsOneWidget);
+      expect(find.text('경기별 기록'), findsOneWidget);
     });
 
-    testWidgets('renders the record hub with the light season theme',
-        (tester) async {
+    testWidgets('renders the record hub with the light season theme', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.light,
@@ -70,7 +71,122 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(find.text('기록'), findsOneWidget);
-      expect(find.text('타자 TOP 5 (규정 IN)'), findsOneWidget);
+      expect(find.text('타자 TOP 5 · 규정 충족'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('uses a compact filter summary and readable batter rows', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(360, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: RecordsScreen(
+            initialTab: RecordsHubTab.batters,
+            apiService: fakeApi,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('현재 조회 조건'), findsOneWidget);
+      expect(find.text('검색·필터'), findsOneWidget);
+      expect(find.text('목록 정렬'), findsOneWidget);
+      expect(find.text('공식 순위'), findsWidgets);
+      expect(find.text('테스트 타자'), findsWidgets);
+      expect(find.byType(DataTable), findsNothing);
+
+      await tester.tap(find.text('검색·필터'));
+      await tester.pumpAndSettle();
+      expect(find.text('기록 검색과 필터'), findsOneWidget);
+      expect(find.text('시즌'), findsOneWidget);
+      expect(find.text('대회 범위'), findsOneWidget);
+      expect(find.text('팀·선수 검색'), findsOneWidget);
+      expect(find.text('규정 충족'), findsWidgets);
+
+      await tester.enterText(
+        find.byKey(const ValueKey<String>('records-search-field')),
+        '중앙',
+      );
+      var doneButton = find.widgetWithText(FilledButton, '완료');
+      await tester.ensureVisible(doneButton);
+      await tester.tap(doneButton);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('“중앙” 검색'), findsNothing);
+
+      await tester.tap(find.text('검색·필터'));
+      await tester.pumpAndSettle();
+      final searchButton = find.widgetWithText(FilledButton, '검색');
+      await tester.ensureVisible(searchButton);
+      await tester.tap(searchButton);
+      await tester.pump(const Duration(milliseconds: 400));
+      doneButton = find.widgetWithText(FilledButton, '완료');
+      await tester.ensureVisible(doneButton);
+      await tester.tap(doneButton);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('“중앙” 검색'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('keeps the complete batter table on wide screens', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(1024, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark,
+          home: RecordsScreen(
+            initialTab: RecordsHubTab.batters,
+            apiService: fakeApi,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.byType(DataTable), findsOneWidget);
+      expect(find.text('OPS'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('does not overflow at 200 percent text on a compact screen', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(390, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(2)),
+            child: child!,
+          ),
+          home: RecordsScreen(
+            initialTab: RecordsHubTab.pitchers,
+            apiService: fakeApi,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('검색·필터'), findsOneWidget);
+      expect(find.text('테스트 투수'), findsWidgets);
+      expect(find.byType(DataTable), findsNothing);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.text('검색·필터'));
+      await tester.pumpAndSettle();
+      expect(find.text('기록 검색과 필터'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });
@@ -78,10 +194,10 @@ void main() {
 
 class _FakeBackendApiService extends BackendApiService {
   _FakeBackendApiService()
-      : super(
-          client: MockClient((_) async => http.Response('{}', 200)),
-          tokenProvider: () async => null,
-        );
+    : super(
+        client: MockClient((_) async => http.Response('{}', 200)),
+        tokenProvider: () async => null,
+      );
 
   @override
   Future<List<SeasonSummary>> getSeasons() async {
@@ -168,8 +284,10 @@ class _FakeBackendApiService extends BackendApiService {
   }
 
   @override
-  Future<RecordsOverview> getRecordOverview(int seasonId,
-      {RecordFilterParams? filters}) async {
+  Future<RecordsOverview> getRecordOverview(
+    int seasonId, {
+    RecordFilterParams? filters,
+  }) async {
     return RecordsOverview(
       seasonId: seasonId,
       totalGames: 90,
@@ -180,8 +298,10 @@ class _FakeBackendApiService extends BackendApiService {
   }
 
   @override
-  Future<List<TeamRecordStanding>> getTeamRecordStandings(int seasonId,
-      {RecordFilterParams? filters}) async {
+  Future<List<TeamRecordStanding>> getTeamRecordStandings(
+    int seasonId, {
+    RecordFilterParams? filters,
+  }) async {
     return const [
       TeamRecordStanding(
         teamId: 1,
@@ -199,14 +319,18 @@ class _FakeBackendApiService extends BackendApiService {
   }
 
   @override
-  Future<List<PlayoffSummaryRow>> getPlayoffSummaries(int seasonId,
-      {RecordFilterParams? filters}) async {
+  Future<List<PlayoffSummaryRow>> getPlayoffSummaries(
+    int seasonId, {
+    RecordFilterParams? filters,
+  }) async {
     return const [];
   }
 
   @override
-  Future<List<PowerRankingApiRow>> getPowerRankings(
-      {required int rankingYear, int? limit}) async {
+  Future<List<PowerRankingApiRow>> getPowerRankings({
+    required int rankingYear,
+    int? limit,
+  }) async {
     return const [
       PowerRankingApiRow(
         rank: 1,
@@ -245,8 +369,10 @@ class _FakeBackendApiService extends BackendApiService {
   }
 
   @override
-  Future<PlayerStatsResponse> getPlayerStats(int playerId,
-      {int? seasonId}) async {
+  Future<PlayerStatsResponse> getPlayerStats(
+    int playerId, {
+    int? seasonId,
+  }) async {
     return PlayerStatsResponse(
       playerId: playerId,
       playerName: playerId == 11 ? '테스트 타자' : '테스트 투수',
@@ -291,8 +417,10 @@ class _FakeBackendApiService extends BackendApiService {
   }
 
   @override
-  Future<PlayerGameLogsResponse> getPlayerGameLogs(int playerId,
-      {int? gameId}) async {
+  Future<PlayerGameLogsResponse> getPlayerGameLogs(
+    int playerId, {
+    int? gameId,
+  }) async {
     return const PlayerGameLogsResponse(batterLogs: [], pitcherLogs: []);
   }
 }
