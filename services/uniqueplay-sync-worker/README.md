@@ -19,4 +19,8 @@ Required environment:
 
 Run `npm run session:bootstrap` from a controlled operator machine to create an encrypted Playwright storage-state payload. Never commit the resulting `.enc` file. When the session expires the worker reports `REAUTH_REQUIRED`; it never stores the personal account password.
 
+To perform the one-time login in locally installed Chrome, set `UNIQUEPLAY_BROWSER_CHANNEL=chrome`. This opens an isolated Chrome window for the operator login; after the encrypted session is installed, collection is triggered only by an explicit administrator request to `POST /collect`. The worker contains no scheduler or periodic collection loop.
+
+If Google blocks automated-browser login, use a dedicated normal Chrome profile without automation, finish the login, close it, and relaunch that same dedicated profile with a loopback-only remote-debugging port. Then run `npm run session:capture-cdp` to capture only that dedicated profile's UniquePlay storage state. Do not attach the operator's everyday Chrome profile.
+
 The adapter intentionally anchors on Korean navigation labels and table headers because UniquePlay currently renders React-Native-Web class names that are not stable identifiers. A header/schema change fails closed instead of silently publishing shifted columns.

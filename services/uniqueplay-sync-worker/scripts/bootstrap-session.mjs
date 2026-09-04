@@ -6,7 +6,11 @@ import { encryptStorageState } from '../src/session.mjs';
 
 const outputPath = process.env.UNIQUEPLAY_SESSION_PATH || './uniqueplay-session.enc';
 const leagueId = process.env.UNIQUEPLAY_LEAGUE_ID || '57';
-const browser = await chromium.launch({ headless: false });
+const browserChannel = process.env.UNIQUEPLAY_BROWSER_CHANNEL?.trim();
+const browser = await chromium.launch({
+  headless: false,
+  ...(browserChannel ? { channel: browserChannel } : {}),
+});
 const context = await browser.newContext({ locale: 'ko-KR', timezoneId: 'Asia/Seoul' });
 const page = await context.newPage();
 await page.goto(`https://unique-play.com/league/${encodeURIComponent(leagueId)}`);
