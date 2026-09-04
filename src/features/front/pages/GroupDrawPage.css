@@ -27,10 +27,7 @@
   --draw-accent: var(--season-blue-700);
   --draw-success: var(--season-success);
   --draw-danger: var(--season-danger);
-  background:
-    radial-gradient(circle at 4% 12%, rgba(249, 115, 22, 0.08), transparent 26%),
-    radial-gradient(circle at 96% 4%, rgba(168, 85, 247, 0.09), transparent 24%),
-    #061126;
+  background: var(--season-canvas);
 }
 
 .group-draw-page__hero {
@@ -82,7 +79,7 @@
 .group-draw-page a:focus-visible,
 .group-draw-page input:focus-visible,
 .group-draw-page__assign:focus-visible {
-  outline: 3px solid #fbbf24 !important;
+  outline: 3px solid var(--season-focus) !important;
   outline-offset: 3px !important;
 }
 

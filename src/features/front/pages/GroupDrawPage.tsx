@@ -169,7 +169,7 @@ export default function GroupDrawPage() {
   const downloadImage = async (el: HTMLElement | null, filename: string) => {
     if (!el) return;
     const canvas = await html2canvas(el, {
-      backgroundColor: '#0d1117',
+      backgroundColor: document.documentElement.dataset.theme === 'dark' ? '#07142b' : '#f4f7fc',
       scale: 2,
       useCORS: true,
       logging: false,
@@ -240,7 +240,7 @@ export default function GroupDrawPage() {
                 style={{
                   height: '100%', borderRadius: '999px',
                   width: `${totalTeams > 0 ? (assignedCount / totalTeams) * 100 : 0}%`,
-                  background: isComplete ? 'linear-gradient(90deg, #34d399, #10b981)' : 'linear-gradient(90deg, #f97316, #a855f7)',
+                  background: isComplete ? 'var(--draw-success)' : 'var(--season-primary-fill)',
                   transition: 'width 350ms ease',
                 }}
               />
@@ -315,7 +315,7 @@ export default function GroupDrawPage() {
                   color: isActive ? c : isDone ? 'var(--draw-success)' : 'var(--draw-muted)',
                   border: isActive ? `2px solid ${c}65` : isDone ? '1.5px solid rgba(52,211,153,0.3)' : '1.5px solid rgba(148,163,184,0.18)',
                   cursor: 'pointer', transition: 'all 160ms ease',
-                  boxShadow: isActive ? `0 0 18px ${c}22` : 'none',
+                  boxShadow: 'none',
                 }}
               >
                 {SEED_LABELS[seed]}
@@ -405,7 +405,7 @@ export default function GroupDrawPage() {
                       cursor: isAssigned ? 'default' : 'pointer',
                       transition: 'all 160ms ease', width: '100%',
                       filter: isAssigned ? 'grayscale(1) opacity(0.35)' : 'none',
-                      boxShadow: isSelected ? `0 0 22px ${seedColor}28, 0 4px 14px rgba(0,0,0,0.2)` : '0 2px 8px rgba(0,0,0,0.15)',
+                      boxShadow: 'none',
                     }}
                   >
                     {team.rank !== undefined && (
@@ -458,7 +458,7 @@ export default function GroupDrawPage() {
                     style={{
                       width: '100%', padding: '14px', borderRadius: '13px',
                       fontWeight: 900, fontSize: '15px',
-                      background: 'linear-gradient(120deg, rgba(52,211,153,0.2), rgba(16,185,129,0.2))',
+                      background: 'color-mix(in srgb, var(--draw-success) 10%, var(--season-surface))',
                       color: 'var(--draw-success)', border: '1.5px solid rgba(52,211,153,0.4)',
                       cursor: 'pointer',
                     }}
@@ -526,16 +526,14 @@ export default function GroupDrawPage() {
                     onClick={() => handleGroupClick(group)}
                     style={{
                       padding: '16px 18px', borderRadius: '16px',
-                      background: isTarget
-                        ? `radial-gradient(circle at 85% 12%, ${gc}1a, transparent 55%), rgba(255,255,255,0.04)`
-                        : hasThisSeed
-                          ? `radial-gradient(circle at 85% 12%, ${gc}10, transparent 50%), rgba(255,255,255,0.03)`
-                          : 'rgba(255,255,255,0.025)',
+                      background: isTarget || hasThisSeed
+                        ? `color-mix(in srgb, ${gc} 7%, var(--season-surface))`
+                        : 'var(--season-surface)',
                       border: isTarget ? `2px solid ${gc}65` : hasThisSeed ? `1.5px solid ${gc}40` : `1.5px solid ${gc}22`,
                       cursor: isTarget ? 'pointer' : 'default',
                       transition: 'all 200ms ease',
                       minHeight: '140px',
-                      boxShadow: isTarget ? `0 0 22px ${gc}1a` : 'none',
+                      boxShadow: 'none',
                     }}
                   >
                     {/* 조 헤더 */}

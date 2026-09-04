@@ -87,7 +87,17 @@ export default function TopFivePanel({
         >
           <div style={{ fontWeight: 900, color: 'var(--season-blue-700)' }}>{row.rank}</div>
           <div style={{ display: 'grid', gap: '4px' }}>
-            <Link to={row.link} style={{ color: 'var(--season-ink)', fontWeight: 800, textDecoration: 'none' }}>
+            <Link
+              to={row.link}
+              style={{
+                alignItems: 'center',
+                color: 'var(--season-ink)',
+                display: 'inline-flex',
+                fontWeight: 800,
+                minHeight: '44px',
+                textDecoration: 'none',
+              }}
+            >
               {row.name}
             </Link>
             <span style={{ color: 'var(--season-muted)', fontSize: '12px' }}>{row.team}</span>

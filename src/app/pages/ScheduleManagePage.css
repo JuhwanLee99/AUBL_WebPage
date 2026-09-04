@@ -139,7 +139,7 @@
 }
 
 .schedule-manage__choice-group button {
-  min-height: 42px;
+  min-height: 44px;
   padding: 8px 11px;
   border: 0;
   border-right: 1px solid var(--season-line);
