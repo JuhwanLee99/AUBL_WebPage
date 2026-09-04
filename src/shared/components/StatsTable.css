@@ -1,0 +1,171 @@
+.stats-table-card {
+  --stats-card-radius: 4px;
+  --stats-table-radius: 2px;
+  --stats-leading-width: 50px;
+  --stats-heading-background: #0a2457;
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--season-line);
+  border-radius: var(--stats-card-radius);
+  background: var(--season-surface);
+  color: var(--season-ink);
+}
+
+.stats-table-card--pitcher {
+  --stats-leading-width: 60px;
+}
+
+.stats-table-card__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--season-navy-900);
+}
+
+.stats-table-card__title {
+  min-width: 0;
+  color: var(--season-navy-950);
+  font-weight: 900;
+  letter-spacing: -0.025em;
+}
+
+.stats-table-card__subtitle {
+  flex: 0 0 auto;
+  color: var(--season-muted);
+  font-weight: 700;
+}
+
+.stats-table-card__scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--season-line);
+  border-radius: var(--stats-table-radius);
+  scrollbar-color: var(--season-line-strong) transparent;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.stats-table-card__table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: var(--season-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-table-card__table th,
+.stats-table-card__table td {
+  border-bottom: 1px solid var(--season-line);
+  color: var(--season-ink);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.stats-table-card__table th {
+  position: relative;
+  z-index: 2;
+  background: var(--stats-heading-background);
+  color: #ffffff;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+}
+
+.stats-table-card__table tbody tr {
+  --stats-row-background: var(--season-surface);
+}
+
+.stats-table-card__table tbody tr.is-odd {
+  --stats-row-background: var(--season-surface-muted);
+}
+
+.stats-table-card__table tbody td {
+  background: var(--stats-row-background);
+}
+
+.stats-table-card__table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.stats-table-card__leading-cell,
+.stats-table-card__name-cell {
+  position: sticky !important;
+}
+
+.stats-table-card__leading-cell {
+  left: 0;
+  z-index: 3 !important;
+  width: var(--stats-leading-width);
+  min-width: var(--stats-leading-width) !important;
+}
+
+.stats-table-card__name-cell {
+  left: var(--stats-leading-width);
+  z-index: 3 !important;
+  border-right: 1px solid var(--season-line);
+}
+
+.stats-table-card__table thead .stats-table-card__leading-cell,
+.stats-table-card__table thead .stats-table-card__name-cell {
+  z-index: 5 !important;
+  border-right-color: color-mix(in srgb, #ffffff 24%, transparent);
+  background: var(--stats-heading-background);
+}
+
+.stats-table-card__player {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  font-weight: 850;
+}
+
+.stats-table-card__position {
+  margin-left: 4px;
+  color: var(--season-muted);
+  font-weight: 700;
+}
+
+.stats-table-card__badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 20px;
+  padding: 2px 5px;
+  border: 1px solid var(--season-line-strong);
+  border-radius: 2px;
+  background: var(--season-surface-muted);
+  color: var(--season-muted);
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+:root[data-theme='dark'] .stats-table-card {
+  --stats-heading-background: #153a6b;
+}
+
+@media (max-width: 720px) {
+  .stats-table-card {
+    --stats-card-radius: 4px !important;
+  }
+
+  .stats-table-card__header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .stats-table-card__subtitle {
+    white-space: normal;
+  }
+
+  .stats-table-card__table th,
+  .stats-table-card__table td {
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+  }
+}

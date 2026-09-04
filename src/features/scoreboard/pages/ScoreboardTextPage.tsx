@@ -1065,80 +1065,39 @@ function NowPlayingCard({
   }${pitcherToday.so ? ` · ${pitcherToday.so}탈삼진` : ''}`;
 
   return (
-    <div
-      style={{
-        borderRadius: '14px',
-        border: '1px solid rgba(148, 163, 184, 0.2)',
-        background: 'linear-gradient(180deg, rgba(15,23,42,0.9), rgba(15,23,42,0.7))',
-        padding: '12px',
-        display: 'grid',
-        gap: '10px',
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 900, color: '#e2e8f0' }}>현재 타석 · {batter}</span>
-          <span
-            style={{
-              padding: '4px 8px',
-              borderRadius: '999px',
-              background: 'rgba(59,130,246,0.16)',
-              border: '1px solid rgba(59,130,246,0.4)',
-              color: '#bfdbfe',
-              fontWeight: 800,
-              fontSize: '12px',
-            }}
-          >
+    <section className="now-playing-card" aria-label="현재 타석 정보">
+      <header className="now-playing-card__header">
+        <div className="now-playing-card__matchup">
+          <span className="now-playing-card__eyebrow">NOW AT BAT</span>
+          <strong className="now-playing-card__batter">현재 타석 · {batter}</strong>
+          <span className="now-playing-card__count" aria-label={`볼 ${balls}, 스트라이크 ${strikes}`}>
             B {balls} · S {strikes}
           </span>
         </div>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', color: '#cbd5e1', fontSize: '12px', fontWeight: 800 }}>
-          <span>투수 {pitcher}</span>
-        </div>
-      </div>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))',
-          gap: '10px',
-        }}
-      >
-        <div
-          style={{
-            borderRadius: '10px',
-            border: '1px solid rgba(59,130,246,0.35)',
-            background: 'rgba(59,130,246,0.1)',
-            padding: '10px',
-            display: 'grid',
-            gap: '6px',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontWeight: 900, color: '#bfdbfe' }}>타자 기록</span>
-            <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 800 }}>시즌: -</span>
+        <span className="now-playing-card__pitcher">
+          <small>현재 투수</small>
+          <strong>{pitcher}</strong>
+        </span>
+      </header>
+      <div className="now-playing-card__stats">
+        <section className="now-playing-stat" aria-label={`${batter} 타자 기록`}>
+          <div className="now-playing-stat__header">
+            <span className="now-playing-stat__label">타자 기록</span>
+            <span className="now-playing-stat__season">시즌 -</span>
           </div>
-          <span style={{ color: '#e2e8f0', fontWeight: 800 }}>{batterLine}</span>
-          <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>오늘 성적</span>
-        </div>
-        <div
-          style={{
-            borderRadius: '10px',
-            border: '1px solid rgba(52,211,153,0.35)',
-            background: 'rgba(16,185,129,0.1)',
-            padding: '10px',
-            display: 'grid',
-            gap: '6px',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontWeight: 900, color: '#a7f3d0' }}>투수 기록</span>
-            <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 800 }}>시즌: -</span>
+          <strong className="now-playing-stat__value">{batterLine}</strong>
+          <span className="now-playing-stat__meta">오늘 성적</span>
+        </section>
+        <section className="now-playing-stat" aria-label={`${pitcher} 투수 기록`}>
+          <div className="now-playing-stat__header">
+            <span className="now-playing-stat__label">투수 기록</span>
+            <span className="now-playing-stat__season">시즌 -</span>
           </div>
-          <span style={{ color: '#e2e8f0', fontWeight: 800 }}>{pitcherLine}</span>
-          <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '12px' }}>오늘 기록</span>
-        </div>
+          <strong className="now-playing-stat__value">{pitcherLine}</strong>
+          <span className="now-playing-stat__meta">오늘 기록</span>
+        </section>
       </div>
-    </div>
+    </section>
   );
 }
 

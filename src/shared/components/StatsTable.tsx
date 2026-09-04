@@ -1,4 +1,5 @@
 import type { BatterStatLine, PitcherStatLine } from '../types/scoreStats';
+import './StatsTable.css';
 
 type StatsTableDensity = 'compact' | 'regular';
 
@@ -27,7 +28,7 @@ type StyleSet = {
 
 const stylesByDensity: Record<StatsTableDensity, StyleSet> = {
   compact: {
-    containerRadius: '12px',
+    containerRadius: '4px',
     containerPadding: '10px',
     containerGap: '8px',
     titleFontSize: '14px',
@@ -38,11 +39,11 @@ const stylesByDensity: Record<StatsTableDensity, StyleSet> = {
     tableMinWidthPitcher: '620px',
     headerPadding: '6px 5px',
     cellPadding: '6px 5px',
-    tableRadius: '8px',
+    tableRadius: '2px',
     nameWidth: '100px',
   },
   regular: {
-    containerRadius: '14px',
+    containerRadius: '4px',
     containerPadding: '12px',
     containerGap: '10px',
     titleFontSize: '16px',
@@ -53,7 +54,7 @@ const stylesByDensity: Record<StatsTableDensity, StyleSet> = {
     tableMinWidthPitcher: '660px',
     headerPadding: '6px 4px',
     cellPadding: '6px 4px',
-    tableRadius: '10px',
+    tableRadius: '2px',
     nameWidth: '90px',
   },
 };
@@ -124,48 +125,43 @@ export default function StatsTable({ title, stats, variant, density = 'regular' 
 
   return (
     <div
+      className={`stats-table-card stats-table-card--${density} stats-table-card--${variant}`}
       style={{
-        background: '#0b0f1a',
-        border: '1px solid rgba(148, 163, 184, 0.2)',
-        borderRadius: styles.containerRadius,
+        '--stats-card-radius': styles.containerRadius,
         padding: styles.containerPadding,
-        display: 'grid',
         gap: styles.containerGap,
-      }}
+      } as React.CSSProperties}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 900, color: '#e2e8f0', fontSize: styles.titleFontSize }}>{title}</span>
-        <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: styles.subtitleFontSize }}>{styles.subtitleLabel}</span>
+      <div className="stats-table-card__header">
+        <span className="stats-table-card__title" style={{ fontSize: styles.titleFontSize }}>{title}</span>
+        <span className="stats-table-card__subtitle" style={{ fontSize: styles.subtitleFontSize }}>{styles.subtitleLabel}</span>
       </div>
       <div
+        className="stats-table-card__scroll"
         style={{
-          overflowX: 'auto',
-          borderRadius: styles.tableRadius,
-          border: '1px solid rgba(148, 163, 184, 0.15)',
-        }}
+          '--stats-table-radius': styles.tableRadius,
+        } as React.CSSProperties}
       >
         <table
+          className="stats-table-card__table"
           style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            color: '#e2e8f0',
             fontSize: styles.tableFontSize,
             minWidth: isBatter ? styles.tableMinWidthBatter : styles.tableMinWidthPitcher,
           }}
         >
-          <thead style={{ background: 'rgba(255,255,255,0.04)' }}>
+          <thead>
             <tr>
-              {columns.map((col) => (
+              {columns.map((col, columnIndex) => (
                 <th
                   key={col.key}
+                  className={[
+                    columnIndex === 0 ? 'stats-table-card__leading-cell' : '',
+                    col.key === 'name' ? 'stats-table-card__name-cell' : '',
+                  ].filter(Boolean).join(' ')}
                   style={{
                     textAlign: col.key === 'name' ? 'left' : 'center',
                     padding: styles.headerPadding,
-                    borderBottom: '1px solid rgba(148, 163, 184, 0.2)',
                     minWidth: col.width ?? '50px',
-                    fontWeight: 800,
-                    color: '#cbd5e1',
-                    whiteSpace: 'nowrap',
                   }}
                 >
                   {col.label}
@@ -177,46 +173,32 @@ export default function StatsTable({ title, stats, variant, density = 'regular' 
             {rows.map((row, idx) => (
               <tr
                 key={row.name + idx}
-                style={{
-                  background: idx % 2 === 0 ? 'rgba(15, 23, 42, 0.5)' : 'rgba(15, 23, 42, 0.3)',
-                }}
+                className={idx % 2 === 0 ? 'is-even' : 'is-odd'}
               >
-                {columns.map((col) => (
+                {columns.map((col, columnIndex) => (
                   <td
                     key={col.key}
+                    className={[
+                      columnIndex === 0 ? 'stats-table-card__leading-cell' : '',
+                      col.key === 'name' ? 'stats-table-card__name-cell' : '',
+                    ].filter(Boolean).join(' ')}
                     style={{
                       padding: styles.cellPadding,
                       textAlign: col.key === 'name' ? 'left' : 'center',
-                      borderBottom: '1px solid rgba(148, 163, 184, 0.08)',
-                      fontWeight: col.key === 'name' ? 800 : 700,
-                      color: col.key === 'name' ? '#e2e8f0' : '#cbd5e1',
-                      whiteSpace: 'nowrap',
                     }}
                   >
                     {col.key === 'name' ? (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <span className="stats-table-card__player">
                         <span>
                           {row.name}
                           {(row as BatterStatLine | PitcherStatLine).pos ? (
-                            <span style={{ color: '#94a3b8', marginLeft: '4px', fontWeight: 700 }}>
+                            <span className="stats-table-card__position">
                               ({(row as BatterStatLine | PitcherStatLine).pos?.toUpperCase?.()})
                             </span>
                           ) : null}
                         </span>
-                        {/* 선출 뱃지 */}
                         {(row as BatterStatLine | PitcherStatLine).isElite && (
-                          <span
-                            style={{
-                              padding: '2px 6px',
-                              borderRadius: '999px',
-                              border: '1px solid rgba(249, 115, 22, 0.5)',
-                              background: 'rgba(249, 115, 22, 0.15)',
-                              color: '#fb923c',
-                              fontWeight: 900,
-                              fontSize: '10px',
-                              lineHeight: 1.2,
-                            }}
-                          >
+                          <span className="stats-table-card__badge">
                             선출
                           </span>
                         )}
@@ -227,49 +209,26 @@ export default function StatsTable({ title, stats, variant, density = 'regular' 
                           // }
                           if (!status) return null;
 
-                          const badgeStyles = {
+                          const badgeLabels = {
                             out: {
-                              border: '1px solid rgba(239,68,68,0.4)',
-                              background: 'rgba(239,68,68,0.12)',
-                              color: '#ef4444',
                               text: 'out',
                             },
                             대수비: {
-                              border: '1px solid rgba(59,130,246,0.4)',
-                              background: 'rgba(59,130,246,0.12)',
-                              color: '#3b82f6',
                               text: '대수비',
                             },
                             대타: {
-                              border: '1px solid rgba(34,197,94,0.4)',
-                              background: 'rgba(34,197,94,0.12)',
-                              color: '#22c55e',
                               text: '대타',
                             },
                             대주자: {
-                              border: '1px solid rgba(251,146,60,0.4)',
-                              background: 'rgba(251,146,60,0.12)',
-                              color: '#fb923c',
                               text: '대주자',
                             },
                           };
 
-                          const badge = badgeStyles[status];
+                          const badge = badgeLabels[status];
                           if (!badge) return null;
 
                           return (
-                            <span
-                              style={{
-                                padding: '2px 6px',
-                                borderRadius: '999px',
-                                border: badge.border,
-                                background: badge.background,
-                                color: badge.color,
-                                fontWeight: 900,
-                                fontSize: '10px',
-                                lineHeight: 1.2,
-                              }}
-                            >
+                            <span className="stats-table-card__badge">
                               {badge.text}
                             </span>
                           );

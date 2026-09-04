@@ -566,6 +566,161 @@
   background: var(--season-surface-muted);
 }
 
+.now-playing-card {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--season-line);
+  border-top: 4px solid var(--season-navy-900);
+  border-radius: 4px;
+  background: var(--season-surface);
+  color: var(--season-ink);
+}
+
+.now-playing-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--season-line);
+}
+
+.now-playing-card__matchup {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.now-playing-card__eyebrow {
+  flex: 0 0 100%;
+  color: var(--season-blue-700);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 10px;
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+}
+
+.now-playing-card__batter {
+  min-width: 0;
+  color: var(--season-navy-950);
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
+}
+
+.now-playing-card__count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 3px 8px;
+  border: 1px solid var(--season-line-strong);
+  border-radius: 2px;
+  background: var(--season-surface-muted);
+  color: var(--season-navy-800);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+
+.now-playing-card__pitcher {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 1px;
+  padding-left: 16px;
+  border-left: 1px solid var(--season-line);
+  text-align: right;
+}
+
+.now-playing-card__pitcher small {
+  color: var(--season-muted);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.now-playing-card__pitcher strong {
+  color: var(--season-ink);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.now-playing-card__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.now-playing-stat {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+  padding: 14px 16px;
+  background: var(--season-surface);
+}
+
+.now-playing-stat + .now-playing-stat {
+  border-left: 1px solid var(--season-line);
+}
+
+.now-playing-stat__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.now-playing-stat__label {
+  color: var(--season-blue-700);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.now-playing-stat__season,
+.now-playing-stat__meta {
+  color: var(--season-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.now-playing-stat__value {
+  color: var(--season-ink);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .now-playing-card__header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .now-playing-card__pitcher {
+    width: 100%;
+    padding-top: 8px;
+    padding-left: 0;
+    border-top: 1px solid var(--season-line);
+    border-left: 0;
+    text-align: left;
+  }
+
+  .now-playing-card__stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .now-playing-stat + .now-playing-stat {
+    border-top: 1px solid var(--season-line);
+    border-left: 0;
+  }
+}
+
 :root[data-preview-mode='mobile'] .scoreboard-section > div:last-child {
   height: auto !important;
 }
