@@ -1,5 +1,5 @@
 import type * as React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../shared/auth/AuthProvider';
 import {
@@ -8,6 +8,7 @@ import {
   sendLoginSuccessToFlutter,
 } from '../../shared/bridge/flutterBridge';
 import { auth } from '../../shared/firebase/client';
+import './LoginPage.css';
 
 type LocationState = {
   from?: string;
@@ -51,6 +52,8 @@ export default function LoginPage() {
   // true: 이미 Firebase 로그인 완료 후 동의 대기 (신규 유저), false: 로그인 전 동의 (Flutter 네이티브)
   const [socialConsentPostSignIn, setSocialConsentPostSignIn] = useState(false);
   const [socialConsentTab, setSocialConsentTab] = useState<'terms' | 'privacy'>('terms');
+  const socialConsentDialogRef = useRef<HTMLDivElement>(null);
+  const socialConsentReturnFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!embedded || !user) return;
@@ -111,10 +114,14 @@ export default function LoginPage() {
   const socialProviderLabel = socialConsentProvider === 'google' ? 'Google' : 'Apple';
 
   const openSocialConsent = (provider: SocialProvider, postSignIn: boolean) => {
+    socialConsentReturnFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
     setSocialConsentProvider(provider);
     setSocialAgreedTerms(false);
     setSocialAgreedPrivacy(false);
     setSocialConsentPostSignIn(postSignIn);
+    setSocialConsentTab('terms');
     setMessage(null);
     setShowSocialConsent(true);
   };
@@ -174,7 +181,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleSocialConsentDecline = async () => {
+  const handleSocialConsentDecline = useCallback(async () => {
     setShowSocialConsent(false);
     // 이미 로그인된 신규 유저가 동의 거부 → 계정 삭제
     if (socialConsentPostSignIn && auth.currentUser) {
@@ -184,7 +191,7 @@ export default function LoginPage() {
         // ignore
       }
     }
-  };
+  }, [socialConsentPostSignIn]);
 
   const handleSocialConsent = async () => {
     if (!socialAgreedTerms || !socialAgreedPrivacy) {
@@ -235,6 +242,55 @@ export default function LoginPage() {
       setSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    if (!showSocialConsent) return;
+    const dialog = socialConsentDialogRef.current;
+    if (!dialog) return;
+
+    const focusableSelector = [
+      'button:not(:disabled):not([tabindex="-1"])',
+      'a[href]',
+      'input:not(:disabled)',
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(',');
+    const focusFirstControl = window.requestAnimationFrame(() => {
+      dialog.querySelector<HTMLElement>(focusableSelector)?.focus();
+    });
+
+    const handleDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        void handleSocialConsentDecline();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const controls = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector))
+        .filter((element) => !element.hasAttribute('disabled') && element.tabIndex >= 0);
+      if (controls.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleDialogKeyDown);
+    const returnFocusTarget = socialConsentReturnFocusRef.current;
+    return () => {
+      window.cancelAnimationFrame(focusFirstControl);
+      document.removeEventListener('keydown', handleDialogKeyDown);
+      if (returnFocusTarget?.isConnected) returnFocusTarget.focus();
+    };
+  }, [handleSocialConsentDecline, showSocialConsent]);
 
   return (
     <div className="auth-shell">
@@ -317,27 +373,25 @@ export default function LoginPage() {
             </label>
           )}
           {mode === 'register' && (
-            <div style={{ display: 'grid', gap: '8px', marginTop: '4px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: '#cbd5e1' }}>
+            <div className="auth-consent-list">
+              <label className="auth-consent-check">
                 <input
                   type="checkbox"
                   checked={agreedTerms}
                   onChange={(e) => setAgreedTerms(e.target.checked)}
-                  style={{ accentColor: '#f97316', width: '16px', height: '16px', cursor: 'pointer' }}
                 />
                 <span>
-                  <Link to="/terms" target="_blank" className="auth-link" style={{ fontWeight: 700 }}>이용약관</Link>에 동의합니다 <span style={{ color: '#f97316' }}>*</span>
+                  <Link to="/terms" target="_blank" className="auth-link">이용약관</Link>에 동의합니다 <span className="auth-required">*</span>
                 </span>
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: '#cbd5e1' }}>
+              <label className="auth-consent-check">
                 <input
                   type="checkbox"
                   checked={agreedPrivacy}
                   onChange={(e) => setAgreedPrivacy(e.target.checked)}
-                  style={{ accentColor: '#f97316', width: '16px', height: '16px', cursor: 'pointer' }}
                 />
                 <span>
-                  <Link to="/privacy" target="_blank" className="auth-link" style={{ fontWeight: 700 }}>개인정보 처리방침</Link>에 동의합니다 <span style={{ color: '#f97316' }}>*</span>
+                  <Link to="/privacy" target="_blank" className="auth-link">개인정보 처리방침</Link>에 동의합니다 <span className="auth-required">*</span>
                 </span>
               </label>
             </div>
@@ -349,7 +403,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          <button type="submit" className="auth-submit" disabled={submitting} style={{ marginTop: '6px' }}>
+          <button type="submit" className="auth-submit" disabled={submitting}>
             {submitting ? '처리 중...' : mode === 'login' ? '로그인' : '가입하기'}
           </button>
         </form>
@@ -364,7 +418,7 @@ export default function LoginPage() {
               <span>G</span>
               Google 계정으로 계속하기
             </button>
-            <button type="button" className="auth-apple" onClick={handleAppleClick} disabled={submitting} style={{ marginTop: '8px' }}>
+            <button type="button" className="auth-apple" onClick={handleAppleClick} disabled={submitting}>
               <span className="auth-apple__icon">
                 <AppleLogoIcon />
               </span>
@@ -375,49 +429,50 @@ export default function LoginPage() {
 
         {showSocialConsent && (
           <div
-            style={{
-              position: 'fixed', inset: 0, zIndex: 9999,
-              background: 'rgba(0,0,0,0.7)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              padding: '16px',
-            }}
+            className="auth-consent-modal"
             onClick={handleSocialConsentDecline}
           >
             <div
-              style={{
-                background: '#1e293b', borderRadius: '16px', padding: '28px',
-                maxWidth: '640px', width: '100%', boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
-                display: 'flex', flexDirection: 'column', gap: '20px',
-                maxHeight: '90vh', overflow: 'hidden',
-              }}
+              ref={socialConsentDialogRef}
+              className="auth-consent-modal__dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="social-consent-title"
               onClick={(e) => e.stopPropagation()}
             >
               {/* 헤더 */}
-              <div>
-                <h2 style={{ margin: '0 0 6px', fontSize: '18px', fontWeight: 700, color: '#f1f5f9' }}>
+              <div className="auth-consent-modal__heading">
+                <h2 id="social-consent-title">
                   {socialProviderLabel} 계정으로 계속하기
                 </h2>
-                <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
+                <p>
                   AUBL 서비스 이용을 위해 아래 약관을 확인하고 동의해 주세요.
                 </p>
               </div>
 
               {/* 탭 + 미리보기 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0', border: '1px solid #334155', borderRadius: '10px', overflow: 'hidden' }}>
+              <div className="auth-consent-document">
                 {/* 탭 헤더 */}
-                <div style={{ display: 'flex', borderBottom: '1px solid #334155' }}>
+                <div className="auth-consent-document__tabs" role="tablist" aria-label="동의 문서 선택">
                   {(['terms', 'privacy'] as const).map((tab) => (
                     <button
                       key={tab}
+                      id={`social-consent-tab-${tab}`}
                       type="button"
+                      role="tab"
+                      aria-selected={socialConsentTab === tab}
+                      aria-controls="social-consent-panel"
+                      tabIndex={socialConsentTab === tab ? 0 : -1}
+                      className={socialConsentTab === tab ? 'is-active' : ''}
                       onClick={() => setSocialConsentTab(tab)}
-                      style={{
-                        flex: 1, padding: '10px 0', border: 'none', cursor: 'pointer',
-                        fontSize: '13px', fontWeight: 600,
-                        background: socialConsentTab === tab ? '#0f172a' : '#1e293b',
-                        color: socialConsentTab === tab ? '#f97316' : '#64748b',
-                        borderBottom: socialConsentTab === tab ? '2px solid #f97316' : '2px solid transparent',
-                        transition: 'color 0.15s',
+                      onKeyDown={(event) => {
+                        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                        event.preventDefault();
+                        const nextTab = event.key === 'ArrowLeft' || event.key === 'Home' ? 'terms' : 'privacy';
+                        setSocialConsentTab(nextTab);
+                        window.requestAnimationFrame(() => {
+                          document.getElementById(`social-consent-tab-${nextTab}`)?.focus();
+                        });
                       }}
                     >
                       {tab === 'terms' ? '이용약관' : '개인정보 처리방침'}
@@ -426,7 +481,13 @@ export default function LoginPage() {
                 </div>
 
                 {/* 미리보기 스크롤 영역 */}
-                <div style={{ height: '260px', overflowY: 'auto', padding: '16px', background: '#0f172a', display: 'grid', gap: '14px' }}>
+                <div
+                  id="social-consent-panel"
+                  className="auth-consent-document__body"
+                  role="tabpanel"
+                  aria-labelledby={`social-consent-tab-${socialConsentTab}`}
+                  tabIndex={0}
+                >
                   {socialConsentTab === 'terms' ? (
                     <>
                       {[
@@ -442,10 +503,10 @@ export default function LoginPage() {
                         { title: '부칙', items: ['본 약관은 2026년 7월 11일부터 시행합니다.'] },
                       ].map((section) => (
                         <div key={section.title}>
-                          <p style={{ margin: '0 0 5px', fontSize: '12px', fontWeight: 700, color: '#e2e8f0' }}>{section.title}</p>
-                          <ul style={{ margin: 0, paddingLeft: '16px', display: 'grid', gap: '3px' }}>
+                          <p>{section.title}</p>
+                          <ul>
                             {section.items.map((item, i) => (
-                              <li key={i} style={{ fontSize: '12px', color: '#64748b', lineHeight: 1.6 }}>{item}</li>
+                              <li key={i}>{item}</li>
                             ))}
                           </ul>
                         </div>
@@ -466,10 +527,10 @@ export default function LoginPage() {
                         { title: '10. 개인정보 처리방침의 변경', items: ['시행일: 2026년 7월 11일'] },
                       ].map((section) => (
                         <div key={section.title}>
-                          <p style={{ margin: '0 0 5px', fontSize: '12px', fontWeight: 700, color: '#e2e8f0' }}>{section.title}</p>
-                          <ul style={{ margin: 0, paddingLeft: '16px', display: 'grid', gap: '3px' }}>
+                          <p>{section.title}</p>
+                          <ul>
                             {section.items.map((item, i) => (
-                              <li key={i} style={{ fontSize: '12px', color: '#64748b', lineHeight: 1.6 }}>{item}</li>
+                              <li key={i}>{item}</li>
                             ))}
                           </ul>
                         </div>
@@ -480,27 +541,25 @@ export default function LoginPage() {
               </div>
 
               {/* 동의 체크박스 */}
-              <div style={{ display: 'grid', gap: '10px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: '#cbd5e1' }}>
+              <div className="auth-consent-list">
+                <label className="auth-consent-check">
                   <input
                     type="checkbox"
                     checked={socialAgreedTerms}
                     onChange={(e) => setSocialAgreedTerms(e.target.checked)}
-                    style={{ accentColor: '#f97316', width: '16px', height: '16px', cursor: 'pointer', flexShrink: 0 }}
                   />
                   <span>
-                    <Link to="/terms" target="_blank" className="auth-link" style={{ fontWeight: 700 }}>이용약관</Link>에 동의합니다 <span style={{ color: '#f97316' }}>*</span>
+                    <Link to="/terms" target="_blank" className="auth-link">이용약관</Link>에 동의합니다 <span className="auth-required">*</span>
                   </span>
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: '#cbd5e1' }}>
+                <label className="auth-consent-check">
                   <input
                     type="checkbox"
                     checked={socialAgreedPrivacy}
                     onChange={(e) => setSocialAgreedPrivacy(e.target.checked)}
-                    style={{ accentColor: '#f97316', width: '16px', height: '16px', cursor: 'pointer', flexShrink: 0 }}
                   />
                   <span>
-                    <Link to="/privacy" target="_blank" className="auth-link" style={{ fontWeight: 700 }}>개인정보 처리방침</Link>에 동의합니다 <span style={{ color: '#f97316' }}>*</span>
+                    <Link to="/privacy" target="_blank" className="auth-link">개인정보 처리방침</Link>에 동의합니다 <span className="auth-required">*</span>
                   </span>
                 </label>
               </div>
@@ -509,28 +568,19 @@ export default function LoginPage() {
               {message && <div className="auth-alert">{message}</div>}
 
               {/* 버튼 */}
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div className="auth-consent-modal__actions">
                 <button
                   type="button"
+                  className="auth-consent-modal__cancel"
                   onClick={handleSocialConsentDecline}
-                  style={{
-                    flex: 1, padding: '11px', borderRadius: '8px', border: '1px solid #334155',
-                    background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: '14px',
-                  }}
                 >
                   취소
                 </button>
                 <button
                   type="button"
+                  className="auth-consent-modal__confirm"
                   onClick={handleSocialConsent}
                   disabled={!socialAgreedTerms || !socialAgreedPrivacy}
-                  style={{
-                    flex: 2, padding: '11px', borderRadius: '8px', border: 'none',
-                    background: (!socialAgreedTerms || !socialAgreedPrivacy) ? '#334155' : '#f97316',
-                    color: (!socialAgreedTerms || !socialAgreedPrivacy) ? '#64748b' : '#fff',
-                    cursor: (!socialAgreedTerms || !socialAgreedPrivacy) ? 'not-allowed' : 'pointer',
-                    fontSize: '14px', fontWeight: 600,
-                  }}
                 >
                   동의 후 계속하기
                 </button>
@@ -545,14 +595,11 @@ export default function LoginPage() {
             권한 안내 보기
           </Link>
         </p>
-        <div
-          className="auth-footer"
-          style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', textAlign: 'center', fontSize: '12px' }}
-        >
-          <Link to="/terms" className="auth-link" style={{ fontWeight: 800, fontSize: '12px' }}>
+        <div className="auth-footer auth-footer--legal">
+          <Link to="/terms" className="auth-link">
             이용약관
           </Link>
-          <Link to="/privacy" className="auth-link" style={{ fontWeight: 800, fontSize: '12px' }}>
+          <Link to="/privacy" className="auth-link">
             개인정보 처리방침
           </Link>
         </div>
@@ -562,21 +609,21 @@ export default function LoginPage() {
       <div className="auth-tips-bottom">
         <div className="auth-tips">
           <div>
-            <span>🎟️</span>
+            <span>01</span>
             <div>
               <strong>회원 전용</strong>
               <p>즐겨찾기 경기, 문자중계 구독 등 개인화 기능을 사용하려면 로그인하세요.</p>
             </div>
           </div>
           <div>
-            <span>🔐</span>
+            <span>02</span>
             <div>
               <strong>안전한 인증</strong>
               <p>비밀번호는 안전하게 암호화 저장되며, 모든 통신은 HTTPS로 보호됩니다.</p>
             </div>
           </div>
           <div>
-            <span>✅</span>
+            <span>03</span>
             <div>
               <strong>알림 설정</strong>
               <p>로그인하면 즐겨찾는 팀의 경기 시작/득점 알림을 바로 받아볼 수 있습니다.</p>
