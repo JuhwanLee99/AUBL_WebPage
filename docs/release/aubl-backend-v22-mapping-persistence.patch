@@ -1,0 +1,64 @@
+diff --git a/src/main/java/com/aubl/webpage/service/UniquePlaySyncService.java b/src/main/java/com/aubl/webpage/service/UniquePlaySyncService.java
+--- a/src/main/java/com/aubl/webpage/service/UniquePlaySyncService.java
++++ b/src/main/java/com/aubl/webpage/service/UniquePlaySyncService.java
+@@
+         item.setResolution(resolution);
+         item.setNote(limit(request.note(), 500));
+         itemRepository.save(item);
+-        if ("TEAM".equals(item.getEntityType()) && "MAP_ENTITY".equals(resolution)) {
+-            refreshLegacyGameMappingConflicts(run);
++        if ("MAP_ENTITY".equals(resolution)) {
++            persistEntityMapping(item, normalizeActor(actor));
++            if ("TEAM".equals(item.getEntityType())) {
++                refreshLegacyGameMappingConflicts(run);
++            }
+         }
+@@
+             if (Set.of("TEAM", "GAME").contains(item.getEntityType())
+                 && "MAP_ENTITY".equals(item.getResolution()) && item.getLocalEntityId() != null) {
+-                ExternalEntityMapping mapping = mappingRepository.findByProviderAndEntityTypeAndExternalKey(PROVIDER, item.getEntityType(), item.getSourceKey())
+-                    .orElseGet(ExternalEntityMapping::new);
+-                mapping.setProvider(PROVIDER);
+-                mapping.setEntityType(item.getEntityType());
+-                mapping.setExternalKey(item.getSourceKey());
+-                mapping.setLocalEntityId(item.getLocalEntityId());
+-                mapping.setCreatedBy(actor);
+-                mappingRepository.save(mapping);
++                persistEntityMapping(item, actor);
+                 continue;
+@@
+         }
+     }
++
++    private void persistEntityMapping(UniquePlaySyncItem item, String actor) {
++        ExternalEntityMapping mapping = mappingRepository
++            .findByProviderAndEntityTypeAndExternalKey(PROVIDER, item.getEntityType(), item.getSourceKey())
++            .orElseGet(ExternalEntityMapping::new);
++        mapping.setProvider(PROVIDER);
++        mapping.setEntityType(item.getEntityType());
++        mapping.setExternalKey(item.getSourceKey());
++        mapping.setLocalEntityId(item.getLocalEntityId());
++        mapping.setCreatedBy(actor);
++        mappingRepository.save(mapping);
++    }
+
+diff --git a/src/test/java/com/aubl/webpage/service/UniquePlaySyncGameMappingTest.java b/src/test/java/com/aubl/webpage/service/UniquePlaySyncGameMappingTest.java
+--- a/src/test/java/com/aubl/webpage/service/UniquePlaySyncGameMappingTest.java
++++ b/src/test/java/com/aubl/webpage/service/UniquePlaySyncGameMappingTest.java
+@@
+ import static org.mockito.Mockito.mock;
++import static org.mockito.Mockito.times;
+ import static org.mockito.Mockito.verify;
+@@
+         assertEquals(0, run.getBlockingErrorCount());
+         assertFalse(savedItems.stream().anyMatch(item -> item.isBlocking() && item.getResolution() == null));
++        ArgumentCaptor<ExternalEntityMapping> immediateMapping = ArgumentCaptor.forClass(ExternalEntityMapping.class);
++        verify(mappingRepository).save(immediateMapping.capture());
++        assertEquals("GAME", immediateMapping.getValue().getEntityType());
++        assertEquals("up-game-1", immediateMapping.getValue().getExternalKey());
++        assertEquals(81L, immediateMapping.getValue().getLocalEntityId());
+@@
+         ReflectionTestUtils.invokeMethod(service, "persistMappings", run, "admin@example.com");
+         ArgumentCaptor<ExternalEntityMapping> mapping = ArgumentCaptor.forClass(ExternalEntityMapping.class);
+-        verify(mappingRepository).save(mapping.capture());
++        verify(mappingRepository, times(2)).save(mapping.capture());
