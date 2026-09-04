@@ -2057,8 +2057,8 @@ async function fetchUniquePlaySyncApi(path: string, init?: RequestInit): Promise
   if (!response.ok) {
     const row = asSyncRecord(payload);
     const errorRow = asSyncRecord(row?.error) ?? row;
-    const code = errorRow ? readSyncString(errorRow, 'code', 'errorCode', 'status') : null;
-    const detail = errorRow ? readSyncString(errorRow, 'message', 'detail', 'error') : typeof payload === 'string' ? payload : null;
+    const code = errorRow ? readSyncString(errorRow, 'code', 'errorCode') : null;
+    const detail = errorRow ? readSyncString(errorRow, 'detail', 'message', 'error') : typeof payload === 'string' ? payload : null;
     const reauthRequired = code?.toUpperCase().includes('REAUTH') === true
       || code?.toUpperCase().includes('SESSION_EXPIRED') === true
       || detail?.toUpperCase().includes('REAUTH_REQUIRED') === true;

@@ -1,0 +1,126 @@
+diff --git a/src/main/java/com/aubl/webpage/service/UniquePlaySyncService.java b/src/main/java/com/aubl/webpage/service/UniquePlaySyncService.java
+--- a/src/main/java/com/aubl/webpage/service/UniquePlaySyncService.java
++++ b/src/main/java/com/aubl/webpage/service/UniquePlaySyncService.java
+@@ -379,4 +379,5 @@
+         if (!Objects.equals(run.getBaseRevision(), request.expectedPublishedRevision()) || !Objects.equals(currentRevision, request.expectedPublishedRevision())) {
+             throw new ResponseStatusException(HttpStatus.CONFLICT, "Published revision changed after preview");
+         }
++        ensureSeasonForSync(run.getSeasonYear());
+         persistMappings(run, normalizeActor(actor));
+@@ -451,8 +452,7 @@
+         int seasonYear = revisionRepository.findSeasonYearById(revisionId)
+             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sync revision not found"));
+         attempt.seasonYear = seasonYear;
+-        Season season = seasonRepository.findByYear(seasonYear)
+-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Season must exist before revision activation"));
++        Season season = ensureSeasonForSync(seasonYear);
+         seasonRepository.findByIdForUpdate(season.getId())
+             .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Season lock could not be acquired"));
+         UniquePlaySyncRevision revision = revisionRepository.findByIdForUpdate(revisionId)
+@@ -1269,4 +1269,12 @@
+     private UniquePlaySyncRun requireRun(String runId) {
+         return runRepository.findById(runId)
+             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "UniquePlay sync run not found"));
++    }
++
++    private Season ensureSeasonForSync(int seasonYear) {
++        return seasonRepository.findByYear(seasonYear).orElseGet(() -> {
++            Season season = new Season();
++            season.setYear(seasonYear);
++            return seasonRepository.saveAndFlush(season);
++        });
+     }
+
+diff --git a/src/main/java/com/aubl/webpage/api/UniquePlaySyncProblemDetails.java b/src/main/java/com/aubl/webpage/api/UniquePlaySyncProblemDetails.java
+--- /dev/null
++++ b/src/main/java/com/aubl/webpage/api/UniquePlaySyncProblemDetails.java
+@@ -0,0 +1,23 @@
++package com.aubl.webpage.api;
++
++import org.springframework.http.ProblemDetail;
++import org.springframework.http.ResponseEntity;
++import org.springframework.web.bind.annotation.ExceptionHandler;
++import org.springframework.web.bind.annotation.RestControllerAdvice;
++import org.springframework.web.server.ResponseStatusException;
++
++@RestControllerAdvice(assignableTypes = {
++    UniquePlaySyncController.class,
++    QualificationFinalizeController.class
++})
++public class UniquePlaySyncProblemDetails {
++
++    @ExceptionHandler(ResponseStatusException.class)
++    public ResponseEntity<ProblemDetail> handleResponseStatus(ResponseStatusException exception) {
++        String detail = exception.getReason() == null || exception.getReason().isBlank()
++            ? exception.getStatusCode().toString()
++            : exception.getReason();
++        ProblemDetail problem = ProblemDetail.forStatusAndDetail(exception.getStatusCode(), detail);
++        return ResponseEntity.status(exception.getStatusCode()).body(problem);
++    }
++}
+
+diff --git a/src/test/java/com/aubl/webpage/service/UniquePlaySyncRevisionFreshnessTest.java b/src/test/java/com/aubl/webpage/service/UniquePlaySyncRevisionFreshnessTest.java
+--- a/src/test/java/com/aubl/webpage/service/UniquePlaySyncRevisionFreshnessTest.java
++++ b/src/test/java/com/aubl/webpage/service/UniquePlaySyncRevisionFreshnessTest.java
+@@ -188,3 +188,32 @@
++    @Test
++    void publishCreatesMissingSeasonBeforeFirstActivation() {
++        AtomicReference<Season> storedSeason = new AtomicReference<>();
++        when(seasonRepository.findByYear(2026)).thenAnswer(invocation -> Optional.ofNullable(storedSeason.get()));
++        when(seasonRepository.saveAndFlush(any(Season.class))).thenAnswer(invocation -> {
++            Season created = invocation.getArgument(0);
++            created.setId(10L);
++            storedSeason.set(created);
++            return created;
++        });
++        when(seasonRepository.findByIdForUpdate(10L)).thenAnswer(invocation -> Optional.ofNullable(storedSeason.get()));
++
++        PublishResponse publication = service.publish(
++            run.getId(),
++            new PublishRequest(run.getChecksum(), UniquePlaySyncService.NO_REVISION),
++            "admin@example.com"
++        );
++        ActivationResponse activation = service.activate(
++            publication.revisionId(),
++            new ActivateRequest(UniquePlaySyncService.NO_REVISION),
++            "admin@example.com"
++        );
++
++        assertNotNull(storedSeason.get());
++        assertEquals(2026, storedSeason.get().getYear());
++        assertEquals(publication.revisionId(), activation.activeRevision());
++        verify(seasonRepository, times(1)).saveAndFlush(any(Season.class));
++    }
++
+     private String sha256(String value) throws Exception {
+         byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+         return HexFormat.of().formatHex(digest);
+
+diff --git a/src/test/java/com/aubl/webpage/api/UniquePlaySyncProblemDetailsTest.java b/src/test/java/com/aubl/webpage/api/UniquePlaySyncProblemDetailsTest.java
+--- /dev/null
++++ b/src/test/java/com/aubl/webpage/api/UniquePlaySyncProblemDetailsTest.java
+@@ -0,0 +1,24 @@
++package com.aubl.webpage.api;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++
++import org.junit.jupiter.api.Test;
++import org.springframework.http.HttpStatus;
++import org.springframework.http.ProblemDetail;
++import org.springframework.http.ResponseEntity;
++import org.springframework.web.server.ResponseStatusException;
++
++class UniquePlaySyncProblemDetailsTest {
++
++    @Test
++    void exposesSafeConflictReasonToTheAdminClient() {
++        UniquePlaySyncProblemDetails handler = new UniquePlaySyncProblemDetails();
++
++        ResponseEntity<ProblemDetail> response = handler.handleResponseStatus(
++            new ResponseStatusException(HttpStatus.CONFLICT, "Active revision changed before activation")
++        );
++
++        assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
++        assertEquals("Active revision changed before activation", response.getBody().getDetail());
++    }
++}
