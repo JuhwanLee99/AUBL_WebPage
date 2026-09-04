@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import '../../theme/app_theme.dart';
 
 const String aublTableEmbedType = 'aublTable';
 
@@ -22,14 +23,8 @@ class AublTableData {
   final int cols;
   final List<List<String>> cells;
 
-  factory AublTableData.initial({
-    int rows = 3,
-    int cols = 3,
-  }) {
-    return AublTableData.fromDynamic({
-      'rows': rows,
-      'cols': cols,
-    });
+  factory AublTableData.initial({int rows = 3, int cols = 3}) {
+    return AublTableData.fromDynamic({'rows': rows, 'cols': cols});
   }
 
   factory AublTableData.fromDynamic(dynamic raw) {
@@ -63,19 +58,11 @@ class AublTableData {
       });
     });
 
-    return AublTableData(
-      rows: rows,
-      cols: cols,
-      cells: nextCells,
-    );
+    return AublTableData(rows: rows, cols: cols, cells: nextCells);
   }
 
   Map<String, dynamic> toMap() {
-    return {
-      'rows': rows,
-      'cols': cols,
-      'cells': cells,
-    };
+    return {'rows': rows, 'cols': cols, 'cells': cells};
   }
 
   AublTableData resize(int nextRows, int nextCols) {
@@ -96,8 +83,9 @@ class AublTableData {
     if (rowIdx < 0 || rowIdx >= rows || colIdx < 0 || colIdx >= cols) {
       return this;
     }
-    final nextCells =
-        cells.map((row) => List<String>.from(row)).toList(growable: false);
+    final nextCells = cells
+        .map((row) => List<String>.from(row))
+        .toList(growable: false);
     nextCells[rowIdx][colIdx] = value;
     return AublTableData(rows: rows, cols: cols, cells: nextCells);
   }
@@ -108,15 +96,14 @@ Embeddable buildAublTableEmbeddable(AublTableData tableData) {
 }
 
 class AublTableEmbedBuilder extends EmbedBuilder {
-  const AublTableEmbedBuilder({
-    this.onEditRequested,
-  });
+  const AublTableEmbedBuilder({this.onEditRequested});
 
   final Future<void> Function(
     BuildContext context,
     EmbedContext embedContext,
     AublTableData tableData,
-  )? onEditRequested;
+  )?
+  onEditRequested;
 
   @override
   String get key => aublTableEmbedType;
@@ -133,15 +120,12 @@ class AublTableEmbedBuilder extends EmbedBuilder {
     final editable = !embedContext.readOnly && onEditRequested != null;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
+      child: _AublTableCard(
+        tableData: tableData,
+        editable: editable,
         onTap: editable
             ? () => onEditRequested!(context, embedContext, tableData)
             : null,
-        child: _AublTableCard(
-          tableData: tableData,
-          editable: editable,
-        ),
       ),
     );
   }
@@ -159,21 +143,36 @@ Future<AublTableData?> showAublTableEditorDialog({
     builder: (dialogContext) {
       return StatefulBuilder(
         builder: (dialogContext, setState) {
+          final colors = dialogContext.aublColors;
+
           void resize(int rows, int cols) {
             setState(() {
               draft = draft.resize(rows, cols);
             });
           }
 
-          final maxDialogHeight =
-              math.min(MediaQuery.of(dialogContext).size.height * 0.52, 360.0);
+          final maxDialogHeight = math.min(
+            MediaQuery.of(dialogContext).size.height * 0.52,
+            360.0,
+          );
 
           return AlertDialog(
-            backgroundColor: const Color(0xFF1e293b),
-            title: Text(title, style: const TextStyle(color: Colors.white)),
+            backgroundColor: colors.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(4),
+            ),
+            title: Text(
+              title,
+              style: TextStyle(
+                color: colors.navyStrong,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
             content: SizedBox(
-              width:
-                  math.min(MediaQuery.of(dialogContext).size.width * 0.92, 820),
+              width: math.min(
+                MediaQuery.of(dialogContext).size.width * 0.92,
+                820,
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -203,38 +202,42 @@ Future<AublTableData?> showAublTableEditorDialog({
                   const SizedBox(height: 8),
                   Text(
                     '${draft.rows}행 x ${draft.cols}열',
-                    style:
-                        const TextStyle(color: Color(0xFF94a3b8), fontSize: 12),
+                    style: TextStyle(color: colors.muted, fontSize: 12),
                   ),
                   const SizedBox(height: 10),
                   Container(
                     constraints: BoxConstraints(maxHeight: maxDialogHeight),
                     decoration: BoxDecoration(
-                      border: Border.all(color: const Color(0xFF475569)),
-                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: colors.line),
+                      borderRadius: BorderRadius.circular(4),
                     ),
+                    clipBehavior: Clip.antiAlias,
                     child: SingleChildScrollView(
                       child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Table(
-                          border:
-                              TableBorder.all(color: const Color(0xFF475569)),
+                          border: TableBorder.all(color: colors.line),
                           defaultColumnWidth: const FixedColumnWidth(140),
-                          children:
-                              List<TableRow>.generate(draft.rows, (rowIdx) {
+                          children: List<TableRow>.generate(draft.rows, (
+                            rowIdx,
+                          ) {
                             return TableRow(
-                              children:
-                                  List<Widget>.generate(draft.cols, (colIdx) {
+                              children: List<Widget>.generate(draft.cols, (
+                                colIdx,
+                              ) {
                                 final isHeader = rowIdx == 0;
                                 return Container(
                                   color: isHeader
-                                      ? const Color(0xFF0f172a)
-                                      : const Color(0xFF111827),
+                                      ? colors.surfaceMuted
+                                      : colors.surface,
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 3),
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
                                   child: TextFormField(
                                     key: ValueKey(
-                                        'table-$rowIdx-$colIdx-${draft.cells[rowIdx][colIdx]}'),
+                                      'table-$rowIdx-$colIdx-${draft.cells[rowIdx][colIdx]}',
+                                    ),
                                     initialValue: draft.cells[rowIdx][colIdx],
                                     onChanged: (value) {
                                       draft = draft.updateCell(
@@ -243,18 +246,26 @@ Future<AublTableData?> showAublTableEditorDialog({
                                         value,
                                       );
                                     },
-                                    style: const TextStyle(
-                                      color: Color(0xFFe2e8f0),
+                                    style: TextStyle(
+                                      color: isHeader
+                                          ? colors.navyStrong
+                                          : colors.ink,
                                       fontSize: 13,
+                                      fontWeight: isHeader
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
                                     ),
                                     decoration: InputDecoration(
                                       border: InputBorder.none,
                                       isDense: true,
+                                      constraints: const BoxConstraints(
+                                        minHeight: 44,
+                                      ),
                                       hintText: isHeader
                                           ? '헤더 ${colIdx + 1}'
                                           : '값 입력',
-                                      hintStyle: const TextStyle(
-                                        color: Color(0xFF64748b),
+                                      hintStyle: TextStyle(
+                                        color: colors.muted,
                                         fontSize: 12,
                                       ),
                                     ),
@@ -268,9 +279,9 @@ Future<AublTableData?> showAublTableEditorDialog({
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     '표를 누르면 다시 셀 단위로 수정할 수 있습니다.',
-                    style: TextStyle(color: Color(0xFF94a3b8), fontSize: 12),
+                    style: TextStyle(color: colors.muted, fontSize: 12),
                   ),
                 ],
               ),
@@ -282,10 +293,7 @@ Future<AublTableData?> showAublTableEditorDialog({
               ),
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext, draft),
-                child: const Text(
-                  '적용',
-                  style: TextStyle(color: Color(0xFF3b82f6)),
-                ),
+                child: Text('적용', style: TextStyle(color: colors.cobalt)),
               ),
             ],
           );
@@ -299,96 +307,98 @@ class _AublTableCard extends StatelessWidget {
   const _AublTableCard({
     required this.tableData,
     required this.editable,
+    required this.onTap,
   });
 
   final AublTableData tableData;
   final bool editable;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF475569)),
-        color: const Color(0xFF0f172a),
+    final colors = context.aublColors;
+    return Material(
+      color: colors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(4),
+        side: BorderSide(color: colors.line),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Table(
-              border: TableBorder.all(color: const Color(0xFF475569)),
-              defaultColumnWidth: const FixedColumnWidth(120),
-              children: List<TableRow>.generate(tableData.rows, (rowIdx) {
-                return TableRow(
-                  children: List<Widget>.generate(tableData.cols, (colIdx) {
-                    final isHeader = rowIdx == 0;
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 6,
-                      ),
-                      color: isHeader
-                          ? const Color(0xFF1e293b)
-                          : const Color(0xFF0f172a),
-                      child: Text(
-                        tableData.cells[rowIdx][colIdx].isEmpty
-                            ? ' '
-                            : tableData.cells[rowIdx][colIdx],
-                        style: TextStyle(
-                          color: isHeader
-                              ? const Color(0xFFf8fafc)
-                              : const Color(0xFFe2e8f0),
-                          fontSize: 12,
-                          fontWeight:
-                              isHeader ? FontWeight.w700 : FontWeight.w500,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Table(
+                border: TableBorder.all(color: colors.line),
+                defaultColumnWidth: const FixedColumnWidth(120),
+                children: List<TableRow>.generate(tableData.rows, (rowIdx) {
+                  return TableRow(
+                    children: List<Widget>.generate(tableData.cols, (colIdx) {
+                      final isHeader = rowIdx == 0;
+                      return Ink(
+                        color: isHeader ? colors.surfaceMuted : colors.surface,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 6,
                         ),
-                      ),
-                    );
-                  }),
-                );
-              }),
-            ),
-          ),
-          if (editable)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(8, 6, 8, 8),
-              child: Text(
-                '표를 탭해서 셀 편집',
-                style: TextStyle(
-                  color: Color(0xFF94a3b8),
-                  fontSize: 11,
-                ),
+                        child: Text(
+                          tableData.cells[rowIdx][colIdx].isEmpty
+                              ? ' '
+                              : tableData.cells[rowIdx][colIdx],
+                          style: TextStyle(
+                            color: isHeader ? colors.navyStrong : colors.ink,
+                            fontSize: 12,
+                            fontWeight: isHeader
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                          ),
+                        ),
+                      );
+                    }),
+                  );
+                }),
               ),
             ),
-        ],
+            if (editable)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+                child: Text(
+                  '표를 탭해서 셀 편집',
+                  style: TextStyle(color: colors.muted, fontSize: 11),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
 }
 
 class _TableActionButton extends StatelessWidget {
-  const _TableActionButton({
-    required this.label,
-    required this.onPressed,
-  });
+  const _TableActionButton({required this.label, required this.onPressed});
 
   final String label;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.aublColors;
     return OutlinedButton(
       style: OutlinedButton.styleFrom(
-        foregroundColor: const Color(0xFFcbd5e1),
-        side: const BorderSide(color: Color(0xFF475569)),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        minimumSize: Size.zero,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        foregroundColor: colors.navy,
+        side: BorderSide(color: colors.lineStrong),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        minimumSize: const Size(72, 44),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
       ),
       onPressed: onPressed,
-      child: Text(label, style: const TextStyle(fontSize: 12)),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+      ),
     );
   }
 }

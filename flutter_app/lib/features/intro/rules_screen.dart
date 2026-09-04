@@ -4,6 +4,7 @@ import '../../core/data/default_rules.dart';
 import '../../core/services/cache_service.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/season_components.dart';
 
 class RulesScreen extends StatefulWidget {
   const RulesScreen({super.key});
@@ -104,8 +105,9 @@ class _RulesScreenState extends State<RulesScreen> {
   void _moveSearchResult(int step) {
     final total = _searchResultAnchors.length;
     if (!_hasSearchQuery || total == 0) return;
-    final baseIndex =
-        _currentResultIndex == -1 ? (step > 0 ? -1 : 0) : _currentResultIndex;
+    final baseIndex = _currentResultIndex == -1
+        ? (step > 0 ? -1 : 0)
+        : _currentResultIndex;
     final next = (baseIndex + step) % total;
     final normalized = next < 0 ? next + total : next;
     setState(() => _currentResultIndex = normalized);
@@ -160,10 +162,7 @@ class _RulesScreenState extends State<RulesScreen> {
     for (final match in matches) {
       if (match.start > cursor) {
         spans.add(
-          TextSpan(
-            text: text.substring(cursor, match.start),
-            style: baseStyle,
-          ),
+          TextSpan(text: text.substring(cursor, match.start), style: baseStyle),
         );
       }
       spans.add(
@@ -182,7 +181,8 @@ class _RulesScreenState extends State<RulesScreen> {
 
   Widget _buildHighlightedText(String text, TextStyle style) {
     return RichText(
-        text: TextSpan(children: _buildHighlightedSpans(text, style)));
+      text: TextSpan(children: _buildHighlightedSpans(text, style)),
+    );
   }
 
   List<String> _extractBodyLines(Object? rawBody) {
@@ -216,79 +216,73 @@ class _RulesScreenState extends State<RulesScreen> {
         ? '${_currentResultIndex + 1}/$resultCount'
         : '';
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _searchController,
-              onChanged: _updateSearchQuery,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: '키워드로 회칙 검색',
-                prefixIcon: const Icon(Icons.search, size: 20),
-                suffixIcon: _trimmedQuery.isEmpty
-                    ? null
-                    : IconButton(
-                        onPressed: () {
-                          _searchController.clear();
-                          _updateSearchQuery('');
-                          FocusScope.of(context).unfocus();
-                        },
-                        icon: const Icon(Icons.close, size: 20),
-                      ),
-              ),
-            ),
-          ),
+    final navigation = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _SearchResultButton(
+          tooltip: '이전 검색 결과',
+          icon: Icons.keyboard_arrow_up,
+          onPressed: canNavigate ? () => _moveSearchResult(-1) : null,
+        ),
+        const SizedBox(width: 6),
+        _SearchResultButton(
+          tooltip: '다음 검색 결과',
+          icon: Icons.keyboard_arrow_down,
+          onPressed: canNavigate ? () => _moveSearchResult(1) : null,
+        ),
+        if (positionLabel.isNotEmpty) ...[
           const SizedBox(width: 8),
-          Container(
-            width: 44,
-            height: 50,
-            decoration: BoxDecoration(
-              color: context.aublColors.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: context.aublColors.line),
-            ),
-            child: Column(
-              children: [
-                Expanded(
-                  child: IconButton(
-                    onPressed: canNavigate ? () => _moveSearchResult(-1) : null,
-                    icon: const Icon(Icons.keyboard_arrow_up, size: 18),
-                    color: context.aublColors.ink,
-                    disabledColor: context.aublColors.lineStrong,
-                    padding: EdgeInsets.zero,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ),
-                Divider(
-                    height: 1, thickness: 0.8, color: context.aublColors.line),
-                Expanded(
-                  child: IconButton(
-                    onPressed: canNavigate ? () => _moveSearchResult(1) : null,
-                    icon: const Icon(Icons.keyboard_arrow_down, size: 18),
-                    color: context.aublColors.ink,
-                    disabledColor: context.aublColors.lineStrong,
-                    padding: EdgeInsets.zero,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ),
-              ],
-            ),
+          Text(
+            positionLabel,
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: context.aublColors.muted),
           ),
-          if (positionLabel.isNotEmpty) ...[
-            const SizedBox(width: 8),
-            Text(
-              positionLabel,
-              style: TextStyle(
-                color: context.aublColors.muted,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
         ],
+      ],
+    );
+    final searchField = TextField(
+      controller: _searchController,
+      onChanged: _updateSearchQuery,
+      textInputAction: TextInputAction.search,
+      decoration: InputDecoration(
+        hintText: '키워드로 회칙 검색',
+        prefixIcon: const Icon(Icons.search, size: 20),
+        suffixIcon: _trimmedQuery.isEmpty
+            ? null
+            : IconButton(
+                tooltip: '검색어 지우기',
+                onPressed: () {
+                  _searchController.clear();
+                  _updateSearchQuery('');
+                  FocusScope.of(context).unfocus();
+                },
+                icon: const Icon(Icons.close, size: 20),
+              ),
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final stack =
+              constraints.maxWidth < 440 ||
+              MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+          if (stack) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [searchField, const SizedBox(height: 8), navigation],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: searchField),
+              const SizedBox(width: 8),
+              navigation,
+            ],
+          );
+        },
       ),
     );
   }
@@ -319,7 +313,8 @@ class _RulesScreenState extends State<RulesScreen> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: context.aublColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: context.aublColors.line),
       ),
       child: Text(
         '일치하는 회칙 항목이 없습니다. 다른 키워드로 검색해 주세요.',
@@ -335,10 +330,13 @@ class _RulesScreenState extends State<RulesScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _content == null
-              ? Center(
-                  child: Text('콘텐츠를 불러올 수 없습니다.',
-                      style: TextStyle(color: context.aublColors.muted)))
-              : _buildContent(),
+          ? Center(
+              child: Text(
+                '콘텐츠를 불러올 수 없습니다.',
+                style: TextStyle(color: context.aublColors.muted),
+              ),
+            )
+          : _buildContent(),
     );
   }
 
@@ -352,11 +350,31 @@ class _RulesScreenState extends State<RulesScreen> {
         : _buildDefaultChapters();
     _syncSearchResultAnchors(listResult.resultAnchors);
 
-    return Column(
-      children: [
-        _buildSearchField(),
-        Expanded(child: listResult.listView),
-      ],
+    return SafeArea(
+      top: false,
+      child: LayoutBuilder(
+        builder: (context, constraints) => Align(
+          alignment: Alignment.topCenter,
+          child: SizedBox(
+            width: constraints.maxWidth > 1180 ? 1180 : constraints.maxWidth,
+            height: constraints.maxHeight,
+            child: Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(12, 8, 12, 16),
+                  child: SeasonPageHero(
+                    eyebrow: 'AUBL DOCUMENTS',
+                    title: Text('AUBL 회칙'),
+                    description: '리그 운영 기준과 경기 규정을 항목별로 확인하세요.',
+                  ),
+                ),
+                _buildSearchField(),
+                Expanded(child: listResult.listView),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -383,17 +401,23 @@ class _RulesScreenState extends State<RulesScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: context.aublColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(4),
+        border: Border(
+          top: BorderSide(color: context.aublColors.line),
+          right: BorderSide(color: context.aublColors.line),
+          bottom: BorderSide(color: context.aublColors.line),
+          left: BorderSide(color: context.aublColors.cobalt, width: 3),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.history, size: 16, color: context.aublColors.warning),
+              Icon(Icons.history, size: 16, color: context.aublColors.cobalt),
               const SizedBox(width: 8),
               Text(
-                '주최 순서',
+                '연합회교 순서',
                 style: TextStyle(
                   color: context.aublColors.ink,
                   fontSize: 14,
@@ -410,7 +434,7 @@ class _RulesScreenState extends State<RulesScreen> {
               final index = entry.key + 1;
               final name = entry.value;
               final indexStyle = TextStyle(
-                color: context.aublColors.warning,
+                color: context.aublColors.cobalt,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               );
@@ -420,22 +444,19 @@ class _RulesScreenState extends State<RulesScreen> {
                 fontWeight: FontWeight.w600,
               );
               return Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
-                  color: context.aublColors.warning.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: context.aublColors.warning.withValues(alpha: 0.35),
-                  ),
+                  color: context.aublColors.surfaceMuted,
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(color: context.aublColors.line),
                 ),
                 child: RichText(
                   text: TextSpan(
                     children: [
-                      TextSpan(
-                        text: '$index ',
-                        style: indexStyle,
-                      ),
+                      TextSpan(text: '$index ', style: indexStyle),
                       ..._buildHighlightedSpans(name, valueStyle),
                     ],
                   ),
@@ -453,7 +474,8 @@ class _RulesScreenState extends State<RulesScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: context.aublColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: context.aublColors.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -481,21 +503,24 @@ class _RulesScreenState extends State<RulesScreen> {
   }
 
   _RulesListBuildResult _buildFirestoreChapters(
-      Map<String, dynamic> rules, List<dynamic> chapters) {
+    Map<String, dynamic> rules,
+    List<dynamic> chapters,
+  ) {
     final hostOrder = _resolveHostOrder(rules['hostOrder']);
     final appendixText = _resolveAppendixText(rules['appendixText']);
     final hostOrderEntries = hostOrder.asMap().entries.toList(growable: false);
     final filteredHostOrderEntries = _hasSearchQuery
         ? hostOrderEntries
-            .where((entry) => _matchesQueryInFields([entry.value]))
-            .toList(growable: false)
+              .where((entry) => _matchesQueryInFields([entry.value]))
+              .toList(growable: false)
         : hostOrderEntries;
     final appendixVisible =
         !_hasSearchQuery || _matchesQueryInFields([appendixText]);
 
     final rawHeaderBadge = rules['headerBadge'];
     final headerBadge = rawHeaderBadge is String ? rawHeaderBadge : null;
-    final headerBadgeVisible = headerBadge != null &&
+    final headerBadgeVisible =
+        headerBadge != null &&
         (!_hasSearchQuery || _matchesQueryInFields([headerBadge]));
 
     final chapterWidgets = <Widget>[];
@@ -525,7 +550,8 @@ class _RulesScreenState extends State<RulesScreen> {
           margin: const EdgeInsets.only(bottom: 8),
           decoration: BoxDecoration(
             color: context.aublColors.surface,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: context.aublColors.line),
           ),
           child: ExpansionTile(
             key: PageStorageKey('firestore-$title'),
@@ -533,7 +559,9 @@ class _RulesScreenState extends State<RulesScreen> {
             title: _buildHighlightedText(
               title,
               TextStyle(
-                  color: context.aublColors.ink, fontWeight: FontWeight.w500),
+                color: context.aublColors.ink,
+                fontWeight: FontWeight.w500,
+              ),
             ),
             childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             children: visibleArticles.map((article) {
@@ -657,12 +685,13 @@ class _RulesScreenState extends State<RulesScreen> {
   }
 
   _RulesListBuildResult _buildDefaultChapters() {
-    final hostOrderEntries =
-        defaultRuleHostOrder.asMap().entries.toList(growable: false);
+    final hostOrderEntries = defaultRuleHostOrder.asMap().entries.toList(
+      growable: false,
+    );
     final filteredHostOrderEntries = _hasSearchQuery
         ? hostOrderEntries
-            .where((entry) => _matchesQueryInFields([entry.value]))
-            .toList(growable: false)
+              .where((entry) => _matchesQueryInFields([entry.value]))
+              .toList(growable: false)
         : hostOrderEntries;
     final appendixVisible =
         !_hasSearchQuery || _matchesQueryInFields([defaultRuleAppendixText]);
@@ -670,16 +699,16 @@ class _RulesScreenState extends State<RulesScreen> {
     final chapterWidgets = <Widget>[];
     final resultAnchors = <GlobalKey>[];
     for (final chapter in defaultRuleChapters) {
-      final accentColor = Color(chapter.accent);
+      final accentColor = context.aublColors.cobalt;
       final chapterTitleMatched = _matchesQueryInFields([chapter.title]);
       final visibleArticles = (!_hasSearchQuery || chapterTitleMatched)
           ? chapter.articles
           : chapter.articles
-              .where(
-                (article) =>
-                    _matchesQueryInFields([article.title, ...article.body]),
-              )
-              .toList();
+                .where(
+                  (article) =>
+                      _matchesQueryInFields([article.title, ...article.body]),
+                )
+                .toList();
 
       if (_hasSearchQuery && !chapterTitleMatched && visibleArticles.isEmpty) {
         continue;
@@ -695,7 +724,8 @@ class _RulesScreenState extends State<RulesScreen> {
           margin: const EdgeInsets.only(bottom: 8),
           decoration: BoxDecoration(
             color: context.aublColors.surface,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: context.aublColors.line),
           ),
           child: ExpansionTile(
             key: PageStorageKey('default-${chapter.title}'),
@@ -703,7 +733,9 @@ class _RulesScreenState extends State<RulesScreen> {
             title: _buildHighlightedText(
               chapter.title,
               TextStyle(
-                  color: context.aublColors.ink, fontWeight: FontWeight.w500),
+                color: context.aublColors.ink,
+                fontWeight: FontWeight.w500,
+              ),
             ),
             childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             children: visibleArticles.map((article) {
@@ -791,11 +823,40 @@ class _RulesScreenState extends State<RulesScreen> {
   }
 }
 
-class _RulesListBuildResult {
-  _RulesListBuildResult({
-    required this.listView,
-    required this.resultAnchors,
+class _SearchResultButton extends StatelessWidget {
+  const _SearchResultButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
   });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.aublColors;
+    return SizedBox.square(
+      dimension: 44,
+      child: IconButton.outlined(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        icon: Icon(icon, size: 20),
+        color: colors.ink,
+        disabledColor: colors.lineStrong,
+        style: IconButton.styleFrom(
+          padding: EdgeInsets.zero,
+          side: BorderSide(color: colors.line),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+        ),
+      ),
+    );
+  }
+}
+
+class _RulesListBuildResult {
+  _RulesListBuildResult({required this.listView, required this.resultAnchors});
 
   final Widget listView;
   final List<GlobalKey> resultAnchors;

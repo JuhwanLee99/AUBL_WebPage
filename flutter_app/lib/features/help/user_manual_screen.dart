@@ -2,16 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../core/contracts/web_contracts.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/season_components.dart';
 
 /* ─── 데이터 모델 ─── */
 
 class _ManualItem {
   final String heading;
   final List<String> bullets;
-  _ManualItem({
-    required this.heading,
-    required this.bullets,
-  });
+  _ManualItem({required this.heading, required this.bullets});
 }
 
 class _ManualSection {
@@ -32,7 +30,7 @@ const _roleLabels = ['방문자', '일반 회원', '관리자/기록원'];
 const _roleIcons = [
   Icons.people_outline,
   Icons.person_outline,
-  Icons.shield_outlined
+  Icons.shield_outlined,
 ];
 
 final _guestSections = <_ManualSection>[
@@ -49,16 +47,11 @@ final _guestSections = <_ManualSection>[
       ),
       _ManualItem(
         heading: '팀 탭',
-        bullets: [
-          '팀명 검색, 조(A~H) 필터, 조별/이름순 정렬',
-          '팀 카드를 탭하여 팀 상세로 진입합니다.',
-        ],
+        bullets: ['팀명 검색, 조(A~H) 필터, 조별/이름순 정렬', '팀 카드를 탭하여 팀 상세로 진입합니다.'],
       ),
       _ManualItem(
         heading: '더보기 > 리그 정보',
-        bullets: [
-          '리그 소개, 회칙, 개인정보 처리방침, 이용약관을 확인합니다.',
-        ],
+        bullets: ['리그 소개, 회칙, 개인정보 처리방침, 이용약관을 확인합니다.'],
       ),
     ],
   ),
@@ -78,9 +71,7 @@ final _guestSections = <_ManualSection>[
       ),
       _ManualItem(
         heading: '경기 카드 탭',
-        bullets: [
-          '경기 카드를 누르면 문자중계/결과 화면으로 이동합니다.',
-        ],
+        bullets: ['경기 카드를 누르면 문자중계/결과 화면으로 이동합니다.'],
       ),
     ],
   ),
@@ -120,9 +111,7 @@ final _memberSections = <_ManualSection>[
     items: [
       _ManualItem(
         heading: '첫 실행 온보딩',
-        bullets: [
-          '"로그인 / 회원가입" 또는 "그냥 사용하기" 선택',
-        ],
+        bullets: ['"로그인 / 회원가입" 또는 "그냥 사용하기" 선택'],
       ),
       _ManualItem(
         heading: '로그인 방식',
@@ -190,12 +179,7 @@ final _memberSections = <_ManualSection>[
     title: '팀 상세 및 팀 공지',
     icon: Icons.sports_baseball,
     items: [
-      _ManualItem(
-        heading: '팀 상세',
-        bullets: [
-          '팀 소개, 로스터, 팀 공지, 예정/최근 경기 확인',
-        ],
-      ),
+      _ManualItem(heading: '팀 상세', bullets: ['팀 소개, 로스터, 팀 공지, 예정/최근 경기 확인']),
       _ManualItem(
         heading: '팀 공지 게시판',
         bullets: [
@@ -228,32 +212,18 @@ final _memberSections = <_ManualSection>[
     title: '감독(Coach) 팀 홈 관리',
     icon: Icons.manage_accounts,
     items: [
-      _ManualItem(
-        heading: '팀 브랜딩/소개',
-        bullets: [
-          '웹 팀 홈에서 로고 변경, 팀 설명 추가/수정',
-        ],
-      ),
+      _ManualItem(heading: '팀 브랜딩/소개', bullets: ['웹 팀 홈에서 로고 변경, 팀 설명 추가/수정']),
       _ManualItem(
         heading: '팀 일정 운영',
-        bullets: [
-          '앱에서 예정/진행/최근 경기 확인',
-          '웹 일정 화면으로 이동해 일정 운영',
-        ],
+        bullets: ['앱에서 예정/진행/최근 경기 확인', '웹 일정 화면으로 이동해 일정 운영'],
       ),
       _ManualItem(
         heading: '선수 로스터',
-        bullets: [
-          '웹 팀 홈에서 선수 추가/수정/정리',
-          '등번호/포지션/투타/프로필 관리',
-        ],
+        bullets: ['웹 팀 홈에서 선수 추가/수정/정리', '등번호/포지션/투타/프로필 관리'],
       ),
       _ManualItem(
         heading: '팀 공지 운영',
-        bullets: [
-          '앱에서 공지 작성(제목/내용/카테고리 + 고정 옵션)',
-          '공지 고정/해제, 삭제 수행',
-        ],
+        bullets: ['앱에서 공지 작성(제목/내용/카테고리 + 고정 옵션)', '공지 고정/해제, 삭제 수행'],
       ),
     ],
   ),
@@ -359,14 +329,7 @@ final _troubleshooting = <({String title, List<String> steps})>[
       'Apple 로그인 문제 시 WebView에서 버튼 재시도 및 기본 브라우저 로그인 상태 확인',
     ],
   ),
-  (
-    title: '데이터가 오래된 것 같을 때',
-    steps: [
-      '화면 당겨서 새로고침',
-      '앱 재실행',
-      '네트워크 상태 확인',
-    ],
-  ),
+  (title: '데이터가 오래된 것 같을 때', steps: ['화면 당겨서 새로고침', '앱 재실행', '네트워크 상태 확인']),
   (
     title: '관리자 메뉴가 보이지 않을 때',
     steps: [
@@ -450,73 +413,82 @@ class _UserManualScreenState extends State<UserManualScreen>
                 indicatorSize: TabBarIndicatorSize.label,
                 dividerColor: context.aublColors.line,
                 tabs: List.generate(
-                    3,
-                    (i) => Tab(
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(_roleIcons[i], size: 16),
-                              const SizedBox(width: 4),
-                              Flexible(
-                                child: Text(
-                                  _roleLabels[i],
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                            ],
+                  3,
+                  (i) => Tab(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(_roleIcons[i], size: 16),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            _roleLabels[i],
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        )),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
 
           // ── 본문 ──
           SliverToBoxAdapter(
-            child: AnimatedBuilder(
-              animation: _tabCtrl,
-              builder: (context, _) {
-                final sections = _sectionsForTab(_tabCtrl.index);
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                  child: Column(
-                    children:
-                        sections.map((s) => _SectionCard(section: s)).toList(),
-                  ),
-                );
-              },
+            child: _ManualContent(
+              child: AnimatedBuilder(
+                animation: _tabCtrl,
+                builder: (context, _) {
+                  final sections = _sectionsForTab(_tabCtrl.index);
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    child: Column(
+                      children: sections
+                          .map((s) => _SectionCard(section: s))
+                          .toList(),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
 
           // ── 문제 해결 ──
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: _buildTroubleshooting(),
+            child: _ManualContent(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: _buildTroubleshooting(),
+              ),
             ),
           ),
 
           // ── 푸터 ──
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: context.aublColors.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: context.aublColors.line.withValues(alpha: 0.5)),
-                ),
-                child: Text(
-                  '문서 버전: 2026-03-04\n앱 구조: 하단 탭 홈 · 팀 · 일정 · 기록 · 커뮤니티 · 더보기\n일부 관리 기능은 WebView로 웹 관리 화면에 연결됩니다.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
+            child: _ManualContent(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: context.aublColors.surface,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: context.aublColors.line),
+                  ),
+                  child: Text(
+                    '문서 버전: 2026-03-04\n앱 구조: 하단 탭 홈 · 팀 · 일정 · 기록 · 커뮤니티 · 더보기\n일부 관리 기능은 WebView로 웹 관리 화면에 연결됩니다.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
                       color: context.aublColors.muted,
                       fontSize: 11,
-                      height: 1.6),
+                      height: 1.6,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -528,65 +500,30 @@ class _UserManualScreenState extends State<UserManualScreen>
 
   /* ── 히어로 ── */
   Widget _buildHero() {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.fromLTRB(
-          20, MediaQuery.of(context).padding.top + 16, 20, 28),
-      decoration: BoxDecoration(
-        color: context.aublColors.surface,
-        border: Border(bottom: BorderSide(color: context.aublColors.line)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              GestureDetector(
-                onTap: () => Navigator.of(context).pop(),
-                child: Icon(Icons.arrow_back, color: context.aublColors.ink),
-              ),
-              const SizedBox(width: 12),
-              Text('사용 설명서',
-                  style: TextStyle(
-                      color: context.aublColors.ink,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600)),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: context.aublColors.cobalt.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: context.aublColors.cobalt.withValues(alpha: 0.3)),
+    return _ManualContent(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          MediaQuery.of(context).padding.top + 8,
+          16,
+          12,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            IconButton(
+              onPressed: () => Navigator.of(context).pop(),
+              tooltip: '뒤로',
+              icon: const Icon(Icons.arrow_back_rounded),
             ),
-            child: Text(
-              'AUBL · USER MANUAL',
-              style: TextStyle(
-                  color: context.aublColors.cobalt,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600),
+            const SizedBox(height: 4),
+            const SeasonPageHero(
+              eyebrow: 'AUBL USER MANUAL',
+              title: Text('앱 사용 설명서'),
+              description: '방문자, 일반 회원, 관리자·기록원별 사용 가능한 기능을 안내합니다.',
             ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'AUBL 앱 사용 설명서',
-            style: TextStyle(
-              color: context.aublColors.ink,
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              height: 1.3,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '방문자, 일반 회원, 관리자/기록원별로 사용 가능한 기능을 안내합니다. 탭을 전환하여 역할별 가이드를 확인하세요.',
-            style: TextStyle(
-                color: context.aublColors.ink, fontSize: 13, height: 1.6),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -598,63 +535,79 @@ class _UserManualScreenState extends State<UserManualScreen>
       children: [
         Row(
           children: [
-            const Icon(Icons.build_outlined,
-                size: 16, color: AppTheme.amber400),
+            Icon(
+              Icons.build_outlined,
+              size: 16,
+              color: context.aublColors.cobalt,
+            ),
             const SizedBox(width: 8),
-            Text('문제 해결',
-                style: TextStyle(
-                    color: context.aublColors.ink,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700)),
+            Text(
+              '문제 해결',
+              style: TextStyle(
+                color: context.aublColors.ink,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 10),
-        ..._troubleshooting.map((item) => Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: context.aublColors.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                    color: context.aublColors.line.withValues(alpha: 0.5)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(item.title,
-                      style: TextStyle(
-                          color: context.aublColors.ink,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  ...item.steps.asMap().entries.map((e) => Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(
-                              width: 20,
-                              child: Text(
-                                '${e.key + 1}.',
-                                style: TextStyle(
-                                    color: context.aublColors.cobalt,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600),
-                              ),
+        ..._troubleshooting.map(
+          (item) => Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: context.aublColors.surface,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: context.aublColors.line),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.title,
+                  style: TextStyle(
+                    color: context.aublColors.ink,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ...item.steps.asMap().entries.map(
+                  (e) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          child: Text(
+                            '${e.key + 1}.',
+                            style: TextStyle(
+                              color: context.aublColors.cobalt,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
                             ),
-                            Expanded(
-                              child: Text(e.value,
-                                  style: TextStyle(
-                                      color: context.aublColors.ink,
-                                      fontSize: 13,
-                                      height: 1.5)),
-                            ),
-                          ],
+                          ),
                         ),
-                      )),
-                ],
-              ),
-            )),
+                        Expanded(
+                          child: Text(
+                            e.value,
+                            style: TextStyle(
+                              color: context.aublColors.ink,
+                              fontSize: 13,
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -682,22 +635,25 @@ class _SectionCardState extends State<_SectionCard> {
         color: _expanded
             ? context.aublColors.cobalt.withValues(alpha: 0.06)
             : context.aublColors.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(4),
         border: Border.all(
           color: _expanded
               ? context.aublColors.cobalt.withValues(alpha: 0.3)
-              : context.aublColors.line.withValues(alpha: 0.5),
+              : context.aublColors.line,
         ),
       ),
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
           leading: Icon(s.icon, color: context.aublColors.cobalt, size: 22),
-          title: Text(s.title,
-              style: TextStyle(
-                  color: context.aublColors.ink,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700)),
+          title: Text(
+            s.title,
+            style: TextStyle(
+              color: context.aublColors.ink,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           initiallyExpanded: false,
           onExpansionChanged: (v) => setState(() => _expanded = v),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -706,31 +662,42 @@ class _SectionCardState extends State<_SectionCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 12),
-                Text(item.heading,
-                    style: TextStyle(
-                        color: context.aublColors.cobalt,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700)),
+                Text(
+                  item.heading,
+                  style: TextStyle(
+                    color: context.aublColors.cobalt,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
                 const SizedBox(height: 6),
-                ...item.bullets.map((b) => Padding(
-                      padding: const EdgeInsets.only(bottom: 3),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('• ',
-                              style: TextStyle(
-                                  color: context.aublColors.cobalt,
-                                  fontSize: 13)),
-                          Expanded(
-                            child: Text(b,
-                                style: TextStyle(
-                                    color: context.aublColors.ink,
-                                    fontSize: 13,
-                                    height: 1.5)),
+                ...item.bullets.map(
+                  (b) => Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '• ',
+                          style: TextStyle(
+                            color: context.aublColors.cobalt,
+                            fontSize: 13,
                           ),
-                        ],
-                      ),
-                    )),
+                        ),
+                        Expanded(
+                          child: Text(
+                            b,
+                            style: TextStyle(
+                              color: context.aublColors.ink,
+                              fontSize: 13,
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 _ScreenshotPlaceholder(label: item.heading),
               ],
             );
@@ -754,7 +721,7 @@ class _ScreenshotPlaceholder extends StatelessWidget {
       margin: const EdgeInsets.only(top: 10),
       padding: const EdgeInsets.symmetric(vertical: 32),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(4),
         border: Border.all(
           color: context.aublColors.line.withValues(alpha: 0.5),
           style: BorderStyle.solid,
@@ -765,15 +732,19 @@ class _ScreenshotPlaceholder extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.image_outlined,
-              size: 28,
-              color: context.aublColors.lineStrong.withValues(alpha: 0.7)),
+          Icon(
+            Icons.image_outlined,
+            size: 28,
+            color: context.aublColors.lineStrong.withValues(alpha: 0.7),
+          ),
           const SizedBox(height: 6),
           Text(
             '스크린샷: $label',
             textAlign: TextAlign.center,
-            style:
-                TextStyle(color: context.aublColors.lineStrong, fontSize: 11),
+            style: TextStyle(
+              color: context.aublColors.lineStrong,
+              fontSize: 11,
+            ),
           ),
         ],
       ),
@@ -796,13 +767,32 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   Widget build(
-      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
     return Container(
       color: context.aublColors.canvas,
-      child: tabBar,
+      child: _ManualContent(child: tabBar),
     );
   }
 
   @override
   bool shouldRebuild(covariant _TabBarDelegate oldDelegate) => false;
+}
+
+class _ManualContent extends StatelessWidget {
+  const _ManualContent({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1000),
+        child: SizedBox(width: double.infinity, child: child),
+      ),
+    );
+  }
 }

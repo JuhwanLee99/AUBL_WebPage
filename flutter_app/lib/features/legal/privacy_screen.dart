@@ -72,66 +72,80 @@ class PrivacyScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('개인정보 처리방침')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          SeasonPageHero(
-            eyebrow: 'PRIVACY POLICY',
-            title: Text('개인정보 처리방침',
-                style: Theme.of(context).textTheme.headlineSmall),
-            description:
-                '전국대학아마추어야구연합회(AUBL)는 개인정보 보호법을 준수하며, 이 방침은 모바일 앱과 웹 서비스에 적용됩니다.',
-          ),
-          const SizedBox(height: 16),
-
-          // 섹션들
-          for (final section in _kSections) ...[
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      section.title,
-                      style: TextStyle(
-                        color: context.aublColors.ink,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    for (final item in section.items)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('  \u2022  ',
-                                style: TextStyle(
-                                    color: context.aublColors.muted,
-                                    fontSize: 13)),
-                            Expanded(
-                              child: Text(
-                                item,
-                                style: TextStyle(
-                                  color: context.aublColors.muted,
-                                  fontSize: 13,
-                                  height: 1.7,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-              ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final outerInset = constraints.maxWidth > 900
+              ? (constraints.maxWidth - 900) / 2
+              : 0.0;
+          return ListView(
+            padding: EdgeInsets.fromLTRB(
+              outerInset + 16,
+              16,
+              outerInset + 16,
+              32,
             ),
-            const SizedBox(height: 10),
-          ],
-          const SizedBox(height: 16),
-        ],
+            children: [
+              const SeasonPageHero(
+                eyebrow: 'PRIVACY POLICY',
+                title: Text('개인정보 처리방침'),
+                description:
+                    '전국대학아마추어야구연합회(AUBL)는 개인정보 보호법을 준수하며, 이 방침은 모바일 앱과 웹 서비스에 적용됩니다.',
+              ),
+              const SizedBox(height: 16),
+
+              // 섹션들
+              for (final section in _kSections) ...[
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          section.title,
+                          style: TextStyle(
+                            color: context.aublColors.ink,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        for (final item in section.items)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '  \u2022  ',
+                                  style: TextStyle(
+                                    color: context.aublColors.muted,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    item,
+                                    style: TextStyle(
+                                      color: context.aublColors.muted,
+                                      fontSize: 13,
+                                      height: 1.7,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              const SizedBox(height: 16),
+            ],
+          );
+        },
       ),
     );
   }

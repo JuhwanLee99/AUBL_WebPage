@@ -103,12 +103,12 @@ class _MoreScreenState extends State<MoreScreen> {
 
   Future<void> _loadNotificationPrefs() async {
     final pref = await NotificationService.instance.getMatchPreference();
-    final allEnabled =
-        await NotificationService.instance.getAllNotificationsEnabled();
-    final community =
-        await NotificationService.instance.getCommunityNoticeEnabled();
-    final teamNotice =
-        await NotificationService.instance.getTeamNoticeEnabled();
+    final allEnabled = await NotificationService.instance
+        .getAllNotificationsEnabled();
+    final community = await NotificationService.instance
+        .getCommunityNoticeEnabled();
+    final teamNotice = await NotificationService.instance
+        .getTeamNoticeEnabled();
     final inquiry = await NotificationService.instance.getInquiryNotifEnabled();
     if (!mounted) return;
     setState(() {
@@ -159,8 +159,8 @@ class _MoreScreenState extends State<MoreScreen> {
               Text(
                 '시스템 설정을 기본으로 사용하며 언제든 직접 바꿀 수 있습니다.',
                 style: Theme.of(sheetContext).textTheme.bodySmall?.copyWith(
-                      color: sheetContext.aublColors.muted,
-                    ),
+                  color: sheetContext.aublColors.muted,
+                ),
               ),
               const SizedBox(height: 12),
               RadioGroup<ThemePreference>(
@@ -243,10 +243,11 @@ class _MoreScreenState extends State<MoreScreen> {
                         }
                       },
                       activeThumbColor: colors.cobalt,
-                      title: Text('전체 알림',
-                          style: TextStyle(color: colors.ink)),
-                      subtitle: Text('긴급 공지 포함 전체 알림 (ON/OFF)',
-                          style: TextStyle(color: colors.muted, fontSize: 12)),
+                      title: Text('전체 알림', style: TextStyle(color: colors.ink)),
+                      subtitle: Text(
+                        '긴급 공지 포함 전체 알림 (ON/OFF)',
+                        style: TextStyle(color: colors.muted, fontSize: 12),
+                      ),
                     ),
                     SwitchListTile(
                       value: _communityNoticeOn,
@@ -260,10 +261,14 @@ class _MoreScreenState extends State<MoreScreen> {
                               }
                             },
                       activeThumbColor: colors.cobalt,
-                      title: Text('커뮤니티 공지',
-                          style: TextStyle(color: colors.ink)),
-                      subtitle: Text('긴급 제외 공지 알림 (ON/OFF)',
-                          style: TextStyle(color: colors.muted, fontSize: 12)),
+                      title: Text(
+                        '커뮤니티 공지',
+                        style: TextStyle(color: colors.ink),
+                      ),
+                      subtitle: Text(
+                        '긴급 제외 공지 알림 (ON/OFF)',
+                        style: TextStyle(color: colors.muted, fontSize: 12),
+                      ),
                     ),
                     SwitchListTile(
                       value: _teamNoticeOn,
@@ -277,10 +282,11 @@ class _MoreScreenState extends State<MoreScreen> {
                               }
                             },
                       activeThumbColor: colors.cobalt,
-                      title: Text('홈팀 공지',
-                          style: TextStyle(color: colors.ink)),
-                      subtitle: Text('소속 팀 공지 알림',
-                          style: TextStyle(color: colors.muted, fontSize: 12)),
+                      title: Text('홈팀 공지', style: TextStyle(color: colors.ink)),
+                      subtitle: Text(
+                        '소속 팀 공지 알림',
+                        style: TextStyle(color: colors.muted, fontSize: 12),
+                      ),
                     ),
                     SwitchListTile(
                       value: tempInquiry,
@@ -295,10 +301,14 @@ class _MoreScreenState extends State<MoreScreen> {
                               }
                             },
                       activeThumbColor: colors.cobalt,
-                      title: Text('건의/문의 알림',
-                          style: TextStyle(color: colors.ink)),
-                      subtitle: Text('내 글의 처리 상태 변경 및 새 댓글 알림',
-                          style: TextStyle(color: colors.muted, fontSize: 12)),
+                      title: Text(
+                        '건의/문의 알림',
+                        style: TextStyle(color: colors.ink),
+                      ),
+                      subtitle: Text(
+                        '내 글의 처리 상태 변경 및 새 댓글 알림',
+                        style: TextStyle(color: colors.muted, fontSize: 12),
+                      ),
                     ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
@@ -323,8 +333,9 @@ class _MoreScreenState extends State<MoreScreen> {
                           onChanged: (value) {
                             if (value == null || !tempAll) return;
                             setSheetState(() => temp = value);
-                            NotificationService.instance
-                                .setMatchPreference(value);
+                            NotificationService.instance.setMatchPreference(
+                              value,
+                            );
                             if (mounted) {
                               setState(() => _matchPref = value);
                             }
@@ -356,15 +367,13 @@ class _MoreScreenState extends State<MoreScreen> {
   }
 
   void _push(Widget screen) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => screen),
-    );
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
   }
 
   Future<void> _login() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const LoginWebViewScreen()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const LoginWebViewScreen()));
   }
 
   Future<void> _logout() async {
@@ -385,51 +394,76 @@ class _MoreScreenState extends State<MoreScreen> {
 
   Widget _buildLoginBanner() {
     final colors = context.aublColors;
-    return GestureDetector(
-      onTap: _login,
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: colors.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: colors.line),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Material(
+        color: colors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+          side: BorderSide(color: colors.line),
         ),
-        child: Row(
-          children: [
-            Icon(Icons.person_outline, color: colors.navy, size: 32),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('로그인하고 더 많은 기능을 이용하세요',
-                      style: TextStyle(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(4),
+          onTap: _login,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: colors.surfaceMuted,
+                    border: Border.all(color: colors.line),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: Icon(Icons.person_outline, color: colors.navy),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '로그인하고 더 많은 기능을 이용하세요',
+                        style: TextStyle(
                           color: colors.ink,
                           fontSize: 14,
-                          fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 4),
-                  Text('팀 관리, 승부예측 등 다양한 기능을 사용할 수 있습니다.',
-                      style: TextStyle(color: colors.muted, fontSize: 12)),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: colors.navy,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text('로그인',
-                  style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '팀 관리, 승부예측 등 다양한 기능을 사용할 수 있습니다.',
+                        style: TextStyle(color: colors.muted, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  constraints: const BoxConstraints(minHeight: 44),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: colors.navy,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                  child: Text(
+                    '로그인',
+                    style: TextStyle(
                       color: Theme.of(context).brightness == Brightness.dark
                           ? AppTheme.navy950
                           : Colors.white,
                       fontSize: 13,
-                      fontWeight: FontWeight.w600)),
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -439,164 +473,190 @@ class _MoreScreenState extends State<MoreScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('더보기')),
-      body: ListView(
-        children: [
-          if (!_checking && !_loggedIn) ...[
-            _buildLoginBanner(),
-            const SizedBox(height: 8),
-          ],
-          const _SectionTitle('일반'),
-          _MenuTile(
-            icon: Icons.emoji_events,
-            label: '순위',
-            onTap: () {
-              final shell = ShellController.of(context);
-              if (shell != null) {
-                shell.switchTab(AppDestination.records,
-                    recordsTabIndex: RecordsHubTab.standings.index);
-                return;
-              }
-              _push(const RecordsScreen(initialTab: RecordsHubTab.standings));
-            },
-          ),
-          _MenuTile(
-            icon: Icons.palette_outlined,
-            label: '화면 테마',
-            value: ThemeControllerScope.of(context).preference.label,
-            onTap: _openThemeSettings,
-          ),
-          _MenuTile(
-            icon: Icons.person,
-            label: '계정',
-            onTap: () => _push(const AccountScreen()),
-          ),
-          const Divider(height: 32),
-          const _SectionTitle('알림'),
-          _MenuTile(
-            icon: Icons.notifications_active,
-            label: '알림 설정',
-            value: _loadingNotif ? '확인 중...' : _notificationSummary(),
-            onTap: _openNotificationSettings,
-          ),
-          const Divider(height: 32),
-          const _SectionTitle('리그 정보'),
-          _MenuTile(
-            icon: Icons.info_outline,
-            label: '리그 소개',
-            onTap: () => _push(const IntroScreen()),
-          ),
-          _MenuTile(
-            icon: Icons.menu_book,
-            label: '회칙',
-            onTap: () => _push(const RulesScreen()),
-          ),
-          // TODO: 승부예측 기능 구현 후 활성화
-          // _MenuTile(
-          //   icon: Icons.analytics,
-          //   label: '승부예측',
-          //   onTap: () => _push(const PredictionScreen()),
-          // ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final outerInset = constraints.maxWidth > 860
+              ? (constraints.maxWidth - 860) / 2
+              : 0.0;
+          return ListView(
+            padding: EdgeInsets.fromLTRB(outerInset, 0, outerInset, 32),
+            children: [
+              if (!_checking && !_loggedIn) ...[
+                _buildLoginBanner(),
+                const SizedBox(height: 8),
+              ],
+              const _SectionTitle('일반'),
+              _MenuTile(
+                icon: Icons.emoji_events,
+                label: '순위',
+                onTap: () {
+                  final shell = ShellController.of(context);
+                  if (shell != null) {
+                    shell.switchTab(
+                      AppDestination.records,
+                      recordsTabIndex: RecordsHubTab.standings.index,
+                    );
+                    return;
+                  }
+                  _push(
+                    const RecordsScreen(initialTab: RecordsHubTab.standings),
+                  );
+                },
+              ),
+              _MenuTile(
+                icon: Icons.palette_outlined,
+                label: '화면 테마',
+                value: ThemeControllerScope.of(context).preference.label,
+                onTap: _openThemeSettings,
+              ),
+              _MenuTile(
+                icon: Icons.person,
+                label: '계정',
+                onTap: () => _push(const AccountScreen()),
+              ),
+              const Divider(height: 32),
+              const _SectionTitle('알림'),
+              _MenuTile(
+                icon: Icons.notifications_active,
+                label: '알림 설정',
+                value: _loadingNotif ? '확인 중...' : _notificationSummary(),
+                onTap: _openNotificationSettings,
+              ),
+              const Divider(height: 32),
+              const _SectionTitle('리그 정보'),
+              _MenuTile(
+                icon: Icons.info_outline,
+                label: '리그 소개',
+                onTap: () => _push(const IntroScreen()),
+              ),
+              _MenuTile(
+                icon: Icons.menu_book,
+                label: '회칙',
+                onTap: () => _push(const RulesScreen()),
+              ),
 
-          if (!_checking && _loggedIn && (_isAdmin || _isScorer)) ...[
-            const Divider(height: 32),
-            _SectionTitle(_isAdmin ? '관리자' : '기록원'),
-            _MenuTile(
-              icon: Icons.fact_check,
-              label: '기록원',
-              onTap: () {
-                final shell = ShellController.of(context);
-                if (shell != null) {
-                  shell.openEmbeddedWebView(
-                      WebRouteContracts.scorekeeper, '기록원',
-                      fullscreen: true);
-                } else {
-                  _push(const AppWebViewScreen(
-                    path: WebRouteContracts.scorekeeper,
-                    title: '기록원',
-                  ));
-                }
-              },
-            ),
-            _MenuTile(
-              icon: Icons.edit_note,
-              label: '경기 기록 수정',
-              onTap: () => _push(const AppWebViewScreen(
-                path: WebRouteContracts.adminGames,
-                title: '경기 기록 수정',
-              )),
-            ),
-            if (_isAdmin) ...[
+              // TODO: 승부예측 기능 구현 후 활성화
+              // _MenuTile(
+              //   icon: Icons.analytics,
+              //   label: '승부예측',
+              //   onTap: () => _push(const PredictionScreen()),
+              // ),
+              if (!_checking && _loggedIn && (_isAdmin || _isScorer)) ...[
+                const Divider(height: 32),
+                _SectionTitle(_isAdmin ? '관리자' : '기록원'),
+                _MenuTile(
+                  icon: Icons.fact_check,
+                  label: '기록원',
+                  onTap: () {
+                    final shell = ShellController.of(context);
+                    if (shell != null) {
+                      shell.openEmbeddedWebView(
+                        WebRouteContracts.scorekeeper,
+                        '기록원',
+                        fullscreen: true,
+                      );
+                    } else {
+                      _push(
+                        const AppWebViewScreen(
+                          path: WebRouteContracts.scorekeeper,
+                          title: '기록원',
+                        ),
+                      );
+                    }
+                  },
+                ),
+                _MenuTile(
+                  icon: Icons.edit_note,
+                  label: '경기 기록 수정',
+                  onTap: () => _push(
+                    const AppWebViewScreen(
+                      path: WebRouteContracts.adminGames,
+                      title: '경기 기록 수정',
+                    ),
+                  ),
+                ),
+                if (_isAdmin) ...[
+                  _MenuTile(
+                    icon: Icons.scoreboard,
+                    label: '스코어보드',
+                    onTap: () => _push(
+                      const AppWebViewScreen(
+                        path: WebRouteContracts.scoreboard,
+                        title: '스코어보드',
+                      ),
+                    ),
+                  ),
+                  _MenuTile(
+                    icon: Icons.admin_panel_settings,
+                    label: '관리자 패널',
+                    onTap: () => _push(
+                      const AppWebViewScreen(
+                        path: WebRouteContracts.admin,
+                        title: '관리자',
+                      ),
+                    ),
+                  ),
+                  _MenuTile(
+                    icon: Icons.report_problem_outlined,
+                    label: '신고/차단 관리',
+                    onTap: () => _push(
+                      const AppWebViewScreen(
+                        path: WebRouteContracts.adminModeration,
+                        title: '신고/차단 관리',
+                      ),
+                    ),
+                  ),
+                  _MenuTile(
+                    icon: Icons.edit_calendar,
+                    label: '일정 관리',
+                    onTap: () => _push(
+                      const AppWebViewScreen(
+                        path: WebRouteContracts.scheduleManage,
+                        title: '일정 관리',
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+
+              const Divider(height: 32),
+              const _SectionTitle('도움말'),
               _MenuTile(
-                icon: Icons.scoreboard,
-                label: '스코어보드',
-                onTap: () => _push(const AppWebViewScreen(
-                  path: WebRouteContracts.scoreboard,
-                  title: '스코어보드',
-                )),
+                icon: Icons.help_outline,
+                label: '사용 설명서',
+                onTap: () => _push(const UserManualScreen()),
+              ),
+              const Divider(height: 32),
+              const _SectionTitle('앱 정보'),
+              _MenuTile(
+                icon: Icons.privacy_tip_outlined,
+                label: '개인정보 처리방침',
+                onTap: () => _push(const PrivacyScreen()),
               ),
               _MenuTile(
-                icon: Icons.admin_panel_settings,
-                label: '관리자 패널',
-                onTap: () => _push(const AppWebViewScreen(
-                  path: WebRouteContracts.admin,
-                  title: '관리자',
-                )),
+                icon: Icons.description_outlined,
+                label: '이용약관',
+                onTap: () => _push(const TermsScreen()),
               ),
-              _MenuTile(
-                icon: Icons.report_problem_outlined,
-                label: '신고/차단 관리',
-                onTap: () => _push(const AppWebViewScreen(
-                  path: WebRouteContracts.adminModeration,
-                  title: '신고/차단 관리',
-                )),
-              ),
-              _MenuTile(
-                icon: Icons.edit_calendar,
-                label: '일정 관리',
-                onTap: () => _push(const AppWebViewScreen(
-                  path: WebRouteContracts.scheduleManage,
-                  title: '일정 관리',
-                )),
-              ),
+              const Divider(height: 32),
+              if (_loggedIn)
+                _MenuTile(
+                  icon: Icons.logout,
+                  label: '로그아웃',
+                  color: context.aublColors.danger,
+                  onTap: _logout,
+                )
+              else
+                _MenuTile(
+                  icon: Icons.login,
+                  label: '로그인',
+                  color: context.aublColors.cobalt,
+                  onTap: _login,
+                ),
+              const SizedBox(height: 32),
             ],
-          ],
-
-          const Divider(height: 32),
-          const _SectionTitle('도움말'),
-          _MenuTile(
-            icon: Icons.help_outline,
-            label: '사용 설명서',
-            onTap: () => _push(const UserManualScreen()),
-          ),
-          const Divider(height: 32),
-          const _SectionTitle('앱 정보'),
-          _MenuTile(
-            icon: Icons.privacy_tip_outlined,
-            label: '개인정보 처리방침',
-            onTap: () => _push(const PrivacyScreen()),
-          ),
-          _MenuTile(
-            icon: Icons.description_outlined,
-            label: '이용약관',
-            onTap: () => _push(const TermsScreen()),
-          ),
-          const Divider(height: 32),
-          if (_loggedIn)
-            _MenuTile(
-              icon: Icons.logout,
-              label: '로그아웃',
-              color: AppTheme.red500,
-              onTap: _logout,
-            )
-          else
-            _MenuTile(
-              icon: Icons.login,
-              label: '로그인',
-              color: context.aublColors.cobalt,
-              onTap: _login,
-            ),
-          const SizedBox(height: 32),
-        ],
+          );
+        },
       ),
     );
   }
@@ -609,14 +669,23 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: Text(
-        title,
-        style: TextStyle(
-          color: context.aublColors.muted,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 7),
+      child: Container(
+        padding: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: context.aublColors.navy, width: 2),
+          ),
+        ),
+        child: Text(
+          title.toUpperCase(),
+          style: TextStyle(
+            color: context.aublColors.cobalt,
+            fontFamily: 'BarlowCondensed',
+            fontSize: 12,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.2,
+          ),
         ),
       ),
     );
@@ -641,18 +710,50 @@ class _MenuTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.aublColors;
-    return ListTile(
-      minTileHeight: 52,
-      leading: Icon(icon, color: color ?? colors.navy),
-      title: Text(label, style: TextStyle(color: color ?? colors.ink)),
-      subtitle: value == null
-          ? null
-          : Text(
-              value!,
-              style: TextStyle(color: colors.muted, fontSize: 12),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+      child: Material(
+        color: colors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+          side: BorderSide(color: colors.line),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: ListTile(
+          minTileHeight: 58,
+          leading: Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: colors.surfaceMuted,
+              borderRadius: BorderRadius.circular(3),
+              border: Border.all(color: colors.line),
             ),
-      trailing: Icon(Icons.chevron_right, color: color ?? colors.muted),
-      onTap: onTap,
+            child: Icon(icon, size: 20, color: color ?? colors.navy),
+          ),
+          title: Text(
+            label,
+            style: TextStyle(
+              color: color ?? colors.ink,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          subtitle: value == null
+              ? null
+              : Text(
+                  value!,
+                  style: TextStyle(color: colors.muted, fontSize: 12),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+          trailing: Icon(
+            Icons.arrow_forward_rounded,
+            size: 18,
+            color: color ?? colors.muted,
+          ),
+          onTap: onTap,
+        ),
+      ),
     );
   }
 }

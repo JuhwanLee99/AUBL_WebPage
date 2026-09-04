@@ -99,8 +99,9 @@ class _PlayerRegistrationWriteScreenState
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('저장 실패: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('저장 실패: $e')));
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -109,7 +110,8 @@ class _PlayerRegistrationWriteScreenState
 
   @override
   Widget build(BuildContext context) {
-    final canSubmit = !_submitting &&
+    final canSubmit =
+        !_submitting &&
         _titleCtrl.text.trim().isNotEmpty &&
         !isDeltaEmpty(_contentDelta) &&
         _canWriteCategory(_category);
@@ -154,98 +156,114 @@ class _PlayerRegistrationWriteScreenState
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: context.aublColors.cobalt.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                    color: context.aublColors.cobalt.withValues(alpha: 0.35)),
-              ),
-              child: Text(
-                '작성 권한\n- 선수 등록: 관리자\n- 유니폼 등록: 감독/관리자',
-                style: TextStyle(
-                  color: context.aublColors.cobalt,
-                  fontSize: 12,
-                  height: 1.6,
-                  fontWeight: FontWeight.w600,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final outerInset = constraints.maxWidth > 820
+              ? (constraints.maxWidth - 820) / 2
+              : 0.0;
+          return SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              outerInset + 16,
+              16,
+              outerInset + 16,
+              32,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: context.aublColors.cobalt.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: context.aublColors.cobalt.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Text(
+                    '작성 권한\n- 선수 등록: 관리자\n- 유니폼 등록: 감독/관리자',
+                    style: TextStyle(
+                      color: context.aublColors.cobalt,
+                      fontSize: 12,
+                      height: 1.6,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 16),
+                _sectionLabel('분류'),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: _category,
+                  dropdownColor: context.aublColors.surface,
+                  decoration: _inputDecoration('분류를 선택하세요'),
+                  items: _writableCategories
+                      .map(
+                        (c) => DropdownMenuItem(
+                          value: c,
+                          child: Text(
+                            c,
+                            style: TextStyle(color: context.aublColors.ink),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) => setState(() => _category = v!),
+                ),
+                const SizedBox(height: 16),
+                _sectionLabel('제목'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _titleCtrl,
+                  maxLength: 100,
+                  style: TextStyle(color: context.aublColors.ink),
+                  decoration: _inputDecoration('제목을 입력하세요'),
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 8),
+                _sectionLabel('내용'),
+                const SizedBox(height: 8),
+                RichTextEditor(
+                  initialValue: _contentDelta,
+                  onChanged: (v) => setState(() => _contentDelta = v),
+                  placeholder: '내용을 입력하세요',
+                  minHeight: 220,
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            _sectionLabel('분류'),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              initialValue: _category,
-              dropdownColor: context.aublColors.surface,
-              decoration: _inputDecoration('분류를 선택하세요'),
-              items: _writableCategories
-                  .map((c) => DropdownMenuItem(
-                        value: c,
-                        child: Text(c,
-                            style: TextStyle(color: context.aublColors.ink)),
-                      ))
-                  .toList(),
-              onChanged: (v) => setState(() => _category = v!),
-            ),
-            const SizedBox(height: 16),
-            _sectionLabel('제목'),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _titleCtrl,
-              maxLength: 100,
-              style: TextStyle(color: context.aublColors.ink),
-              decoration: _inputDecoration('제목을 입력하세요'),
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 8),
-            _sectionLabel('내용'),
-            const SizedBox(height: 8),
-            RichTextEditor(
-              initialValue: _contentDelta,
-              onChanged: (v) => setState(() => _contentDelta = v),
-              placeholder: '내용을 입력하세요',
-              minHeight: 220,
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
   Widget _sectionLabel(String label) => Text(
-        label,
-        style: TextStyle(
-          color: context.aublColors.muted,
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-        ),
-      );
+    label,
+    style: TextStyle(
+      color: context.aublColors.muted,
+      fontSize: 13,
+      fontWeight: FontWeight.w700,
+    ),
+  );
 
   InputDecoration _inputDecoration(String hint) => InputDecoration(
-        hintText: hint,
-        hintStyle: TextStyle(color: context.aublColors.muted),
-        filled: true,
-        fillColor: context.aublColors.surface.withValues(alpha: 0.6),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: context.aublColors.line),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: context.aublColors.line),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: context.aublColors.cobalt),
-        ),
-      );
+    hintText: hint,
+    hintStyle: TextStyle(color: context.aublColors.muted),
+    filled: true,
+    fillColor: context.aublColors.surface.withValues(alpha: 0.6),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(4),
+      borderSide: BorderSide(color: context.aublColors.line),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(4),
+      borderSide: BorderSide(color: context.aublColors.line),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(4),
+      borderSide: BorderSide(color: context.aublColors.cobalt),
+    ),
+  );
 }

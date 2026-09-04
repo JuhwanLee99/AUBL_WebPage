@@ -13,10 +13,7 @@ import '../../core/widgets/moderation/e911_emergency_icon.dart';
 import '../../core/widgets/moderation/moderation_dialogs.dart';
 import 'player_registration_write_screen.dart';
 
-enum _PlayerRegModerationAction {
-  report,
-  block,
-}
+enum _PlayerRegModerationAction { report, block }
 
 class PlayerRegistrationDetailScreen extends StatefulWidget {
   const PlayerRegistrationDetailScreen({
@@ -58,10 +55,9 @@ class _PlayerRegistrationDetailScreenState
   }
 
   Color _categoryColor(String category) => switch (category) {
-        '선수 등록' => context.aublColors.danger,
-        '유니폼 등록' => context.aublColors.success,
-        _ => context.aublColors.muted,
-      };
+    '선수 등록' => context.aublColors.cobalt,
+    _ => context.aublColors.navy,
+  };
 
   String _currentUserLabel(User user) {
     return user.displayName ?? user.email ?? user.uid;
@@ -74,20 +70,21 @@ class _PlayerRegistrationDetailScreenState
   }
 
   Future<void> _handleModerationAction(
-      _PlayerRegModerationAction action) async {
+    _PlayerRegModerationAction action,
+  ) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('로그인 후 신고/차단할 수 있습니다.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('로그인 후 신고/차단할 수 있습니다.')));
       return;
     }
     if (_post.uid.isEmpty || _post.uid == user.uid) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('본인 계정은 신고하거나 차단할 수 없습니다.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('본인 계정은 신고하거나 차단할 수 없습니다.')));
       return;
     }
 
@@ -106,8 +103,9 @@ class _PlayerRegistrationDetailScreenState
       targetLabel: _post.author,
       contentDomain: 'playerRegistrationPost',
       contentId: _post.id,
-      contentPreview:
-          _clipPreview('${_post.title}\n${deltaToPreviewText(_post.content)}'),
+      contentPreview: _clipPreview(
+        '${_post.title}\n${deltaToPreviewText(_post.content)}',
+      ),
     );
 
     try {
@@ -136,9 +134,9 @@ class _PlayerRegistrationDetailScreenState
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('신고 처리 중 오류가 발생했습니다: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('신고 처리 중 오류가 발생했습니다: $e')));
     }
   }
 
@@ -159,8 +157,10 @@ class _PlayerRegistrationDetailScreenState
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child:
-                Text('삭제', style: TextStyle(color: context.aublColors.danger)),
+            child: Text(
+              '삭제',
+              style: TextStyle(color: context.aublColors.danger),
+            ),
           ),
         ],
       ),
@@ -180,7 +180,8 @@ class _PlayerRegistrationDetailScreenState
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    final canModeratePost = user != null &&
+    final canModeratePost =
+        user != null &&
         _post.uid.isNotEmpty &&
         user.uid != _post.uid &&
         !_canEdit;
@@ -207,8 +208,10 @@ class _PlayerRegistrationDetailScreenState
               },
             ),
             IconButton(
-              icon:
-                  Icon(Icons.delete_outline, color: context.aublColors.danger),
+              icon: Icon(
+                Icons.delete_outline,
+                color: context.aublColors.danger,
+              ),
               onPressed: _deletePost,
             ),
           ],
@@ -272,44 +275,62 @@ class _PlayerRegistrationDetailScreenState
             );
           }
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  _badge(_post.category, _categoryColor(_post.category)),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                _post.title,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: context.aublColors.ink,
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final outerInset = constraints.maxWidth > 820
+                  ? (constraints.maxWidth - 820) / 2
+                  : 0.0;
+              return ListView(
+                padding: EdgeInsets.fromLTRB(
+                  outerInset + 16,
+                  16,
+                  outerInset + 16,
+                  32,
                 ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '${_post.author} · ${timeago.format(DateTime.fromMillisecondsSinceEpoch(_post.createdAt), locale: 'ko')}',
-                style: TextStyle(color: context.aublColors.muted, fontSize: 12),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '우측 상단 메뉴에서 게시글 신고 또는 작성자 차단이 가능합니다.',
-                style: TextStyle(color: context.aublColors.muted, fontSize: 11),
-              ),
-              const Divider(height: 28),
-              RichTextViewer(
-                content: _post.content,
-                fontSize: 14,
-                color: context.aublColors.ink,
-                lineHeight: 1.7,
-              ),
-            ],
+                children: [
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      _badge(_post.category, _categoryColor(_post.category)),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _post.title,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: context.aublColors.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${_post.author} · ${timeago.format(DateTime.fromMillisecondsSinceEpoch(_post.createdAt), locale: 'ko')}',
+                    style: TextStyle(
+                      color: context.aublColors.muted,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '우측 상단 메뉴에서 게시글 신고 또는 작성자 차단이 가능합니다.',
+                    style: TextStyle(
+                      color: context.aublColors.muted,
+                      fontSize: 11,
+                    ),
+                  ),
+                  const Divider(height: 28),
+                  RichTextViewer(
+                    content: _post.content,
+                    fontSize: 14,
+                    color: context.aublColors.ink,
+                    lineHeight: 1.7,
+                  ),
+                ],
+              );
+            },
           );
         },
       ),
@@ -321,7 +342,8 @@ class _PlayerRegistrationDetailScreenState
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(5),
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Text(
         label,

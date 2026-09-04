@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import '../../theme/app_theme.dart';
 import 'delta_utils.dart';
 import 'table_embed.dart';
 
@@ -14,13 +15,13 @@ class RichTextViewer extends StatefulWidget {
     super.key,
     required this.content,
     this.fontSize = 15.0,
-    this.color = const Color(0xFFcbd5e1),
+    this.color,
     this.lineHeight = 1.6,
   });
 
   final String content;
   final double fontSize;
-  final Color color;
+  final Color? color;
   final double lineHeight;
 
   @override
@@ -59,12 +60,14 @@ class _RichTextViewerState extends State<RichTextViewer> {
 
   @override
   Widget build(BuildContext context) {
+    final contentColor = widget.color ?? context.aublColors.ink;
+
     // plain text는 Delta 없이 간단하게 렌더링
     if (!isJsonDelta(widget.content)) {
       return Text(
         widget.content,
         style: TextStyle(
-          color: widget.color,
+          color: contentColor,
           fontSize: widget.fontSize,
           height: widget.lineHeight,
         ),
@@ -90,12 +93,13 @@ class _RichTextViewerState extends State<RichTextViewer> {
           const AublTableEmbedBuilder(),
         ],
         customStyles: DefaultStyles(
-          color: widget.color,
+          color: contentColor,
           paragraph: DefaultTextBlockStyle(
             TextStyle(
-                color: widget.color,
-                fontSize: widget.fontSize,
-                height: widget.lineHeight),
+              color: contentColor,
+              fontSize: widget.fontSize,
+              height: widget.lineHeight,
+            ),
             HorizontalSpacing.zero,
             VerticalSpacing.zero,
             VerticalSpacing.zero,
@@ -128,12 +132,15 @@ class _ImageEmbedBuilder extends EmbedBuilder {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(4),
         child: CachedNetworkImage(
           imageUrl: url,
           fit: BoxFit.cover,
-          errorWidget: (_, __, ___) => const Icon(Icons.broken_image,
-              color: Color(0xFF64748b), size: 48),
+          errorWidget: (_, __, ___) => Icon(
+            Icons.broken_image,
+            color: context.aublColors.muted,
+            size: 48,
+          ),
         ),
       ),
     );
@@ -156,7 +163,7 @@ class _VideoEmbedBuilder extends EmbedBuilder {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(4),
         child: SizedBox(height: 220, child: WebViewWidget(controller: wc)),
       ),
     );

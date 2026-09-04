@@ -14,6 +14,7 @@ import '../../core/services/moderation_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/editor/delta_utils.dart';
 import '../../core/widgets/editor/rich_text_editor.dart';
+import '../../core/widgets/season_components.dart';
 import 'inquiry_board_screen.dart';
 import 'notice_detail_screen.dart';
 import 'player_registration_board_screen.dart';
@@ -160,12 +161,11 @@ class CommunityScreenState extends State<CommunityScreen> {
   }
 
   Color _categoryColor(BuildContext context, String cat) => switch (cat) {
-        '긴급' => context.aublColors.danger,
-        '심판/기록원 모집' => context.aublColors.success,
-        '징계' => context.aublColors.warning,
-        '경기공지' => context.aublColors.cobalt,
-        _ => context.aublColors.muted,
-      };
+    '긴급' => context.aublColors.danger,
+    '징계' => context.aublColors.warning,
+    '경기공지' => context.aublColors.cobalt,
+    _ => context.aublColors.navy,
+  };
 
   Widget _buildAttachmentBadge(
     BuildContext context, {
@@ -201,6 +201,7 @@ class CommunityScreenState extends State<CommunityScreen> {
   Widget build(BuildContext context) {
     final colors = context.aublColors;
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
 
     return Scaffold(
       appBar: AppBar(title: const Text('커뮤니티')),
@@ -218,196 +219,244 @@ class CommunityScreenState extends State<CommunityScreen> {
           final blockedUserIds = blockedSnapshot.data ?? const <String>{};
           final filtered = _filteredNotices(blockedUserIds);
 
-          return _loading
-              ? const Center(child: CircularProgressIndicator())
-              : RefreshIndicator(
-                  onRefresh: _loadNotices,
-                  child: ListView(
-                    children: [
-                      // ── 갤러리 배너 ──
-                      _buildGalleryBanner(),
-                      const Divider(height: 1),
-
-                      // ── 건의/문의 배너 ──
-                      _buildInquiryBanner(),
-                      const Divider(height: 1),
-
-                      // ── 선수 등록 게시판 배너 ──
-                      _buildPlayerRegistrationBanner(),
-                      const Divider(height: 1),
-
-                      // ── 카테고리 필터 ──
-                      SizedBox(
-                        height: 48,
-                        child: ListView(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          children: _categories.map((cat) {
-                            final selected = cat == _selectedCategory;
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: ChoiceChip(
-                                label: Text(cat),
-                                selected: selected,
-                                onSelected: (_) =>
-                                    setState(() => _selectedCategory = cat),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-
-                      // ── 검색 ──
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
-                        child: TextField(
-                          controller: _searchController,
-                          onChanged: (value) =>
-                              setState(() => _searchQuery = value),
-                          textInputAction: TextInputAction.search,
-                          decoration: InputDecoration(
-                            hintText: '제목, 내용, 작성자 검색',
-                            prefixIcon: const Icon(Icons.search, size: 20),
-                            suffixIcon: _searchQuery.isEmpty
-                                ? null
-                                : IconButton(
-                                    icon: const Icon(Icons.close, size: 18),
-                                    onPressed: () {
-                                      _searchController.clear();
-                                      setState(() => _searchQuery = '');
-                                    },
-                                  ),
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 10),
-                          ),
-                        ),
-                      ),
-
-                      // ── 공지 수 ──
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 4),
-                        child: Text(
-                          '${filtered.length}개 공지',
-                          style: TextStyle(color: colors.muted, fontSize: 12),
-                        ),
-                      ),
-
-                      // ── 공지 목록 ──
-                      if (filtered.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.all(32),
-                          child: Center(
-                            child: Text(
-                              _searchQuery.trim().isEmpty
-                                  ? '공지가 없습니다.'
-                                  : '검색 결과가 없습니다.',
-                              style: TextStyle(color: colors.muted),
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final outerInset = constraints.maxWidth > 1000
+                  ? (constraints.maxWidth - 1000) / 2
+                  : 0.0;
+              return _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : RefreshIndicator(
+                      onRefresh: _loadNotices,
+                      child: ListView(
+                        padding: EdgeInsets.symmetric(horizontal: outerInset),
+                        children: [
+                          const Padding(
+                            padding: EdgeInsets.fromLTRB(12, 8, 12, 8),
+                            child: SeasonPageHero(
+                              eyebrow: 'AUBL COMMUNITY',
+                              title: Text('리그 커뮤니티'),
+                              description: '공식 공지와 리그 참여 채널을 한곳에서 확인하세요.',
                             ),
                           ),
-                        )
-                      else
-                        ...filtered.map((n) {
-                          final ago = timeago.format(
-                            DateTime.fromMillisecondsSinceEpoch(n.createdAt),
-                            locale: 'ko',
-                          );
-                          final attachment =
-                              summarizeDeltaAttachments(n.content);
-                          return Padding(
+                          // ── 갤러리 배너 ──
+                          _buildGalleryBanner(),
+
+                          // ── 건의/문의 배너 ──
+                          _buildInquiryBanner(),
+
+                          // ── 선수 등록 게시판 배너 ──
+                          _buildPlayerRegistrationBanner(),
+
+                          // ── 카테고리 필터 ──
+                          SizedBox(
+                            height: textScale >= 1.6 ? 64 : 48,
+                            child: ListView(
+                              scrollDirection: Axis.horizontal,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              children: _categories.map((cat) {
+                                final selected = cat == _selectedCategory;
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: ChoiceChip(
+                                    label: Text(cat),
+                                    selected: selected,
+                                    onSelected: (_) =>
+                                        setState(() => _selectedCategory = cat),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+
+                          // ── 검색 ──
+                          Padding(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 3),
-                            child: Card(
-                              child: ListTile(
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                onTap: () {
-                                  Navigator.of(context)
-                                      .push(
-                                        MaterialPageRoute<void>(
-                                          builder: (_) =>
-                                              NoticeDetailScreen(notice: n),
-                                        ),
-                                      )
-                                      .then((_) => _loadNotices());
-                                },
-                                leading: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: _categoryColor(context, n.category)
-                                        .withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    n.category,
-                                    style: TextStyle(
-                                      color:
-                                          _categoryColor(context, n.category),
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                                title: Text(
-                                  n.title,
-                                  style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      '${n.author} · $ago',
-                                      style: TextStyle(
-                                          color: colors.muted, fontSize: 12),
-                                    ),
-                                    if (attachment.hasAny) ...[
-                                      const SizedBox(height: 4),
-                                      Wrap(
-                                        spacing: 6,
-                                        runSpacing: 4,
-                                        children: [
-                                          if (attachment.hasImage)
-                                            _buildAttachmentBadge(
-                                              context,
-                                              icon: Icons.image_outlined,
-                                              label: '이미지',
-                                            ),
-                                          if (attachment.hasVideo)
-                                            _buildAttachmentBadge(
-                                              context,
-                                              icon: Icons.videocam_outlined,
-                                              label: '동영상',
-                                            ),
-                                          if (attachment.hasLink)
-                                            _buildAttachmentBadge(
-                                              context,
-                                              icon: Icons.link,
-                                              label: '링크',
-                                            ),
-                                        ],
+                              horizontal: 12,
+                              vertical: 4,
+                            ),
+                            child: TextField(
+                              controller: _searchController,
+                              onChanged: (value) =>
+                                  setState(() => _searchQuery = value),
+                              textInputAction: TextInputAction.search,
+                              decoration: InputDecoration(
+                                hintText: '제목, 내용, 작성자 검색',
+                                prefixIcon: const Icon(Icons.search, size: 20),
+                                suffixIcon: _searchQuery.isEmpty
+                                    ? null
+                                    : IconButton(
+                                        icon: const Icon(Icons.close, size: 18),
+                                        onPressed: () {
+                                          _searchController.clear();
+                                          setState(() => _searchQuery = '');
+                                        },
                                       ),
-                                    ],
-                                  ],
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
                                 ),
-                                trailing: Icon(Icons.chevron_right,
-                                    size: 18, color: colors.muted),
                               ),
                             ),
-                          );
-                        }),
-                      const SizedBox(height: 32),
-                    ],
-                  ),
-                );
+                          ),
+
+                          // ── 공지 수 ──
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 4,
+                            ),
+                            child: Text(
+                              '${filtered.length}개 공지',
+                              style: TextStyle(
+                                color: colors.muted,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+
+                          // ── 공지 목록 ──
+                          if (filtered.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.all(32),
+                              child: Center(
+                                child: Text(
+                                  _searchQuery.trim().isEmpty
+                                      ? '공지가 없습니다.'
+                                      : '검색 결과가 없습니다.',
+                                  style: TextStyle(color: colors.muted),
+                                ),
+                              ),
+                            )
+                          else
+                            ...filtered.map((n) {
+                              final ago = timeago.format(
+                                DateTime.fromMillisecondsSinceEpoch(
+                                  n.createdAt,
+                                ),
+                                locale: 'ko',
+                              );
+                              final attachment = summarizeDeltaAttachments(
+                                n.content,
+                              );
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 3,
+                                ),
+                                child: Card(
+                                  child: ListTile(
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    onTap: () {
+                                      Navigator.of(context)
+                                          .push(
+                                            MaterialPageRoute<void>(
+                                              builder: (_) =>
+                                                  NoticeDetailScreen(notice: n),
+                                            ),
+                                          )
+                                          .then((_) => _loadNotices());
+                                    },
+                                    leading: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _categoryColor(
+                                          context,
+                                          n.category,
+                                        ).withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(3),
+                                        border: Border.all(
+                                          color: _categoryColor(
+                                            context,
+                                            n.category,
+                                          ).withValues(alpha: 0.4),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        n.category,
+                                        style: TextStyle(
+                                          color: _categoryColor(
+                                            context,
+                                            n.category,
+                                          ),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    title: Text(
+                                      n.title,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    subtitle: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          '${n.author} · $ago',
+                                          style: TextStyle(
+                                            color: colors.muted,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                        if (attachment.hasAny) ...[
+                                          const SizedBox(height: 4),
+                                          Wrap(
+                                            spacing: 6,
+                                            runSpacing: 4,
+                                            children: [
+                                              if (attachment.hasImage)
+                                                _buildAttachmentBadge(
+                                                  context,
+                                                  icon: Icons.image_outlined,
+                                                  label: '이미지',
+                                                ),
+                                              if (attachment.hasVideo)
+                                                _buildAttachmentBadge(
+                                                  context,
+                                                  icon: Icons.videocam_outlined,
+                                                  label: '동영상',
+                                                ),
+                                              if (attachment.hasLink)
+                                                _buildAttachmentBadge(
+                                                  context,
+                                                  icon: Icons.link,
+                                                  label: '링크',
+                                                ),
+                                            ],
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                    trailing: Icon(
+                                      Icons.chevron_right,
+                                      size: 18,
+                                      color: colors.muted,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }),
+                          const SizedBox(height: 32),
+                        ],
+                      ),
+                    );
+            },
+          );
         },
       ),
     );
@@ -424,18 +473,17 @@ class CommunityScreenState extends State<CommunityScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => Dialog(
-          insetPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '공지 작성',
-                  style: Theme.of(ctx).textTheme.titleLarge,
-                ),
+                Text('공지 작성', style: Theme.of(ctx).textTheme.titleLarge),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: category,
@@ -489,7 +537,8 @@ class CommunityScreenState extends State<CommunityScreen> {
                               if (title.isEmpty || isDeltaEmpty(contentDelta)) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                      content: Text('제목과 내용을 입력해주세요.')),
+                                    content: Text('제목과 내용을 입력해주세요.'),
+                                  ),
                                 );
                                 return;
                               }
@@ -501,11 +550,13 @@ class CommunityScreenState extends State<CommunityScreen> {
                                   if (!mounted) return;
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                        content: Text('로그인이 필요합니다.')),
+                                      content: Text('로그인이 필요합니다.'),
+                                    ),
                                   );
                                   return;
                                 }
-                                final author = currentUser.displayName ??
+                                final author =
+                                    currentUser.displayName ??
                                     currentUser.email?.split('@').first ??
                                     '관리자';
                                 await _fs.addNotice(
@@ -521,7 +572,8 @@ class CommunityScreenState extends State<CommunityScreen> {
                                   _loadNotices();
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                        content: Text('공지가 등록되었습니다.')),
+                                      content: Text('공지가 등록되었습니다.'),
+                                    ),
                                   );
                                 }
                               } catch (e) {
@@ -566,8 +618,9 @@ class CommunityScreenState extends State<CommunityScreen> {
     return _CommunityLinkCard(
       icon: canAccess ? Icons.badge_outlined : Icons.lock_outline,
       title: '선수 등록 게시판',
-      description:
-          canAccess ? '선수 등록(관리자), 유니폼 등록(감독/관리자)' : '선수/기록원 등급 이상만 접근 가능',
+      description: canAccess
+          ? '선수 등록(관리자), 유니폼 등록(감독/관리자)'
+          : '선수/기록원 등급 이상만 접근 가능',
       locked: !canAccess,
       onTap: () async {
         final messenger = ScaffoldMessenger.of(context);
@@ -584,7 +637,8 @@ class CommunityScreenState extends State<CommunityScreen> {
         }
         await navigator.push<void>(
           MaterialPageRoute(
-              builder: (_) => const PlayerRegistrationBoardScreen()),
+            builder: (_) => const PlayerRegistrationBoardScreen(),
+          ),
         );
       },
     );
@@ -627,33 +681,70 @@ class _CommunityLinkCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.aublColors;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      child: Card(
-        child: ListTile(
-          minTileHeight: 76,
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+      child: Material(
+        color: colors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+          side: BorderSide(color: colors.line),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(4),
           onTap: onTap,
-          leading: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: (locked ? colors.danger : colors.cobalt)
-                  .withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(0, 0, 12, 0),
+            child: Row(
+              children: [
+                Container(
+                  width: 72,
+                  constraints: const BoxConstraints(minHeight: 78),
+                  decoration: BoxDecoration(
+                    color: colors.surfaceMuted,
+                    border: Border(right: BorderSide(color: colors.line)),
+                  ),
+                  child: Icon(
+                    icon,
+                    color: locked ? colors.danger : colors.cobalt,
+                    size: 25,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          description,
+                          style: TextStyle(
+                            color: colors.muted,
+                            fontSize: 12,
+                            height: 1.45,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  locked
+                      ? Icons.lock_outline
+                      : external
+                      ? Icons.open_in_new
+                      : Icons.arrow_forward_rounded,
+                  size: 18,
+                  color: colors.muted,
+                ),
+              ],
             ),
-            child: Icon(icon,
-                color: locked ? colors.danger : colors.cobalt, size: 24),
-          ),
-          title:
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
-          subtitle: Text(description,
-              style: TextStyle(color: colors.muted, fontSize: 12)),
-          trailing: Icon(
-            locked
-                ? Icons.lock_outline
-                : external
-                    ? Icons.open_in_new
-                    : Icons.chevron_right,
-            color: colors.muted,
           ),
         ),
       ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/data/team_groups.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/season_components.dart';
 
 class IntroScreen extends StatefulWidget {
   const IntroScreen({super.key});
@@ -12,8 +13,8 @@ class IntroScreen extends StatefulWidget {
 }
 
 class _IntroScreenState extends State<IntroScreen> {
-  static const double _sectionSpacing = 24;
-  static const double _cardRadius = 14;
+  static const double _sectionSpacing = 18;
+  static const double _cardRadius = 4;
 
   final _fs = FirestoreService();
   Map<String, dynamic>? _content;
@@ -38,6 +39,7 @@ class _IntroScreenState extends State<IntroScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(title: const Text('리그 소개')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _buildContent(),
@@ -59,24 +61,31 @@ class _IntroScreenState extends State<IntroScreen> {
       contentSections.add(_buildAdditionalSections(sections));
     }
 
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(child: _buildHero(intro)),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var i = 0; i < contentSections.length; i++) ...[
-                  if (i > 0) const SizedBox(height: _sectionSpacing),
-                  contentSections[i],
-                ],
-              ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final horizontal = constraints.maxWidth < 520 ? 12.0 : 24.0;
+        return ListView(
+          padding: EdgeInsets.fromLTRB(horizontal, 8, horizontal, 32),
+          children: [
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1180),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHero(intro),
+                    const SizedBox(height: 18),
+                    for (var i = 0; i < contentSections.length; i++) ...[
+                      if (i > 0) const SizedBox(height: _sectionSpacing),
+                      contentSections[i],
+                    ],
+                  ],
+                ),
+              ),
             ),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 
@@ -126,11 +135,11 @@ class _IntroScreenState extends State<IntroScreen> {
                         ),
                       ),
                     ...items.whereType<String>().map(
-                          (item) => Padding(
-                            padding: const EdgeInsets.only(bottom: 6),
-                            child: _buildBulletText(item),
-                          ),
-                        ),
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: _buildBulletText(item),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -143,7 +152,6 @@ class _IntroScreenState extends State<IntroScreen> {
 
   // ── 히어로 ──
   Widget _buildHero(Map<String, dynamic> intro) {
-    final heroAccent = _mutedAccent(context.aublColors.cobalt, 0.5);
     final heroTagline = intro['tagline'] as String? ?? 'AUBL · LEAGUE INTRO';
     final heroSubtitle = _normalizeSeasonCopy(
       intro['heroSubtitle'] as String? ?? '46TH AUBL · 2026 연합회교 중앙대학교(서울)',
@@ -164,131 +172,58 @@ class _IntroScreenState extends State<IntroScreen> {
       ('핵심 가치', '실시간 기록 · 중계 · 디지털화', '모바일 친화 기록/중계로 정보 접근성 강화'),
     ];
 
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.fromLTRB(
-          20, MediaQuery.of(context).padding.top + 16, 20, 28),
-      decoration: BoxDecoration(
-        color: context.aublColors.surface,
-        border: Border(bottom: BorderSide(color: context.aublColors.line)),
-      ),
-      child: Stack(
+    return SeasonPageHero(
+      eyebrow: heroTagline,
+      title: Text(heroTitle),
+      description: heroDescription,
+      footer: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  InkWell(
-                    onTap: () => Navigator.of(context).pop(),
-                    borderRadius: BorderRadius.circular(10),
-                    child: Ink(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: context.aublColors.ink.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: context.aublColors.ink.withValues(alpha: 0.18),
-                        ),
-                      ),
-                      child: Icon(
-                        Icons.arrow_back,
-                        color: context.aublColors.ink,
-                        size: 20,
-                      ),
+          Container(
+            padding: const EdgeInsets.only(left: 10),
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(color: context.aublColors.cobalt, width: 3),
+              ),
+            ),
+            child: Text(
+              heroSubtitle,
+              style: Theme.of(
+                context,
+              ).textTheme.labelMedium?.copyWith(color: context.aublColors.navy),
+            ),
+          ),
+          const SizedBox(height: 18),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final textScale = MediaQuery.textScalerOf(context).scale(1);
+              final columns = constraints.maxWidth >= 760 && textScale < 1.6
+                  ? 3
+                  : constraints.maxWidth >= 520 && textScale < 1.3
+                  ? 2
+                  : 1;
+              const gap = 10.0;
+              final cardWidth =
+                  (constraints.maxWidth - ((columns - 1) * gap)) / columns;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: heroMetrics.map((metric) {
+                  final (label, value, note) = metric;
+                  return SizedBox(
+                    width: cardWidth,
+                    child: _buildHeroMetricCard(
+                      label: label,
+                      value: value,
+                      note: note,
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    '리그 소개',
-                    style: TextStyle(
-                      color: context.aublColors.ink,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  _heroBadge(heroTagline, heroAccent),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                heroSubtitle,
-                style: TextStyle(
-                  color: context.aublColors.muted,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                heroTitle,
-                style: TextStyle(
-                  color: context.aublColors.ink,
-                  fontSize: 21,
-                  fontWeight: FontWeight.w800,
-                  height: 1.3,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                heroDescription,
-                style: TextStyle(
-                  color: context.aublColors.ink,
-                  fontSize: 13,
-                  height: 1.62,
-                ),
-              ),
-              const SizedBox(height: 18),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final isWide = constraints.maxWidth > 540;
-                  final cardWidth = isWide
-                      ? (constraints.maxWidth - 10) / 2
-                      : constraints.maxWidth;
-                  return Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: heroMetrics.map((m) {
-                      final (label, value, note) = m;
-                      return SizedBox(
-                        width: cardWidth,
-                        child: _buildHeroMetricCard(
-                          label: label,
-                          value: value,
-                          note: note,
-                        ),
-                      );
-                    }).toList(),
                   );
-                },
-              ),
-            ],
+                }).toList(),
+              );
+            },
           ),
         ],
       ),
-    );
-  }
-
-  Widget _heroBadge(String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Text(text,
-          style: TextStyle(
-            color: color,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.35,
-          )),
     );
   }
 
@@ -336,8 +271,8 @@ class _IntroScreenState extends State<IntroScreen> {
     );
   }
 
-  Color _mutedAccent(Color color, [double blendWithSlate = 0.35]) {
-    return Color.lerp(color, context.aublColors.ink, blendWithSlate) ?? color;
+  Color _mutedAccent(Color _, [double __ = 0.35]) {
+    return context.aublColors.cobalt;
   }
 
   String _normalizeSeasonCopy(String value) {
@@ -354,7 +289,6 @@ class _IntroScreenState extends State<IntroScreen> {
     Color? backgroundColor,
     double borderOpacity = 0.45,
     EdgeInsetsGeometry padding = const EdgeInsets.all(14),
-    Gradient? gradient,
   }) {
     final resolvedBorderColor = borderColor ?? context.aublColors.line;
     final resolvedBackgroundColor =
@@ -364,8 +298,7 @@ class _IntroScreenState extends State<IntroScreen> {
       width: double.infinity,
       padding: padding,
       decoration: BoxDecoration(
-        color: gradient == null ? resolvedBackgroundColor : null,
-        gradient: gradient,
+        color: resolvedBackgroundColor,
         borderRadius: BorderRadius.circular(_cardRadius),
         border: Border.all(
           color: resolvedBorderColor.withValues(alpha: borderOpacity),
@@ -395,37 +328,38 @@ class _IntroScreenState extends State<IntroScreen> {
     );
   }
 
-  Widget _sectionTitle(String title, IconData icon, Color color) {
-    final accent = _mutedAccent(color, 0.45);
-    return Row(
-      children: [
-        Container(
-          width: 26,
-          height: 26,
-          decoration: BoxDecoration(
-            color: context.aublColors.line.withValues(alpha: 0.65),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-                color: context.aublColors.muted.withValues(alpha: 0.25)),
-          ),
-          child: Icon(icon, size: 15, color: context.aublColors.ink),
+  Widget _sectionTitle(String title, IconData icon, Color _) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: context.aublColors.navy, width: 2),
         ),
-        const SizedBox(width: 10),
-        Text(title,
-            style: TextStyle(
-                color: context.aublColors.ink,
-                fontSize: 16,
-                fontWeight: FontWeight.w700)),
-        const SizedBox(width: 8),
-        Container(
-          width: 6,
-          height: 6,
-          decoration: BoxDecoration(
-            color: accent,
-            shape: BoxShape.circle,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: context.aublColors.surfaceMuted,
+              borderRadius: BorderRadius.circular(3),
+              border: Border.all(color: context.aublColors.line),
+            ),
+            child: Icon(icon, size: 16, color: context.aublColors.cobalt),
           ),
-        ),
-      ],
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              title,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: context.aublColors.navyStrong,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -435,7 +369,10 @@ class _IntroScreenState extends State<IntroScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionTitle(
-            '회장단 인사말', Icons.record_voice_over, context.aublColors.warning),
+          '회장단 인사말',
+          Icons.record_voice_over,
+          context.aublColors.warning,
+        ),
         const SizedBox(height: 10),
         _buildSurfaceCard(
           padding: const EdgeInsets.all(16),
@@ -447,10 +384,11 @@ class _IntroScreenState extends State<IntroScreen> {
               Text(
                 '"변화와 혁신, 그리고 변하지 않는 열정으로"',
                 style: TextStyle(
-                    color: context.aublColors.ink,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    fontStyle: FontStyle.italic),
+                  color: context.aublColors.ink,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
               const SizedBox(height: 10),
               Text(
@@ -482,12 +420,14 @@ class _IntroScreenState extends State<IntroScreen> {
               const SizedBox(height: 10),
               Align(
                 alignment: Alignment.centerRight,
-                child: Text('제46대 전국대학아마추어야구연합회장 정흥영',
-                    style: TextStyle(
-                      color: context.aublColors.muted,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    )),
+                child: Text(
+                  '제46대 전국대학아마추어야구연합회장 정흥영',
+                  style: TextStyle(
+                    color: context.aublColors.muted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ],
           ),
@@ -504,21 +444,21 @@ class _IntroScreenState extends State<IntroScreen> {
         'Since 1981',
         '1981년 대학생들의 작은 교류전으로 출발해 45년을 이어온 '
             '국내 유일 순수 대학 아마추어 야구 리그.',
-        context.aublColors.cobalt
+        context.aublColors.cobalt,
       ),
       (
         'Dynasties',
         'Dynasties',
         '한국외국어대학교(서울)와 동국대학교(L.A.E)가 각각 통산 8회 '
             '우승으로 최다 우승 기록을 보유하며 리그의 역사를 이끌어왔습니다.',
-        context.aublColors.cobalt
+        context.aublColors.cobalt,
       ),
       (
         '2025-2026',
         '2025 → 2026',
-        '2025년 아주대 주최 시즌을 지나 2026년에는 중앙대학교(서울)가 '
-            '호스트를 맡아 8개 조 예선과 으뜸·버금 토너먼트로 리그를 운영합니다.',
-        context.aublColors.success
+        '2025년 아주대학교 연합회교 시즌을 지나 2026년에는 중앙대학교(서울)가 '
+            '연합회교로서 8개 조 예선과 으뜸·버금 토너먼트로 리그를 운영합니다.',
+        context.aublColors.success,
       ),
     ];
 
@@ -539,11 +479,13 @@ class _IntroScreenState extends State<IntroScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: accent.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(999),
+                      borderRadius: BorderRadius.circular(3),
                     ),
                     child: Text(
                       year,
@@ -593,7 +535,10 @@ class _IntroScreenState extends State<IntroScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionTitle(
-            '조직 구성', Icons.corporate_fare, context.aublColors.success),
+          '조직 구성',
+          Icons.corporate_fare,
+          context.aublColors.success,
+        ),
         const SizedBox(height: 10),
         ...roles.map((r) {
           final (label, value, detail) = r;
@@ -675,7 +620,10 @@ class _IntroScreenState extends State<IntroScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionTitle(
-            '리그 구조 · 규정 요약', Icons.menu_book, context.aublColors.warning),
+          '리그 구조 · 규정 요약',
+          Icons.menu_book,
+          context.aublColors.warning,
+        ),
         const SizedBox(height: 10),
         ...cards.map((card) {
           final (title, points) = card;
@@ -696,14 +644,18 @@ class _IntroScreenState extends State<IntroScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  ...points.map((p) => Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: _buildBulletText(
-                          p,
-                          bulletColor:
-                              _mutedAccent(context.aublColors.warning, 0.28),
+                  ...points.map(
+                    (p) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: _buildBulletText(
+                        p,
+                        bulletColor: _mutedAccent(
+                          context.aublColors.warning,
+                          0.28,
                         ),
-                      )),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -719,19 +671,13 @@ class _IntroScreenState extends State<IntroScreen> {
       (
         '으뜸 4강',
         '2026.01.25 예정',
-        [
-          '세종대 Kings vs 경희대 국제 Lions',
-          '연세대 Eagles vs 서울시립대 Falcons',
-        ],
+        ['세종대 Kings vs 경희대 국제 Lions', '연세대 Eagles vs 서울시립대 Falcons'],
         AppTheme.amber400,
       ),
       (
         '버금 4강',
         '2026.01.24 예정',
-        [
-          '한국공학대 Winners vs 한국외대 글로벌 Union',
-          '경희대 서울 Braves vs 인하대 Biryong',
-        ],
+        ['한국공학대 Winners vs 한국외대 글로벌 Union', '경희대 서울 Braves vs 인하대 Biryong'],
         context.aublColors.cobalt,
       ),
     ];
@@ -740,7 +686,10 @@ class _IntroScreenState extends State<IntroScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionTitle(
-            '2026 포스트시즌 스냅샷', Icons.military_tech, context.aublColors.cobalt),
+          '2026 포스트시즌 스냅샷',
+          Icons.military_tech,
+          context.aublColors.cobalt,
+        ),
         const SizedBox(height: 10),
         ...blocks.map((block) {
           final (title, date, matchups, color) = block;
@@ -772,10 +721,12 @@ class _IntroScreenState extends State<IntroScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  ...matchups.map((m) => Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: _buildBulletText(m, bulletColor: accent),
-                      )),
+                  ...matchups.map(
+                    (m) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: _buildBulletText(m, bulletColor: accent),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -790,8 +741,11 @@ class _IntroScreenState extends State<IntroScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('참가 팀 (${teamGroups.length}팀)', Icons.groups,
-            context.aublColors.cobalt),
+        _sectionTitle(
+          '참가 팀 (${teamGroups.length}팀)',
+          Icons.groups,
+          context.aublColors.cobalt,
+        ),
         const SizedBox(height: 10),
         _buildSurfaceCard(
           child: Wrap(
@@ -802,13 +756,16 @@ class _IntroScreenState extends State<IntroScreen> {
                   groupColors[entry.group] ?? context.aublColors.cobalt;
               final accent = _mutedAccent(color, 0.25);
               return Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: context.aublColors.line.withValues(alpha: 0.28),
-                  borderRadius: BorderRadius.circular(9),
+                  borderRadius: BorderRadius.circular(4),
                   border: Border.all(
-                      color: context.aublColors.muted.withValues(alpha: 0.24)),
+                    color: context.aublColors.muted.withValues(alpha: 0.24),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -825,7 +782,9 @@ class _IntroScreenState extends State<IntroScreen> {
                     Text(
                       entry.name,
                       style: TextStyle(
-                          color: context.aublColors.ink, fontSize: 12),
+                        color: context.aublColors.ink,
+                        fontSize: 12,
+                      ),
                     ),
                     const SizedBox(width: 5),
                     Text(

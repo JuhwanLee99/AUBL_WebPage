@@ -13,11 +13,7 @@ import '../../core/widgets/editor/rich_text_editor.dart';
 import '../../core/widgets/editor/rich_text_viewer.dart';
 import '../../core/widgets/moderation/moderation_dialogs.dart';
 
-enum _NoticeModerationAction {
-  report,
-  block,
-  delete,
-}
+enum _NoticeModerationAction { report, block, delete }
 
 class NoticeDetailScreen extends StatefulWidget {
   const NoticeDetailScreen({super.key, required this.notice});
@@ -92,32 +88,32 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
     final viewer = FirebaseAuth.instance.currentUser;
     if (viewer == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('로그인 후 신고/차단할 수 있습니다.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('로그인 후 신고/차단할 수 있습니다.')));
       return;
     }
 
     if (action == _NoticeModerationAction.block) {
       if (targetUid.isEmpty) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('작성자 정보가 없어 차단할 수 없습니다.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('작성자 정보가 없어 차단할 수 없습니다.')));
         return;
       }
       if (targetUid == viewer.uid) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('본인 계정은 차단할 수 없습니다.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('본인 계정은 차단할 수 없습니다.')));
         return;
       }
     } else if (targetUid.isNotEmpty && targetUid == viewer.uid) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('본인 계정은 신고할 수 없습니다.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('본인 계정은 신고할 수 없습니다.')));
       return;
     }
 
@@ -166,9 +162,9 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('신고 처리 중 오류가 발생했습니다: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('신고 처리 중 오류가 발생했습니다: $e')));
     }
   }
 
@@ -207,8 +203,10 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => Dialog(
           backgroundColor: context.aublColors.surface,
-          insetPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -250,8 +248,10 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
                 const SizedBox(height: 6),
                 Text(
                   '이미지/동영상은 툴바 버튼으로 URL을 입력하여 삽입할 수 있습니다.',
-                  style:
-                      TextStyle(color: context.aublColors.muted, fontSize: 11),
+                  style: TextStyle(
+                    color: context.aublColors.muted,
+                    fontSize: 11,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 CheckboxListTile(
@@ -359,8 +359,10 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child:
-                Text('삭제', style: TextStyle(color: context.aublColors.danger)),
+            child: Text(
+              '삭제',
+              style: TextStyle(color: context.aublColors.danger),
+            ),
           ),
         ],
       ),
@@ -372,9 +374,9 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('공지 삭제 중 오류가 발생했습니다: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('공지 삭제 중 오류가 발생했습니다: $e')));
     }
   }
 
@@ -397,8 +399,10 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
               onPressed: _showEditNoticeDialog,
             ),
             IconButton(
-              icon:
-                  Icon(Icons.delete_outline, color: context.aublColors.danger),
+              icon: Icon(
+                Icons.delete_outline,
+                color: context.aublColors.danger,
+              ),
               onPressed: _deleteNotice,
             ),
           ],
@@ -438,277 +442,338 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
           final blockedUserIds = blockedSnapshot.data ?? <String>{};
           final isNoticeBlocked = blockedUserIds.contains(n.uid);
 
-          return Column(
-            children: [
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    if (isNoticeBlocked)
-                      Center(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 48),
-                          child: Column(
-                            children: [
-                              Icon(
-                                Icons.block,
-                                size: 56,
-                                color: context.aublColors.muted,
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final outerInset = constraints.maxWidth > 900
+                  ? (constraints.maxWidth - 900) / 2
+                  : 0.0;
+              return Column(
+                children: [
+                  Expanded(
+                    child: ListView(
+                      padding: EdgeInsets.fromLTRB(
+                        outerInset + 16,
+                        16,
+                        outerInset + 16,
+                        16,
+                      ),
+                      children: [
+                        if (isNoticeBlocked)
+                          Center(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 48),
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.block,
+                                    size: 56,
+                                    color: context.aublColors.muted,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    '차단한 사용자의 게시글입니다.',
+                                    style: TextStyle(
+                                      color: context.aublColors.ink,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    '계정 화면에서 차단을 해제하면 다시 볼 수 있습니다.',
+                                    style: TextStyle(
+                                      color: context.aublColors.muted,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 16),
-                              Text(
-                                '차단한 사용자의 게시글입니다.',
-                                style: TextStyle(
-                                  color: context.aublColors.ink,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                '계정 화면에서 차단을 해제하면 다시 볼 수 있습니다.',
-                                style: TextStyle(
-                                  color: context.aublColors.muted,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    else ...[
-                      Text(n.title,
-                          style: TextStyle(
+                            ),
+                          )
+                        else ...[
+                          Text(
+                            n.title,
+                            style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: context.aublColors.ink)),
-                      const SizedBox(height: 8),
-                      Text(
-                        '${n.author} · ${timeago.format(DateTime.fromMillisecondsSinceEpoch(n.createdAt), locale: 'ko')}',
-                        style: TextStyle(
-                            color: context.aublColors.muted, fontSize: 13),
-                      ),
-                      const Divider(height: 24),
-                      RichTextViewer(
-                        content: n.content,
-                        fontSize: 14,
-                        color: context.aublColors.ink,
-                      ),
-                      const SizedBox(height: 24),
-                      if (n.allowComments) ...[
-                        Text('댓글',
+                              color: context.aublColors.ink,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${n.author} · ${timeago.format(DateTime.fromMillisecondsSinceEpoch(n.createdAt), locale: 'ko')}',
                             style: TextStyle(
+                              color: context.aublColors.muted,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const Divider(height: 24),
+                          RichTextViewer(
+                            content: n.content,
+                            fontSize: 14,
+                            color: context.aublColors.ink,
+                          ),
+                          const SizedBox(height: 24),
+                          if (n.allowComments) ...[
+                            Text(
+                              '댓글',
+                              style: TextStyle(
                                 color: context.aublColors.ink,
                                 fontSize: 15,
-                                fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 4),
-                        Text(
-                          '게시글/댓글 우측 메뉴에서 신고 또는 차단할 수 있습니다.',
-                          style: TextStyle(
-                              color: context.aublColors.muted, fontSize: 11),
-                        ),
-                        const SizedBox(height: 8),
-                        StreamBuilder<List<NoticeComment>>(
-                          stream: _fs.watchNoticeComments(n.id),
-                          builder: (context, snap) {
-                            final comments = (snap.data ?? [])
-                                .where((comment) =>
-                                    !blockedUserIds.contains(comment.uid))
-                                .toList();
-                            if (comments.isEmpty) {
-                              return Text('아직 댓글이 없습니다.',
-                                  style: TextStyle(
-                                      color: context.aublColors.muted));
-                            }
-                            return Column(
-                              children: comments.map((c) {
-                                final isMine = c.uid == user?.uid;
-                                final canDelete = isMine || _canManageNotice;
-                                final canReport = user != null &&
-                                    c.uid.isNotEmpty &&
-                                    c.uid != user.uid;
-                                final showMenu = canDelete || canReport;
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '게시글/댓글 우측 메뉴에서 신고 또는 차단할 수 있습니다.',
+                              style: TextStyle(
+                                color: context.aublColors.muted,
+                                fontSize: 11,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            StreamBuilder<List<NoticeComment>>(
+                              stream: _fs.watchNoticeComments(n.id),
+                              builder: (context, snap) {
+                                final comments = (snap.data ?? [])
+                                    .where(
+                                      (comment) =>
+                                          !blockedUserIds.contains(comment.uid),
+                                    )
+                                    .toList();
+                                if (comments.isEmpty) {
+                                  return Text(
+                                    '아직 댓글이 없습니다.',
+                                    style: TextStyle(
+                                      color: context.aublColors.muted,
+                                    ),
+                                  );
+                                }
+                                return Column(
+                                  children: comments.map((c) {
+                                    final isMine = c.uid == user?.uid;
+                                    final canDelete =
+                                        isMine || _canManageNotice;
+                                    final canReport =
+                                        user != null &&
+                                        c.uid.isNotEmpty &&
+                                        c.uid != user.uid;
+                                    final showMenu = canDelete || canReport;
 
-                                return Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 6),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 6,
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
-                                          Text(c.author,
-                                              style: TextStyle(
+                                          Row(
+                                            children: [
+                                              Text(
+                                                c.author,
+                                                style: TextStyle(
                                                   color: context.aublColors.ink,
                                                   fontSize: 13,
-                                                  fontWeight: FontWeight.w500)),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            timeago.format(
-                                                DateTime
-                                                    .fromMillisecondsSinceEpoch(
-                                                        c.createdAt),
-                                                locale: 'ko'),
-                                            style: TextStyle(
-                                                color: context.aublColors.muted,
-                                                fontSize: 11),
-                                          ),
-                                          if (showMenu) ...[
-                                            const Spacer(),
-                                            PopupMenuButton<
-                                                _NoticeModerationAction>(
-                                              padding: EdgeInsets.zero,
-                                              icon: E911EmergencyIcon(
-                                                size: 18,
-                                                color: context.aublColors.muted,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
                                               ),
-                                              onSelected: (action) {
-                                                if (action ==
-                                                    _NoticeModerationAction
-                                                        .delete) {
-                                                  _fs.deleteNoticeComment(
-                                                      n.id, c.id);
-                                                  return;
-                                                }
-                                                _handleModerationAction(
-                                                  action: action,
-                                                  targetUid: c.uid,
-                                                  targetLabel: c.author,
-                                                  contentDomain:
-                                                      'noticeComment',
-                                                  contentId: c.id,
-                                                  parentContentId: n.id,
-                                                  contentPreview:
-                                                      deltaToPreviewText(
-                                                          c.content),
-                                                );
-                                              },
-                                              itemBuilder: (context) {
-                                                final items = <PopupMenuEntry<
-                                                    _NoticeModerationAction>>[];
-                                                if (canDelete) {
-                                                  items.add(
-                                                    const PopupMenuItem(
-                                                      value:
-                                                          _NoticeModerationAction
-                                                              .delete,
-                                                      child: Text('댓글 삭제'),
-                                                    ),
-                                                  );
-                                                }
-                                                if (canReport) {
-                                                  if (items.isNotEmpty) {
-                                                    items.add(
-                                                        const PopupMenuDivider());
-                                                  }
-                                                  items.addAll([
-                                                    const PopupMenuItem(
-                                                      value:
-                                                          _NoticeModerationAction
-                                                              .report,
-                                                      child: Text('댓글 신고'),
-                                                    ),
-                                                    const PopupMenuItem(
-                                                      value:
-                                                          _NoticeModerationAction
-                                                              .block,
-                                                      child: Text('작성자 차단'),
-                                                    ),
-                                                  ]);
-                                                }
-                                                return items;
-                                              },
-                                            ),
-                                          ],
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                timeago.format(
+                                                  DateTime.fromMillisecondsSinceEpoch(
+                                                    c.createdAt,
+                                                  ),
+                                                  locale: 'ko',
+                                                ),
+                                                style: TextStyle(
+                                                  color:
+                                                      context.aublColors.muted,
+                                                  fontSize: 11,
+                                                ),
+                                              ),
+                                              if (showMenu) ...[
+                                                const Spacer(),
+                                                PopupMenuButton<
+                                                  _NoticeModerationAction
+                                                >(
+                                                  padding: EdgeInsets.zero,
+                                                  icon: E911EmergencyIcon(
+                                                    size: 18,
+                                                    color: context
+                                                        .aublColors
+                                                        .muted,
+                                                  ),
+                                                  onSelected: (action) {
+                                                    if (action ==
+                                                        _NoticeModerationAction
+                                                            .delete) {
+                                                      _fs.deleteNoticeComment(
+                                                        n.id,
+                                                        c.id,
+                                                      );
+                                                      return;
+                                                    }
+                                                    _handleModerationAction(
+                                                      action: action,
+                                                      targetUid: c.uid,
+                                                      targetLabel: c.author,
+                                                      contentDomain:
+                                                          'noticeComment',
+                                                      contentId: c.id,
+                                                      parentContentId: n.id,
+                                                      contentPreview:
+                                                          deltaToPreviewText(
+                                                            c.content,
+                                                          ),
+                                                    );
+                                                  },
+                                                  itemBuilder: (context) {
+                                                    final items =
+                                                        <
+                                                          PopupMenuEntry<
+                                                            _NoticeModerationAction
+                                                          >
+                                                        >[];
+                                                    if (canDelete) {
+                                                      items.add(
+                                                        const PopupMenuItem(
+                                                          value:
+                                                              _NoticeModerationAction
+                                                                  .delete,
+                                                          child: Text('댓글 삭제'),
+                                                        ),
+                                                      );
+                                                    }
+                                                    if (canReport) {
+                                                      if (items.isNotEmpty) {
+                                                        items.add(
+                                                          const PopupMenuDivider(),
+                                                        );
+                                                      }
+                                                      items.addAll([
+                                                        const PopupMenuItem(
+                                                          value:
+                                                              _NoticeModerationAction
+                                                                  .report,
+                                                          child: Text('댓글 신고'),
+                                                        ),
+                                                        const PopupMenuItem(
+                                                          value:
+                                                              _NoticeModerationAction
+                                                                  .block,
+                                                          child: Text('작성자 차단'),
+                                                        ),
+                                                      ]);
+                                                    }
+                                                    return items;
+                                                  },
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                          const SizedBox(height: 4),
+                                          RichTextViewer(
+                                            content: c.content,
+                                            fontSize: 13,
+                                            color: context.aublColors.ink,
+                                          ),
                                         ],
                                       ),
-                                      const SizedBox(height: 4),
-                                      RichTextViewer(
-                                        content: c.content,
-                                        fontSize: 13,
-                                        color: context.aublColors.ink,
-                                      ),
-                                    ],
-                                  ),
+                                    );
+                                  }).toList(),
                                 );
-                              }).toList(),
-                            );
-                          },
-                        ),
+                              },
+                            ),
+                          ],
+                        ],
                       ],
-                    ],
-                  ],
-                ),
-              ),
-              if (n.allowComments && !isNoticeBlocked)
-                Container(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                  decoration: BoxDecoration(
-                    color: context.aublColors.surface,
-                    border:
-                        Border(top: BorderSide(color: context.aublColors.line)),
+                    ),
                   ),
-                  child: SafeArea(
-                    top: false,
-                    child: user == null
-                        ? Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                constraints:
-                                    const BoxConstraints(minHeight: 60),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 18),
-                                decoration: BoxDecoration(
-                                  color: context.aublColors.surface,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                      color: context.aublColors.line),
-                                ),
-                                child: Text(
-                                  '로그인이 필요합니다.',
-                                  style: TextStyle(
-                                    color: context.aublColors.muted,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
+                  if (n.allowComments && !isNoticeBlocked)
+                    Container(
+                      padding: EdgeInsets.fromLTRB(
+                        outerInset + 12,
+                        8,
+                        outerInset + 12,
+                        8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: context.aublColors.surface,
+                        border: Border(
+                          top: BorderSide(color: context.aublColors.line),
+                        ),
+                      ),
+                      child: SafeArea(
+                        top: false,
+                        child: user == null
+                            ? Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    constraints: const BoxConstraints(
+                                      minHeight: 60,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 18,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: context.aublColors.surface,
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(
+                                        color: context.aublColors.line,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      '로그인이 필요합니다.',
+                                      style: TextStyle(
+                                        color: context.aublColors.muted,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                  const SizedBox(height: 6),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Icon(
+                                      Icons.send,
+                                      color: context.aublColors.lineStrong,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  RichTextEditor(
+                                    key: ValueKey(_editorKey),
+                                    onChanged: (v) => _commentDelta = v,
+                                    mini: true,
+                                    placeholder: '댓글을 입력하세요...',
+                                    minHeight: 60,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: IconButton(
+                                      icon: Icon(
+                                        Icons.send,
+                                        color: context.aublColors.cobalt,
+                                      ),
+                                      onPressed: _postComment,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 6),
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: Icon(Icons.send,
-                                    color: context.aublColors.lineStrong),
-                              ),
-                            ],
-                          )
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              RichTextEditor(
-                                key: ValueKey(_editorKey),
-                                onChanged: (v) => _commentDelta = v,
-                                mini: true,
-                                placeholder: '댓글을 입력하세요...',
-                                minHeight: 60,
-                              ),
-                              const SizedBox(height: 6),
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: IconButton(
-                                  icon: Icon(Icons.send,
-                                      color: context.aublColors.cobalt),
-                                  onPressed: _postComment,
-                                ),
-                              ),
-                            ],
-                          ),
-                  ),
-                ),
-            ],
+                      ),
+                    ),
+                ],
+              );
+            },
           );
         },
       ),

@@ -57,9 +57,7 @@ const _kSections = [
     '서비스 이용과 관련하여 분쟁이 발생한 경우 양 당사자 간 원만한 합의를 위해 노력하며, 합의가 이루어지지 않는 경우 민사소송법상의 관할 법원에서 해결합니다.',
     '서비스 관련 문의: aublcau@gmail.com',
   ]),
-  _Section('부칙', [
-    '본 약관은 2026년 3월 5일부터 시행합니다.',
-  ]),
+  _Section('부칙', ['본 약관은 2026년 3월 5일부터 시행합니다.']),
 ];
 
 class TermsScreen extends StatelessWidget {
@@ -69,65 +67,79 @@ class TermsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('이용약관')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          SeasonPageHero(
-            eyebrow: 'TERMS OF SERVICE',
-            title:
-                Text('이용약관', style: Theme.of(context).textTheme.headlineSmall),
-            description: '전국대학아마추어야구연합회(AUBL) 모바일 앱과 웹 서비스 이용에 관한 약관입니다.',
-          ),
-          const SizedBox(height: 16),
-
-          // 섹션들
-          for (final section in _kSections) ...[
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      section.title,
-                      style: TextStyle(
-                        color: context.aublColors.ink,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    for (final item in section.items)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('  \u2022  ',
-                                style: TextStyle(
-                                    color: context.aublColors.muted,
-                                    fontSize: 13)),
-                            Expanded(
-                              child: Text(
-                                item,
-                                style: TextStyle(
-                                  color: context.aublColors.muted,
-                                  fontSize: 13,
-                                  height: 1.7,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-              ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final outerInset = constraints.maxWidth > 900
+              ? (constraints.maxWidth - 900) / 2
+              : 0.0;
+          return ListView(
+            padding: EdgeInsets.fromLTRB(
+              outerInset + 16,
+              16,
+              outerInset + 16,
+              32,
             ),
-            const SizedBox(height: 10),
-          ],
-          const SizedBox(height: 16),
-        ],
+            children: [
+              const SeasonPageHero(
+                eyebrow: 'TERMS OF SERVICE',
+                title: Text('이용약관'),
+                description: '전국대학아마추어야구연합회(AUBL) 모바일 앱과 웹 서비스 이용에 관한 약관입니다.',
+              ),
+              const SizedBox(height: 16),
+
+              // 섹션들
+              for (final section in _kSections) ...[
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          section.title,
+                          style: TextStyle(
+                            color: context.aublColors.ink,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        for (final item in section.items)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '  \u2022  ',
+                                  style: TextStyle(
+                                    color: context.aublColors.muted,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    item,
+                                    style: TextStyle(
+                                      color: context.aublColors.muted,
+                                      fontSize: 13,
+                                      height: 1.7,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              const SizedBox(height: 16),
+            ],
+          );
+        },
       ),
     );
   }

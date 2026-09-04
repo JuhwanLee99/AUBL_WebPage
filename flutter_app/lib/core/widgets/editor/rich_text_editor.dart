@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import '../../theme/app_theme.dart';
 import 'delta_utils.dart';
 import 'table_embed.dart';
 
@@ -73,37 +74,55 @@ class _RichTextEditorState extends State<RichTextEditor> {
     final ctrl = TextEditingController();
     final url = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1e293b),
-        title: const Text('이미지 URL 입력', style: TextStyle(color: Colors.white)),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: 'https://... 또는 Google Drive 공유 링크',
-            hintStyle: TextStyle(color: Color(0xFF64748b)),
-            enabledBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: Color(0xFF334155))),
-            focusedBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: Color(0xFF3b82f6))),
+      builder: (ctx) {
+        final colors = ctx.aublColors;
+        return AlertDialog(
+          backgroundColor: colors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+          title: Text(
+            '이미지 URL 입력',
+            style: TextStyle(
+              color: colors.navyStrong,
+              fontWeight: FontWeight.w800,
+            ),
           ),
-          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('취소')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('삽입', style: TextStyle(color: Color(0xFF3b82f6))),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            style: TextStyle(color: colors.ink),
+            decoration: InputDecoration(
+              hintText: 'https://... 또는 Google Drive 공유 링크',
+              hintStyle: TextStyle(color: colors.muted),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: colors.lineStrong),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: colors.focus, width: 2),
+              ),
+            ),
+            onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
           ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('취소'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+              child: Text('삽입', style: TextStyle(color: colors.cobalt)),
+            ),
+          ],
+        );
+      },
     );
     if (url != null && url.isNotEmpty && mounted) {
       final imageUrl = toGoogleDriveImageUrl(url);
-      final index = _controller.selection.baseOffset
-          .clamp(0, _controller.document.length - 1);
+      final index = _controller.selection.baseOffset.clamp(
+        0,
+        _controller.document.length - 1,
+      );
       _controller.document.insert(index, BlockEmbed.image(imageUrl));
     }
   }
@@ -112,37 +131,55 @@ class _RichTextEditorState extends State<RichTextEditor> {
     final ctrl = TextEditingController();
     final url = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1e293b),
-        title: const Text('동영상 URL 입력', style: TextStyle(color: Colors.white)),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: 'https://www.youtube.com/watch?v=...',
-            hintStyle: TextStyle(color: Color(0xFF64748b)),
-            enabledBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: Color(0xFF334155))),
-            focusedBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: Color(0xFF3b82f6))),
+      builder: (ctx) {
+        final colors = ctx.aublColors;
+        return AlertDialog(
+          backgroundColor: colors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+          title: Text(
+            '동영상 URL 입력',
+            style: TextStyle(
+              color: colors.navyStrong,
+              fontWeight: FontWeight.w800,
+            ),
           ),
-          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('취소')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('삽입', style: TextStyle(color: Color(0xFF3b82f6))),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            style: TextStyle(color: colors.ink),
+            decoration: InputDecoration(
+              hintText: 'https://www.youtube.com/watch?v=...',
+              hintStyle: TextStyle(color: colors.muted),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: colors.lineStrong),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: colors.focus, width: 2),
+              ),
+            ),
+            onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
           ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('취소'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+              child: Text('삽입', style: TextStyle(color: colors.cobalt)),
+            ),
+          ],
+        );
+      },
     );
     if (url != null && url.isNotEmpty && mounted) {
       final embedUrl = toYouTubeEmbedUrl(url);
-      final index = _controller.selection.baseOffset
-          .clamp(0, _controller.document.length - 1);
+      final index = _controller.selection.baseOffset.clamp(
+        0,
+        _controller.document.length - 1,
+      );
       _controller.document.insert(index, BlockEmbed.video(embedUrl));
     }
   }
@@ -186,88 +223,112 @@ class _RichTextEditorState extends State<RichTextEditor> {
 
   @override
   Widget build(BuildContext context) {
-    final toolbarConfigs =
-        widget.mini ? _miniToolbarConfigs : _fullToolbarConfigs;
+    final colors = context.aublColors;
+    final toolbarConfigs = widget.mini
+        ? _miniToolbarConfigs
+        : _fullToolbarConfigs;
+    final toolbarIconTheme = QuillIconTheme(
+      iconButtonUnselectedData: IconButtonData(
+        color: colors.navy,
+        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+        style: IconButton.styleFrom(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+        ),
+      ),
+      iconButtonSelectedData: IconButtonData(
+        color: colors.cobalt,
+        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+        style: IconButton.styleFrom(
+          backgroundColor: colors.cobalt.withValues(alpha: 0.12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+        ),
+      ),
+    );
 
     return Container(
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: const Color(0xFF1e293b),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF334155)),
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: colors.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          QuillSimpleToolbar(
-            controller: _controller,
-            config: QuillSimpleToolbarConfig(
-              showDividers: false,
-              showFontFamily: false,
-              showFontSize: false,
-              showBoldButton: toolbarConfigs.contains('bold'),
-              showItalicButton: toolbarConfigs.contains('italic'),
-              showUnderLineButton: toolbarConfigs.contains('underline'),
-              showStrikeThrough: false,
-              showInlineCode: false,
-              showColorButton: false,
-              showBackgroundColorButton: false,
-              showClearFormat: !widget.mini,
-              showAlignmentButtons: false,
-              showLeftAlignment: false,
-              showCenterAlignment: false,
-              showRightAlignment: false,
-              showJustifyAlignment: false,
-              showHeaderStyle: false,
-              showListNumbers: toolbarConfigs.contains('list'),
-              showListBullets: toolbarConfigs.contains('list'),
-              showListCheck: false,
-              showCodeBlock: false,
-              showQuote: false,
-              showIndent: false,
-              showLink: toolbarConfigs.contains('link'),
-              showUndo: false,
-              showRedo: false,
-              showDirection: false,
-              showSearchButton: false,
-              showSubscript: false,
-              showSuperscript: false,
-              customButtons: widget.mini
-                  ? []
-                  : [
-                      QuillToolbarCustomButtonOptions(
-                        icon: const Icon(Icons.image_outlined,
-                            size: 18, color: Color(0xFF94a3b8)),
-                        onPressed: _showImageUrlDialog,
-                      ),
-                      QuillToolbarCustomButtonOptions(
-                        icon: const Icon(Icons.video_library_outlined,
-                            size: 18, color: Color(0xFF94a3b8)),
-                        onPressed: _showVideoUrlDialog,
-                      ),
-                      QuillToolbarCustomButtonOptions(
-                        icon: const Icon(Icons.table_chart_outlined,
-                            size: 18, color: Color(0xFF94a3b8)),
-                        onPressed: _showTableDialog,
-                      ),
-                    ],
-              iconTheme: const QuillIconTheme(
-                iconButtonUnselectedData: IconButtonData(
-                  color: Color(0xFF94a3b8),
+          ColoredBox(
+            color: colors.surfaceMuted,
+            child: QuillSimpleToolbar(
+              controller: _controller,
+              config: QuillSimpleToolbarConfig(
+                buttonOptions: QuillSimpleToolbarButtonOptions(
+                  base: QuillToolbarBaseButtonOptions(
+                    iconTheme: toolbarIconTheme,
+                  ),
                 ),
-                iconButtonSelectedData: IconButtonData(
-                  color: Color(0xFF3b82f6),
-                ),
-              ),
-              decoration: const BoxDecoration(
-                color: Color(0xFF0f172a),
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(10),
-                  topRight: Radius.circular(10),
+                showDividers: false,
+                showFontFamily: false,
+                showFontSize: false,
+                showBoldButton: toolbarConfigs.contains('bold'),
+                showItalicButton: toolbarConfigs.contains('italic'),
+                showUnderLineButton: toolbarConfigs.contains('underline'),
+                showStrikeThrough: false,
+                showInlineCode: false,
+                showColorButton: false,
+                showBackgroundColorButton: false,
+                showClearFormat: !widget.mini,
+                showAlignmentButtons: false,
+                showLeftAlignment: false,
+                showCenterAlignment: false,
+                showRightAlignment: false,
+                showJustifyAlignment: false,
+                showHeaderStyle: false,
+                showListNumbers: toolbarConfigs.contains('list'),
+                showListBullets: toolbarConfigs.contains('list'),
+                showListCheck: false,
+                showCodeBlock: false,
+                showQuote: false,
+                showIndent: false,
+                showLink: toolbarConfigs.contains('link'),
+                showUndo: false,
+                showRedo: false,
+                showDirection: false,
+                showSearchButton: false,
+                showSubscript: false,
+                showSuperscript: false,
+                customButtons: widget.mini
+                    ? []
+                    : [
+                        QuillToolbarCustomButtonOptions(
+                          icon: const Icon(Icons.image_outlined, size: 20),
+                          onPressed: _showImageUrlDialog,
+                        ),
+                        QuillToolbarCustomButtonOptions(
+                          icon: const Icon(
+                            Icons.video_library_outlined,
+                            size: 20,
+                          ),
+                          onPressed: _showVideoUrlDialog,
+                        ),
+                        QuillToolbarCustomButtonOptions(
+                          icon: const Icon(
+                            Icons.table_chart_outlined,
+                            size: 20,
+                          ),
+                          onPressed: _showTableDialog,
+                        ),
+                      ],
+                iconTheme: toolbarIconTheme,
+                decoration: BoxDecoration(
+                  color: colors.surfaceMuted,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(4),
+                    topRight: Radius.circular(4),
+                  ),
                 ),
               ),
             ),
           ),
-          const Divider(height: 1, color: Color(0xFF334155)),
+          Divider(height: 1, color: colors.line),
           ConstrainedBox(
             constraints: BoxConstraints(minHeight: widget.minHeight),
             child: Padding(
@@ -286,18 +347,17 @@ class _RichTextEditorState extends State<RichTextEditor> {
                     _VideoEmbedBuilder(),
                     AublTableEmbedBuilder(onEditRequested: _editTableEmbed),
                   ],
-                  customStyles: const DefaultStyles(
-                    color: Color(0xFFe2e8f0),
+                  customStyles: DefaultStyles(
+                    color: colors.ink,
                     placeHolder: DefaultTextBlockStyle(
-                      TextStyle(color: Color(0xFF64748b), fontSize: 14),
+                      TextStyle(color: colors.muted, fontSize: 14),
                       HorizontalSpacing.zero,
                       VerticalSpacing.zero,
                       VerticalSpacing.zero,
                       null,
                     ),
                     paragraph: DefaultTextBlockStyle(
-                      TextStyle(
-                          color: Color(0xFFe2e8f0), fontSize: 15, height: 1.6),
+                      TextStyle(color: colors.ink, fontSize: 15, height: 1.6),
                       HorizontalSpacing.zero,
                       VerticalSpacing.zero,
                       VerticalSpacing.zero,
@@ -330,12 +390,15 @@ class _ImageEmbedBuilder extends EmbedBuilder {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(4),
         child: CachedNetworkImage(
           imageUrl: url,
           fit: BoxFit.cover,
-          errorWidget: (_, __, ___) => const Icon(Icons.broken_image,
-              color: Color(0xFF64748b), size: 48),
+          errorWidget: (_, __, ___) => Icon(
+            Icons.broken_image,
+            color: context.aublColors.muted,
+            size: 48,
+          ),
         ),
       ),
     );
@@ -358,7 +421,7 @@ class _VideoEmbedBuilder extends EmbedBuilder {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(4),
         child: SizedBox(height: 220, child: WebViewWidget(controller: wc)),
       ),
     );

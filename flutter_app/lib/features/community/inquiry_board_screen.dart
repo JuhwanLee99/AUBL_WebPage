@@ -32,7 +32,7 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
     '버그 신고',
     '사용 문의',
     '경기/기록 오류',
-    '기타'
+    '기타',
   ];
   static final _statuses = ['전체', '미처리', '처리 중', '처리 완료'];
 
@@ -61,7 +61,8 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
   List<InquiryPost> _filtered(Set<String> blockedUserIds) {
     return _posts.where((p) {
       if (blockedUserIds.contains(p.uid)) return false;
-      final platformOk = _platformFilter == '전체' ||
+      final platformOk =
+          _platformFilter == '전체' ||
           (_platformFilter == '앱' && p.platform == 'app') ||
           (_platformFilter == '웹' && p.platform == 'web');
       final catOk = _categoryFilter == '전체' || p.category == _categoryFilter;
@@ -78,17 +79,15 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
     return user.uid == post.uid;
   }
 
-  Color _platformColor(String platform) => platform == 'app'
-      ? context.aublColors.cobalt
-      : context.aublColors.success;
+  Color _platformColor(String platform) =>
+      platform == 'app' ? context.aublColors.cobalt : context.aublColors.navy;
 
   Color _categoryColor(String cat) => switch (cat) {
-        '기능 개선' => context.aublColors.cobalt,
-        '버그 신고' => context.aublColors.danger,
-        '사용 문의' => context.aublColors.success,
-        '경기/기록 오류' => context.aublColors.warning,
-        _ => context.aublColors.muted,
-      };
+    '기능 개선' => context.aublColors.cobalt,
+    '버그 신고' => context.aublColors.danger,
+    '경기/기록 오류' => context.aublColors.warning,
+    _ => context.aublColors.navy,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -120,13 +119,17 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
           final blockedUserIds = blockedSnapshot.data ?? <String>{};
           final filtered = _filtered(blockedUserIds);
 
-          return Stack(
-            children: [
-              _loading
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final outerInset = constraints.maxWidth > 900
+                  ? (constraints.maxWidth - 900) / 2
+                  : 0.0;
+              return _loading
                   ? const Center(child: CircularProgressIndicator())
                   : RefreshIndicator(
                       onRefresh: _load,
                       child: ListView(
+                        padding: EdgeInsets.symmetric(horizontal: outerInset),
                         children: [
                           Padding(
                             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -134,12 +137,14 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
                               width: double.infinity,
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: context.aublColors.cobalt
-                                    .withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(10),
+                                color: context.aublColors.cobalt.withValues(
+                                  alpha: 0.15,
+                                ),
+                                borderRadius: BorderRadius.circular(4),
                                 border: Border.all(
-                                  color: context.aublColors.cobalt
-                                      .withValues(alpha: 0.35),
+                                  color: context.aublColors.cobalt.withValues(
+                                    alpha: 0.35,
+                                  ),
                                 ),
                               ),
                               child: Text(
@@ -155,21 +160,30 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
                           ),
 
                           // ── 필터 행 ──
-                          _buildFilterRow(_platforms, _platformFilter,
-                              (v) => setState(() => _platformFilter = v)),
-                          _buildFilterRow(_categories, _categoryFilter,
-                              (v) => setState(() => _categoryFilter = v)),
+                          _buildFilterRow(
+                            _platforms,
+                            _platformFilter,
+                            (v) => setState(() => _platformFilter = v),
+                          ),
+                          _buildFilterRow(
+                            _categories,
+                            _categoryFilter,
+                            (v) => setState(() => _categoryFilter = v),
+                          ),
                           _buildStatusFilterRow(),
 
                           // ── 게시글 수 ──
                           Padding(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 4),
+                              horizontal: 16,
+                              vertical: 4,
+                            ),
                             child: Text(
                               '${filtered.length}개 게시글',
                               style: TextStyle(
-                                  color: context.aublColors.muted,
-                                  fontSize: 12),
+                                color: context.aublColors.muted,
+                                fontSize: 12,
+                              ),
                             ),
                           ),
 
@@ -178,9 +192,12 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
                             Padding(
                               padding: const EdgeInsets.all(32),
                               child: Center(
-                                child: Text('게시글이 없습니다.',
-                                    style: TextStyle(
-                                        color: context.aublColors.muted)),
+                                child: Text(
+                                  '게시글이 없습니다.',
+                                  style: TextStyle(
+                                    color: context.aublColors.muted,
+                                  ),
+                                ),
                               ),
                             )
                           else
@@ -188,37 +205,53 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
                               final accessible = _isAccessible(post);
                               final ago = timeago.format(
                                 DateTime.fromMillisecondsSinceEpoch(
-                                    post.createdAt),
+                                  post.createdAt,
+                                ),
                                 locale: 'ko',
                               );
                               return Padding(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 3),
+                                  horizontal: 12,
+                                  vertical: 3,
+                                ),
                                 child: Material(
                                   color: context.aublColors.surface.withValues(
-                                      alpha: accessible ? 0.5 : 0.3),
-                                  borderRadius: BorderRadius.circular(10),
+                                    alpha: accessible ? 1 : 0.55,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(4),
+                                    side: BorderSide(
+                                      color: context.aublColors.line,
+                                    ),
+                                  ),
+                                  clipBehavior: Clip.antiAlias,
                                   child: InkWell(
-                                    borderRadius: BorderRadius.circular(10),
+                                    borderRadius: BorderRadius.circular(4),
                                     onTap: accessible
                                         ? () =>
-                                            Navigator.of(context).push<void>(
-                                              MaterialPageRoute(
-                                                builder: (_) =>
-                                                    InquiryDetailScreen(
-                                                        post: post),
-                                              ),
-                                            )
+                                              Navigator.of(context).push<void>(
+                                                MaterialPageRoute(
+                                                  builder: (_) =>
+                                                      InquiryDetailScreen(
+                                                        post: post,
+                                                      ),
+                                                ),
+                                              )
                                         : null,
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(
-                                          horizontal: 14, vertical: 12),
+                                        horizontal: 14,
+                                        vertical: 12,
+                                      ),
                                       child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          // 뱃지 행
-                                          Row(
+                                          Wrap(
+                                            spacing: 6,
+                                            runSpacing: 6,
+                                            crossAxisAlignment:
+                                                WrapCrossAlignment.center,
                                             children: [
                                               _badge(
                                                 post.platform == 'app'
@@ -226,34 +259,29 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
                                                     : '웹',
                                                 _platformColor(post.platform),
                                               ),
-                                              const SizedBox(width: 6),
                                               _badge(
-                                                  post.category,
-                                                  _categoryColor(
-                                                      post.category)),
-                                              const SizedBox(width: 6),
-                                              _badge(post.status,
-                                                  _statusColor(post.status)),
+                                                post.category,
+                                                _categoryColor(post.category),
+                                              ),
+                                              _badge(
+                                                post.status,
+                                                _statusColor(post.status),
+                                              ),
                                               if (post.isPrivate) ...[
-                                                const SizedBox(width: 6),
-                                                Icon(Icons.lock_outline,
-                                                    size: 13,
-                                                    color: context
-                                                        .aublColors.muted),
+                                                Icon(
+                                                  Icons.lock_outline,
+                                                  size: 13,
+                                                  color:
+                                                      context.aublColors.muted,
+                                                ),
                                               ],
-                                              const Spacer(),
-                                              Text(ago,
-                                                  style: TextStyle(
-                                                      color: context
-                                                          .aublColors.muted,
-                                                      fontSize: 11)),
                                             ],
                                           ),
                                           const SizedBox(height: 6),
                                           // 제목
                                           Text(
                                             post.isPrivate && !accessible
-                                                ? '🔒 비밀글입니다.'
+                                                ? '비밀글입니다.'
                                                 : post.title,
                                             style: TextStyle(
                                               color: accessible
@@ -262,18 +290,18 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
                                               fontSize: 14,
                                               fontWeight: FontWeight.w600,
                                             ),
-                                            maxLines: 1,
+                                            maxLines: 2,
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                           if (accessible &&
                                               post.author.isNotEmpty) ...[
                                             const SizedBox(height: 2),
                                             Text(
-                                              post.author,
+                                              '${post.author} · $ago',
                                               style: TextStyle(
-                                                  color:
-                                                      context.aublColors.muted,
-                                                  fontSize: 12),
+                                                color: context.aublColors.muted,
+                                                fontSize: 12,
+                                              ),
                                             ),
                                           ],
                                         ],
@@ -286,8 +314,8 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
                           const SizedBox(height: 32),
                         ],
                       ),
-                    ),
-            ],
+                    );
+            },
           );
         },
       ),
@@ -295,29 +323,37 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
   }
 
   Widget _buildFilterRow(
-      List<String> items, String selected, ValueChanged<String> onSelect) {
+    List<String> items,
+    String selected,
+    ValueChanged<String> onSelect,
+  ) {
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
     return SizedBox(
-      height: 44,
+      height: textScale >= 1.6 ? 64 : 44,
       child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         children: items.map((item) {
           final isSelected = item == selected;
+          final selectedFill = Theme.of(context).brightness == Brightness.dark
+              ? const Color(0xFF285FA9)
+              : AppTheme.navy900;
           return Padding(
             padding: const EdgeInsets.only(right: 6),
             child: ChoiceChip(
-              label: Text(item,
-                  style: TextStyle(
-                      color:
-                          isSelected ? Colors.white : context.aublColors.muted,
-                      fontSize: 12)),
+              label: Text(
+                item,
+                style: TextStyle(
+                  color: isSelected ? Colors.white : context.aublColors.muted,
+                  fontSize: 12,
+                ),
+              ),
               selected: isSelected,
-              selectedColor: context.aublColors.cobalt,
+              selectedColor: selectedFill,
               backgroundColor: context.aublColors.surface,
               side: BorderSide(
-                  color: isSelected
-                      ? context.aublColors.cobalt
-                      : context.aublColors.line),
+                color: isSelected ? selectedFill : context.aublColors.line,
+              ),
               onSelected: (_) => onSelect(item),
             ),
           );
@@ -327,8 +363,9 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
   }
 
   Widget _buildStatusFilterRow() {
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
     return SizedBox(
-      height: 44,
+      height: textScale >= 1.6 ? 64 : 44,
       child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -338,14 +375,23 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
           return Padding(
             padding: const EdgeInsets.only(right: 6),
             child: ChoiceChip(
-              label: Text(s,
-                  style: TextStyle(
-                      color: isSelected ? Colors.white : color, fontSize: 12)),
+              label: Text(
+                s,
+                style: TextStyle(
+                  color: isSelected
+                      ? Theme.of(context).brightness == Brightness.dark
+                            ? AppTheme.navy950
+                            : Colors.white
+                      : color,
+                  fontSize: 12,
+                ),
+              ),
               selected: isSelected,
               selectedColor: color,
               backgroundColor: context.aublColors.surface,
               side: BorderSide(
-                  color: isSelected ? color : context.aublColors.line),
+                color: isSelected ? color : context.aublColors.line,
+              ),
               onSelected: (_) => setState(() => _statusFilter = s),
             ),
           );
@@ -355,22 +401,28 @@ class _InquiryBoardScreenState extends State<InquiryBoardScreen> {
   }
 
   Color _statusColor(String status) => switch (status) {
-        '미처리' => context.aublColors.danger,
-        '처리 중' => context.aublColors.warning,
-        '처리 완료' => context.aublColors.success,
-        _ => context.aublColors.muted,
-      };
+    '미처리' => context.aublColors.danger,
+    '처리 중' => context.aublColors.warning,
+    '처리 완료' => context.aublColors.success,
+    _ => context.aublColors.muted,
+  };
 
   Widget _badge(String label, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
-      child: Text(label,
-          style: TextStyle(
-              color: color, fontSize: 11, fontWeight: FontWeight.w700)),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
     );
   }
 }
