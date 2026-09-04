@@ -26,6 +26,8 @@ type AnnouncementHiddenPreference = {
 };
 
 type FeedPhase = 'loading' | 'ready' | 'error';
+type MatchBoardView = 'list' | 'calendar';
+type CalendarMonth = { year: number; month: number };
 
 const associationSchoolCopy = (value: string) =>
   value
@@ -192,6 +194,39 @@ const compareMatchTimeAsc = (a: MatchSchedule, b: MatchSchedule) =>
 
 const compareMatchTimeDesc = (a: MatchSchedule, b: MatchSchedule) =>
   (matchTimestamp(b) ?? Number.MIN_SAFE_INTEGER) - (matchTimestamp(a) ?? Number.MIN_SAFE_INTEGER);
+
+const calendarMonthFrom = (value: string | number | Date): CalendarMonth => {
+  const dateKey = getKstDateKey(value);
+  if (!dateKey) return { year: 2026, month: 1 };
+  const [year, month] = dateKey.split('-').map(Number);
+  return { year, month };
+};
+
+const calendarMonthPrefix = ({ year, month }: CalendarMonth) =>
+  `${year}-${String(month).padStart(2, '0')}`;
+
+const shiftCalendarMonth = ({ year, month }: CalendarMonth, amount: number): CalendarMonth => {
+  const shifted = new Date(Date.UTC(year, month - 1 + amount, 1));
+  return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth() + 1 };
+};
+
+const formatCalendarDate = (dateKey: string) => {
+  const date = new Date(`${dateKey}T00:00:00+09:00`);
+  if (Number.isNaN(date.getTime())) return '선택한 날짜';
+  return new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  }).format(date);
+};
+
+const getMatchState = (match: MatchSchedule) => {
+  if (match.status === 'inProgress') return { key: 'live', label: '진행 중' } as const;
+  if (match.status === 'completed') return { key: 'final', label: '종료' } as const;
+  if (match.status === 'canceled') return { key: 'canceled', label: '취소' } as const;
+  return { key: 'scheduled', label: '예정' } as const;
+};
 
 const formatMatchDay = (value: string) => {
   const date = new Date(value);
@@ -405,13 +440,14 @@ function MatchItem({ match }: { match: MatchSchedule }) {
   const awayScore = matchScore(match, 'away');
   const isFinal = match.status === 'completed';
   const isLive = match.status === 'inProgress';
+  const state = getMatchState(match);
 
   return (
     <article className="s26-match-card">
       <div className="s26-match-card__meta">
         <span>{formatMatchDay(match.startTime)} · {formatMatchTime(match.startTime)}</span>
-        <span className={`s26-match-state${isLive ? ' is-live' : ''}`}>
-          {isLive ? '진행 중' : isFinal ? '경기 종료' : '경기 예정'}
+        <span className={`s26-match-state is-${state.key}`}>
+          {state.label === '종료' ? '경기 종료' : state.label === '예정' ? '경기 예정' : state.label}
         </span>
       </div>
       <div className="s26-match-card__teams">
@@ -436,9 +472,176 @@ function MatchItem({ match }: { match: MatchSchedule }) {
   );
 }
 
+function HomeMatchCalendar({ matches, nowTs }: { matches: MatchSchedule[]; nowTs: number }) {
+  const todayKey = getKstDateKey(nowTs) ?? '2026-01-01';
+  const [calendarMonth, setCalendarMonth] = useState<CalendarMonth>(() => calendarMonthFrom(nowTs));
+  const [selectedDateKey, setSelectedDateKey] = useState(todayKey);
+  const monthPrefix = calendarMonthPrefix(calendarMonth);
+
+  const matchesByDate = useMemo(() => {
+    const grouped = new Map<string, MatchSchedule[]>();
+    matches.forEach((match) => {
+      const dateKey = getKstDateKey(match.startTime);
+      if (!dateKey) return;
+      const current = grouped.get(dateKey) ?? [];
+      current.push(match);
+      grouped.set(dateKey, current);
+    });
+    grouped.forEach((dayMatches) => dayMatches.sort(compareMatchTimeAsc));
+    return grouped;
+  }, [matches]);
+
+  const calendarWeeks = useMemo(() => {
+    const firstWeekday = new Date(Date.UTC(calendarMonth.year, calendarMonth.month - 1, 1)).getUTCDay();
+    const daysInMonth = new Date(Date.UTC(calendarMonth.year, calendarMonth.month, 0)).getUTCDate();
+    const cells: Array<number | null> = [
+      ...Array.from<null>({ length: firstWeekday }).fill(null),
+      ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
+    ];
+    while (cells.length % 7) cells.push(null);
+    return Array.from({ length: cells.length / 7 }, (_, index) => cells.slice(index * 7, index * 7 + 7));
+  }, [calendarMonth]);
+
+  const selectedMatches = matchesByDate.get(selectedDateKey) ?? [];
+  const weekdayLabels = ['일', '월', '화', '수', '목', '금', '토'];
+
+  const moveToMonth = (nextMonth: CalendarMonth, preferredDateKey?: string) => {
+    const nextPrefix = calendarMonthPrefix(nextMonth);
+    const firstMatchDate = Array.from(matchesByDate.keys())
+      .filter((dateKey) => dateKey.startsWith(`${nextPrefix}-`))
+      .sort()[0];
+    setCalendarMonth(nextMonth);
+    setSelectedDateKey(preferredDateKey ?? firstMatchDate ?? `${nextPrefix}-01`);
+  };
+
+  const calendarLabel = `${calendarMonth.year}년 ${calendarMonth.month}월`;
+
+  return (
+    <div className="s26-calendar">
+      <div className="s26-calendar__toolbar">
+        <div>
+          <strong>{calendarLabel}</strong>
+          <p>날짜를 선택하면 해당 경기의 일정과 결과를 확인할 수 있습니다.</p>
+        </div>
+        <div className="s26-calendar__navigation" aria-label="달력 월 이동">
+          <button
+            type="button"
+            onClick={() => moveToMonth(shiftCalendarMonth(calendarMonth, -1))}
+            aria-label="이전 달 보기"
+          >
+            이전 달
+          </button>
+          <button
+            type="button"
+            onClick={() => moveToMonth(calendarMonthFrom(nowTs), todayKey)}
+            disabled={monthPrefix === todayKey.slice(0, 7) && selectedDateKey === todayKey}
+          >
+            오늘
+          </button>
+          <button
+            type="button"
+            onClick={() => moveToMonth(shiftCalendarMonth(calendarMonth, 1))}
+            aria-label="다음 달 보기"
+          >
+            다음 달
+          </button>
+        </div>
+      </div>
+
+      <div className="s26-calendar__table-wrap">
+        <table className="s26-calendar__table">
+          <caption className="s26-visually-hidden">{calendarLabel} AUBL 경기 달력</caption>
+          <thead>
+            <tr>
+              {weekdayLabels.map((label) => <th key={label} scope="col">{label}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {calendarWeeks.map((week, weekIndex) => (
+              <tr key={`${calendarMonth.year}-${calendarMonth.month}-${weekIndex}`}>
+                {week.map((day, dayIndex) => {
+                  if (!day) return <td key={`empty-${weekIndex}-${dayIndex}`} className="is-empty" />;
+                  const dateKey = `${monthPrefix}-${String(day).padStart(2, '0')}`;
+                  const dayMatches = matchesByDate.get(dateKey) ?? [];
+                  const isToday = dateKey === todayKey;
+                  const isSelected = dateKey === selectedDateKey;
+                  const statusSummary = dayMatches.reduce<Record<string, number>>((summary, match) => {
+                    const state = getMatchState(match);
+                    summary[state.label] = (summary[state.label] ?? 0) + 1;
+                    return summary;
+                  }, {});
+                  const statusText = Object.entries(statusSummary)
+                    .map(([label, count]) => `${label} ${count}경기`)
+                    .join(', ');
+
+                  return (
+                    <td key={dateKey} className={isToday ? 'is-today' : undefined}>
+                      <button
+                        type="button"
+                        className={`s26-calendar__day${isSelected ? ' is-selected' : ''}`}
+                        onClick={() => setSelectedDateKey(dateKey)}
+                        aria-pressed={isSelected}
+                        aria-current={isToday ? 'date' : undefined}
+                        aria-label={`${calendarMonth.month}월 ${day}일, ${dayMatches.length ? statusText : '경기 없음'}`}
+                      >
+                        <span className="s26-calendar__day-heading">
+                          <b>{day}</b>
+                          {isToday ? <em>오늘</em> : null}
+                          {dayMatches.length ? <small>{dayMatches.length}경기</small> : null}
+                        </span>
+                        {dayMatches.length ? (
+                          <span className="s26-calendar__previews" aria-hidden="true">
+                            {dayMatches.slice(0, 1).map((match) => {
+                              const state = getMatchState(match);
+                              const awayScore = matchScore(match, 'away');
+                              const homeScore = matchScore(match, 'home');
+                              return (
+                                <span key={match.id} className={`s26-calendar__preview is-${state.key}`}>
+                                  <span>
+                                    <b>{formatMatchTime(match.startTime)}</b>
+                                    <em>{state.label}</em>
+                                  </span>
+                                  <strong>{match.awayTeamName || '원정팀 미정'} · {match.homeTeamName || '홈팀 미정'}</strong>
+                                  {match.status === 'completed' || match.status === 'inProgress' ? (
+                                    <small>{awayScore ?? '-'} : {homeScore ?? '-'}</small>
+                                  ) : null}
+                                </span>
+                              );
+                            })}
+                            {dayMatches.length > 1 ? <small>외 {dayMatches.length - 1}경기</small> : null}
+                          </span>
+                        ) : null}
+                      </button>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <section className="s26-calendar__agenda" aria-labelledby="s26-calendar-agenda-title">
+        <div className="s26-subheading">
+          <h3 id="s26-calendar-agenda-title">{formatCalendarDate(selectedDateKey)}</h3>
+          <span aria-live="polite">{selectedMatches.length}경기</span>
+        </div>
+        {selectedMatches.length ? (
+          <div className="s26-calendar__agenda-grid">
+            {selectedMatches.map((match) => <MatchItem key={match.id} match={match} />)}
+          </div>
+        ) : (
+          <div className="s26-empty">선택한 날짜에 등록된 경기가 없습니다.</div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function MatchBoard({ matches, schedulePhase, nowTs }: Pick<Season2026HomeProps, 'matches' | 'schedulePhase' | 'nowTs'>) {
+  const [viewMode, setViewMode] = useState<MatchBoardView>('list');
+  const official = useMemo(() => matches.filter(is2026OfficialMatch).sort(compareMatchTimeAsc), [matches]);
   const { featured, featuredTitle, recent } = useMemo(() => {
-    const official = matches.filter(is2026OfficialMatch);
     const todayKey = getKstDateKey(nowTs);
     const live = official.filter((match) => match.status === 'inProgress').sort(compareMatchTimeAsc);
     const scheduled = official
@@ -466,7 +669,7 @@ function MatchBoard({ matches, schedulePhase, nowTs }: Pick<Season2026HomeProps,
       .sort(compareMatchTimeDesc)
       .slice(0, 4);
     return { featured: chosen.slice(0, 4), featuredTitle: title, recent: completed };
-  }, [matches, nowTs]);
+  }, [official, nowTs]);
 
   return (
     <section className="s26-section s26-match-board" aria-labelledby="match-board-title">
@@ -474,38 +677,61 @@ function MatchBoard({ matches, schedulePhase, nowTs }: Pick<Season2026HomeProps,
         id="match-board-title"
         eyebrow="GAMES"
         title="일정과 결과를 한눈에"
-        description="당일 경기가 없으면 가장 가까운 예정 경기를 보여드립니다."
+        description="가까운 경기 목록과 월간 달력 중 원하는 방식으로 확인하세요."
         link="/schedule"
         linkLabel="전체 일정"
       />
-      <div className="s26-match-board__columns">
-        <div>
-          <div className="s26-subheading">
-            <h3>{featuredTitle}</h3>
-            <span>{featured.length}경기</span>
-          </div>
-          {schedulePhase === 'loading' ? (
-            <div className="s26-empty" role="status">일정을 불러오는 중입니다.</div>
-          ) : featured.length ? (
-            <div className="s26-match-list">{featured.map((match) => <MatchItem key={match.id} match={match} />)}</div>
-          ) : (
-            <div className="s26-empty">등록된 예정 경기가 없습니다.</div>
-          )}
-        </div>
-        <div>
-          <div className="s26-subheading">
-            <h3>최근 경기 결과</h3>
-            <Link to="/schedule/results">전체 결과</Link>
-          </div>
-          {schedulePhase === 'loading' ? (
-            <div className="s26-empty" role="status">결과를 불러오는 중입니다.</div>
-          ) : recent.length ? (
-            <div className="s26-match-list">{recent.map((match) => <MatchItem key={match.id} match={match} />)}</div>
-          ) : (
-            <div className="s26-empty">아직 완료된 경기가 없습니다.</div>
-          )}
+      <div className="s26-match-view-toolbar">
+        <p aria-live="polite">
+          {viewMode === 'list'
+            ? '당일 경기가 없으면 가장 가까운 예정 경기를 보여드립니다.'
+            : '월별 경기 분포와 선택한 날짜의 상세 일정을 함께 보여드립니다.'}
+        </p>
+        <div className="s26-match-view-toggle" role="group" aria-label="경기 표시 방식">
+          {(['list', 'calendar'] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              className={viewMode === mode ? 'is-active' : undefined}
+              onClick={() => setViewMode(mode)}
+              aria-pressed={viewMode === mode}
+            >
+              {mode === 'list' ? '목록 보기' : '달력 보기'}
+            </button>
+          ))}
         </div>
       </div>
+
+      {schedulePhase === 'loading' ? (
+        <div className="s26-empty s26-match-board__loading" role="status">일정과 결과를 불러오는 중입니다.</div>
+      ) : viewMode === 'calendar' ? (
+        <HomeMatchCalendar matches={official} nowTs={nowTs} />
+      ) : (
+        <div className="s26-match-board__columns">
+          <div>
+            <div className="s26-subheading">
+              <h3>{featuredTitle}</h3>
+              <span>{featured.length}경기</span>
+            </div>
+            {featured.length ? (
+              <div className="s26-match-list">{featured.map((match) => <MatchItem key={match.id} match={match} />)}</div>
+            ) : (
+              <div className="s26-empty">등록된 예정 경기가 없습니다.</div>
+            )}
+          </div>
+          <div>
+            <div className="s26-subheading">
+              <h3>최근 경기 결과</h3>
+              <Link to="/schedule/results">전체 결과</Link>
+            </div>
+            {recent.length ? (
+              <div className="s26-match-list">{recent.map((match) => <MatchItem key={match.id} match={match} />)}</div>
+            ) : (
+              <div className="s26-empty">아직 완료된 경기가 없습니다.</div>
+            )}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
