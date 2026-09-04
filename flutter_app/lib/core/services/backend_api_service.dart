@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
+import '../models/public_season_models.dart';
 
 /// Service for communicating with the Spring Boot backend API.
 class BackendApiService {
@@ -149,6 +150,55 @@ class BackendApiService {
         .toList()
       ..sort((a, b) => b.year.compareTo(a.year));
   }
+
+  Future<SeasonOverview> getSeasonOverview(int seasonId) async {
+    _validatePositiveInt(seasonId, 'seasonId');
+    final raw = await _get('/api/seasons/$seasonId/overview');
+    if (raw is! Map<String, dynamic>) {
+      throw const FormatException('시즌 통합 현황 응답 형식이 올바르지 않습니다.');
+    }
+    return SeasonOverview.fromJson(raw, fallbackSeasonId: seasonId);
+  }
+
+  Future<List<PublicGame>> getPublicGames({
+    int? seasonId,
+    DateTime? date,
+    DateTime? dateFrom,
+    DateTime? dateTo,
+    String? group,
+    String? status,
+    String? qualification,
+  }) async {
+    final query = <String, String>{};
+    if (seasonId != null) {
+      _validatePositiveInt(seasonId, 'seasonId');
+      query['seasonId'] = '$seasonId';
+    }
+    if (date != null) query['date'] = _isoDate(date);
+    if (dateFrom != null) query['dateFrom'] = _isoDate(dateFrom);
+    if (dateTo != null) query['dateTo'] = _isoDate(dateTo);
+    if (group != null && group.trim().isNotEmpty) {
+      query['group'] = group.trim().toUpperCase();
+    }
+    if (status != null && status.trim().isNotEmpty) {
+      query['status'] = status.trim().toUpperCase();
+    }
+    if (qualification != null && qualification.trim().isNotEmpty) {
+      query['qualification'] = qualification.trim().toUpperCase();
+    }
+
+    final raw = await _get('/api/games', query: query);
+    if (raw is! List) return [];
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map(PublicGame.fromJson)
+        .where((game) => game.activeRevision)
+        .toList();
+  }
+
+  String _isoDate(DateTime value) => '${value.year.toString().padLeft(4, '0')}-'
+      '${value.month.toString().padLeft(2, '0')}-'
+      '${value.day.toString().padLeft(2, '0')}';
 
   Future<RecordsOverview> getRecordOverview(
     int seasonId, {
@@ -413,12 +463,14 @@ class BackendApiService {
         .whereType<Map<String, dynamic>>()
         .map((row) {
           final id = _toInt(row['id'] ?? row['teamId']);
-          final teamName = _toString(row['teamName'] ?? row['team_name'] ?? row['name']);
+          final teamName =
+              _toString(row['teamName'] ?? row['team_name'] ?? row['name']);
           if (id <= 0 || teamName.isEmpty) return null;
           return TeamSummary(
             id: id,
             teamName: teamName,
-            teamCode: _toString(row['teamCode'] ?? row['team_code'] ?? row['code']),
+            teamCode:
+                _toString(row['teamCode'] ?? row['team_code'] ?? row['code']),
             active: _toBool(row['active'] ?? true),
           );
         })
@@ -442,8 +494,11 @@ class BackendApiService {
         .map((row) {
           final resolvedSeasonId = _toInt(row['seasonId'] ?? row['season_id']);
           final teamId = _toInt(row['teamId'] ?? row['team_id'] ?? row['id']);
-          final teamName = _toString(row['teamName'] ?? row['team_name'] ?? row['name']);
-          if (resolvedSeasonId <= 0 || teamId <= 0 || teamName.isEmpty) return null;
+          final teamName =
+              _toString(row['teamName'] ?? row['team_name'] ?? row['name']);
+          if (resolvedSeasonId <= 0 || teamId <= 0 || teamName.isEmpty) {
+            return null;
+          }
           return SeasonTeam(
             seasonId: resolvedSeasonId,
             teamId: teamId,
@@ -460,7 +515,8 @@ class BackendApiService {
     _validatePositiveInt(seasonId, 'seasonId');
     dynamic raw;
     try {
-      raw = await _get('/api/records/filter-options', query: {'seasonId': '$seasonId'});
+      raw = await _get('/api/records/filter-options',
+          query: {'seasonId': '$seasonId'});
     } catch (err) {
       if (_isNotFoundError(err)) return null;
       rethrow;
@@ -558,8 +614,12 @@ class BackendApiService {
           final playerId = _toInt(row['playerId'] ?? row['player_id']);
           final teamId = _toInt(row['teamId'] ?? row['team_id']);
           final resolvedSeasonId = _toInt(row['seasonId'] ?? row['season_id']);
-          final playerName = _toString(row['playerName'] ?? row['player_name'] ?? row['name']);
-          if (playerId <= 0 || teamId <= 0 || resolvedSeasonId <= 0 || playerName.isEmpty) {
+          final playerName =
+              _toString(row['playerName'] ?? row['player_name'] ?? row['name']);
+          if (playerId <= 0 ||
+              teamId <= 0 ||
+              resolvedSeasonId <= 0 ||
+              playerName.isEmpty) {
             return null;
           }
           return PlayerSearchResult(
@@ -602,7 +662,8 @@ class BackendApiService {
 
     return PlayerProfile(
       playerId: resolvedPlayerId,
-      playerName: _toString(raw['playerName'] ?? raw['player_name'] ?? raw['name']),
+      playerName:
+          _toString(raw['playerName'] ?? raw['player_name'] ?? raw['name']),
       seasonId: resolvedSeasonId,
       teamId: teamId,
       teamName: _toString(raw['teamName'] ?? raw['team_name']),
@@ -893,7 +954,6 @@ class BackendApiService {
     return limit > 100 ? 100 : limit;
   }
 
-
   void _applyRecordFilters(
       Map<String, String> query, RecordFilterParams? filters) {
     if (filters == null) return;
@@ -1036,6 +1096,15 @@ class BackendApiService {
       dynamic raw, int fallbackSeasonId, int fallbackRank) {
     if (raw is! Map<String, dynamic>) return null;
 
+    final hasPublishedStats = <dynamic>[
+      raw['gamesPlayed'] ?? raw['games_played'],
+      raw['plateAppearance'] ?? raw['plate_appearance'],
+      raw['atBats'] ?? raw['at_bats'],
+      raw['hits'],
+      raw['battingAverage'] ?? raw['batting_average'] ?? raw['avg'],
+    ].any(_isPublishedNumber);
+    if (!hasPublishedStats) return null;
+
     final playerId = _toNullableInt(raw['playerId'] ?? raw['player_id']);
     if (playerId == null || playerId <= 0) return null;
 
@@ -1098,6 +1167,15 @@ class BackendApiService {
   PitcherRanking? _normalizePitcherRankingRow(
       dynamic raw, int fallbackSeasonId, int fallbackRank) {
     if (raw is! Map<String, dynamic>) return null;
+
+    final hasPublishedStats = <dynamic>[
+      raw['gamesPlayed'] ?? raw['games_played'],
+      raw['inningsPitched'] ?? raw['innings_pitched'] ?? raw['ip'],
+      raw['wins'] ?? raw['w'],
+      raw['losses'] ?? raw['l'],
+      raw['era'],
+    ].any(_isPublishedNumber);
+    if (!hasPublishedStats) return null;
 
     final playerId = _toNullableInt(raw['playerId'] ?? raw['player_id']);
     if (playerId == null || playerId <= 0) return null;
@@ -1170,6 +1248,14 @@ class BackendApiService {
       if (normalized != null) out.add(normalized);
     }
     return out;
+  }
+
+  bool _isPublishedNumber(dynamic value) {
+    if (value is num) return value.isFinite;
+    if (value is String && value.trim().isNotEmpty) {
+      return double.tryParse(value.trim()) != null;
+    }
+    return false;
   }
 
   PlayerRosterResponse _normalizePlayerRosterResponse(

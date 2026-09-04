@@ -28,7 +28,7 @@ class FirestoreService {
         .snapshots()
         .map((snap) => snap.docs
             .map(Match.fromFirestore)
-            .where((m) => !m.deleted)
+            .where((m) => m.isPublic)
             .toList());
   }
 
@@ -42,12 +42,12 @@ class FirestoreService {
         .where('startTime', isLessThan: '${dateStr}Z') // same-day range
         .get();
 
-    return snap.docs.map(Match.fromFirestore).where((m) => !m.deleted).toList();
+    return snap.docs.map(Match.fromFirestore).where((m) => m.isPublic).toList();
   }
 
   Future<List<Match>> getAllMatches() async {
     final snap = await _db.collection('matches').orderBy('startTime').get();
-    return snap.docs.map(Match.fromFirestore).where((m) => !m.deleted).toList();
+    return snap.docs.map(Match.fromFirestore).where((m) => m.isPublic).toList();
   }
 
   Future<List<Match>> getCompletedMatches() async {
@@ -56,7 +56,7 @@ class FirestoreService {
         .where('status', isEqualTo: 'completed')
         .orderBy('startTime', descending: true)
         .get();
-    return snap.docs.map(Match.fromFirestore).where((m) => !m.deleted).toList();
+    return snap.docs.map(Match.fromFirestore).where((m) => m.isPublic).toList();
   }
 
   Future<List<Match>> getScheduledMatches() async {
@@ -65,7 +65,7 @@ class FirestoreService {
         .where('status', isEqualTo: 'scheduled')
         .orderBy('startTime')
         .get();
-    return snap.docs.map(Match.fromFirestore).where((m) => !m.deleted).toList();
+    return snap.docs.map(Match.fromFirestore).where((m) => m.isPublic).toList();
   }
 
   Future<List<Match>> getMatchesByTeam(String teamName) async {
@@ -85,7 +85,7 @@ class FirestoreService {
     for (final doc in [...homeSnap.docs, ...awaySnap.docs]) {
       if (ids.add(doc.id)) {
         final m = Match.fromFirestore(doc);
-        if (!m.deleted) results.add(m);
+        if (m.isPublic) results.add(m);
       }
     }
     results.sort((a, b) => (a.startTime ?? '').compareTo(b.startTime ?? ''));

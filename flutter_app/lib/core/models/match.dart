@@ -15,6 +15,12 @@ class Match {
     this.notes,
     this.recordMode,
     this.deleted = false,
+    this.sourceActive,
+    this.sourceProvider,
+    this.sourceGameId,
+    this.groupCode,
+    this.syncRevision,
+    this.sourceUpdatedAt,
   });
 
   final String id;
@@ -30,12 +36,22 @@ class Match {
   final String? notes;
   final String? recordMode; // official | practice
   final bool deleted;
+  final bool? sourceActive;
+  final String? sourceProvider;
+  final String? sourceGameId;
+  final String? groupCode;
+  final String? syncRevision;
+  final String? sourceUpdatedAt;
 
   bool get isLive => status == 'inProgress';
   bool get isCompleted => status == 'completed';
   bool get isScheduled => status == 'scheduled';
   bool get isCanceled => status == 'canceled';
   bool get isPractice => recordMode == 'practice';
+  bool get isPublic => !deleted && sourceActive != false;
+  String get detailId => sourceGameId != null && sourceGameId!.trim().isNotEmpty
+      ? sourceGameId!
+      : id;
 
   factory Match.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? {};
@@ -53,6 +69,12 @@ class Match {
       notes: d['notes'] as String?,
       recordMode: d['recordMode'] as String?,
       deleted: d['deleted'] as bool? ?? false,
+      sourceActive: d['sourceActive'] as bool?,
+      sourceProvider: d['sourceProvider'] as String?,
+      sourceGameId: d['sourceGameId'] as String?,
+      groupCode: d['groupCode'] as String?,
+      syncRevision: d['syncRevision'] as String?,
+      sourceUpdatedAt: d['sourceUpdatedAt']?.toString(),
     );
   }
 
@@ -70,6 +92,12 @@ class Match {
         notes: d['notes'] as String?,
         recordMode: d['recordMode'] as String?,
         deleted: d['deleted'] as bool? ?? false,
+        sourceActive: d['sourceActive'] as bool?,
+        sourceProvider: d['sourceProvider'] as String?,
+        sourceGameId: d['sourceGameId'] as String?,
+        groupCode: d['groupCode'] as String?,
+        syncRevision: d['syncRevision'] as String?,
+        sourceUpdatedAt: d['sourceUpdatedAt'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -86,5 +114,11 @@ class Match {
         'notes': notes,
         'recordMode': recordMode,
         'deleted': deleted,
+        'sourceActive': sourceActive,
+        'sourceProvider': sourceProvider,
+        'sourceGameId': sourceGameId,
+        'groupCode': groupCode,
+        'syncRevision': syncRevision,
+        'sourceUpdatedAt': sourceUpdatedAt,
       };
 }

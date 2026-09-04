@@ -11,7 +11,8 @@ class CacheService {
   CacheService._();
   static final instance = CacheService._();
 
-  static const _keyMatches = 'cache_matches';
+  static const _keyMatches = 'cache_matches_v2';
+  static const _legacyKeyMatches = 'cache_matches';
   static const _keyNotices = 'cache_notices';
   static const _keyStaticContent = 'cache_static_content';
 
@@ -26,6 +27,7 @@ class CacheService {
     final sp = await _sp;
     final json = jsonEncode(matches.map((m) => m.toJson()).toList());
     await sp.setString(_keyMatches, json);
+    await sp.remove(_legacyKeyMatches);
   }
 
   Future<List<Match>?> getCachedMatches() async {
@@ -34,7 +36,7 @@ class CacheService {
     if (raw == null) return null;
     try {
       final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
-      return list.map(Match.fromJson).where((m) => !m.deleted).toList();
+      return list.map(Match.fromJson).where((m) => m.isPublic).toList();
     } catch (_) {
       return null;
     }
