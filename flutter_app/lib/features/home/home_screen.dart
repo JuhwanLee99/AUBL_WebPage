@@ -10,6 +10,7 @@ import '../../core/data/team_groups.dart';
 import '../../core/contracts/web_contracts.dart';
 import '../../core/models/match.dart';
 import '../../core/models/match_state.dart';
+import '../../core/navigation/app_destination.dart';
 import '../../core/models/team_notice.dart';
 import '../../core/services/cache_service.dart';
 import '../../core/services/firestore_service.dart';
@@ -720,14 +721,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   final shell = ShellController.of(context);
                   if (shell == null) return;
                   const tabMap = {
-                    '팀': 1,
-                    '일정': 2,
-                    '기록': 3,
-                    '순위': 5, // 더보기 탭 → 순위는 별도 push
+                    '팀': AppDestination.teams,
+                    '일정': AppDestination.games,
+                    '기록': AppDestination.records,
                   };
-                  final tabIdx = tabMap[label];
-                  if (tabIdx != null && tabIdx < 5) {
-                    shell.switchTab(tabIdx);
+                  final destination = tabMap[label];
+                  if (destination != null) {
+                    shell.switchTab(destination);
                   } else if (label == '순위') {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(

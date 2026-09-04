@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../core/navigation/app_destination.dart';
 import '../core/services/notification_service.dart';
+import '../core/theme/app_theme.dart';
 import '../features/feature_entries.dart';
 import 'embedded_webview_panel.dart';
 import 'more_screen.dart';
@@ -17,7 +19,7 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
-  int _currentIndex = 0;
+  AppDestination _currentDestination = AppDestination.home;
   bool _loggedIn = false;
   late final StreamSubscription<User?> _authSub;
   StreamSubscription<String>? _notifNavSub;
@@ -93,18 +95,18 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
     switch (navType) {
       case 'community_urgent':
-        setState(() => _currentIndex = 4);
+        setState(() => _currentDestination = AppDestination.community);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _communityKey.currentState?.switchToCategory('긴급');
         });
       case 'community_notice':
-        setState(() => _currentIndex = 4);
+        setState(() => _currentDestination = AppDestination.community);
       case 'team_notice':
-        setState(() => _currentIndex = 1);
+        setState(() => _currentDestination = AppDestination.teams);
       case 'match':
-        setState(() => _currentIndex = 2);
+        setState(() => _currentDestination = AppDestination.games);
       case 'inquiry':
-        setState(() => _currentIndex = 4);
+        setState(() => _currentDestination = AppDestination.community);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           Navigator.of(context).push<void>(
@@ -122,31 +124,23 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       openEmbeddedWebView: _openEmbeddedWebView,
       closeEmbeddedWebView: _closeEmbeddedWebView,
       refreshNotifier: _refreshNotifier,
-      switchTab: (i, {recordsTabIndex}) {
+      switchTab: (destination, {recordsTabIndex}) {
         if (hasOverlay) _closeEmbeddedWebView();
         if (recordsTabIndex != null) {
           _recordsKey.currentState?.switchToTabIndex(recordsTabIndex);
         }
-        setState(() => _currentIndex = i);
+        setState(() => _currentDestination = destination);
       },
-      child: PopScope(
-        canPop: _currentIndex == 0 && !hasOverlay,
-        onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) {
-            if (hasOverlay) {
-              _closeEmbeddedWebView();
-            } else {
-              setState(() => _currentIndex = 0);
-            }
-          }
-        },
-        child: Scaffold(
-          body: Stack(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final useRail = constraints.maxWidth >= 840;
+          final hideNavigation = hasOverlay && _overlayFullscreen;
+          final content = Stack(
             children: [
               Offstage(
                 offstage: hasOverlay,
                 child: IndexedStack(
-                  index: _currentIndex,
+                  index: _currentDestination.index,
                   children: [
                     const HomeScreen(),
                     const TeamHubScreen(),
@@ -166,38 +160,160 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
                   onClose: _closeEmbeddedWebView,
                 ),
             ],
-          ),
-          bottomNavigationBar: (hasOverlay && _overlayFullscreen)
-              ? null
-              : BottomNavigationBar(
-                  currentIndex: _currentIndex,
-                  onTap: (i) {
-                    if (hasOverlay) _closeEmbeddedWebView();
-                    setState(() => _currentIndex = i);
-                  },
-                  items: [
-                    const BottomNavigationBarItem(
-                        icon: Icon(Icons.home), label: '홈'),
-                    const BottomNavigationBarItem(
-                        icon: Icon(Icons.groups), label: '팀'),
-                    const BottomNavigationBarItem(
-                        icon: Icon(Icons.calendar_month), label: '일정'),
-                    const BottomNavigationBarItem(
-                        icon: Icon(Icons.leaderboard), label: '기록'),
-                    const BottomNavigationBarItem(
-                        icon: Icon(Icons.forum), label: '커뮤니티'),
-                    BottomNavigationBarItem(
-                      icon: _loggedIn
-                          ? const Icon(Icons.menu)
-                          : const Badge(
-                              label: Text('로그인', style: TextStyle(fontSize: 9)),
-                              backgroundColor: Color(0xFF3B82F6),
-                              child: Icon(Icons.menu),
-                            ),
-                      label: '더보기',
+          );
+          void select(AppDestination destination) {
+            if (hasOverlay) _closeEmbeddedWebView();
+            setState(() => _currentDestination = destination);
+          }
+
+          return PopScope(
+            canPop: _currentDestination == AppDestination.home && !hasOverlay,
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop) {
+                if (hasOverlay) {
+                  _closeEmbeddedWebView();
+                } else {
+                  setState(() => _currentDestination = AppDestination.home);
+                }
+              }
+            },
+            child: Scaffold(
+              body: useRail && !hideNavigation
+                  ? Row(
+                      children: [
+                        _FloatingNavigationRail(
+                          current: _currentDestination,
+                          onSelected: select,
+                        ),
+                        Expanded(child: content),
+                      ],
+                    )
+                  : content,
+              bottomNavigationBar: useRail || hideNavigation
+                  ? null
+                  : _FloatingNavigation(
+                      current: _currentDestination,
+                      loggedIn: _loggedIn,
+                      onSelected: select,
                     ),
-                  ],
-                ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _FloatingNavigationRail extends StatelessWidget {
+  const _FloatingNavigationRail({
+    required this.current,
+    required this.onSelected,
+  });
+
+  final AppDestination current;
+  final ValueChanged<AppDestination> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.aublColors;
+    return SafeArea(
+      minimum: const EdgeInsets.fromLTRB(12, 12, 0, 12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: colors.line),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(21),
+          child: NavigationRail(
+            backgroundColor: colors.surface,
+            selectedIndex: current.index,
+            labelType: NavigationRailLabelType.all,
+            groupAlignment: -0.6,
+            onDestinationSelected: (index) =>
+                onSelected(AppDestination.values[index]),
+            destinations: AppDestination.values
+                .map(
+                  (destination) => NavigationRailDestination(
+                    icon: Icon(_FloatingNavigation._icons[destination]),
+                    selectedIcon: Icon(
+                      _FloatingNavigation._icons[destination],
+                      fill: 1,
+                    ),
+                    label: Text(destination.label),
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FloatingNavigation extends StatelessWidget {
+  const _FloatingNavigation({
+    required this.current,
+    required this.loggedIn,
+    required this.onSelected,
+  });
+
+  final AppDestination current;
+  final bool loggedIn;
+  final ValueChanged<AppDestination> onSelected;
+
+  static const _icons = <AppDestination, IconData>{
+    AppDestination.home: Icons.home_outlined,
+    AppDestination.teams: Icons.groups_outlined,
+    AppDestination.games: Icons.calendar_month_outlined,
+    AppDestination.records: Icons.leaderboard_outlined,
+    AppDestination.community: Icons.forum_outlined,
+    AppDestination.more: Icons.menu,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.aublColors;
+    return SafeArea(
+      minimum: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: colors.line),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(
+                alpha: Theme.of(context).brightness == Brightness.dark
+                    ? 0.24
+                    : 0.09,
+              ),
+              blurRadius: 22,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(21),
+          child: NavigationBar(
+            selectedIndex: current.index,
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+            onDestinationSelected: (index) =>
+                onSelected(AppDestination.values[index]),
+            destinations: AppDestination.values.map((destination) {
+              Widget icon = Icon(_icons[destination]);
+              if (destination == AppDestination.more && !loggedIn) {
+                icon = Badge(child: icon);
+              }
+              return NavigationDestination(
+                icon: icon,
+                selectedIcon: Icon(_icons[destination], fill: 1),
+                label: destination.label,
+                tooltip: destination.label,
+              );
+            }).toList(),
+          ),
         ),
       ),
     );

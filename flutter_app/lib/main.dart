@@ -22,7 +22,11 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  SystemChrome.setSystemUIOverlayStyle(AppTheme.systemUiStyle);
+  SystemChrome.setSystemUIOverlayStyle(
+    AppTheme.systemUiStyleFor(
+      WidgetsBinding.instance.platformDispatcher.platformBrightness,
+    ),
+  );
 
   // 한국어 로케일 초기화
   await initializeDateFormatting('ko');

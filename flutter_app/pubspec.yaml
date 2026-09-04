@@ -39,3 +39,15 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    - assets/fonts/Pretendard-LICENSE.txt
+    - assets/fonts/BarlowCondensed-OFL.txt
+  fonts:
+    - family: Pretendard
+      fonts:
+        - asset: assets/fonts/PretendardVariable.otf
+    - family: BarlowCondensed
+      fonts:
+        - asset: assets/fonts/BarlowCondensed-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/BarlowCondensed-Black.ttf
+          weight: 900

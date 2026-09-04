@@ -5,9 +5,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../core/contracts/web_contracts.dart';
+import '../core/navigation/app_destination.dart';
 import '../core/services/auth_session_service.dart';
 import '../core/services/notification_service.dart';
 import '../core/theme/app_theme.dart';
+import '../core/theme/theme_controller.dart';
 import '../core/webview/app_webview_screen.dart';
 import '../features/feature_entries.dart';
 import 'shell_controller.dart';
@@ -139,11 +141,65 @@ class _MoreScreenState extends State<MoreScreen> {
     return '${_matchPrefLabel(_matchPref)} · ${_noticePrefLabel()}';
   }
 
+  void _openThemeSettings() {
+    final controller = ThemeControllerScope.of(context);
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('화면 테마', style: Theme.of(sheetContext).textTheme.titleLarge),
+              const SizedBox(height: 6),
+              Text(
+                '시스템 설정을 기본으로 사용하며 언제든 직접 바꿀 수 있습니다.',
+                style: Theme.of(sheetContext).textTheme.bodySmall?.copyWith(
+                      color: sheetContext.aublColors.muted,
+                    ),
+              ),
+              const SizedBox(height: 12),
+              RadioGroup<ThemePreference>(
+                groupValue: controller.preference,
+                onChanged: (value) {
+                  if (value == null) return;
+                  controller.setPreference(value);
+                  Navigator.of(sheetContext).pop();
+                },
+                child: Column(
+                  children: ThemePreference.values
+                      .map(
+                        (preference) => RadioListTile<ThemePreference>(
+                          value: preference,
+                          title: Text(preference.label),
+                          secondary: Icon(switch (preference) {
+                            ThemePreference.system =>
+                              Icons.brightness_auto_outlined,
+                            ThemePreference.light => Icons.light_mode_outlined,
+                            ThemePreference.dark => Icons.dark_mode_outlined,
+                          }),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _openNotificationSettings() {
+    final colors = context.aublColors;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.slate900,
+      backgroundColor: colors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -162,18 +218,18 @@ class _MoreScreenState extends State<MoreScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       '알림 설정',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: colors.ink,
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
+                    Text(
                       '전체 알림을 끄면 긴급 공지를 포함해 모든 알림이 중단됩니다.',
-                      style: TextStyle(color: AppTheme.slate400, fontSize: 12),
+                      style: TextStyle(color: colors.muted, fontSize: 12),
                     ),
                     const SizedBox(height: 12),
                     SwitchListTile(
@@ -186,12 +242,11 @@ class _MoreScreenState extends State<MoreScreen> {
                           setState(() => _allNotificationsOn = value);
                         }
                       },
-                      activeThumbColor: AppTheme.blue400,
-                      title: const Text('전체 알림',
-                          style: TextStyle(color: Colors.white)),
-                      subtitle: const Text('긴급 공지 포함 전체 알림 (ON/OFF)',
-                          style: TextStyle(
-                              color: AppTheme.slate500, fontSize: 12)),
+                      activeThumbColor: colors.cobalt,
+                      title: Text('전체 알림',
+                          style: TextStyle(color: colors.ink)),
+                      subtitle: Text('긴급 공지 포함 전체 알림 (ON/OFF)',
+                          style: TextStyle(color: colors.muted, fontSize: 12)),
                     ),
                     SwitchListTile(
                       value: _communityNoticeOn,
@@ -204,12 +259,11 @@ class _MoreScreenState extends State<MoreScreen> {
                                 setState(() => _communityNoticeOn = value);
                               }
                             },
-                      activeThumbColor: AppTheme.blue400,
-                      title: const Text('커뮤니티 공지',
-                          style: TextStyle(color: Colors.white)),
-                      subtitle: const Text('긴급 제외 공지 알림 (ON/OFF)',
-                          style: TextStyle(
-                              color: AppTheme.slate500, fontSize: 12)),
+                      activeThumbColor: colors.cobalt,
+                      title: Text('커뮤니티 공지',
+                          style: TextStyle(color: colors.ink)),
+                      subtitle: Text('긴급 제외 공지 알림 (ON/OFF)',
+                          style: TextStyle(color: colors.muted, fontSize: 12)),
                     ),
                     SwitchListTile(
                       value: _teamNoticeOn,
@@ -222,12 +276,11 @@ class _MoreScreenState extends State<MoreScreen> {
                                 setState(() => _teamNoticeOn = value);
                               }
                             },
-                      activeThumbColor: AppTheme.blue400,
-                      title: const Text('홈팀 공지',
-                          style: TextStyle(color: Colors.white)),
-                      subtitle: const Text('소속 팀 공지 알림',
-                          style: TextStyle(
-                              color: AppTheme.slate500, fontSize: 12)),
+                      activeThumbColor: colors.cobalt,
+                      title: Text('홈팀 공지',
+                          style: TextStyle(color: colors.ink)),
+                      subtitle: Text('소속 팀 공지 알림',
+                          style: TextStyle(color: colors.muted, fontSize: 12)),
                     ),
                     SwitchListTile(
                       value: tempInquiry,
@@ -241,26 +294,25 @@ class _MoreScreenState extends State<MoreScreen> {
                                 setState(() => _inquiryNotifOn = value);
                               }
                             },
-                      activeThumbColor: AppTheme.blue400,
-                      title: const Text('건의/문의 알림',
-                          style: TextStyle(color: Colors.white)),
-                      subtitle: const Text('내 글의 처리 상태 변경 및 새 댓글 알림',
-                          style: TextStyle(
-                              color: AppTheme.slate500, fontSize: 12)),
+                      activeThumbColor: colors.cobalt,
+                      title: Text('건의/문의 알림',
+                          style: TextStyle(color: colors.ink)),
+                      subtitle: Text('내 글의 처리 상태 변경 및 새 댓글 알림',
+                          style: TextStyle(color: colors.muted, fontSize: 12)),
                     ),
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                       child: Text(
                         '경기 알림 설정',
                         style: TextStyle(
-                          color: AppTheme.slate400,
+                          color: colors.muted,
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.5,
                         ),
                       ),
                     ),
-                    const Divider(height: 1, color: AppTheme.slate700),
+                    Divider(height: 1, color: colors.line),
                     const SizedBox(height: 4),
                     IgnorePointer(
                       ignoring: !tempAll,
@@ -282,10 +334,10 @@ class _MoreScreenState extends State<MoreScreen> {
                               for (final pref in MatchNotifyPreference.values)
                                 RadioListTile<MatchNotifyPreference>(
                                   value: pref,
-                                  activeColor: AppTheme.blue400,
+                                  activeColor: colors.cobalt,
                                   title: Text(
                                     _matchPrefLabel(pref),
-                                    style: const TextStyle(color: Colors.white),
+                                    style: TextStyle(color: colors.ink),
                                   ),
                                 ),
                             ],
@@ -332,35 +384,33 @@ class _MoreScreenState extends State<MoreScreen> {
   }
 
   Widget _buildLoginBanner() {
+    final colors = context.aublColors;
     return GestureDetector(
       onTap: _login,
       child: Container(
         margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(12),
+          color: colors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: colors.line),
         ),
         child: Row(
           children: [
-            const Icon(Icons.person_outline, color: Colors.white, size: 32),
+            Icon(Icons.person_outline, color: colors.navy, size: 32),
             const SizedBox(width: 12),
-            const Expanded(
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('로그인하고 더 많은 기능을 이용하세요',
                       style: TextStyle(
-                          color: Colors.white,
+                          color: colors.ink,
                           fontSize: 14,
                           fontWeight: FontWeight.w600)),
-                  SizedBox(height: 4),
+                  const SizedBox(height: 4),
                   Text('팀 관리, 승부예측 등 다양한 기능을 사용할 수 있습니다.',
-                      style: TextStyle(color: Colors.white70, fontSize: 12)),
+                      style: TextStyle(color: colors.muted, fontSize: 12)),
                 ],
               ),
             ),
@@ -368,12 +418,14 @@ class _MoreScreenState extends State<MoreScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: colors.navy,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Text('로그인',
+              child: Text('로그인',
                   style: TextStyle(
-                      color: Color(0xFF1E3A8A),
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? AppTheme.navy950
+                          : Colors.white,
                       fontSize: 13,
                       fontWeight: FontWeight.w600)),
             ),
@@ -400,12 +452,18 @@ class _MoreScreenState extends State<MoreScreen> {
             onTap: () {
               final shell = ShellController.of(context);
               if (shell != null) {
-                shell.switchTab(3,
+                shell.switchTab(AppDestination.records,
                     recordsTabIndex: RecordsHubTab.standings.index);
                 return;
               }
               _push(const RecordsScreen(initialTab: RecordsHubTab.standings));
             },
+          ),
+          _MenuTile(
+            icon: Icons.palette_outlined,
+            label: '화면 테마',
+            value: ThemeControllerScope.of(context).preference.label,
+            onTap: _openThemeSettings,
           ),
           _MenuTile(
             icon: Icons.person,
@@ -534,7 +592,7 @@ class _MoreScreenState extends State<MoreScreen> {
             _MenuTile(
               icon: Icons.login,
               label: '로그인',
-              color: AppTheme.blue400,
+              color: context.aublColors.cobalt,
               onTap: _login,
             ),
           const SizedBox(height: 32),
@@ -554,8 +612,8 @@ class _SectionTitle extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Text(
         title,
-        style: const TextStyle(
-          color: AppTheme.slate400,
+        style: TextStyle(
+          color: context.aublColors.muted,
           fontSize: 12,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.5,
@@ -582,16 +640,18 @@ class _MenuTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.aublColors;
     return ListTile(
-      leading: Icon(icon, color: color ?? AppTheme.slate300),
-      title: Text(label, style: TextStyle(color: color ?? Colors.white)),
+      minTileHeight: 52,
+      leading: Icon(icon, color: color ?? colors.navy),
+      title: Text(label, style: TextStyle(color: color ?? colors.ink)),
       subtitle: value == null
           ? null
           : Text(
               value!,
-              style: const TextStyle(color: AppTheme.slate500, fontSize: 12),
+              style: TextStyle(color: colors.muted, fontSize: 12),
             ),
-      trailing: Icon(Icons.chevron_right, color: color ?? AppTheme.slate500),
+      trailing: Icon(Icons.chevron_right, color: color ?? colors.muted),
       onTap: onTap,
     );
   }

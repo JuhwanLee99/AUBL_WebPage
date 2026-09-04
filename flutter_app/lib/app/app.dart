@@ -4,32 +4,62 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/theme/app_theme.dart';
+import '../core/theme/theme_controller.dart';
 import '../features/feature_entries.dart';
 import 'main_shell.dart';
 import 'maintenance_guard.dart';
 
-class AublApp extends StatelessWidget {
+class AublApp extends StatefulWidget {
   const AublApp({super.key, required this.prefs});
 
   final SharedPreferences prefs;
 
   @override
+  State<AublApp> createState() => _AublAppState();
+}
+
+class _AublAppState extends State<AublApp> {
+  late final ThemeController _themeController;
+
+  @override
+  void initState() {
+    super.initState();
+    _themeController = ThemeController(widget.prefs);
+  }
+
+  @override
+  void dispose() {
+    _themeController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'AUBL',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.dark,
-      localizationsDelegates: const [FlutterQuillLocalizations.delegate],
-      builder: (context, child) {
-        return AnnotatedRegion<SystemUiOverlayStyle>(
-          value: AppTheme.systemUiStyle,
-          child: Container(
-            color: AppTheme.slate900,
-            child: child ?? const SizedBox.shrink(),
-          ),
-        );
-      },
-      home: AppGate(prefs: prefs),
+    return ThemeControllerScope(
+      controller: _themeController,
+      child: ListenableBuilder(
+        listenable: _themeController,
+        builder: (context, _) => MaterialApp(
+          title: 'AUBL',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.light,
+          darkTheme: AppTheme.dark,
+          themeMode: _themeController.themeMode,
+          themeAnimationDuration: const Duration(milliseconds: 220),
+          localizationsDelegates: const [FlutterQuillLocalizations.delegate],
+          builder: (context, child) {
+            final theme = Theme.of(context);
+            return AnnotatedRegion<SystemUiOverlayStyle>(
+              value: AppTheme.systemUiStyleFor(theme.brightness),
+              child: ColoredBox(
+                color: theme.scaffoldBackgroundColor,
+                child: child ?? const SizedBox.shrink(),
+              ),
+            );
+          },
+          home: AppGate(prefs: widget.prefs),
+        ),
+      ),
     );
   }
 }
