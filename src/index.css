@@ -45,6 +45,9 @@
   --season-blue-700: #174f9d;
   --season-blue-600: #2565bd;
   --season-blue-100: #dceafe;
+  --season-primary-fill: #0a2457;
+  --season-primary-fill-hover: #123873;
+  --season-on-primary: #ffffff;
   --season-ink: #102854;
   --season-muted: #62718c;
   --season-canvas: #f4f7fc;
@@ -56,6 +59,8 @@
   --season-success: #13795b;
   --season-warning: #9a5b05;
   --season-danger: #b4233c;
+  --season-danger-fill: #a51f35;
+  --season-on-danger: #ffffff;
   --page-max-width: 1440px;
   --page-padding: 32px 24px 72px;
   --header-height: 72px;
@@ -83,6 +88,9 @@
   --season-blue-700: #8db9fb;
   --season-blue-600: #6ea7f5;
   --season-blue-100: #17345f;
+  --season-primary-fill: #285fa9;
+  --season-primary-fill-hover: #3978cf;
+  --season-on-primary: #ffffff;
   --season-ink: #e7eef9;
   --season-muted: #a8b8cf;
   --season-canvas: #07142b;
@@ -94,6 +102,8 @@
   --season-success: #65d8ae;
   --season-warning: #f3bd61;
   --season-danger: #ff899b;
+  --season-danger-fill: #a51f35;
+  --season-on-danger: #ffffff;
 }
 
 a {
@@ -142,6 +152,32 @@ select:focus-visible,
 textarea:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--season-focus) 48%, transparent);
   outline-offset: 3px;
+}
+
+th[tabindex]:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--season-focus) 48%, transparent);
+  outline-offset: -3px;
+}
+
+.record-filter-cell__button {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+}
+
+.record-filter-cell__button:hover,
+.record-filter-cell__button:focus-visible {
+  background: color-mix(in srgb, var(--season-blue-100) 54%, transparent);
+  box-shadow: none;
+  color: var(--season-blue-700);
+  transform: none;
 }
 
 .app-shell {
@@ -1673,7 +1709,7 @@ textarea:focus-visible {
 .season-shell-footer {
   margin-top: auto;
   border-top: 1px solid var(--season-line);
-  background: #ffffff;
+  background: var(--season-surface);
   color: var(--season-muted);
 }
 
@@ -1690,11 +1726,18 @@ textarea:focus-visible {
 }
 
 .season-shell-footer__legal {
+  align-items: center;
   display: flex;
   gap: 16px;
   margin-left: auto;
-  color: #415674;
+  color: var(--season-muted);
   font-weight: 700;
+}
+
+.season-shell-footer__legal a {
+  align-items: center;
+  display: inline-flex;
+  min-height: 44px;
 }
 
 .shell-mobile-nav,
@@ -2901,6 +2944,12 @@ textarea:focus-visible {
 .admin-cms-page__nav a[aria-current='page'] {
   background: var(--season-navy-900) !important;
   color: #ffffff !important;
+}
+
+:root[data-theme='dark'] .admin-cms-page__nav a[aria-current='page'] {
+  border-color: var(--season-primary-fill-hover) !important;
+  background: var(--season-primary-fill) !important;
+  color: var(--season-on-primary) !important;
 }
 
 .admin-cms-page > :where(div, section):not(.admin-cms-page__header):not(.admin-cms-page__nav) section {
