@@ -130,6 +130,12 @@ function rememberRunId(runId: string): void {
 
 function syncErrorMessage(error: unknown): string {
   if (error instanceof UniquePlaySyncApiError) {
+    if (error.status === 401 || error.code === 'INVALID_FIREBASE_TOKEN' || error.code === 'AUTHENTICATION_REQUIRED') {
+      return 'NAS 백엔드가 AUBL 관리자 인증 토큰을 확인하지 못했습니다. AUBL에서 다시 로그인한 뒤에도 계속되면 NAS의 Firebase Admin 인증서 설정을 확인하세요.';
+    }
+    if (error.status === 403 || error.code === 'FORBIDDEN') {
+      return '현재 AUBL 계정에 NAS 관리자 API 권한이 없습니다. Firebase 관리자 권한을 다시 확인하세요.';
+    }
     const code = error.code ? ` (${error.code})` : '';
     return `${error.message}${code}`;
   }
