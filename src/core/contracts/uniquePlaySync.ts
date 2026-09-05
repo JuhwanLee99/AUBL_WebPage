@@ -116,6 +116,7 @@ export interface UniquePlaySyncRun {
   summary: UniquePlaySyncSummary;
   validation: UniquePlaySyncValidation;
   message: string | null;
+  errorCode: string | null;
   startedAt: string | null;
   updatedAt: string | null;
   completedAt: string | null;

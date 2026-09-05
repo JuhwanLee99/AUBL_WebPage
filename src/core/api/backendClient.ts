@@ -2316,6 +2316,13 @@ function normalizeRunProgress(value: unknown, parent: SyncJsonRecord): UniquePla
   };
 }
 
+function normalizeSyncErrorCode(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toUpperCase();
+  if (!/^(?=.*[A-Z])[A-Z_]{1,64}$/.test(normalized)) return null;
+  return normalized;
+}
+
 function normalizeUniquePlaySyncRun(raw: unknown): UniquePlaySyncRun {
   const row = unwrapSyncRecord(raw, 'run', 'syncRun', 'result');
   const runId = readSyncString(row, 'runId', 'id', 'jobId');
@@ -2354,6 +2361,7 @@ function normalizeUniquePlaySyncRun(raw: unknown): UniquePlaySyncRun {
     summary: summaryValue == null ? emptySyncSummary() : normalizeSyncSummary(summaryValue),
     validation: normalizeSyncValidation(validationValue, row),
     message: readSyncString(row, 'message', 'detail', 'errorMessage'),
+    errorCode: normalizeSyncErrorCode(row.errorCode ?? row.error_code),
     startedAt: readSyncString(row, 'startedAt', 'createdAt'),
     updatedAt: readSyncString(row, 'updatedAt', 'modifiedAt'),
     completedAt: readSyncString(row, 'completedAt', 'finishedAt'),

@@ -979,6 +979,14 @@ export default function AdminUniquePlaySyncPage() {
               </div>
             )}
             {run.message && <p style={{ margin: '12px 0 0', color: run.status === 'FAILED' || run.status === 'REPAIR_REQUIRED' ? 'var(--season-danger)' : 'var(--season-muted)', fontSize: '13px' }}>{run.message}</p>}
+            {run.errorCode && (
+              <p style={{ margin: '8px 0 0', color: 'var(--season-muted)', fontSize: '12px', fontWeight: 750 }}>
+                운영 진단 코드{' '}
+                <code aria-label={`운영 진단 코드 ${run.errorCode}`} style={{ padding: '3px 6px', border: '1px solid var(--season-line)', borderRadius: '4px', background: 'var(--season-surface-muted)', color: 'var(--season-ink)', overflowWrap: 'anywhere' }}>
+                  {run.errorCode}
+                </code>
+              </p>
+            )}
             <div style={{ marginTop: '15px' }}><SummaryGrid summary={summary} /></div>
             <dl style={{ margin: '15px 0 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '9px', color: 'var(--season-muted)', fontSize: '12px' }}>
               <div><dt style={{ fontWeight: 800 }}>시즌</dt><dd style={{ margin: '3px 0 0' }}>{run.seasonYear ?? '—'}</dd></div>

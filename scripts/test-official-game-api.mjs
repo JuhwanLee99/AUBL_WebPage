@@ -108,6 +108,27 @@ try {
       assert.deepEqual(result.games,[]);
     }
   });
+  await test('sync run exposes a bounded diagnostic code without expanding raw errors', async () => {
+    respond=async(url)=>{
+      assert.equal(url,'/api/admin/sync/unique-play/runs/run-fixture');
+      return json({
+        runId:'run-fixture',status:'FAILED',message:'수집 데이터 형식을 확인해 주세요.',
+        errorCode:'GAME_DETAIL_SCHEMA',rawError:{email:'must-not-be-normalized'},
+      });
+    };
+    const result=await client.getUniquePlaySyncRun('run-fixture');
+    assert.equal(result.errorCode,'GAME_DETAIL_SCHEMA');
+    assert.equal('rawError' in result,false);
+  });
+  await test('sync run drops unsafe or unbounded diagnostic codes', async () => {
+    for(const errorCode of ['PRIVATE user@example.com','CODE_2','_'.repeat(10),'A'.repeat(65),{secret:'value'}]) {
+      respond=async()=>json({runId:'run-fixture',status:'FAILED',errorCode});
+      const result=await client.getUniquePlaySyncRun('run-fixture');
+      assert.equal(result.errorCode,null);
+    }
+    respond=async()=>json({runId:'run-fixture',status:'FAILED',error_code:'game_detail_schema'});
+    assert.equal((await client.getUniquePlaySyncRun('run-fixture')).errorCode,'GAME_DETAIL_SCHEMA');
+  });
 } finally {
   await vite.close();
   await deleteApp(app);
