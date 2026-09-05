@@ -120,9 +120,11 @@ function playerIdentity(label, role) {
     }
   }
   let jerseyNumber = null;
-  const jersey = remaining.match(/\s*\(\s*(\d{1,4}|-)\s*\)$/u);
+  const jersey = remaining.match(/\s*\(\s*(\d{1,4}|-)?\s*\)$/u);
   if (jersey) {
-    jerseyNumber = jersey[1] === '-' ? null : jersey[1];
+    // The provider explicitly renders () when no jersey is registered.
+    // Preserve that absence rather than inventing number zero.
+    jerseyNumber = !jersey[1] || jersey[1] === '-' ? null : jersey[1];
     remaining = remaining.slice(0, jersey.index).trim();
   }
   let battingOrder = null;

@@ -40,6 +40,25 @@ test('innings uses outs rather than decimal arithmetic and preserves unknown ver
   assert.deepEqual(parseInningRuns('X'), { runs: null, notPlayed: true });
 });
 
+test('explicit empty jersey parentheses preserve null without relaxing malformed player labels', () => {
+  const snapshot = boxscoreSnapshots()[0];
+  snapshot.batter.labels[0] = '5 포수 선수갑 ()';
+  snapshot.batter.labels[1] = '9 지타 선수을 (   )';
+  snapshot.pitcher.labels[0] = '투수갑() 승';
+  const rows = parseTeamTables(snapshot, snapshot.selectedTeam);
+  assert.equal(rows.batters[0].playerName, '선수갑');
+  assert.equal(rows.batters[0].battingOrder, 5);
+  assert.equal(rows.batters[0].jerseyNumber, null);
+  assert.equal(rows.batters[1].position, '지타');
+  assert.equal(rows.batters[1].jerseyNumber, null);
+  assert.equal(rows.pitchers[0].jerseyNumber, null);
+  assert.equal(rows.pitchers[0].decision, '승');
+  for (const label of ['5 포수 선수갑 (abc)', '5 포수 선수갑 (', '5 포수 선수갑 ())', '5 포수 ()', '5 알수없음 선수갑 ()']) {
+    snapshot.batter.labels[0] = label;
+    assert.throws(() => parseTeamTables(snapshot, snapshot.selectedTeam), { code: 'GAME_DETAIL_SCHEMA' });
+  }
+});
+
 test('parses two team tables, excludes totals, preserves substitution rows and repeated plate appearances', () => {
   const detail = detailFixture();
   assert.equal(detail.teams[0].batters.length, 3);

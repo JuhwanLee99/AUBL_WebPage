@@ -41,16 +41,21 @@ export function inspectBoxscoreDom({ action = 'read', teamName = null } = {}) {
   const pitcherRoot = pitcherHeaders[0].parentElement?.parentElement;
   const content = batterRoot?.parentElement;
   const lineRoot = content?.children?.[1]?.children?.[0];
-  const tabs = content?.children?.[6];
-  if (!lineRoot || !tabs || lineRoot.children.length !== 6 || pitcherRoot.parentElement !== content) return { error: 'GAME_DETAIL_SCHEMA' };
+  if (!lineRoot || lineRoot.children.length !== 6 || pitcherRoot.parentElement !== content) return { error: 'GAME_DETAIL_SCHEMA' };
   const teamNames = [...lineRoot.children[0].children].slice(1).map(cellText);
   if (teamNames.length !== 2 || teamNames.some((name) => !name)) return { error: 'GAME_DETAIL_SCHEMA' };
+  // Optional public scorer information can shift the tab's child index. Match
+  // the unique direct-child control by its two exact line-score team labels.
+  const tabCandidates = [...content.children].filter((node) => node.children.length === 2
+    && teamNames.every((name, index) => cellText(node.children[index]) === name));
+  if (tabCandidates.length !== 1) return { error: 'GAME_DETAIL_SCHEMA' };
+  const tabs = tabCandidates[0];
   const tabNodes = [...tabs.children];
-  if (tabNodes.length !== 2 || !teamNames.every((name, index) => cellText(tabNodes[index]) === name)) return { error: 'GAME_DETAIL_SCHEMA' };
   const activeTabs = tabNodes.filter((node) => {
     const color = getComputedStyle(node).backgroundColor.replace(/\s+/gu, '');
     return color !== 'transparent' && !/^rgba\([^,]+,[^,]+,[^,]+,0(?:\.0+)?\)$/u.test(color);
   });
+  if (activeTabs.length !== 1) return { error: 'GAME_DETAIL_SCHEMA' };
   if (action === 'select-team') {
     const selected = tabNodes.filter((node) => cellText(node) === normalize(teamName));
     if (selected.length !== 1) return { error: 'GAME_DETAIL_TEAM_MAPPING' };
@@ -75,7 +80,7 @@ export function inspectBoxscoreDom({ action = 'read', teamName = null } = {}) {
   if (!inningRoot) return { error: 'GAME_DETAIL_SCHEMA' };
   const column = (node) => ({ header: cellText(node.children[0]), values: [...node.children].slice(1).map(cellText) });
   return {
-    selectedTeam: activeTabs.length === 1 ? cellText(activeTabs[0]) : null,
+    selectedTeam: cellText(activeTabs[0]),
     batter: table(batterRoot, '타자'), pitcher: table(pitcherRoot, '투수'),
     lineScore: { teamNames, innings: [...inningRoot.children].map(column), totals: [...lineRoot.children].slice(2).map(column) },
   };

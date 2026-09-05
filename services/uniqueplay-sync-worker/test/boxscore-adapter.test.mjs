@@ -132,6 +132,30 @@ test('mixed direct Text nodes and child spans retain batting order, player names
   assert.equal(JSON.stringify(actual).includes('private@example'), false);
 });
 
+test('optional scorer information may shift team tabs without being collected; duplicate or unselected controls fail closed', () => {
+  const fixture = boxscoreSnapshots()[0];
+  let selected = null;
+  const document = fixtureDocument(fixture, 0, (index) => { selected = index; });
+  const content = document.body.children[1];
+  const [, line, , , batter, pitcher, tabs] = content.children;
+  const scorer = element('', [textCell('기록원'), textCell('합성 기록원')]);
+  content.children = [element(), line, element(), element(), element(), element(), scorer, tabs, batter, pitcher];
+  content.children.forEach((node) => { node.parentElement = content; });
+  const actual = JSON.parse(JSON.stringify(inspect(document, {})));
+  assert.deepEqual(actual, fixture);
+  assert.equal(JSON.stringify(actual).includes('기록원'), false);
+  assert.equal(inspect(document, { action: 'select-team', teamName: fixture.lineScore.teamNames[1] }).selected, fixture.lineScore.teamNames[1]);
+  assert.equal(selected, 1);
+  const duplicate = element('', fixture.lineScore.teamNames.map(textCell));
+  duplicate.children[0].backgroundColor = 'rgb(61, 80, 183)';
+  duplicate.parentElement = content;
+  content.children.push(duplicate);
+  assert.equal(inspect(document, {}).error, 'GAME_DETAIL_SCHEMA');
+  content.children.pop();
+  tabs.children[0].backgroundColor = 'rgba(0, 0, 0, 0)';
+  assert.equal(inspect(document, {}).error, 'GAME_DETAIL_SCHEMA');
+});
+
 test('back navigation recognizes dated result cards even without a game-results label', () => {
   const body = element('', ['일정결과', '2026년', '조별일정확인', '팀별일정확인', '08/24 월 15:00'].map(textCell));
   const context = { document: { querySelectorAll: () => body.querySelectorAll('*') }, location: { pathname: '/league/57' }, args: { leagueId: '57' } };
