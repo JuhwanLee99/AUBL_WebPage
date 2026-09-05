@@ -32,6 +32,7 @@ v22와 v23의 재현 가능한 소스 변경은 각각 `docs/release/aubl-backen
 - 원천 A조 순위표의 BODY overflow 전파를 확인했다. v11이 실제 scrollingElement인 HTML 대신 스크롤할 수 없는 BODY를 선택하는 회귀를 합성 Chromium에서 재현했다. 계정 만료/경기 점수 오류로 해석하지 않는다.
 - v12는 맞춤 내부 목록과 실제 문서 scrollingElement를 구분하고, 표 실패 시 조·표 종류·행 수·안전한 기하 진단을 제공한다. 기존 누락 차단과 수동 수집·검수·게시 정책은 유지한다.
 - 단위/웹 회귀 134개, Chromium CSS 2개(두 viewport) 통과. 실제 실행과 배포 검증 범위는 [v12 회귀 기록](release/uniqueplay-body-scroll-regression-v12-2026-09-05.md)에 구분하여 보관한다.
+- `4aaf625`의 최종 amd64 이미지에서도 브라우저/기동 검사를 통과해 Docker Hub 업로드 후 **16:57:00 KST NAS v12**로 교체했다. 환경변수 12개와 기존 설정을 보존하고 관리자 세션 연결·활성 실행 없음 확인. 새 시즌 수집·게시·활성화는 실행하지 않았다.
 
 ### 2026-09-05 스크롤 조기 종료·불완전 후보 차단 — 워커 v11
 

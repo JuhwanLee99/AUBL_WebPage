@@ -40,7 +40,19 @@ v11은 내부의 맞춤 목록을 기억한 뒤에도 BODY의 76px 높이 차이
 
 ## 배포 결과
 
-v12 빌드·적용 진행 중. 이미지 digest, 설정 보존과 적용 시각은 확인 후 추가한다. Spring v25·웹·Flutter·DB 스키마는 변경 대상이 아니다.
+- 소스 커밋 `4aaf625` (`getResult`): 회귀 수정·진단 보강·재현 테스트·원인 문서. Git 원격 push는 수행하지 않았다.
+- 이미지 `synapse9983/aubl-uniqueplay-sync-worker:v12`, `linux/amd64`, Docker Hub 업로드 및 NAS 교체 완료.
+- Manifest digest: `sha256:c1e114d1c00ebb416f7314951498a5453492220f2ba9a2d0eb9c2e2414909ca2`.
+- Image config digest(Portainer 표시): `sha256:403b5e5536a3352ea15bb0f641454c56a766fd8a2686a66837354ca983bf4bf6`.
+- NAS 생성·시작: **2026-09-05 16:57:00 KST**, `running` 확인.
+- NAS 시작 로그 `UniquePlay sync worker listening on 8080 (adapter 2026.09.05.12)` 확인. 확인한 기동 로그에 오류는 없다.
+- 새 컨테이너: `103e1a321f4251c4f6931d9fa57bdd9d9b73d2f1faaa4b00a7c37b274d9d1a98`.
+- 교체 전·초안·교체 후 환경변수 12개 값 모두 일치. 기존 암호화 세션·서비스 토큰·네트워크 `ix-aubl-backend_default`·`Unless stopped`·볼륨 없음·관리자 권한 제한을 유지했다. 비밀값은 기록하지 않았다.
+- 관리자 `세션 다시 확인`: 연결됨, 인증 확인됨, 활성 실행 없음. 새 수집·검증·게시·활성화는 실행하지 않았다.
+- 16:58:07 KST 공개 overview GET HTTP 200, `publishedRevision=375df8a9-5f3b-49f6-81a6-cc26906c4465`, `syncMode=MANUAL`로 교체 전과 동일하다.
+- 최종 amd64 이미지에서도 Chromium CSS 2개를 재실행해 통과했다. 네트워크 차단 기동 검사 `/health` HTTP 200, `adapterVersion=2026.09.05.12`, `activeRuns=0` 확인. NAS `/health` 직접 호출과는 구분한다.
+- Spring v25 컨테이너는 교체하지 않았다. 웹·Flutter·DB 스키마도 이번 변경 대상이 아니다. 사용자 수정 중인 Word 보고서를 커밋에 포함하지 않았다.
+- 이전 v11 컨테이너는 Portainer Replace로 제거했으며 이미지·동일 설정으로 재생성할 수 있다. v11에는 이번 회귀가 있으므로 복귀가 데이터 수집 정상화를 의미하지 않는다. DB·볼륨·실행 후보·공개 기록은 삭제하지 않았다.
 
 ## 운영 후속
 
