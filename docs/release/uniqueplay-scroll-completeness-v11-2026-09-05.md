@@ -29,7 +29,7 @@ v10은 게임 결과의 첫 지연 로딩 묶음 8개 중 A~H 경기 6개만 읽
 ## 검증
 
 - 워커 단위/합성 DOM 60개 통과: 기존 50개 유지, 신규 10개. 카드 넘침 오인, 표/문서 스크롤, 가로 래퍼, 실제 끝 전 정지, 지연 추가 로딩, 6경기/빈 목록 차단, 조별 부족·중복·취소·예정·반복 실행을 포함한다.
-- 실제 Chromium의 합성 CSS fixture 1개 통과: 192/214px `visible` 카드 구조를 재현하고 8 → 16 → 24행의 비동기 추가 로딩, 표와 문서 스크롤을 확인했다. 외부 네트워크는 차단하며 운영 계정·원본 HTML을 쓰지 않는다.
+- 실제 Chromium의 합성 CSS fixture 1개 통과: 192/214px `visible` 카드 구조를 재현하고 8 → 16 → 24행의 비동기 추가 로딩, 표와 문서 스크롤을 확인했다. 외부 네트워크는 차단하며 운영 계정·원본 HTML을 쓰지 않는다. macOS와 최종 linux/amd64 이미지에서 각각 같은 검사를 통과했다(테스트 수는 중복 합산하지 않음).
 - 기존 웹 경로·검수·API·품질 표시·수정 편집·내보내기 회귀 71개 통과. 합계 132개, 실패 0개.
 - 변경 JS 구문 검사와 `git diff --check` 통과. 웹/Flutter/Spring 소스나 DB 마이그레이션은 이번 변경 대상이 아니다.
 
@@ -53,7 +53,20 @@ docker buildx build --platform linux/amd64 -t synapse9983/aubl-uniqueplay-sync-w
 
 ## 배포 결과
 
-빌드·배포 진행 중. 공개 리비전과 실행 상태를 보존하여 결과를 추가 기록한다.
+- 소스·테스트·원인 문서 커밋: `96c4a69` (`getResult`). Git 원격 push는 수행하지 않았다.
+- Docker Hub 업로드 완료: `synapse9983/aubl-uniqueplay-sync-worker:v11`, `linux/amd64`.
+- OCI manifest digest: `sha256:efe10040921dbb246c79b81a2099e3e406e3e4925abc5cb5bb18bfd7807af002`.
+- 이미지 config digest(Portainer 표시): `sha256:9db8140a4e10415819ff5370c603037583f1976c5b71acb85e9eb51a996655be`.
+- NAS 생성 2026-09-05 **16:41:44 KST**, 시작 **16:41:45 KST**, `running` 확인.
+- NAS 시작 로그: `UniquePlay sync worker listening on 8080 (adapter 2026.09.05.11)`. 확인한 로그에는 기동 오류가 없다.
+- 새 컨테이너: `288c761cb995ac8105f1cfee53c81cf9a851a4bedd7abd45462dba21a3957d8e`.
+- 기존 환경변수 **12개 값 모두 전후 일치**, 볼륨 없음, `ix-aubl-backend_default` 네트워크, `Unless stopped` 재시작 정책, 관리자 접근 제한 유지. 비밀값은 로그·문서·커밋에 포함하지 않았다.
+- 교체 직전과 직후 AUBL 관리자 `세션 다시 확인`: 연결됨, 인증 확인됨, 활성 실행 없음. 새 수집·검증·게시·활성화 버튼은 실행하지 않았다.
+- 최종 이미지에서 네트워크 차단 기동 검사: `/health` HTTP 200, `adapterVersion=2026.09.05.11`, `activeRuns=0`. NAS의 직접 `/health` 조회와 구분한다.
+- 16:42:38 KST 운영 overview GET HTTP 200, 공개 리비전 `375df8a9-5f3b-49f6-81a6-cc26906c4465`, `syncMode=MANUAL` 유지. 백엔드 v25 컨테이너도 교체 전과 동일하다.
+- 이전 v10 컨테이너는 Portainer의 Replace 절차로 제거됐다. **v10 이미지와 동일 설정으로 재생성 가능**하며 DB·볼륨·후보·기록을 삭제하지 않았다. 사용자가 수정 중인 기존 Word 검수 보고서는 이 커밋에 포함하지 않았다.
+
+실제 원천의 새 수집 결과는 아직 확인하지 않았다. 관리자 재수집과 검수 후 최종 정상화 여부를 판단한다.
 
 ## 후속 확인 / 롤백
 
