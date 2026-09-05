@@ -37,11 +37,28 @@ Future<void> main() async {
     serverClientId:
         '74667071214-c0iq29sa6fkf2gah8bf0nah4i6ptrvlf.apps.googleusercontent.com',
   );
-  FirebaseMessaging.onBackgroundMessage(
-    _firebaseMessagingBackgroundHandler,
-  );
-  await NotificationService.instance.init();
-
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   final prefs = await SharedPreferences.getInstance();
-  runApp(AublApp(prefs: prefs));
+  runAppWithNotifications(
+    app: AublApp(prefs: prefs),
+    initializeNotifications: NotificationService.instance.init,
+  );
+}
+
+/// Native push registration can wait for APNs or the network indefinitely.
+/// Draw the app before starting optional notification setup.
+void runAppWithNotifications({
+  required Widget app,
+  required Future<void> Function() initializeNotifications,
+}) {
+  runApp(app);
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(() async {
+      try {
+        await initializeNotifications();
+      } catch (_) {
+        debugPrint('[NotificationService] Notification setup unavailable.');
+      }
+    }());
+  });
 }
