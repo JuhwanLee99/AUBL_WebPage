@@ -7,14 +7,19 @@ import { assertCompleteGameCollection, collectLazyList, collectUntilStable } fro
 // Public geometry only, matching the observed 192/214px visible-overflow card
 // inside the 1120/1683px auto-scrolling results list. No provider HTML/session.
 function node({ text = '', height = 0, total = height, overflow = 'visible', children = [], stuck = false } = {}) {
+  let scrollTop = 0;
   const element = {
-    children, parentElement: null, clientHeight: height, scrollHeight: total, scrollTop: 0, overflow,
+    children, parentElement: null, clientHeight: height, scrollHeight: total, overflow,
+    get scrollTop() { return scrollTop; },
+    set scrollTop(top) {
+      if (!stuck && (/^(auto|scroll|overlay)$/u.test(this.overflow) || this.isDocument)) {
+        scrollTop = Math.max(0, Math.min(this.scrollHeight - this.clientHeight, top));
+      }
+    },
     get textContent() { return text + children.map((child) => child.textContent).join(''); },
     querySelectorAll() { return children.flatMap((child) => [child, ...child.querySelectorAll('*')]); },
     scrollTo({ top }) {
-      if (!stuck && (/^(auto|scroll|overlay)$/u.test(overflow) || this.isDocument)) {
-        this.scrollTop = Math.max(0, Math.min(this.scrollHeight - this.clientHeight, top));
-      }
+      this.scrollTop = top;
     },
   };
   children.forEach((child) => { child.parentElement = element; });
@@ -54,6 +59,17 @@ test('table scrolling uses the same actual overflow selection', () => {
   assert.equal(dom.inspect({ kind: 'table', anchor: '게임수', expectedHeaders: ['게임수', '승률'] }).advanced, true);
   assert.equal(dom.list.scrollTop, 563);
   assert.equal(dom.inspect({ kind: 'table', anchor: 'ERA', expectedHeaders: ['ERA'] }).atEnd, false);
+});
+
+test('a provider-owned scrollTo method cannot swallow table or game scrolling', () => {
+  for (const table of [true, false]) {
+    const dom = fixture({ table });
+    dom.list.scrollTo = () => { throw new Error('Provider method must not be called'); };
+    const options = table ? { kind: 'table', anchor: '게임수', expectedHeaders: ['게임수', '승률'] } : {};
+    assert.equal(dom.inspect(options).advanced, true);
+    assert.equal(dom.list.scrollTop, 563);
+    assert.equal(dom.inspect(options).atEnd, true);
+  }
 });
 
 test('a horizontal-only wrapper does not hide the outer vertical scroller; fitted lists still finish', () => {

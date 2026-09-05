@@ -58,8 +58,12 @@ export function scrollCollectionDom({ kind = 'games', anchor, expectedHeaders = 
   }
   const before = target.scrollTop;
   if (!inspectOnly) {
-    target.scrollTo({ top: Math.min(target.scrollHeight - target.clientHeight,
-      before + Math.max(kind === 'table' ? 180 : 300, Math.floor(target.clientHeight * 0.8))), behavior: 'instant' });
+    // UniquePlay attaches its own scrollTo method to the DOM element in the
+    // page's main world. That method does not honor native { top } options.
+    // Keep v9's native property assignment; selecting a real scroll surface
+    // and proving a stable end remain independent completeness safeguards.
+    target.scrollTop = Math.min(target.scrollHeight - target.clientHeight,
+      before + Math.max(kind === 'table' ? 180 : 300, Math.floor(target.clientHeight * 0.8)));
   }
   return {
     advanced: target.scrollTop > before,

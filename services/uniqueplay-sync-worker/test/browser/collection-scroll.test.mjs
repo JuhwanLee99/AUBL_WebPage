@@ -20,6 +20,8 @@ test('Chromium CSS layout: overflowing cards, lazy batches, table and document s
     </style><div id="list"></div>`);
     await page.evaluate(() => {
       const list = document.querySelector('#list');
+      // The provider also owns this method on its game-list DOM element.
+      list.scrollTo = () => {};
       let count = 0;
       let loading = false;
       const append = () => {
@@ -66,6 +68,65 @@ test('Chromium CSS layout: overflowing cards, lazy batches, table and document s
     assert.equal(documentResult.advanced, true);
     assert.equal(documentResult.atEnd, false);
     assert.ok(await page.evaluate(() => document.scrollingElement.scrollTop > 0));
+  } finally {
+    await browser.close();
+  }
+});
+
+test('provider-owned scrollTo reproduces NAS 20-row stall; native property reaches all 40 rows', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    await page.route('**/*', (route) => route.abort());
+    await page.setContent(`<!doctype html><style>
+      html,body{height:100%;margin:0;overflow:hidden}
+      #list{height:620px;overflow-y:auto;scroll-behavior:auto}
+      #padding{height:528px} #header{height:25px} .row{height:45px}
+    </style><div id="list"><div id="padding"></div><div><div id="values"><div id="header"><span>타율</span><span>팀게임</span></div></div></div></div>`);
+    await page.evaluate(() => {
+      const list = document.querySelector('#list');
+      const values = document.querySelector('#values');
+      let count = 0;
+      let loading = false;
+      const append = () => {
+        for (let index = 0; index < 20; index += 1) {
+          const row = document.createElement('div');
+          row.className = 'row';
+          row.textContent = String(++count);
+          values.append(row);
+        }
+      };
+      append();
+      // Public observation: own non-native method + {top} is a no-op. Do not
+      // depend on or copy the provider's private framework implementation.
+      list.scrollTo = () => {};
+      list.addEventListener('scroll', () => {
+        if (!loading && count < 40 && list.scrollTop + list.clientHeight >= list.scrollHeight - 2) {
+          loading = true;
+          setTimeout(() => { append(); loading = false; }, 150);
+        }
+      });
+    });
+    const legacy = await page.locator('#list').evaluate((list) => {
+      list.scrollTo({ top: 496, behavior: 'instant' });
+      return { top: list.scrollTop, height: list.clientHeight, total: list.scrollHeight,
+        own: Object.hasOwn(list, 'scrollTo') };
+    });
+    assert.deepEqual(legacy, { top: 0, height: 620, total: 1453, own: true });
+    assert.equal(await page.locator('.row').count(), 20);
+    const options = { kind: 'table', anchor: '타율', expectedHeaders: ['타율', '팀게임'] };
+    assert.equal((await page.evaluate(scrollCollectionDom, { ...options, inspectOnly: true })).top, 0);
+    const first = await page.evaluate(scrollCollectionDom, options);
+    assert.deepEqual({ top: first.top, advanced: first.advanced, atEnd: first.atEnd }, { top: 496, advanced: true, atEnd: false });
+    const rows = await collectUntilStable({
+      read: async () => ({ rows: (await page.locator('.row').allTextContents()).map((value) => ({ fixed: [value], values: [value] })) }),
+      advance: () => page.evaluate(scrollCollectionDom, options),
+      wait: () => page.waitForTimeout(100), maxPasses: 20,
+    });
+    assert.equal(rows.length, 40);
+    const end = await page.evaluate(scrollCollectionDom, options);
+    assert.deepEqual({ top: end.top, height: end.height, total: end.total, atEnd: end.atEnd, advanced: end.advanced },
+      { top: 1733, height: 620, total: 2353, atEnd: true, advanced: false });
   } finally {
     await browser.close();
   }
