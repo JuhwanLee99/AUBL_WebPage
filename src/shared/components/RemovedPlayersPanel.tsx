@@ -6,6 +6,7 @@ type RemovedPlayersPanelProps = {
   title: string;
   players: RemovedPlayerEntry[];
   density?: RemovedPlayersPanelDensity;
+  unavailable?: boolean;
 };
 
 const stylesByDensity = {
@@ -27,7 +28,7 @@ const stylesByDensity = {
   },
 };
 
-export default function RemovedPlayersPanel({ title, players, density = 'regular' }: RemovedPlayersPanelProps) {
+export default function RemovedPlayersPanel({ title, players, density = 'regular', unavailable = false }: RemovedPlayersPanelProps) {
   const styles = stylesByDensity[density];
   return (
     <div
@@ -42,7 +43,7 @@ export default function RemovedPlayersPanel({ title, players, density = 'regular
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontWeight: 900, color: '#e2e8f0', fontSize: styles.titleFontSize }}>{title}</span>
-        <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: styles.subtitleFontSize }}>{players.length}명</span>
+        <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: styles.subtitleFontSize }}>{unavailable ? '미제공' : `${players.length}명`}</span>
       </div>
       {players.length ? (
         <div style={{ display: 'grid', gap: '6px' }}>
@@ -70,7 +71,7 @@ export default function RemovedPlayersPanel({ title, players, density = 'regular
           ))}
         </div>
       ) : (
-        <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: styles.rowFontSize }}>퇴장 선수 없음</span>
+        <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: styles.rowFontSize }}>{unavailable ? '교체·퇴장 여부는 수집하지 않은 정보입니다.' : '퇴장 선수 없음'}</span>
       )}
     </div>
   );

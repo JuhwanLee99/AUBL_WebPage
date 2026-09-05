@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   currentResourceForKey,
   findDetailRouteMatch,
+  hasMatchingAublLiveRecord,
   isUniquePlayProvider,
   resolveOfficialRequestSource,
   shouldKeepFirestoreLive,
@@ -47,12 +48,24 @@ test('a response from route A cannot be selected for route B', () => {
 });
 
 test('only a matching in-progress game with an explicit not-collected response keeps live Firestore UI', () => {
-  assert.equal(shouldKeepFirestoreLive('inProgress', 'NOT_COLLECTED', 'IN_PROGRESS'), true);
-  assert.equal(shouldKeepFirestoreLive('inProgress', 'NOT_COLLECTED', 'SCHEDULED'), true);
-  assert.equal(shouldKeepFirestoreLive('completed', 'NOT_COLLECTED', 'IN_PROGRESS'), false);
-  assert.equal(shouldKeepFirestoreLive('inProgress', 'NOT_COLLECTED', 'COMPLETED'), false);
-  assert.equal(shouldKeepFirestoreLive('inProgress', 'NOT_COLLECTED', null), false);
-  assert.equal(shouldKeepFirestoreLive('inProgress', 'NOT_PUBLISHED', 'IN_PROGRESS'), false);
-  assert.equal(shouldKeepFirestoreLive('inProgress', 'REVIEW_REQUIRED', 'IN_PROGRESS'), false);
-  assert.equal(shouldKeepFirestoreLive('inProgress', 'AVAILABLE', 'IN_PROGRESS'), false);
+  assert.equal(shouldKeepFirestoreLive('inProgress', 'NOT_COLLECTED', 'IN_PROGRESS', true), true);
+  assert.equal(shouldKeepFirestoreLive('inProgress', 'NOT_COLLECTED', 'SCHEDULED', true), true);
+  assert.equal(shouldKeepFirestoreLive('completed', 'NOT_COLLECTED', 'IN_PROGRESS', true), false);
+  assert.equal(shouldKeepFirestoreLive('inProgress', 'NOT_COLLECTED', 'COMPLETED', true), false);
+  assert.equal(shouldKeepFirestoreLive('inProgress', 'NOT_COLLECTED', null, true), false);
+  assert.equal(shouldKeepFirestoreLive('inProgress', 'NOT_PUBLISHED', 'IN_PROGRESS', true), false);
+  assert.equal(shouldKeepFirestoreLive('inProgress', 'REVIEW_REQUIRED', 'IN_PROGRESS', true), false);
+  assert.equal(shouldKeepFirestoreLive('inProgress', 'AVAILABLE', 'IN_PROGRESS', true), false);
+  assert.equal(shouldKeepFirestoreLive('inProgress', 'NOT_COLLECTED', 'IN_PROGRESS', false), false);
+  assert.equal(shouldKeepFirestoreLive('inProgress', 'NOT_COLLECTED', 'IN_PROGRESS'), false);
+});
+
+test('AUBL live default requires actual recording in the selected game, not a status or another game', () => {
+  const state = { activeMatchId: uniquePlayMatch.id, gameStarted: false, eventCount: 0 };
+  assert.equal(hasMatchingAublLiveRecord(uniquePlayMatch, state), false);
+  assert.equal(hasMatchingAublLiveRecord(uniquePlayMatch, { ...state, gameStarted: true }), true);
+  assert.equal(hasMatchingAublLiveRecord(uniquePlayMatch, { ...state, eventCount: 1 }), true);
+  assert.equal(hasMatchingAublLiveRecord(uniquePlayMatch, { ...state, activeMatchId: 'other-game', gameStarted: true }), false);
+  assert.equal(hasMatchingAublLiveRecord({ ...uniquePlayMatch, scoreInputMode: 'manual' }, { ...state, gameStarted: true, eventCount: 20 }), false);
+  assert.equal(hasMatchingAublLiveRecord(null, { ...state, gameStarted: true }), false);
 });

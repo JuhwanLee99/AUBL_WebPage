@@ -86,7 +86,7 @@ const DEFAULT_LANDING: LandingContent = {
   heroTitle: '그라운드 위의 지성,\n멈추지 않는 열정.',
   heroDescription:
     '2026 제46회 전국대학아마추어야구연합회(AUBL). 대한민국 유일의 순수 대학 아마추어 야구 리그에서\n40개 대학 2,000여 명의 선수가 써 내려가는 각본 없는 드라마가 지금 시작됩니다.',
-  heroSubDescription: '2026 연합회교 중앙대학교(서울)와 함께하는 시즌 — 실시간 기록과 중계, 디지털화를 핵심 가치로 리그의 새로운 도약을 준비했습니다.',
+  heroSubDescription: '2026 연합회교 중앙대학교(서울)와 함께하는 시즌',
   valueProps: [
     {
       title: 'Pure Amateurism',

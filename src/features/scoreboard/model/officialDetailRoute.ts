@@ -4,6 +4,7 @@ export interface DetailRouteMatch {
   sourceProvider?: string;
   status?: string;
   seasonId?: number;
+  scoreInputMode?: 'live' | 'manual';
 }
 
 export function findDetailRouteMatch<T extends DetailRouteMatch>(
@@ -42,9 +43,22 @@ export function shouldKeepFirestoreLive(
   matchStatus: string | null | undefined,
   officialStatus: string | null | undefined,
   officialGameStatus: string | null | undefined,
+  hasAublLiveRecord = false,
 ): boolean {
   const normalizedOfficialStatus = officialGameStatus?.trim().toUpperCase();
-  return matchStatus === 'inProgress'
+  return hasAublLiveRecord
+    && matchStatus === 'inProgress'
     && officialStatus === 'NOT_COLLECTED'
     && (normalizedOfficialStatus === 'SCHEDULED' || normalizedOfficialStatus === 'IN_PROGRESS');
+}
+
+/** A schedule status alone is not evidence that an AUBL scorekeeper recorded it. */
+export function hasMatchingAublLiveRecord(
+  match: DetailRouteMatch | null,
+  state: { activeMatchId: string | null; gameStarted: boolean; eventCount: number },
+): boolean {
+  return Boolean(match
+    && match.id === state.activeMatchId
+    && match.scoreInputMode !== 'manual'
+    && (state.gameStarted || state.eventCount > 0));
 }

@@ -8,6 +8,8 @@ type StatsTableProps = {
   stats: BatterStatLine[] | PitcherStatLine[];
   variant: 'batter' | 'pitcher';
   density?: StatsTableDensity;
+  displayRows?: Array<{ name: string; [key: string]: string | number | null | undefined }>;
+  subtitle?: string;
 };
 
 type StyleSet = {
@@ -62,7 +64,7 @@ const stylesByDensity: Record<StatsTableDensity, StyleSet> = {
 const formatFloat = (val: number) => (Number.isFinite(val) ? val.toFixed(3).replace(/^0/, '') : '-');
 const formatEra = (val: number) => (Number.isFinite(val) ? val.toFixed(2) : '-');
 
-export default function StatsTable({ title, stats, variant, density = 'regular' }: StatsTableProps) {
+export default function StatsTable({ title, stats, variant, density = 'regular', displayRows, subtitle }: StatsTableProps) {
   const isBatter = variant === 'batter';
   const styles = stylesByDensity[density];
   const columns = isBatter
@@ -103,7 +105,7 @@ export default function StatsTable({ title, stats, variant, density = 'regular' 
         { key: 'era', label: 'ERA' },
       ];
 
-  const rows = isBatter
+  const rows = displayRows ?? (isBatter
     ? (stats as BatterStatLine[]).map((stat) => {
         const avg = stat.ab > 0 ? stat.h / stat.ab : 0;
         const obpDen = stat.ab + stat.bb + stat.hbp + stat.sac + stat.ci;
@@ -121,7 +123,7 @@ export default function StatsTable({ title, stats, variant, density = 'regular' 
           appearanceLabel:
             stat.appearanceLabel ?? (stat.appearanceOrder === 0 ? '선발' : stat.appearanceOrder ? `계투(${stat.appearanceOrder})` : '-'),
         };
-      });
+      }));
 
   return (
     <div
@@ -134,7 +136,7 @@ export default function StatsTable({ title, stats, variant, density = 'regular' 
     >
       <div className="stats-table-card__header">
         <span className="stats-table-card__title" style={{ fontSize: styles.titleFontSize }}>{title}</span>
-        <span className="stats-table-card__subtitle" style={{ fontSize: styles.subtitleFontSize }}>{styles.subtitleLabel}</span>
+        <span className="stats-table-card__subtitle" style={{ fontSize: styles.subtitleFontSize }}>{subtitle ?? styles.subtitleLabel}</span>
       </div>
       <div
         className="stats-table-card__scroll"

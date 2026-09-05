@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { BatterRanking, PitcherRanking } from '@core/api/backendClient';
 import type { LandingContent, SiteAnnouncement } from '@shared/state/contentProvider';
@@ -326,8 +326,12 @@ function SectionHeading({
   );
 }
 
-function CampaignHero({ landing }: { landing: LandingContent }) {
+function CampaignHero({ landing, children }: { landing: LandingContent; children: ReactNode }) {
   const campaignLead = '우리의 청춘은 이번에도';
+  // Retire the old promotional sentence even when remote content still has it.
+  const subcopy = associationSchoolCopy(landing.heroSubDescription)
+    .replace(/\s*[—–-]?\s*실시간\s+기록과\s+중계,\s*디지털화를\s+핵심\s+가치로\s+리그의\s+새로운\s+도약을\s+준비했습니다\.?/gu, '')
+    .trim();
 
   return (
     <section className="s26-hero" aria-labelledby="season-campaign-title">
@@ -350,7 +354,7 @@ function CampaignHero({ landing }: { landing: LandingContent }) {
           <strong>PLAY BALL</strong>
         </h1>
         <p className="s26-hero__description">{associationSchoolCopy(landing.heroDescription)}</p>
-        <p className="s26-hero__subcopy">{associationSchoolCopy(landing.heroSubDescription)}</p>
+        {subcopy ? <p className="s26-hero__subcopy">{subcopy}</p> : null}
         <div className="s26-actions">
           <Link className="s26-button s26-button--primary" to="/schedule">
             경기 일정 · 결과
@@ -361,15 +365,7 @@ function CampaignHero({ landing }: { landing: LandingContent }) {
         </div>
       </div>
 
-      <div className="s26-hero__facts" aria-label="2026 시즌 요약">
-        {landing.snapshotCards.slice(0, 3).map((item, index) => (
-          <div key={`${item.label}-${index}`}>
-            <span>{associationSchoolCopy(item.label)}</span>
-            <strong>{associationSchoolCopy(item.value)}</strong>
-            <p>{associationSchoolCopy(item.desc)}</p>
-          </div>
-        ))}
-      </div>
+      {children}
     </section>
   );
 }
@@ -1034,13 +1030,14 @@ export default function Season2026Home(props: Season2026HomeProps) {
   return (
     <div className="s26-home">
       <HomeAnnouncement announcement={props.announcement} />
-      <CampaignHero landing={props.landing} />
-      <FreshnessBar
-        schedulePhase={props.schedulePhase}
-        scheduleCheckedAt={props.scheduleCheckedAt}
-        recordPhase={props.recordPhase}
-        recordPayload={props.recordPayload}
-      />
+      <CampaignHero landing={props.landing}>
+        <FreshnessBar
+          schedulePhase={props.schedulePhase}
+          scheduleCheckedAt={props.scheduleCheckedAt}
+          recordPhase={props.recordPhase}
+          recordPayload={props.recordPayload}
+        />
+      </CampaignHero>
       <MatchBoard matches={props.matches} schedulePhase={props.schedulePhase} nowTs={props.nowTs} />
       <GroupStandings groups={props.groups} recordPhase={props.recordPhase} preferredTeamName={props.myTeamName} />
       <RecordLeaders recordPhase={props.recordPhase} recordPayload={props.recordPayload} />
