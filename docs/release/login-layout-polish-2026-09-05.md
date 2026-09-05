@@ -42,5 +42,12 @@
 
 ## 배포 상태
 
-- 로컬 구현·검증 및 커밋 완료. 이 변경의 운영 배포는 아직 수행하지 않았다.
+- 구현 커밋: `4e16e16` (`fix(auth): consolidate login styles and rebalance responsive layout`).
+- 사용자 배포 승인 후 `firebase deploy --only hosting --project aubl-backup --non-interactive`로 운영 Hosting 배포를 완료했다. 46개 파일을 배포했으며 Functions·Firestore 규칙·백엔드·DB는 배포하지 않았다.
+- 운영 전달 검증 시각: **2026-09-05 19:00:45 KST**. `https://aubl.club/login`의 `/login/` 리디렉션을 따라 받은 HTML이 새 JS·CSS를 참조하는 것을 확인했다.
+- 운영 파일과 로컬 빌드의 SHA-256이 각각 일치했다.
+  - JS: `index-BMpAEfNr.js` — `68413c0a27d77e02edbe129c99bc2878efebfb80369976e07ad45fd03913f413`
+  - CSS: `index-tCB-7sP9.css` — `a2da658556905ab67d6e8ba0cf789970960ee32c918dd795314b5e5b1d042721`
+- 배포 직전 타입 검사와 프로덕션 빌드를 다시 통과했다. 기존 번들 크기 경고 외 오류는 없었다.
+- 사용자 Chrome 로그인 탭의 작성 중인 입력 내용을 보호하기 위해 강제 새로고침·탭 이동·로그인 제출은 하지 않았다. 반응형 화면 검증은 앞서 수행한 fixture 검사·스크린샷을 기준으로 하며, 이번 배포 후 확인은 운영 HTML·JS·CSS 전달 및 체크섬 검증 범위다.
 - 사용자 보고서 `.docx`의 기존 변경은 이번 커밋에서 제외한다.
