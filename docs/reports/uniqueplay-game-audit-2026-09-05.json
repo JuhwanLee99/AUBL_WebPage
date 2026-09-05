@@ -1,0 +1,7200 @@
+{
+  "schemaVersion": 1,
+  "auditDateKst": "2026-09-05",
+  "scope": "저장된 수집 후보 전수 산술검사와 타점 7경기 원본 대조",
+  "runId": "f994f85b-b6dc-4845-8b47-dd62eb63f352",
+  "checksum": "8a778a9fba18801455909640be6de5c789b90f76cbd8202215c0496e8aeab330",
+  "reviewChecksum": "348716925c2edbc4942b72b54e56bb215ebf97b1237bcff351f59a4dae399cef",
+  "expectedRevision": "ca075759-16ef-48c6-913f-a55453bda54f",
+  "issueCounts": {
+    "DETAIL_PITCHER_RUNS_TOTAL": 11,
+    "DETAIL_PITCHER_EARNED_RUNS": 18,
+    "DETAIL_PITCHER_HITS_TOTAL": 34,
+    "DETAIL_BATTER_TOTAL": 9,
+    "DETAIL_TEAM_RBI_ZERO": 6,
+    "DETAIL_LINE_SCORE": 1,
+    "DETAIL_TEAM_RBI": 1
+  },
+  "totalGames": 117,
+  "availableGames": 112,
+  "warningGames": 46,
+  "warningOccurrences": 80,
+  "games": [
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-21T09:00:00+09:00",
+      "groupCode": "H",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "세종킹스",
+      "awayTeamName": "아주대학교 ABBA",
+      "homeScore": 8,
+      "awayScore": 6,
+      "sourceGameId": "up-f00e1e2a2b6b6f9a807afb86",
+      "providerGameId": "54609",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-c544e954c057484043af452e8210fd47",
+          "code": "DETAIL_PITCHER_RUNS_TOTAL",
+          "message": "투수 실점 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-f00e1e2a2b6b6f9a807afb86",
+          "teamName": "세종킹스",
+          "field": "pitchers.runsAllowed",
+          "rowKey": null,
+          "observed": 2,
+          "expected": 6,
+          "playerName": null
+        },
+        {
+          "id": "dq-622e550ecb29deb5bb4fede8693e35fb",
+          "code": "DETAIL_PITCHER_EARNED_RUNS",
+          "message": "투수 자책점이 실점보다 많습니다.",
+          "sourceGameId": "up-f00e1e2a2b6b6f9a807afb86",
+          "teamName": "아주대학교 ABBA",
+          "field": "pitchers.earnedRuns",
+          "rowKey": "up-row-8c7bb06eb0b0ee388b32163e",
+          "observed": 2,
+          "expected": 0,
+          "playerName": "부승현"
+        },
+        {
+          "id": "dq-23799f9eec9b9fc5b8a3da3059f363e1",
+          "code": "DETAIL_PITCHER_RUNS_TOTAL",
+          "message": "투수 실점 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-f00e1e2a2b6b6f9a807afb86",
+          "teamName": "아주대학교 ABBA",
+          "field": "pitchers.runsAllowed",
+          "rowKey": null,
+          "observed": 6,
+          "expected": 8,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "세종킹스",
+          "totals": {
+            "runs": 8,
+            "hits": 10,
+            "errors": 6,
+            "walks": 1
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 29,
+          "hits": 10,
+          "runs": 8,
+          "rbi": 5,
+          "pitcherHits": 5,
+          "pitcherRuns": 2
+        },
+        {
+          "teamName": "아주대학교 ABBA",
+          "totals": {
+            "runs": 6,
+            "hits": 5,
+            "errors": 4,
+            "walks": 3
+          },
+          "batterRows": 13,
+          "pitcherRows": 2,
+          "atBats": 26,
+          "hits": 5,
+          "runs": 6,
+          "rbi": 3,
+          "pitcherHits": 10,
+          "pitcherRuns": 6
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54609/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-21T11:00:00+09:00",
+      "groupCode": "B",
+      "venue": "난지 야구장2",
+      "homeTeamName": "외대(글로벌) 유니온",
+      "awayTeamName": "외대(서울) 야구부",
+      "homeScore": 11,
+      "awayScore": 5,
+      "sourceGameId": "up-57761c62f5491d5ada71dab6",
+      "providerGameId": "54614",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "외대(글로벌) 유니온",
+          "totals": {
+            "runs": 11,
+            "hits": 7,
+            "errors": 2,
+            "walks": 7
+          },
+          "batterRows": 10,
+          "pitcherRows": 3,
+          "atBats": 24,
+          "hits": 7,
+          "runs": 11,
+          "rbi": 10,
+          "pitcherHits": 3,
+          "pitcherRuns": 5
+        },
+        {
+          "teamName": "외대(서울) 야구부",
+          "totals": {
+            "runs": 5,
+            "hits": 3,
+            "errors": 2,
+            "walks": 8
+          },
+          "batterRows": 9,
+          "pitcherRows": 2,
+          "atBats": 18,
+          "hits": 3,
+          "runs": 5,
+          "rbi": 3,
+          "pitcherHits": 7,
+          "pitcherRuns": 11
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54614/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-21T11:00:00+09:00",
+      "groupCode": "G",
+      "venue": "난지 야구장1",
+      "homeTeamName": "성균관대학교 킹고야구반",
+      "awayTeamName": "인천대학교 바이킹",
+      "homeScore": 14,
+      "awayScore": 5,
+      "sourceGameId": "up-f33c5abc224ccb8148072b97",
+      "providerGameId": "54613",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-10e3638f65d77056f2d1bdf7b30b99bd",
+          "code": "DETAIL_PITCHER_EARNED_RUNS",
+          "message": "투수 자책점이 실점보다 많습니다.",
+          "sourceGameId": "up-f33c5abc224ccb8148072b97",
+          "teamName": "성균관대학교 킹고야구반",
+          "field": "pitchers.earnedRuns",
+          "rowKey": "up-row-a06936eba786a0a644ac99b7",
+          "observed": 3,
+          "expected": 0,
+          "playerName": "박용현"
+        },
+        {
+          "id": "dq-be6d7c978d639980cb38402f7896d5d5",
+          "code": "DETAIL_PITCHER_EARNED_RUNS",
+          "message": "투수 자책점이 실점보다 많습니다.",
+          "sourceGameId": "up-f33c5abc224ccb8148072b97",
+          "teamName": "성균관대학교 킹고야구반",
+          "field": "pitchers.earnedRuns",
+          "rowKey": "up-row-12e9428f4eeed54cc3bfc448",
+          "observed": 1,
+          "expected": 0,
+          "playerName": "이의준"
+        },
+        {
+          "id": "dq-946c9623f8ba1b775f239f4eb2e01476",
+          "code": "DETAIL_PITCHER_RUNS_TOTAL",
+          "message": "투수 실점 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-f33c5abc224ccb8148072b97",
+          "teamName": "성균관대학교 킹고야구반",
+          "field": "pitchers.runsAllowed",
+          "rowKey": null,
+          "observed": 0,
+          "expected": 5,
+          "playerName": null
+        },
+        {
+          "id": "dq-ae636b37a71481552d178db36f5f7c66",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-f33c5abc224ccb8148072b97",
+          "teamName": "인천대학교 바이킹",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 6,
+          "expected": 9,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "성균관대학교 킹고야구반",
+          "totals": {
+            "runs": 14,
+            "hits": 9,
+            "errors": 2,
+            "walks": 5
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 26,
+          "hits": 9,
+          "runs": 14,
+          "rbi": 12,
+          "pitcherHits": 3,
+          "pitcherRuns": 0
+        },
+        {
+          "teamName": "인천대학교 바이킹",
+          "totals": {
+            "runs": 5,
+            "hits": 3,
+            "errors": 4,
+            "walks": 5
+          },
+          "batterRows": 11,
+          "pitcherRows": 5,
+          "atBats": 20,
+          "hits": 3,
+          "runs": 5,
+          "rbi": 5,
+          "pitcherHits": 6,
+          "pitcherRuns": 14
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54613/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-21T12:00:00+09:00",
+      "groupCode": "F",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "강남대학교 타키온즈",
+      "awayTeamName": "한양대학교 불새",
+      "homeScore": 3,
+      "awayScore": 13,
+      "sourceGameId": "up-9c8187cc5fa558edbf0ddbd5",
+      "providerGameId": "54610",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "강남대학교 타키온즈",
+          "totals": {
+            "runs": 3,
+            "hits": 4,
+            "errors": 3,
+            "walks": 4
+          },
+          "batterRows": 10,
+          "pitcherRows": 4,
+          "atBats": 17,
+          "hits": 4,
+          "runs": 3,
+          "rbi": 2,
+          "pitcherHits": 7,
+          "pitcherRuns": 13
+        },
+        {
+          "teamName": "한양대학교 불새",
+          "totals": {
+            "runs": 13,
+            "hits": 7,
+            "errors": 1,
+            "walks": 9
+          },
+          "batterRows": 11,
+          "pitcherRows": 3,
+          "atBats": 19,
+          "hits": 7,
+          "runs": 13,
+          "rbi": 12,
+          "pitcherHits": 4,
+          "pitcherRuns": 3
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54610/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-21T14:00:00+09:00",
+      "groupCode": "A",
+      "venue": "난지 야구장2",
+      "homeTeamName": "동국대학교 L.A.E",
+      "awayTeamName": "고려대학교 백구회",
+      "homeScore": 8,
+      "awayScore": 8,
+      "sourceGameId": "up-e639dc20367b84054ea83422",
+      "providerGameId": "54615",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-41e012ed9d77db22d86f312853647bdc",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-e639dc20367b84054ea83422",
+          "teamName": "고려대학교 백구회",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 3,
+          "expected": 5,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "동국대학교 L.A.E",
+          "totals": {
+            "runs": 8,
+            "hits": 5,
+            "errors": 3,
+            "walks": 2
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 26,
+          "hits": 5,
+          "runs": 8,
+          "rbi": 7,
+          "pitcherHits": 9,
+          "pitcherRuns": 8
+        },
+        {
+          "teamName": "고려대학교 백구회",
+          "totals": {
+            "runs": 8,
+            "hits": 9,
+            "errors": 2,
+            "walks": 4
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 29,
+          "hits": 9,
+          "runs": 8,
+          "rbi": 8,
+          "pitcherHits": 3,
+          "pitcherRuns": 8
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54615/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-21T15:00:00+09:00",
+      "groupCode": "B",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "한성대학교 TURTLES",
+      "awayTeamName": "서울시립대학교 FALCONS",
+      "homeScore": 3,
+      "awayScore": 10,
+      "sourceGameId": "up-846390a62e86de8901438559",
+      "providerGameId": "54611",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-bdf9ad5ba5ea7979a167baa9ad00ea25",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-846390a62e86de8901438559",
+          "teamName": "한성대학교 TURTLES",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 14,
+          "expected": 13,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "한성대학교 TURTLES",
+          "totals": {
+            "runs": 3,
+            "hits": 6,
+            "errors": 2,
+            "walks": 2
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 24,
+          "hits": 6,
+          "runs": 3,
+          "rbi": 2,
+          "pitcherHits": 14,
+          "pitcherRuns": 10
+        },
+        {
+          "teamName": "서울시립대학교 FALCONS",
+          "totals": {
+            "runs": 10,
+            "hits": 13,
+            "errors": 1,
+            "walks": 3
+          },
+          "batterRows": 13,
+          "pitcherRows": 3,
+          "atBats": 31,
+          "hits": 13,
+          "runs": 10,
+          "rbi": 10,
+          "pitcherHits": 6,
+          "pitcherRuns": 3
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54611/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-21T18:00:00+09:00",
+      "groupCode": "C",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "경희 LIONS",
+      "awayTeamName": "인하대학교 비룡",
+      "homeScore": 7,
+      "awayScore": 12,
+      "sourceGameId": "up-082ac115bd1798c889e31fa7",
+      "providerGameId": "54612",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "경희 LIONS",
+          "totals": {
+            "runs": 7,
+            "hits": 2,
+            "errors": 2,
+            "walks": 9
+          },
+          "batterRows": 11,
+          "pitcherRows": 3,
+          "atBats": 12,
+          "hits": 2,
+          "runs": 7,
+          "rbi": 5,
+          "pitcherHits": 6,
+          "pitcherRuns": 12
+        },
+        {
+          "teamName": "인하대학교 비룡",
+          "totals": {
+            "runs": 12,
+            "hits": 6,
+            "errors": 1,
+            "walks": 11
+          },
+          "batterRows": 9,
+          "pitcherRows": 2,
+          "atBats": 14,
+          "hits": 6,
+          "runs": 12,
+          "rbi": 8,
+          "pitcherHits": 2,
+          "pitcherRuns": 7
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54612/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-22T09:00:00+09:00",
+      "groupCode": "D",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "경기대학교 KGB",
+      "awayTeamName": "숭실대학교 ONERS",
+      "homeScore": 7,
+      "awayScore": 8,
+      "sourceGameId": "up-cca584ba081afe200ff08e63",
+      "providerGameId": "54616",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "경기대학교 KGB",
+          "totals": {
+            "runs": 7,
+            "hits": 5,
+            "errors": 0,
+            "walks": 5
+          },
+          "batterRows": 10,
+          "pitcherRows": 3,
+          "atBats": 24,
+          "hits": 5,
+          "runs": 7,
+          "rbi": 5,
+          "pitcherHits": 6,
+          "pitcherRuns": 8
+        },
+        {
+          "teamName": "숭실대학교 ONERS",
+          "totals": {
+            "runs": 8,
+            "hits": 6,
+            "errors": 2,
+            "walks": 5
+          },
+          "batterRows": 13,
+          "pitcherRows": 3,
+          "atBats": 21,
+          "hits": 6,
+          "runs": 8,
+          "rbi": 8,
+          "pitcherHits": 5,
+          "pitcherRuns": 7
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54616/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-22T14:00:00+09:00",
+      "groupCode": "E",
+      "venue": "난지 야구장2",
+      "homeTeamName": "한신대학교 갱스터",
+      "awayTeamName": "단국대 PANDAS",
+      "homeScore": 18,
+      "awayScore": 9,
+      "sourceGameId": "up-30c39572e6b9c6c0bae4b814",
+      "providerGameId": "54619",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-7fd6e40fc4f4746c97bd510e67dc7fb4",
+          "code": "DETAIL_BATTER_TOTAL",
+          "message": "개별 타자 득점 합계와 팀 기록이 다릅니다.",
+          "sourceGameId": "up-30c39572e6b9c6c0bae4b814",
+          "teamName": "단국대 PANDAS",
+          "field": "batters.runs",
+          "rowKey": null,
+          "observed": 8,
+          "expected": 9,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "한신대학교 갱스터",
+          "totals": {
+            "runs": 18,
+            "hits": 9,
+            "errors": 4,
+            "walks": 8
+          },
+          "batterRows": 12,
+          "pitcherRows": 3,
+          "atBats": 33,
+          "hits": 9,
+          "runs": 18,
+          "rbi": 9,
+          "pitcherHits": 3,
+          "pitcherRuns": 9
+        },
+        {
+          "teamName": "단국대 PANDAS",
+          "totals": {
+            "runs": 9,
+            "hits": 3,
+            "errors": 11,
+            "walks": 9
+          },
+          "batterRows": 14,
+          "pitcherRows": 3,
+          "atBats": 20,
+          "hits": 3,
+          "runs": 8,
+          "rbi": 1,
+          "pitcherHits": 9,
+          "pitcherRuns": 18
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54619/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-22T14:00:00+09:00",
+      "groupCode": "C",
+      "venue": "난지 야구장1",
+      "homeTeamName": "국민대 윈드밀스",
+      "awayTeamName": "한국항공대 Astros",
+      "homeScore": 8,
+      "awayScore": 7,
+      "sourceGameId": "up-3ffccb8beb8d9bba24050eaa",
+      "providerGameId": "54618",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "국민대 윈드밀스",
+          "totals": {
+            "runs": 8,
+            "hits": 3,
+            "errors": 0,
+            "walks": 8
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 25,
+          "hits": 3,
+          "runs": 8,
+          "rbi": 5,
+          "pitcherHits": 6,
+          "pitcherRuns": 7
+        },
+        {
+          "teamName": "한국항공대 Astros",
+          "totals": {
+            "runs": 7,
+            "hits": 6,
+            "errors": 3,
+            "walks": 4
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 28,
+          "hits": 6,
+          "runs": 7,
+          "rbi": 3,
+          "pitcherHits": 3,
+          "pitcherRuns": 8
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54618/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-22T18:00:00+09:00",
+      "groupCode": "F",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "서강대학교 알바트로스",
+      "awayTeamName": "상명대학교 BUCKS",
+      "homeScore": 10,
+      "awayScore": 10,
+      "sourceGameId": "up-ef5541f1869cc005f5cde7fb",
+      "providerGameId": "54617",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "서강대학교 알바트로스",
+          "totals": {
+            "runs": 10,
+            "hits": 10,
+            "errors": 1,
+            "walks": 3
+          },
+          "batterRows": 9,
+          "pitcherRows": 2,
+          "atBats": 29,
+          "hits": 10,
+          "runs": 10,
+          "rbi": 7,
+          "pitcherHits": 3,
+          "pitcherRuns": 10
+        },
+        {
+          "teamName": "상명대학교 BUCKS",
+          "totals": {
+            "runs": 10,
+            "hits": 3,
+            "errors": 2,
+            "walks": 8
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 22,
+          "hits": 3,
+          "runs": 10,
+          "rbi": 9,
+          "pitcherHits": 10,
+          "pitcherRuns": 10
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54617/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-28T11:00:00+09:00",
+      "groupCode": "A",
+      "venue": "난지 야구장1",
+      "homeTeamName": "고려대학교 백구회",
+      "awayTeamName": "서경대학교 JUKSITA",
+      "homeScore": 18,
+      "awayScore": 2,
+      "sourceGameId": "up-5011421453542d5b077d4e73",
+      "providerGameId": "54622",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "고려대학교 백구회",
+          "totals": {
+            "runs": 18,
+            "hits": 12,
+            "errors": 0,
+            "walks": 8
+          },
+          "batterRows": 14,
+          "pitcherRows": 2,
+          "atBats": 26,
+          "hits": 12,
+          "runs": 18,
+          "rbi": 13,
+          "pitcherHits": 0,
+          "pitcherRuns": 2
+        },
+        {
+          "teamName": "서경대학교 JUKSITA",
+          "totals": {
+            "runs": 2,
+            "hits": 0,
+            "errors": 5,
+            "walks": 4
+          },
+          "batterRows": 16,
+          "pitcherRows": 3,
+          "atBats": 15,
+          "hits": 0,
+          "runs": 2,
+          "rbi": 2,
+          "pitcherHits": 12,
+          "pitcherRuns": 18
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54622/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-28T11:00:00+09:00",
+      "groupCode": "H",
+      "venue": "난지 야구장2",
+      "homeTeamName": "단국대학교 HOUND",
+      "awayTeamName": "가톨릭대 텀블러즈",
+      "homeScore": 15,
+      "awayScore": 0,
+      "sourceGameId": "up-707d0ea4c755037f081eeb5b",
+      "providerGameId": "54623",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-f41998ecbf811648526b860f237ecf27",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-707d0ea4c755037f081eeb5b",
+          "teamName": "가톨릭대 텀블러즈",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 10,
+          "expected": 11,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "단국대학교 HOUND",
+          "totals": {
+            "runs": 15,
+            "hits": 11,
+            "errors": 0,
+            "walks": 5
+          },
+          "batterRows": 14,
+          "pitcherRows": 2,
+          "atBats": 26,
+          "hits": 11,
+          "runs": 15,
+          "rbi": 10,
+          "pitcherHits": 2,
+          "pitcherRuns": 0
+        },
+        {
+          "teamName": "가톨릭대 텀블러즈",
+          "totals": {
+            "runs": 0,
+            "hits": 2,
+            "errors": 4,
+            "walks": 2
+          },
+          "batterRows": 11,
+          "pitcherRows": 3,
+          "atBats": 13,
+          "hits": 2,
+          "runs": 0,
+          "rbi": 0,
+          "pitcherHits": 10,
+          "pitcherRuns": 15
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54623/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-28T15:00:00+09:00",
+      "groupCode": "B",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "서울과학기술대학교 미르",
+      "awayTeamName": "외대(글로벌) 유니온",
+      "homeScore": 14,
+      "awayScore": 7,
+      "sourceGameId": "up-a503b28e9502fcbc6808541f",
+      "providerGameId": "54620",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "서울과학기술대학교 미르",
+          "totals": {
+            "runs": 14,
+            "hits": 9,
+            "errors": 2,
+            "walks": 9
+          },
+          "batterRows": 9,
+          "pitcherRows": 1,
+          "atBats": 22,
+          "hits": 9,
+          "runs": 14,
+          "rbi": 13,
+          "pitcherHits": 11,
+          "pitcherRuns": 7
+        },
+        {
+          "teamName": "외대(글로벌) 유니온",
+          "totals": {
+            "runs": 7,
+            "hits": 11,
+            "errors": 6,
+            "walks": 2
+          },
+          "batterRows": 9,
+          "pitcherRows": 3,
+          "atBats": 26,
+          "hits": 11,
+          "runs": 7,
+          "rbi": 6,
+          "pitcherHits": 9,
+          "pitcherRuns": 14
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54620/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-28T18:00:00+09:00",
+      "groupCode": "G",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "중앙대학교 랑데뷰",
+      "awayTeamName": "홍익대학교 위너스",
+      "homeScore": 5,
+      "awayScore": 6,
+      "sourceGameId": "up-57fad2df8cb75fc1df4c8671",
+      "providerGameId": "54621",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "중앙대학교 랑데뷰",
+          "totals": {
+            "runs": 5,
+            "hits": 5,
+            "errors": 2,
+            "walks": 7
+          },
+          "batterRows": 15,
+          "pitcherRows": 2,
+          "atBats": 21,
+          "hits": 5,
+          "runs": 5,
+          "rbi": 4,
+          "pitcherHits": 5,
+          "pitcherRuns": 6
+        },
+        {
+          "teamName": "홍익대학교 위너스",
+          "totals": {
+            "runs": 6,
+            "hits": 5,
+            "errors": 3,
+            "walks": 7
+          },
+          "batterRows": 9,
+          "pitcherRows": 2,
+          "atBats": 17,
+          "hits": 5,
+          "runs": 6,
+          "rbi": 6,
+          "pitcherHits": 5,
+          "pitcherRuns": 5
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54621/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-29T11:00:00+09:00",
+      "groupCode": "C",
+      "venue": "난지 야구장2",
+      "homeTeamName": "한국체대 루나틱스",
+      "awayTeamName": "국민대 윈드밀스",
+      "homeScore": 0,
+      "awayScore": 7,
+      "sourceGameId": "up-47299067af4e2cde29a37c86",
+      "providerGameId": "54982",
+      "detailStatus": "NOT_PUBLISHED",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [],
+      "sourceUrl": "https://unique-play.com/game/54982/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-29T12:00:00+09:00",
+      "groupCode": "D",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "한국교통대학교 스윙스",
+      "awayTeamName": "경기대학교 KGB",
+      "homeScore": 7,
+      "awayScore": 0,
+      "sourceGameId": "up-6519616b8605db52dc559a6f",
+      "providerGameId": "54981",
+      "detailStatus": "NOT_PUBLISHED",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [],
+      "sourceUrl": "https://unique-play.com/game/54981/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-29T14:00:00+09:00",
+      "groupCode": "E",
+      "venue": "연세대학교(신촌) 야구장",
+      "homeTeamName": "단국대 PANDAS",
+      "awayTeamName": "연세대학교 EAGLES",
+      "homeScore": 7,
+      "awayScore": 0,
+      "sourceGameId": "up-4a7e67badb83a382c0fedde8",
+      "providerGameId": "54980",
+      "detailStatus": "NOT_PUBLISHED",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [],
+      "sourceUrl": "https://unique-play.com/game/54980/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-29T15:00:00+09:00",
+      "groupCode": "G",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "광운대학교 페가수스",
+      "awayTeamName": "성균관대학교 킹고야구반",
+      "homeScore": 4,
+      "awayScore": 8,
+      "sourceGameId": "up-22826800e9dbd83f806c05d1",
+      "providerGameId": "54625",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "광운대학교 페가수스",
+          "totals": {
+            "runs": 4,
+            "hits": 1,
+            "errors": 4,
+            "walks": 6
+          },
+          "batterRows": 10,
+          "pitcherRows": 1,
+          "atBats": 18,
+          "hits": 1,
+          "runs": 4,
+          "rbi": 3,
+          "pitcherHits": 7,
+          "pitcherRuns": 8
+        },
+        {
+          "teamName": "성균관대학교 킹고야구반",
+          "totals": {
+            "runs": 8,
+            "hits": 7,
+            "errors": 0,
+            "walks": 5
+          },
+          "batterRows": 12,
+          "pitcherRows": 3,
+          "atBats": 19,
+          "hits": 7,
+          "runs": 8,
+          "rbi": 4,
+          "pitcherHits": 1,
+          "pitcherRuns": 4
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54625/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-29T15:00:00+09:00",
+      "groupCode": "E",
+      "venue": "성남고등학교 야구장",
+      "homeTeamName": "건국대학교 불소야구부",
+      "awayTeamName": "백석대 KAHLOS",
+      "homeScore": 6,
+      "awayScore": 2,
+      "sourceGameId": "up-6e4de1c5fde2c615e12c6f5d",
+      "providerGameId": "54628",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "건국대학교 불소야구부",
+          "totals": {
+            "runs": 6,
+            "hits": 11,
+            "errors": 3,
+            "walks": 3
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 30,
+          "hits": 11,
+          "runs": 6,
+          "rbi": 6,
+          "pitcherHits": 4,
+          "pitcherRuns": 2
+        },
+        {
+          "teamName": "백석대 KAHLOS",
+          "totals": {
+            "runs": 2,
+            "hits": 4,
+            "errors": 1,
+            "walks": 2
+          },
+          "batterRows": 9,
+          "pitcherRows": 3,
+          "atBats": 26,
+          "hits": 4,
+          "runs": 2,
+          "rbi": 1,
+          "pitcherHits": 11,
+          "pitcherRuns": 6
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54628/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-29T18:00:00+09:00",
+      "groupCode": "D",
+      "venue": "성남고등학교 야구장",
+      "homeTeamName": "가천대학교 Wind",
+      "awayTeamName": "건국대 팬서스",
+      "homeScore": 11,
+      "awayScore": 10,
+      "sourceGameId": "up-d8dc9222f4d782d14b937307",
+      "providerGameId": "54746",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "가천대학교 Wind",
+          "totals": {
+            "runs": 11,
+            "hits": 10,
+            "errors": 7,
+            "walks": 6
+          },
+          "batterRows": 13,
+          "pitcherRows": 2,
+          "atBats": 30,
+          "hits": 10,
+          "runs": 11,
+          "rbi": 9,
+          "pitcherHits": 11,
+          "pitcherRuns": 10
+        },
+        {
+          "teamName": "건국대 팬서스",
+          "totals": {
+            "runs": 10,
+            "hits": 11,
+            "errors": 4,
+            "walks": 3
+          },
+          "batterRows": 14,
+          "pitcherRows": 1,
+          "atBats": 32,
+          "hits": 11,
+          "runs": 10,
+          "rbi": 6,
+          "pitcherHits": 10,
+          "pitcherRuns": 11
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54746/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-03-29T18:00:00+09:00",
+      "groupCode": "F",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "한양대학교 불새",
+      "awayTeamName": "한국공학대학교 WINNERS",
+      "homeScore": 13,
+      "awayScore": 10,
+      "sourceGameId": "up-eb8c34b7c79c91d9052913d5",
+      "providerGameId": "54626",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-66724932b3da03d5c94a08793dc5310e",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-eb8c34b7c79c91d9052913d5",
+          "teamName": "한국공학대학교 WINNERS",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 14,
+          "expected": 13,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "한양대학교 불새",
+          "totals": {
+            "runs": 13,
+            "hits": 13,
+            "errors": 7,
+            "walks": 2
+          },
+          "batterRows": 10,
+          "pitcherRows": 1,
+          "atBats": 38,
+          "hits": 13,
+          "runs": 13,
+          "rbi": 10,
+          "pitcherHits": 10,
+          "pitcherRuns": 10
+        },
+        {
+          "teamName": "한국공학대학교 WINNERS",
+          "totals": {
+            "runs": 10,
+            "hits": 10,
+            "errors": 5,
+            "walks": 3
+          },
+          "batterRows": 9,
+          "pitcherRows": 2,
+          "atBats": 33,
+          "hits": 10,
+          "runs": 10,
+          "rbi": 7,
+          "pitcherHits": 14,
+          "pitcherRuns": 13
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54626/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-04-04T09:00:00+09:00",
+      "groupCode": "C",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "한국체대 루나틱스",
+      "awayTeamName": "경희 LIONS",
+      "homeScore": 4,
+      "awayScore": 14,
+      "sourceGameId": "up-ab4c4a752ed4182fb9ddfe03",
+      "providerGameId": "54896",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "한국체대 루나틱스",
+          "totals": {
+            "runs": 4,
+            "hits": 3,
+            "errors": 0,
+            "walks": 4
+          },
+          "batterRows": 11,
+          "pitcherRows": 5,
+          "atBats": 15,
+          "hits": 3,
+          "runs": 4,
+          "rbi": 3,
+          "pitcherHits": 11,
+          "pitcherRuns": 14
+        },
+        {
+          "teamName": "경희 LIONS",
+          "totals": {
+            "runs": 14,
+            "hits": 11,
+            "errors": 1,
+            "walks": 9
+          },
+          "batterRows": 12,
+          "pitcherRows": 2,
+          "atBats": 23,
+          "hits": 11,
+          "runs": 14,
+          "rbi": 13,
+          "pitcherHits": 3,
+          "pitcherRuns": 4
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54896/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-04-04T12:00:00+09:00",
+      "groupCode": "G",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "인천대학교 바이킹",
+      "awayTeamName": "홍익대학교 위너스",
+      "homeScore": 2,
+      "awayScore": 12,
+      "sourceGameId": "up-5fc67d8c20037c2569a16fec",
+      "providerGameId": "54897",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-a84d42862bb179133a686fc633c5241d",
+          "code": "DETAIL_TEAM_RBI_ZERO",
+          "message": "득점이 있으나 선수 타점 합계가 0입니다. 실책·주루 득점일 수 있으므로 원천 타석 기록을 확인해 주세요.",
+          "sourceGameId": "up-5fc67d8c20037c2569a16fec",
+          "teamName": "인천대학교 바이킹",
+          "field": "batters.rbi",
+          "rowKey": null,
+          "observed": 0,
+          "expected": 2,
+          "playerName": null
+        },
+        {
+          "id": "dq-a5cea23db0a30076937c988d29480c93",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-5fc67d8c20037c2569a16fec",
+          "teamName": "홍익대학교 위너스",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 3,
+          "expected": 2,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "인천대학교 바이킹",
+          "totals": {
+            "runs": 2,
+            "hits": 2,
+            "errors": 3,
+            "walks": 1
+          },
+          "batterRows": 11,
+          "pitcherRows": 3,
+          "atBats": 18,
+          "hits": 2,
+          "runs": 2,
+          "rbi": 0,
+          "pitcherHits": 9,
+          "pitcherRuns": 12
+        },
+        {
+          "teamName": "홍익대학교 위너스",
+          "totals": {
+            "runs": 12,
+            "hits": 9,
+            "errors": 3,
+            "walks": 6
+          },
+          "batterRows": 10,
+          "pitcherRows": 3,
+          "atBats": 23,
+          "hits": 9,
+          "runs": 12,
+          "rbi": 11,
+          "pitcherHits": 3,
+          "pitcherRuns": 2
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54897/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": true
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-04-04T18:00:00+09:00",
+      "groupCode": "A",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "동국대학교 L.A.E",
+      "awayTeamName": "경희대학교(서울) BRAVES",
+      "homeScore": 7,
+      "awayScore": 8,
+      "sourceGameId": "up-f8d4304010bd548edf3a973d",
+      "providerGameId": "54898",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "동국대학교 L.A.E",
+          "totals": {
+            "runs": 7,
+            "hits": 5,
+            "errors": 2,
+            "walks": 4
+          },
+          "batterRows": 12,
+          "pitcherRows": 3,
+          "atBats": 24,
+          "hits": 5,
+          "runs": 7,
+          "rbi": 5,
+          "pitcherHits": 8,
+          "pitcherRuns": 8
+        },
+        {
+          "teamName": "경희대학교(서울) BRAVES",
+          "totals": {
+            "runs": 8,
+            "hits": 8,
+            "errors": 7,
+            "walks": 4
+          },
+          "batterRows": 9,
+          "pitcherRows": 1,
+          "atBats": 25,
+          "hits": 8,
+          "runs": 8,
+          "rbi": 6,
+          "pitcherHits": 5,
+          "pitcherRuns": 7
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54898/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-04-05T12:00:00+09:00",
+      "groupCode": "D",
+      "venue": "난지 야구장1",
+      "homeTeamName": "건국대 팬서스",
+      "awayTeamName": "숭실대학교 ONERS",
+      "homeScore": 2,
+      "awayScore": 8,
+      "sourceGameId": "up-3d55ca69aa201e0355c51fdf",
+      "providerGameId": "54900",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "건국대 팬서스",
+          "totals": {
+            "runs": 2,
+            "hits": 6,
+            "errors": 3,
+            "walks": 1
+          },
+          "batterRows": 12,
+          "pitcherRows": 1,
+          "atBats": 24,
+          "hits": 6,
+          "runs": 2,
+          "rbi": 2,
+          "pitcherHits": 8,
+          "pitcherRuns": 8
+        },
+        {
+          "teamName": "숭실대학교 ONERS",
+          "totals": {
+            "runs": 8,
+            "hits": 8,
+            "errors": 2,
+            "walks": 5
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 25,
+          "hits": 8,
+          "runs": 8,
+          "rbi": 5,
+          "pitcherHits": 6,
+          "pitcherRuns": 2
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54900/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-04-05T15:00:00+09:00",
+      "groupCode": "E",
+      "venue": "장흥야구장",
+      "homeTeamName": "백석대 KAHLOS",
+      "awayTeamName": "한신대학교 갱스터",
+      "homeScore": 8,
+      "awayScore": 7,
+      "sourceGameId": "up-c3aa0305912469681eb7bdf6",
+      "providerGameId": "54902",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-09f779d05cabca25e8bc9275e1d00847",
+          "code": "DETAIL_PITCHER_EARNED_RUNS",
+          "message": "투수 자책점이 실점보다 많습니다.",
+          "sourceGameId": "up-c3aa0305912469681eb7bdf6",
+          "teamName": "백석대 KAHLOS",
+          "field": "pitchers.earnedRuns",
+          "rowKey": "up-row-507e3c56f904f7b5e9bf5d8f",
+          "observed": 6,
+          "expected": 5,
+          "playerName": "이용성"
+        },
+        {
+          "id": "dq-60f8dccc443ce9d4f995c64f6df7f34f",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-c3aa0305912469681eb7bdf6",
+          "teamName": "백석대 KAHLOS",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 5,
+          "expected": 7,
+          "playerName": null
+        },
+        {
+          "id": "dq-d96cdce5fe4f1e05056e2e4fc2f940eb",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-c3aa0305912469681eb7bdf6",
+          "teamName": "한신대학교 갱스터",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 11,
+          "expected": 14,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "백석대 KAHLOS",
+          "totals": {
+            "runs": 8,
+            "hits": 14,
+            "errors": 2,
+            "walks": 1
+          },
+          "batterRows": 10,
+          "pitcherRows": 3,
+          "atBats": 34,
+          "hits": 14,
+          "runs": 8,
+          "rbi": 7,
+          "pitcherHits": 5,
+          "pitcherRuns": 7
+        },
+        {
+          "teamName": "한신대학교 갱스터",
+          "totals": {
+            "runs": 7,
+            "hits": 7,
+            "errors": 1,
+            "walks": 4
+          },
+          "batterRows": 9,
+          "pitcherRows": 1,
+          "atBats": 27,
+          "hits": 7,
+          "runs": 7,
+          "rbi": 5,
+          "pitcherHits": 11,
+          "pitcherRuns": 8
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54902/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-04-05T16:00:00+09:00",
+      "groupCode": "F",
+      "venue": "난지 야구장1",
+      "homeTeamName": "한국공학대학교 WINNERS",
+      "awayTeamName": "서강대학교 알바트로스",
+      "homeScore": 7,
+      "awayScore": 4,
+      "sourceGameId": "up-ddd82c04d474d625a540d6d0",
+      "providerGameId": "54901",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "한국공학대학교 WINNERS",
+          "totals": {
+            "runs": 7,
+            "hits": 6,
+            "errors": 2,
+            "walks": 6
+          },
+          "batterRows": 10,
+          "pitcherRows": 3,
+          "atBats": 21,
+          "hits": 6,
+          "runs": 7,
+          "rbi": 7,
+          "pitcherHits": 1,
+          "pitcherRuns": 4
+        },
+        {
+          "teamName": "서강대학교 알바트로스",
+          "totals": {
+            "runs": 4,
+            "hits": 1,
+            "errors": 0,
+            "walks": 9
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 18,
+          "hits": 1,
+          "runs": 4,
+          "rbi": 3,
+          "pitcherHits": 6,
+          "pitcherRuns": 7
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54901/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-04-05T18:00:00+09:00",
+      "groupCode": "H",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "명지대학교 나이너스",
+      "awayTeamName": "아주대학교 ABBA",
+      "homeScore": 4,
+      "awayScore": 8,
+      "sourceGameId": "up-a25d62c97337b7a5f569e803",
+      "providerGameId": "54899",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "명지대학교 나이너스",
+          "totals": {
+            "runs": 4,
+            "hits": 7,
+            "errors": 0,
+            "walks": 0
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 28,
+          "hits": 7,
+          "runs": 4,
+          "rbi": 3,
+          "pitcherHits": 9,
+          "pitcherRuns": 8
+        },
+        {
+          "teamName": "아주대학교 ABBA",
+          "totals": {
+            "runs": 8,
+            "hits": 9,
+            "errors": 2,
+            "walks": 8
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 27,
+          "hits": 9,
+          "runs": 8,
+          "rbi": 7,
+          "pitcherHits": 7,
+          "pitcherRuns": 4
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54899/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-04-11T12:00:00+09:00",
+      "groupCode": "B",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "서울시립대학교 FALCONS",
+      "awayTeamName": "서울과학기술대학교 미르",
+      "homeScore": 3,
+      "awayScore": 3,
+      "sourceGameId": "up-2b8592852e2b70ba4cc5442c",
+      "providerGameId": "54923",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-983e9e1418e435ca6246a09b006d9cfb",
+          "code": "DETAIL_BATTER_TOTAL",
+          "message": "개별 타자 득점 합계와 팀 기록이 다릅니다.",
+          "sourceGameId": "up-2b8592852e2b70ba4cc5442c",
+          "teamName": "서울시립대학교 FALCONS",
+          "field": "batters.runs",
+          "rowKey": null,
+          "observed": 2,
+          "expected": 3,
+          "playerName": null
+        },
+        {
+          "id": "dq-f6430d02a9181d46f669a6d50e1d4587",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-2b8592852e2b70ba4cc5442c",
+          "teamName": "서울과학기술대학교 미르",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 8,
+          "expected": 7,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "서울시립대학교 FALCONS",
+          "totals": {
+            "runs": 3,
+            "hits": 7,
+            "errors": 2,
+            "walks": 4
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 22,
+          "hits": 7,
+          "runs": 2,
+          "rbi": 3,
+          "pitcherHits": 7,
+          "pitcherRuns": 3
+        },
+        {
+          "teamName": "서울과학기술대학교 미르",
+          "totals": {
+            "runs": 3,
+            "hits": 7,
+            "errors": 0,
+            "walks": 4
+          },
+          "batterRows": 9,
+          "pitcherRows": 1,
+          "atBats": 24,
+          "hits": 7,
+          "runs": 3,
+          "rbi": 2,
+          "pitcherHits": 8,
+          "pitcherRuns": 3
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54923/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-04-11T15:00:00+09:00",
+      "groupCode": "G",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "성균관대학교 킹고야구반",
+      "awayTeamName": "중앙대학교 랑데뷰",
+      "homeScore": 3,
+      "awayScore": 7,
+      "sourceGameId": "up-2b61df60fb1269aa39211a69",
+      "providerGameId": "54924",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "성균관대학교 킹고야구반",
+          "totals": {
+            "runs": 3,
+            "hits": 5,
+            "errors": 2,
+            "walks": 4
+          },
+          "batterRows": 10,
+          "pitcherRows": 1,
+          "atBats": 22,
+          "hits": 5,
+          "runs": 3,
+          "rbi": 3,
+          "pitcherHits": 9,
+          "pitcherRuns": 7
+        },
+        {
+          "teamName": "중앙대학교 랑데뷰",
+          "totals": {
+            "runs": 7,
+            "hits": 9,
+            "errors": 3,
+            "walks": 2
+          },
+          "batterRows": 10,
+          "pitcherRows": 3,
+          "atBats": 26,
+          "hits": 9,
+          "runs": 7,
+          "rbi": 4,
+          "pitcherHits": 5,
+          "pitcherRuns": 3
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54924/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-04-11T18:00:00+09:00",
+      "groupCode": "E",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "연세대학교 EAGLES",
+      "awayTeamName": "건국대학교 불소야구부",
+      "homeScore": 17,
+      "awayScore": 1,
+      "sourceGameId": "up-04b796ba3effcf71225a5d86",
+      "providerGameId": "54925",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-db3195e205a04d6abb9912c88cda2539",
+          "code": "DETAIL_PITCHER_EARNED_RUNS",
+          "message": "투수 자책점이 실점보다 많습니다.",
+          "sourceGameId": "up-04b796ba3effcf71225a5d86",
+          "teamName": "연세대학교 EAGLES",
+          "field": "pitchers.earnedRuns",
+          "rowKey": "up-row-9102dab173d3119c1b8968c7",
+          "observed": 1,
+          "expected": 0,
+          "playerName": "권은성"
+        },
+        {
+          "id": "dq-bd580c00868692247db1518494a82aff",
+          "code": "DETAIL_PITCHER_RUNS_TOTAL",
+          "message": "투수 실점 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-04b796ba3effcf71225a5d86",
+          "teamName": "연세대학교 EAGLES",
+          "field": "pitchers.runsAllowed",
+          "rowKey": null,
+          "observed": 0,
+          "expected": 1,
+          "playerName": null
+        },
+        {
+          "id": "dq-537ec78983e8cfb7663a4b99a64cfdec",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-04b796ba3effcf71225a5d86",
+          "teamName": "건국대학교 불소야구부",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 8,
+          "expected": 10,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "연세대학교 EAGLES",
+          "totals": {
+            "runs": 17,
+            "hits": 10,
+            "errors": 0,
+            "walks": 7
+          },
+          "batterRows": 11,
+          "pitcherRows": 1,
+          "atBats": 24,
+          "hits": 10,
+          "runs": 17,
+          "rbi": 12,
+          "pitcherHits": 3,
+          "pitcherRuns": 0
+        },
+        {
+          "teamName": "건국대학교 불소야구부",
+          "totals": {
+            "runs": 1,
+            "hits": 3,
+            "errors": 2,
+            "walks": 1
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 14,
+          "hits": 3,
+          "runs": 1,
+          "rbi": 1,
+          "pitcherHits": 8,
+          "pitcherRuns": 17
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54925/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-04-12T08:00:00+09:00",
+      "groupCode": "F",
+      "venue": "서강대학교",
+      "homeTeamName": "서강대학교 알바트로스",
+      "awayTeamName": "강남대학교 타키온즈",
+      "homeScore": 14,
+      "awayScore": 0,
+      "sourceGameId": "up-1e20d1668757f3aae18ff7ae",
+      "providerGameId": "54931",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "서강대학교 알바트로스",
+          "totals": {
+            "runs": 14,
+            "hits": 10,
+            "errors": 0,
+            "walks": 6
+          },
+          "batterRows": 11,
+          "pitcherRows": 3,
+          "atBats": 28,
+          "hits": 10,
+          "runs": 14,
+          "rbi": 9,
+          "pitcherHits": 2,
+          "pitcherRuns": 0
+        },
+        {
+          "teamName": "강남대학교 타키온즈",
+          "totals": {
+            "runs": 0,
+            "hits": 2,
+            "errors": 6,
+            "walks": 2
+          },
+          "batterRows": 12,
+          "pitcherRows": 3,
+          "atBats": 17,
+          "hits": 2,
+          "runs": 0,
+          "rbi": 0,
+          "pitcherHits": 10,
+          "pitcherRuns": 14
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54931/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-04-12T09:00:00+09:00",
+      "groupCode": "B",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "외대(서울) 야구부",
+      "awayTeamName": "한성대학교 TURTLES",
+      "homeScore": 11,
+      "awayScore": 5,
+      "sourceGameId": "up-212a90d23ab39c6b658d9743",
+      "providerGameId": "54927",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-2198e213dd2b0dab1130875e1beb1a03",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-212a90d23ab39c6b658d9743",
+          "teamName": "외대(서울) 야구부",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 5,
+          "expected": 6,
+          "playerName": null
+        },
+        {
+          "id": "dq-4972ed20e35fe80cd452dedb5a3c561f",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-212a90d23ab39c6b658d9743",
+          "teamName": "한성대학교 TURTLES",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 8,
+          "expected": 9,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "외대(서울) 야구부",
+          "totals": {
+            "runs": 11,
+            "hits": 9,
+            "errors": 1,
+            "walks": 5
+          },
+          "batterRows": 10,
+          "pitcherRows": 1,
+          "atBats": 26,
+          "hits": 9,
+          "runs": 11,
+          "rbi": 10,
+          "pitcherHits": 5,
+          "pitcherRuns": 5
+        },
+        {
+          "teamName": "한성대학교 TURTLES",
+          "totals": {
+            "runs": 5,
+            "hits": 6,
+            "errors": 2,
+            "walks": 5
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 24,
+          "hits": 6,
+          "runs": 5,
+          "rbi": 4,
+          "pitcherHits": 8,
+          "pitcherRuns": 11
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54927/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-04-12T12:00:00+09:00",
+      "groupCode": "D",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "숭실대학교 ONERS",
+      "awayTeamName": "한국교통대학교 스윙스",
+      "homeScore": 24,
+      "awayScore": 5,
+      "sourceGameId": "up-f3dc9d71199f9bdb5cbb6fdc",
+      "providerGameId": "54928",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "숭실대학교 ONERS",
+          "totals": {
+            "runs": 24,
+            "hits": 7,
+            "errors": 1,
+            "walks": 19
+          },
+          "batterRows": 17,
+          "pitcherRows": 4,
+          "atBats": 20,
+          "hits": 7,
+          "runs": 24,
+          "rbi": 22,
+          "pitcherHits": 2,
+          "pitcherRuns": 5
+        },
+        {
+          "teamName": "한국교통대학교 스윙스",
+          "totals": {
+            "runs": 5,
+            "hits": 2,
+            "errors": 4,
+            "walks": 9
+          },
+          "batterRows": 15,
+          "pitcherRows": 4,
+          "atBats": 12,
+          "hits": 2,
+          "runs": 5,
+          "rbi": 5,
+          "pitcherHits": 7,
+          "pitcherRuns": 24
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54928/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-04-12T18:00:00+09:00",
+      "groupCode": "G",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "인천대학교 바이킹",
+      "awayTeamName": "광운대학교 페가수스",
+      "homeScore": 18,
+      "awayScore": 1,
+      "sourceGameId": "up-f4423eb43bac9a28a473bc92",
+      "providerGameId": "54930",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-23bc22de40e7159d13a20af430b7927e",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-f4423eb43bac9a28a473bc92",
+          "teamName": "광운대학교 페가수스",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 10,
+          "expected": 11,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "인천대학교 바이킹",
+          "totals": {
+            "runs": 18,
+            "hits": 11,
+            "errors": 1,
+            "walks": 11
+          },
+          "batterRows": 14,
+          "pitcherRows": 4,
+          "atBats": 24,
+          "hits": 11,
+          "runs": 18,
+          "rbi": 14,
+          "pitcherHits": 2,
+          "pitcherRuns": 1
+        },
+        {
+          "teamName": "광운대학교 페가수스",
+          "totals": {
+            "runs": 1,
+            "hits": 2,
+            "errors": 2,
+            "walks": 1
+          },
+          "batterRows": 14,
+          "pitcherRows": 5,
+          "atBats": 17,
+          "hits": 2,
+          "runs": 1,
+          "rbi": 1,
+          "pitcherHits": 10,
+          "pitcherRuns": 18
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54930/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-04-26T15:00:00+09:00",
+      "groupCode": "E",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "단국대 PANDAS",
+      "awayTeamName": "백석대 KAHLOS",
+      "homeScore": 8,
+      "awayScore": 9,
+      "sourceGameId": "up-1c16764a7da256f1b6f1f4de",
+      "providerGameId": "54932",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "단국대 PANDAS",
+          "totals": {
+            "runs": 8,
+            "hits": 6,
+            "errors": 4,
+            "walks": 5
+          },
+          "batterRows": 9,
+          "pitcherRows": 2,
+          "atBats": 15,
+          "hits": 6,
+          "runs": 8,
+          "rbi": 6,
+          "pitcherHits": 6,
+          "pitcherRuns": 9
+        },
+        {
+          "teamName": "백석대 KAHLOS",
+          "totals": {
+            "runs": 9,
+            "hits": 6,
+            "errors": 1,
+            "walks": 4
+          },
+          "batterRows": 10,
+          "pitcherRows": 3,
+          "atBats": 19,
+          "hits": 6,
+          "runs": 9,
+          "rbi": 5,
+          "pitcherHits": 6,
+          "pitcherRuns": 8
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54932/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-02T16:00:00+09:00",
+      "groupCode": "A",
+      "venue": "장흥야구장",
+      "homeTeamName": "경희대학교(서울) BRAVES",
+      "awayTeamName": "서경대학교 JUKSITA",
+      "homeScore": 10,
+      "awayScore": 12,
+      "sourceGameId": "up-469c9b44c3bfda25a4d555a9",
+      "providerGameId": "54987",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-4dc4413b86763cbe731f75830c8b7a65",
+          "code": "DETAIL_BATTER_TOTAL",
+          "message": "개별 타자 득점 합계와 팀 기록이 다릅니다.",
+          "sourceGameId": "up-469c9b44c3bfda25a4d555a9",
+          "teamName": "경희대학교(서울) BRAVES",
+          "field": "batters.runs",
+          "rowKey": null,
+          "observed": 0,
+          "expected": 10,
+          "playerName": null
+        },
+        {
+          "id": "dq-6df82fd01f18611ea96fc68a27380f6f",
+          "code": "DETAIL_TEAM_RBI_ZERO",
+          "message": "득점이 있으나 선수 타점 합계가 0입니다. 실책·주루 득점일 수 있으므로 원천 타석 기록을 확인해 주세요.",
+          "sourceGameId": "up-469c9b44c3bfda25a4d555a9",
+          "teamName": "경희대학교(서울) BRAVES",
+          "field": "batters.rbi",
+          "rowKey": null,
+          "observed": 0,
+          "expected": 10,
+          "playerName": null
+        },
+        {
+          "id": "dq-84e12ffc58bafc40d2c8c765139a270e",
+          "code": "DETAIL_PITCHER_EARNED_RUNS",
+          "message": "투수 자책점이 실점보다 많습니다.",
+          "sourceGameId": "up-469c9b44c3bfda25a4d555a9",
+          "teamName": "서경대학교 JUKSITA",
+          "field": "pitchers.earnedRuns",
+          "rowKey": "up-row-7ced49f8ee2ef584caf9e25e",
+          "observed": 5,
+          "expected": 0,
+          "playerName": "김인호"
+        },
+        {
+          "id": "dq-d891f04e0c5998b3cff4e9b6a3e158c9",
+          "code": "DETAIL_PITCHER_EARNED_RUNS",
+          "message": "투수 자책점이 실점보다 많습니다.",
+          "sourceGameId": "up-469c9b44c3bfda25a4d555a9",
+          "teamName": "서경대학교 JUKSITA",
+          "field": "pitchers.earnedRuns",
+          "rowKey": "up-row-24c0ca996a8134853fa4fe97",
+          "observed": 5,
+          "expected": 0,
+          "playerName": "김현수"
+        },
+        {
+          "id": "dq-5d61cd2780d826c4a0c345ac65187a47",
+          "code": "DETAIL_PITCHER_RUNS_TOTAL",
+          "message": "투수 실점 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-469c9b44c3bfda25a4d555a9",
+          "teamName": "서경대학교 JUKSITA",
+          "field": "pitchers.runsAllowed",
+          "rowKey": null,
+          "observed": 0,
+          "expected": 10,
+          "playerName": null
+        },
+        {
+          "id": "dq-a2ded3609b118fb55a77b9c7f770de15",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-469c9b44c3bfda25a4d555a9",
+          "teamName": "서경대학교 JUKSITA",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 11,
+          "expected": 12,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "경희대학교(서울) BRAVES",
+          "totals": {
+            "runs": 10,
+            "hits": 12,
+            "errors": 5,
+            "walks": 4
+          },
+          "batterRows": 10,
+          "pitcherRows": 4,
+          "atBats": 25,
+          "hits": 12,
+          "runs": 0,
+          "rbi": 0,
+          "pitcherHits": 7,
+          "pitcherRuns": 12
+        },
+        {
+          "teamName": "서경대학교 JUKSITA",
+          "totals": {
+            "runs": 12,
+            "hits": 7,
+            "errors": 0,
+            "walks": 6
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 20,
+          "hits": 7,
+          "runs": 12,
+          "rbi": 5,
+          "pitcherHits": 11,
+          "pitcherRuns": 0
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54987/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": true
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-02T18:00:00+09:00",
+      "groupCode": "H",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "세종킹스",
+      "awayTeamName": "명지대학교 나이너스",
+      "homeScore": 3,
+      "awayScore": 1,
+      "sourceGameId": "up-c376f1e78b10a9d292fd0050",
+      "providerGameId": "54985",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "세종킹스",
+          "totals": {
+            "runs": 3,
+            "hits": 8,
+            "errors": 0,
+            "walks": 0
+          },
+          "batterRows": 11,
+          "pitcherRows": 4,
+          "atBats": 25,
+          "hits": 8,
+          "runs": 3,
+          "rbi": 3,
+          "pitcherHits": 2,
+          "pitcherRuns": 1
+        },
+        {
+          "teamName": "명지대학교 나이너스",
+          "totals": {
+            "runs": 1,
+            "hits": 2,
+            "errors": 0,
+            "walks": 9
+          },
+          "batterRows": 9,
+          "pitcherRows": 1,
+          "atBats": 20,
+          "hits": 2,
+          "runs": 1,
+          "rbi": 1,
+          "pitcherHits": 8,
+          "pitcherRuns": 3
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54985/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-03T12:00:00+09:00",
+      "groupCode": "G",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "광운대학교 페가수스",
+      "awayTeamName": "중앙대학교 랑데뷰",
+      "homeScore": 5,
+      "awayScore": 12,
+      "sourceGameId": "up-112e420d26bc3205777ff379",
+      "providerGameId": "54988",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "광운대학교 페가수스",
+          "totals": {
+            "runs": 5,
+            "hits": 4,
+            "errors": 3,
+            "walks": 4
+          },
+          "batterRows": 11,
+          "pitcherRows": 3,
+          "atBats": 18,
+          "hits": 4,
+          "runs": 5,
+          "rbi": 5,
+          "pitcherHits": 7,
+          "pitcherRuns": 12
+        },
+        {
+          "teamName": "중앙대학교 랑데뷰",
+          "totals": {
+            "runs": 12,
+            "hits": 7,
+            "errors": 1,
+            "walks": 15
+          },
+          "batterRows": 16,
+          "pitcherRows": 3,
+          "atBats": 17,
+          "hits": 7,
+          "runs": 12,
+          "rbi": 11,
+          "pitcherHits": 4,
+          "pitcherRuns": 5
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54988/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-03T15:00:00+09:00",
+      "groupCode": "C",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "한국항공대 Astros",
+      "awayTeamName": "한국체대 루나틱스",
+      "homeScore": 8,
+      "awayScore": 11,
+      "sourceGameId": "up-dbddf581b17a318bf8c41564",
+      "providerGameId": "54989",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-9e77018d55027bc9707c81737e8df280",
+          "code": "DETAIL_PITCHER_EARNED_RUNS",
+          "message": "투수 자책점이 실점보다 많습니다.",
+          "sourceGameId": "up-dbddf581b17a318bf8c41564",
+          "teamName": "한국항공대 Astros",
+          "field": "pitchers.earnedRuns",
+          "rowKey": "up-row-7e4f3eb2808b53d7aafbf429",
+          "observed": 6,
+          "expected": 0,
+          "playerName": "김도훈"
+        },
+        {
+          "id": "dq-46060b1de6b0ccb258fe374e2f256270",
+          "code": "DETAIL_PITCHER_RUNS_TOTAL",
+          "message": "투수 실점 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-dbddf581b17a318bf8c41564",
+          "teamName": "한국항공대 Astros",
+          "field": "pitchers.runsAllowed",
+          "rowKey": null,
+          "observed": 3,
+          "expected": 11,
+          "playerName": null
+        },
+        {
+          "id": "dq-a5099361ffb1f1a0e7591e40e0f0919a",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-dbddf581b17a318bf8c41564",
+          "teamName": "한국체대 루나틱스",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 11,
+          "expected": 8,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "한국항공대 Astros",
+          "totals": {
+            "runs": 8,
+            "hits": 8,
+            "errors": 6,
+            "walks": 4
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 27,
+          "hits": 8,
+          "runs": 8,
+          "rbi": 7,
+          "pitcherHits": 10,
+          "pitcherRuns": 3
+        },
+        {
+          "teamName": "한국체대 루나틱스",
+          "totals": {
+            "runs": 11,
+            "hits": 10,
+            "errors": 4,
+            "walks": 2
+          },
+          "batterRows": 19,
+          "pitcherRows": 4,
+          "atBats": 26,
+          "hits": 10,
+          "runs": 11,
+          "rbi": 7,
+          "pitcherHits": 11,
+          "pitcherRuns": 8
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54989/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-03T16:00:00+09:00",
+      "groupCode": "H",
+      "venue": "유신고등학교 야구장",
+      "homeTeamName": "아주대학교 ABBA",
+      "awayTeamName": "단국대학교 HOUND",
+      "homeScore": 11,
+      "awayScore": 3,
+      "sourceGameId": "up-235f6a47640ecd051f5c8dba",
+      "providerGameId": "54991",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "아주대학교 ABBA",
+          "totals": {
+            "runs": 11,
+            "hits": 13,
+            "errors": 0,
+            "walks": 2
+          },
+          "batterRows": 9,
+          "pitcherRows": 2,
+          "atBats": 29,
+          "hits": 13,
+          "runs": 11,
+          "rbi": 11,
+          "pitcherHits": 7,
+          "pitcherRuns": 3
+        },
+        {
+          "teamName": "단국대학교 HOUND",
+          "totals": {
+            "runs": 3,
+            "hits": 7,
+            "errors": 1,
+            "walks": 2
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 25,
+          "hits": 7,
+          "runs": 3,
+          "rbi": 2,
+          "pitcherHits": 13,
+          "pitcherRuns": 11
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54991/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-03T17:30:00+09:00",
+      "groupCode": "F",
+      "venue": "성남고등학교 야구장",
+      "homeTeamName": "강남대학교 타키온즈",
+      "awayTeamName": "상명대학교 BUCKS",
+      "homeScore": 3,
+      "awayScore": 12,
+      "sourceGameId": "up-de3d2df62bea14503cb4a12a",
+      "providerGameId": "54994",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "강남대학교 타키온즈",
+          "totals": {
+            "runs": 3,
+            "hits": 5,
+            "errors": 4,
+            "walks": 1
+          },
+          "batterRows": 10,
+          "pitcherRows": 4,
+          "atBats": 18,
+          "hits": 5,
+          "runs": 3,
+          "rbi": 2,
+          "pitcherHits": 9,
+          "pitcherRuns": 12
+        },
+        {
+          "teamName": "상명대학교 BUCKS",
+          "totals": {
+            "runs": 12,
+            "hits": 9,
+            "errors": 1,
+            "walks": 6
+          },
+          "batterRows": 14,
+          "pitcherRows": 3,
+          "atBats": 25,
+          "hits": 9,
+          "runs": 12,
+          "rbi": 6,
+          "pitcherHits": 5,
+          "pitcherRuns": 3
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54994/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-03T18:00:00+09:00",
+      "groupCode": "A",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "한양대학교 에리카 HIBA",
+      "awayTeamName": "동국대학교 L.A.E",
+      "homeScore": 7,
+      "awayScore": 7,
+      "sourceGameId": "up-6bfe29eafcc569e4eb3987d5",
+      "providerGameId": "54990",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "한양대학교 에리카 HIBA",
+          "totals": {
+            "runs": 7,
+            "hits": 8,
+            "errors": 3,
+            "walks": 3
+          },
+          "batterRows": 10,
+          "pitcherRows": 1,
+          "atBats": 29,
+          "hits": 8,
+          "runs": 7,
+          "rbi": 5,
+          "pitcherHits": 10,
+          "pitcherRuns": 7
+        },
+        {
+          "teamName": "동국대학교 L.A.E",
+          "totals": {
+            "runs": 7,
+            "hits": 10,
+            "errors": 3,
+            "walks": 4
+          },
+          "batterRows": 11,
+          "pitcherRows": 3,
+          "atBats": 30,
+          "hits": 10,
+          "runs": 7,
+          "rbi": 5,
+          "pitcherHits": 8,
+          "pitcherRuns": 7
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54990/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-05T14:30:00+09:00",
+      "groupCode": "E",
+      "venue": "연세대학교(신촌) 야구장",
+      "homeTeamName": "백석대 KAHLOS",
+      "awayTeamName": "연세대학교 EAGLES",
+      "homeScore": 6,
+      "awayScore": 13,
+      "sourceGameId": "up-358047ee473144a84ff67b23",
+      "providerGameId": "54995",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "백석대 KAHLOS",
+          "totals": {
+            "runs": 6,
+            "hits": 5,
+            "errors": 2,
+            "walks": 5
+          },
+          "batterRows": 10,
+          "pitcherRows": 3,
+          "atBats": 20,
+          "hits": 5,
+          "runs": 6,
+          "rbi": 6,
+          "pitcherHits": 5,
+          "pitcherRuns": 13
+        },
+        {
+          "teamName": "연세대학교 EAGLES",
+          "totals": {
+            "runs": 13,
+            "hits": 5,
+            "errors": 0,
+            "walks": 9
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 23,
+          "hits": 5,
+          "runs": 13,
+          "rbi": 10,
+          "pitcherHits": 5,
+          "pitcherRuns": 6
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54995/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-09T12:00:00+09:00",
+      "groupCode": "C",
+      "venue": "송도 LNG 야구장 (보조경기장)",
+      "homeTeamName": "국민대 윈드밀스",
+      "awayTeamName": "경희 LIONS",
+      "homeScore": 9,
+      "awayScore": 5,
+      "sourceGameId": "up-d5f48707be2790671d875d86",
+      "providerGameId": "55079",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-73d4250af792e3b31d4a2da75288c80b",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-d5f48707be2790671d875d86",
+          "teamName": "국민대 윈드밀스",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 3,
+          "expected": 4,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "국민대 윈드밀스",
+          "totals": {
+            "runs": 9,
+            "hits": 6,
+            "errors": 2,
+            "walks": 7
+          },
+          "batterRows": 9,
+          "pitcherRows": 2,
+          "atBats": 26,
+          "hits": 6,
+          "runs": 9,
+          "rbi": 6,
+          "pitcherHits": 3,
+          "pitcherRuns": 5
+        },
+        {
+          "teamName": "경희 LIONS",
+          "totals": {
+            "runs": 5,
+            "hits": 4,
+            "errors": 5,
+            "walks": 2
+          },
+          "batterRows": 9,
+          "pitcherRows": 2,
+          "atBats": 21,
+          "hits": 4,
+          "runs": 5,
+          "rbi": 1,
+          "pitcherHits": 6,
+          "pitcherRuns": 9
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55079/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-09T16:00:00+09:00",
+      "groupCode": "G",
+      "venue": "장흥야구장",
+      "homeTeamName": "홍익대학교 위너스",
+      "awayTeamName": "광운대학교 페가수스",
+      "homeScore": 15,
+      "awayScore": 2,
+      "sourceGameId": "up-26124fbac0834b3796dca3eb",
+      "providerGameId": "55082",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-53399868e1d882ebffcc550238e018cd",
+          "code": "DETAIL_PITCHER_EARNED_RUNS",
+          "message": "투수 자책점이 실점보다 많습니다.",
+          "sourceGameId": "up-26124fbac0834b3796dca3eb",
+          "teamName": "광운대학교 페가수스",
+          "field": "pitchers.earnedRuns",
+          "rowKey": "up-row-1523644a98af8a15df157a44",
+          "observed": 3,
+          "expected": 0,
+          "playerName": "김기민"
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "홍익대학교 위너스",
+          "totals": {
+            "runs": 15,
+            "hits": 8,
+            "errors": 2,
+            "walks": 9
+          },
+          "batterRows": 11,
+          "pitcherRows": 3,
+          "atBats": 26,
+          "hits": 8,
+          "runs": 15,
+          "rbi": 9,
+          "pitcherHits": 6,
+          "pitcherRuns": 2
+        },
+        {
+          "teamName": "광운대학교 페가수스",
+          "totals": {
+            "runs": 2,
+            "hits": 6,
+            "errors": 3,
+            "walks": 0
+          },
+          "batterRows": 9,
+          "pitcherRows": 4,
+          "atBats": 23,
+          "hits": 6,
+          "runs": 2,
+          "rbi": 2,
+          "pitcherHits": 8,
+          "pitcherRuns": 15
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55082/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-09T18:00:00+09:00",
+      "groupCode": "D",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "숭실대학교 ONERS",
+      "awayTeamName": "가천대학교 Wind",
+      "homeScore": 6,
+      "awayScore": 14,
+      "sourceGameId": "up-beb787efc0fa43c76bc6f702",
+      "providerGameId": "54996",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "숭실대학교 ONERS",
+          "totals": {
+            "runs": 6,
+            "hits": 6,
+            "errors": 1,
+            "walks": 8
+          },
+          "batterRows": 13,
+          "pitcherRows": 3,
+          "atBats": 19,
+          "hits": 6,
+          "runs": 6,
+          "rbi": 6,
+          "pitcherHits": 10,
+          "pitcherRuns": 14
+        },
+        {
+          "teamName": "가천대학교 Wind",
+          "totals": {
+            "runs": 14,
+            "hits": 10,
+            "errors": 0,
+            "walks": 11
+          },
+          "batterRows": 14,
+          "pitcherRows": 7,
+          "atBats": 21,
+          "hits": 10,
+          "runs": 14,
+          "rbi": 13,
+          "pitcherHits": 6,
+          "pitcherRuns": 6
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54996/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-10T15:00:00+09:00",
+      "groupCode": "C",
+      "venue": "송도랜드마크 야구장",
+      "homeTeamName": "인하대학교 비룡",
+      "awayTeamName": "한국체대 루나틱스",
+      "homeScore": 17,
+      "awayScore": 3,
+      "sourceGameId": "up-870c27ce9aa66ab1ccb96e9b",
+      "providerGameId": "55085",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "인하대학교 비룡",
+          "totals": {
+            "runs": 17,
+            "hits": 11,
+            "errors": 3,
+            "walks": 10
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 29,
+          "hits": 11,
+          "runs": 17,
+          "rbi": 13,
+          "pitcherHits": 2,
+          "pitcherRuns": 3
+        },
+        {
+          "teamName": "한국체대 루나틱스",
+          "totals": {
+            "runs": 3,
+            "hits": 2,
+            "errors": 8,
+            "walks": 6
+          },
+          "batterRows": 13,
+          "pitcherRows": 3,
+          "atBats": 17,
+          "hits": 2,
+          "runs": 3,
+          "rbi": 2,
+          "pitcherHits": 11,
+          "pitcherRuns": 17
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55085/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-10T16:00:00+09:00",
+      "groupCode": "G",
+      "venue": "난지 야구장2",
+      "homeTeamName": "중앙대학교 랑데뷰",
+      "awayTeamName": "인천대학교 바이킹",
+      "homeScore": 6,
+      "awayScore": 5,
+      "sourceGameId": "up-c0a1beeadcbb8516470bc778",
+      "providerGameId": "55083",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-bc5055d53d4d3e77b8722cd03aab8dd9",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-c0a1beeadcbb8516470bc778",
+          "teamName": "중앙대학교 랑데뷰",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 7,
+          "expected": 4,
+          "playerName": null
+        },
+        {
+          "id": "dq-91df6586248ab6c2fbac7772fb6f85c0",
+          "code": "DETAIL_BATTER_TOTAL",
+          "message": "개별 타자 득점 합계와 팀 기록이 다릅니다.",
+          "sourceGameId": "up-c0a1beeadcbb8516470bc778",
+          "teamName": "인천대학교 바이킹",
+          "field": "batters.runs",
+          "rowKey": null,
+          "observed": 3,
+          "expected": 5,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "중앙대학교 랑데뷰",
+          "totals": {
+            "runs": 6,
+            "hits": 7,
+            "errors": 1,
+            "walks": 4
+          },
+          "batterRows": 13,
+          "pitcherRows": 3,
+          "atBats": 23,
+          "hits": 7,
+          "runs": 6,
+          "rbi": 5,
+          "pitcherHits": 7,
+          "pitcherRuns": 5
+        },
+        {
+          "teamName": "인천대학교 바이킹",
+          "totals": {
+            "runs": 5,
+            "hits": 4,
+            "errors": 2,
+            "walks": 4
+          },
+          "batterRows": 9,
+          "pitcherRows": 3,
+          "atBats": 19,
+          "hits": 4,
+          "runs": 3,
+          "rbi": 5,
+          "pitcherHits": 7,
+          "pitcherRuns": 6
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55083/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-10T17:00:00+09:00",
+      "groupCode": "B",
+      "venue": "장흥야구장",
+      "homeTeamName": "외대(서울) 야구부",
+      "awayTeamName": "서울시립대학교 FALCONS",
+      "homeScore": 8,
+      "awayScore": 14,
+      "sourceGameId": "up-d9d554ba3d8d2f259250aa79",
+      "providerGameId": "55084",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "외대(서울) 야구부",
+          "totals": {
+            "runs": 8,
+            "hits": 9,
+            "errors": 1,
+            "walks": 2
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 33,
+          "hits": 9,
+          "runs": 8,
+          "rbi": 7,
+          "pitcherHits": 13,
+          "pitcherRuns": 14
+        },
+        {
+          "teamName": "서울시립대학교 FALCONS",
+          "totals": {
+            "runs": 14,
+            "hits": 13,
+            "errors": 4,
+            "walks": 8
+          },
+          "batterRows": 13,
+          "pitcherRows": 2,
+          "atBats": 30,
+          "hits": 13,
+          "runs": 14,
+          "rbi": 10,
+          "pitcherHits": 9,
+          "pitcherRuns": 8
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55084/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-10T18:00:00+09:00",
+      "groupCode": "H",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "가톨릭대 텀블러즈",
+      "awayTeamName": "명지대학교 나이너스",
+      "homeScore": 0,
+      "awayScore": 15,
+      "sourceGameId": "up-2bfa4d2d064924c28b4f77d0",
+      "providerGameId": "54997",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "가톨릭대 텀블러즈",
+          "totals": {
+            "runs": 0,
+            "hits": 0,
+            "errors": 0,
+            "walks": 2
+          },
+          "batterRows": 13,
+          "pitcherRows": 5,
+          "atBats": 13,
+          "hits": 0,
+          "runs": 0,
+          "rbi": 0,
+          "pitcherHits": 5,
+          "pitcherRuns": 15
+        },
+        {
+          "teamName": "명지대학교 나이너스",
+          "totals": {
+            "runs": 15,
+            "hits": 5,
+            "errors": 1,
+            "walks": 8
+          },
+          "batterRows": 16,
+          "pitcherRows": 2,
+          "atBats": 14,
+          "hits": 5,
+          "runs": 15,
+          "rbi": 11,
+          "pitcherHits": 0,
+          "pitcherRuns": 0
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/54997/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-16T18:00:00+09:00",
+      "groupCode": "H",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "아주대학교 ABBA",
+      "awayTeamName": "가톨릭대 텀블러즈",
+      "homeScore": 7,
+      "awayScore": 0,
+      "sourceGameId": "up-062cf76a8cf6c371b52660f7",
+      "providerGameId": "55107",
+      "detailStatus": "NOT_PUBLISHED",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [],
+      "sourceUrl": "https://unique-play.com/game/55107/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-17T12:00:00+09:00",
+      "groupCode": "A",
+      "venue": "장흥야구장",
+      "homeTeamName": "고려대학교 백구회",
+      "awayTeamName": "경희대학교(서울) BRAVES",
+      "homeScore": 15,
+      "awayScore": 5,
+      "sourceGameId": "up-514c5ea2609a9940d60c5a2d",
+      "providerGameId": "55109",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-0ad219666ecf62ccda514592aa979cf2",
+          "code": "DETAIL_PITCHER_EARNED_RUNS",
+          "message": "투수 자책점이 실점보다 많습니다.",
+          "sourceGameId": "up-514c5ea2609a9940d60c5a2d",
+          "teamName": "경희대학교(서울) BRAVES",
+          "field": "pitchers.earnedRuns",
+          "rowKey": "up-row-70b6d732a5d2bcce76487eca",
+          "observed": 12,
+          "expected": 0,
+          "playerName": "권혁태"
+        },
+        {
+          "id": "dq-6914d23c85c231a3189421082af9ab3f",
+          "code": "DETAIL_PITCHER_RUNS_TOTAL",
+          "message": "투수 실점 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-514c5ea2609a9940d60c5a2d",
+          "teamName": "경희대학교(서울) BRAVES",
+          "field": "pitchers.runsAllowed",
+          "rowKey": null,
+          "observed": 0,
+          "expected": 15,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "고려대학교 백구회",
+          "totals": {
+            "runs": 15,
+            "hits": 13,
+            "errors": 2,
+            "walks": 8
+          },
+          "batterRows": 10,
+          "pitcherRows": 3,
+          "atBats": 28,
+          "hits": 13,
+          "runs": 15,
+          "rbi": 11,
+          "pitcherHits": 3,
+          "pitcherRuns": 5
+        },
+        {
+          "teamName": "경희대학교(서울) BRAVES",
+          "totals": {
+            "runs": 5,
+            "hits": 3,
+            "errors": 5,
+            "walks": 8
+          },
+          "batterRows": 11,
+          "pitcherRows": 1,
+          "atBats": 18,
+          "hits": 3,
+          "runs": 5,
+          "rbi": 3,
+          "pitcherHits": 13,
+          "pitcherRuns": 0
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55109/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-17T18:00:00+09:00",
+      "groupCode": "B",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "외대(글로벌) 유니온",
+      "awayTeamName": "한성대학교 TURTLES",
+      "homeScore": 8,
+      "awayScore": 9,
+      "sourceGameId": "up-e200d1f67f67743d9015accb",
+      "providerGameId": "55108",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "외대(글로벌) 유니온",
+          "totals": {
+            "runs": 8,
+            "hits": 2,
+            "errors": 5,
+            "walks": 6
+          },
+          "batterRows": 10,
+          "pitcherRows": 3,
+          "atBats": 14,
+          "hits": 2,
+          "runs": 8,
+          "rbi": 5,
+          "pitcherHits": 9,
+          "pitcherRuns": 9
+        },
+        {
+          "teamName": "한성대학교 TURTLES",
+          "totals": {
+            "runs": 9,
+            "hits": 9,
+            "errors": 2,
+            "walks": 4
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 17,
+          "hits": 9,
+          "runs": 9,
+          "rbi": 4,
+          "pitcherHits": 2,
+          "pitcherRuns": 8
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55108/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-23T12:00:00+09:00",
+      "groupCode": "F",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "상명대학교 BUCKS",
+      "awayTeamName": "한국공학대학교 WINNERS",
+      "homeScore": 11,
+      "awayScore": 14,
+      "sourceGameId": "up-8982ac6b157b49b584ad59b8",
+      "providerGameId": "55132",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-de168e226c673c9ead037e82a1f348ea",
+          "code": "DETAIL_PITCHER_RUNS_TOTAL",
+          "message": "투수 실점 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-8982ac6b157b49b584ad59b8",
+          "teamName": "상명대학교 BUCKS",
+          "field": "pitchers.runsAllowed",
+          "rowKey": null,
+          "observed": 13,
+          "expected": 14,
+          "playerName": null
+        },
+        {
+          "id": "dq-d9bfcb47e2a1f4f32aeb12bf5a456670",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-8982ac6b157b49b584ad59b8",
+          "teamName": "상명대학교 BUCKS",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 11,
+          "expected": 12,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "상명대학교 BUCKS",
+          "totals": {
+            "runs": 11,
+            "hits": 3,
+            "errors": 3,
+            "walks": 10
+          },
+          "batterRows": 11,
+          "pitcherRows": 3,
+          "atBats": 20,
+          "hits": 3,
+          "runs": 11,
+          "rbi": 10,
+          "pitcherHits": 11,
+          "pitcherRuns": 13
+        },
+        {
+          "teamName": "한국공학대학교 WINNERS",
+          "totals": {
+            "runs": 14,
+            "hits": 12,
+            "errors": 2,
+            "walks": 7
+          },
+          "batterRows": 13,
+          "pitcherRows": 4,
+          "atBats": 26,
+          "hits": 12,
+          "runs": 14,
+          "rbi": 10,
+          "pitcherHits": 3,
+          "pitcherRuns": 11
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55132/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-23T12:00:00+09:00",
+      "groupCode": "B",
+      "venue": "송도 LNG 야구장 (보조경기장)",
+      "homeTeamName": "외대(서울) 야구부",
+      "awayTeamName": "외대(글로벌) 유니온",
+      "homeScore": 16,
+      "awayScore": 7,
+      "sourceGameId": "up-9675a57eeefaf9e05f0e2914",
+      "providerGameId": "55133",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-aa9f4762ad5cd9201e000b24af3a582b",
+          "code": "DETAIL_TEAM_RBI_ZERO",
+          "message": "득점이 있으나 선수 타점 합계가 0입니다. 실책·주루 득점일 수 있으므로 원천 타석 기록을 확인해 주세요.",
+          "sourceGameId": "up-9675a57eeefaf9e05f0e2914",
+          "teamName": "외대(글로벌) 유니온",
+          "field": "batters.rbi",
+          "rowKey": null,
+          "observed": 0,
+          "expected": 7,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "외대(서울) 야구부",
+          "totals": {
+            "runs": 16,
+            "hits": 12,
+            "errors": 4,
+            "walks": 6
+          },
+          "batterRows": 12,
+          "pitcherRows": 2,
+          "atBats": 25,
+          "hits": 12,
+          "runs": 16,
+          "rbi": 9,
+          "pitcherHits": 1,
+          "pitcherRuns": 7
+        },
+        {
+          "teamName": "외대(글로벌) 유니온",
+          "totals": {
+            "runs": 7,
+            "hits": 1,
+            "errors": 3,
+            "walks": 5
+          },
+          "batterRows": 9,
+          "pitcherRows": 2,
+          "atBats": 16,
+          "hits": 1,
+          "runs": 7,
+          "rbi": 0,
+          "pitcherHits": 12,
+          "pitcherRuns": 16
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55133/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": true
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-23T15:00:00+09:00",
+      "groupCode": "H",
+      "venue": "송도 LNG 야구장 (보조경기장)",
+      "homeTeamName": "명지대학교 나이너스",
+      "awayTeamName": "단국대학교 HOUND",
+      "homeScore": 2,
+      "awayScore": 3,
+      "sourceGameId": "up-10af2702029f2ec33fc2d927",
+      "providerGameId": "55134",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "명지대학교 나이너스",
+          "totals": {
+            "runs": 2,
+            "hits": 6,
+            "errors": 1,
+            "walks": 4
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 26,
+          "hits": 6,
+          "runs": 2,
+          "rbi": 2,
+          "pitcherHits": 6,
+          "pitcherRuns": 3
+        },
+        {
+          "teamName": "단국대학교 HOUND",
+          "totals": {
+            "runs": 3,
+            "hits": 6,
+            "errors": 2,
+            "walks": 2
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 23,
+          "hits": 6,
+          "runs": 3,
+          "rbi": 2,
+          "pitcherHits": 6,
+          "pitcherRuns": 2
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55134/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-23T15:00:00+09:00",
+      "groupCode": "D",
+      "venue": "신길야구장",
+      "homeTeamName": "가천대학교 Wind",
+      "awayTeamName": "경기대학교 KGB",
+      "homeScore": 11,
+      "awayScore": 5,
+      "sourceGameId": "up-c78df81624c90640b26da5a8",
+      "providerGameId": "55137",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-42850218a728f968b1872a83056df284",
+          "code": "DETAIL_PITCHER_EARNED_RUNS",
+          "message": "투수 자책점이 실점보다 많습니다.",
+          "sourceGameId": "up-c78df81624c90640b26da5a8",
+          "teamName": "가천대학교 Wind",
+          "field": "pitchers.earnedRuns",
+          "rowKey": "up-row-ba2ea446484a741bbc703ffe",
+          "observed": 3,
+          "expected": 2,
+          "playerName": "김진륜"
+        },
+        {
+          "id": "dq-3d690ace4f3ae36464e597e4f3d03c25",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-c78df81624c90640b26da5a8",
+          "teamName": "가천대학교 Wind",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 8,
+          "expected": 9,
+          "playerName": null
+        },
+        {
+          "id": "dq-3ed7229791663c56eec958b4786b884e",
+          "code": "DETAIL_PITCHER_EARNED_RUNS",
+          "message": "투수 자책점이 실점보다 많습니다.",
+          "sourceGameId": "up-c78df81624c90640b26da5a8",
+          "teamName": "경기대학교 KGB",
+          "field": "pitchers.earnedRuns",
+          "rowKey": "up-row-5fa3250337aa788f2099f1fd",
+          "observed": 2,
+          "expected": 0,
+          "playerName": "공재원"
+        },
+        {
+          "id": "dq-8012a7fe319438dab24c1865e0e0607e",
+          "code": "DETAIL_PITCHER_EARNED_RUNS",
+          "message": "투수 자책점이 실점보다 많습니다.",
+          "sourceGameId": "up-c78df81624c90640b26da5a8",
+          "teamName": "경기대학교 KGB",
+          "field": "pitchers.earnedRuns",
+          "rowKey": "up-row-2a08848230870cd36a22a927",
+          "observed": 3,
+          "expected": 2,
+          "playerName": "허정연"
+        },
+        {
+          "id": "dq-3ce29956bed8faede7920c5888ccd990",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-c78df81624c90640b26da5a8",
+          "teamName": "경기대학교 KGB",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 6,
+          "expected": 7,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "가천대학교 Wind",
+          "totals": {
+            "runs": 11,
+            "hits": 7,
+            "errors": 1,
+            "walks": 7
+          },
+          "batterRows": 9,
+          "pitcherRows": 5,
+          "atBats": 25,
+          "hits": 7,
+          "runs": 11,
+          "rbi": 10,
+          "pitcherHits": 8,
+          "pitcherRuns": 5
+        },
+        {
+          "teamName": "경기대학교 KGB",
+          "totals": {
+            "runs": 5,
+            "hits": 9,
+            "errors": 1,
+            "walks": 4
+          },
+          "batterRows": 9,
+          "pitcherRows": 4,
+          "atBats": 24,
+          "hits": 9,
+          "runs": 5,
+          "rbi": 5,
+          "pitcherHits": 6,
+          "pitcherRuns": 11
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55137/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-23T16:00:00+09:00",
+      "groupCode": "G",
+      "venue": "장흥야구장",
+      "homeTeamName": "중앙대학교 랑데뷰",
+      "awayTeamName": "성균관대학교 킹고야구반",
+      "homeScore": 4,
+      "awayScore": 5,
+      "sourceGameId": "up-b6375be714fc1820851d63c2",
+      "providerGameId": "55141",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "중앙대학교 랑데뷰",
+          "totals": {
+            "runs": 4,
+            "hits": 7,
+            "errors": 2,
+            "walks": 2
+          },
+          "batterRows": 14,
+          "pitcherRows": 1,
+          "atBats": 25,
+          "hits": 7,
+          "runs": 4,
+          "rbi": 2,
+          "pitcherHits": 4,
+          "pitcherRuns": 5
+        },
+        {
+          "teamName": "성균관대학교 킹고야구반",
+          "totals": {
+            "runs": 5,
+            "hits": 4,
+            "errors": 1,
+            "walks": 2
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 22,
+          "hits": 4,
+          "runs": 5,
+          "rbi": 5,
+          "pitcherHits": 7,
+          "pitcherRuns": 4
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55141/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-24T12:00:00+09:00",
+      "groupCode": "F",
+      "venue": "난지 야구장2",
+      "homeTeamName": "한양대학교 불새",
+      "awayTeamName": "강남대학교 타키온즈",
+      "homeScore": 11,
+      "awayScore": 0,
+      "sourceGameId": "up-833c5e3a881707fdbeff824e",
+      "providerGameId": "55140",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-80dfc5330800d99307a3a60caad7d548",
+          "code": "DETAIL_LINE_SCORE",
+          "message": "이닝별 점수가 비어 있거나 팀 득점 합계와 다릅니다.",
+          "sourceGameId": "up-833c5e3a881707fdbeff824e",
+          "teamName": "강남대학교 타키온즈",
+          "field": "innings.runs",
+          "rowKey": null,
+          "observed": null,
+          "expected": 0,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "한양대학교 불새",
+          "totals": {
+            "runs": 11,
+            "hits": 6,
+            "errors": 0,
+            "walks": 11
+          },
+          "batterRows": 14,
+          "pitcherRows": 2,
+          "atBats": 21,
+          "hits": 6,
+          "runs": 11,
+          "rbi": 11,
+          "pitcherHits": 0,
+          "pitcherRuns": 0
+        },
+        {
+          "teamName": "강남대학교 타키온즈",
+          "totals": {
+            "runs": 0,
+            "hits": 0,
+            "errors": 2,
+            "walks": 2
+          },
+          "batterRows": 11,
+          "pitcherRows": 5,
+          "atBats": 14,
+          "hits": 0,
+          "runs": 0,
+          "rbi": 0,
+          "pitcherHits": 6,
+          "pitcherRuns": 11
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55140/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-24T15:00:00+09:00",
+      "groupCode": "C",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "한국항공대 Astros",
+      "awayTeamName": "인하대학교 비룡",
+      "homeScore": 1,
+      "awayScore": 12,
+      "sourceGameId": "up-451fe46b8910cb725f93fa75",
+      "providerGameId": "55138",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "한국항공대 Astros",
+          "totals": {
+            "runs": 1,
+            "hits": 0,
+            "errors": 2,
+            "walks": 6
+          },
+          "batterRows": 13,
+          "pitcherRows": 4,
+          "atBats": 12,
+          "hits": 0,
+          "runs": 1,
+          "rbi": 1,
+          "pitcherHits": 7,
+          "pitcherRuns": 12
+        },
+        {
+          "teamName": "인하대학교 비룡",
+          "totals": {
+            "runs": 12,
+            "hits": 7,
+            "errors": 0,
+            "walks": 7
+          },
+          "batterRows": 9,
+          "pitcherRows": 3,
+          "atBats": 19,
+          "hits": 7,
+          "runs": 12,
+          "rbi": 8,
+          "pitcherHits": 0,
+          "pitcherRuns": 1
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55138/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-24T18:00:00+09:00",
+      "groupCode": "A",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "서경대학교 JUKSITA",
+      "awayTeamName": "한양대학교 에리카 HIBA",
+      "homeScore": 4,
+      "awayScore": 12,
+      "sourceGameId": "up-1701968efb2242ba12b5f21e",
+      "providerGameId": "55139",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-9c200771785d30c12ab974cd8e28129f",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-1701968efb2242ba12b5f21e",
+          "teamName": "한양대학교 에리카 HIBA",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 1,
+          "expected": 3,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "서경대학교 JUKSITA",
+          "totals": {
+            "runs": 4,
+            "hits": 3,
+            "errors": 4,
+            "walks": 5
+          },
+          "batterRows": 11,
+          "pitcherRows": 3,
+          "atBats": 17,
+          "hits": 3,
+          "runs": 4,
+          "rbi": 2,
+          "pitcherHits": 13,
+          "pitcherRuns": 12
+        },
+        {
+          "teamName": "한양대학교 에리카 HIBA",
+          "totals": {
+            "runs": 12,
+            "hits": 13,
+            "errors": 1,
+            "walks": 2
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 27,
+          "hits": 13,
+          "runs": 12,
+          "rbi": 12,
+          "pitcherHits": 1,
+          "pitcherRuns": 4
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55139/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-30T09:00:00+09:00",
+      "groupCode": "D",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "한국교통대학교 스윙스",
+      "awayTeamName": "숭실대학교 ONERS",
+      "homeScore": 1,
+      "awayScore": 9,
+      "sourceGameId": "up-4c684be21c49d1fcaa97774c",
+      "providerGameId": "55207",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-1d6c05b204e9ff10445891f8487d8141",
+          "code": "DETAIL_BATTER_TOTAL",
+          "message": "개별 타자 득점 합계와 팀 기록이 다릅니다.",
+          "sourceGameId": "up-4c684be21c49d1fcaa97774c",
+          "teamName": "숭실대학교 ONERS",
+          "field": "batters.runs",
+          "rowKey": null,
+          "observed": 8,
+          "expected": 9,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "한국교통대학교 스윙스",
+          "totals": {
+            "runs": 1,
+            "hits": 2,
+            "errors": 2,
+            "walks": 2
+          },
+          "batterRows": 13,
+          "pitcherRows": 2,
+          "atBats": 21,
+          "hits": 2,
+          "runs": 1,
+          "rbi": 1,
+          "pitcherHits": 6,
+          "pitcherRuns": 9
+        },
+        {
+          "teamName": "숭실대학교 ONERS",
+          "totals": {
+            "runs": 9,
+            "hits": 6,
+            "errors": 1,
+            "walks": 4
+          },
+          "batterRows": 13,
+          "pitcherRows": 3,
+          "atBats": 22,
+          "hits": 6,
+          "runs": 8,
+          "rbi": 7,
+          "pitcherHits": 2,
+          "pitcherRuns": 1
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55207/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-30T12:00:00+09:00",
+      "groupCode": "B",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "외대(서울) 야구부",
+      "awayTeamName": "서울과학기술대학교 미르",
+      "homeScore": 11,
+      "awayScore": 11,
+      "sourceGameId": "up-b3ee66495942b18e16fd2505",
+      "providerGameId": "55208",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-b951390d3a2c510a5c82b4afdf02ec10",
+          "code": "DETAIL_BATTER_TOTAL",
+          "message": "개별 타자 득점 합계와 팀 기록이 다릅니다.",
+          "sourceGameId": "up-b3ee66495942b18e16fd2505",
+          "teamName": "외대(서울) 야구부",
+          "field": "batters.runs",
+          "rowKey": null,
+          "observed": 10,
+          "expected": 11,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "외대(서울) 야구부",
+          "totals": {
+            "runs": 11,
+            "hits": 7,
+            "errors": 2,
+            "walks": 6
+          },
+          "batterRows": 12,
+          "pitcherRows": 1,
+          "atBats": 24,
+          "hits": 7,
+          "runs": 10,
+          "rbi": 9,
+          "pitcherHits": 9,
+          "pitcherRuns": 11
+        },
+        {
+          "teamName": "서울과학기술대학교 미르",
+          "totals": {
+            "runs": 11,
+            "hits": 9,
+            "errors": 5,
+            "walks": 4
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 29,
+          "hits": 9,
+          "runs": 11,
+          "rbi": 9,
+          "pitcherHits": 7,
+          "pitcherRuns": 11
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55208/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-30T18:00:00+09:00",
+      "groupCode": "F",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "강남대학교 타키온즈",
+      "awayTeamName": "서강대학교 알바트로스",
+      "homeScore": 13,
+      "awayScore": 4,
+      "sourceGameId": "up-56732aecf7f68d368ddb2c9e",
+      "providerGameId": "55209",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-bf32e1ec8ab7cae23f1ab6af4620bb1f",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-56732aecf7f68d368ddb2c9e",
+          "teamName": "서강대학교 알바트로스",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 9,
+          "expected": 10,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "강남대학교 타키온즈",
+          "totals": {
+            "runs": 13,
+            "hits": 10,
+            "errors": 2,
+            "walks": 11
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 29,
+          "hits": 10,
+          "runs": 13,
+          "rbi": 10,
+          "pitcherHits": 5,
+          "pitcherRuns": 4
+        },
+        {
+          "teamName": "서강대학교 알바트로스",
+          "totals": {
+            "runs": 4,
+            "hits": 5,
+            "errors": 3,
+            "walks": 3
+          },
+          "batterRows": 11,
+          "pitcherRows": 4,
+          "atBats": 21,
+          "hits": 5,
+          "runs": 4,
+          "rbi": 2,
+          "pitcherHits": 9,
+          "pitcherRuns": 13
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55209/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-31T12:00:00+09:00",
+      "groupCode": "D",
+      "venue": "송도 LNG 야구장 (보조경기장)",
+      "homeTeamName": "건국대 팬서스",
+      "awayTeamName": "가천대학교 Wind",
+      "homeScore": 12,
+      "awayScore": 9,
+      "sourceGameId": "up-08dffab0862e25f33b8125a2",
+      "providerGameId": "55212",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-50f2b9b5efda68499eb5bae897392b5d",
+          "code": "DETAIL_PITCHER_EARNED_RUNS",
+          "message": "투수 자책점이 실점보다 많습니다.",
+          "sourceGameId": "up-08dffab0862e25f33b8125a2",
+          "teamName": "가천대학교 Wind",
+          "field": "pitchers.earnedRuns",
+          "rowKey": "up-row-e9f837c072be484147bff717",
+          "observed": 6,
+          "expected": 5,
+          "playerName": "박건균"
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "건국대 팬서스",
+          "totals": {
+            "runs": 12,
+            "hits": 11,
+            "errors": 3,
+            "walks": 5
+          },
+          "batterRows": 10,
+          "pitcherRows": 1,
+          "atBats": 26,
+          "hits": 11,
+          "runs": 12,
+          "rbi": 9,
+          "pitcherHits": 8,
+          "pitcherRuns": 9
+        },
+        {
+          "teamName": "가천대학교 Wind",
+          "totals": {
+            "runs": 9,
+            "hits": 8,
+            "errors": 2,
+            "walks": 3
+          },
+          "batterRows": 11,
+          "pitcherRows": 5,
+          "atBats": 25,
+          "hits": 8,
+          "runs": 9,
+          "rbi": 9,
+          "pitcherHits": 11,
+          "pitcherRuns": 12
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55212/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-31T15:00:00+09:00",
+      "groupCode": "B",
+      "venue": "장흥야구장",
+      "homeTeamName": "서울시립대학교 FALCONS",
+      "awayTeamName": "한성대학교 TURTLES",
+      "homeScore": 5,
+      "awayScore": 6,
+      "sourceGameId": "up-0088e6274ebf27d5d6a46aa2",
+      "providerGameId": "55214",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-1cf7c45fd31ce4a15d791704102503e6",
+          "code": "DETAIL_BATTER_TOTAL",
+          "message": "개별 타자 득점 합계와 팀 기록이 다릅니다.",
+          "sourceGameId": "up-0088e6274ebf27d5d6a46aa2",
+          "teamName": "서울시립대학교 FALCONS",
+          "field": "batters.runs",
+          "rowKey": null,
+          "observed": 0,
+          "expected": 5,
+          "playerName": null
+        },
+        {
+          "id": "dq-a2b82d7d4581cff66f85cfee255b6767",
+          "code": "DETAIL_TEAM_RBI_ZERO",
+          "message": "득점이 있으나 선수 타점 합계가 0입니다. 실책·주루 득점일 수 있으므로 원천 타석 기록을 확인해 주세요.",
+          "sourceGameId": "up-0088e6274ebf27d5d6a46aa2",
+          "teamName": "서울시립대학교 FALCONS",
+          "field": "batters.rbi",
+          "rowKey": null,
+          "observed": 0,
+          "expected": 5,
+          "playerName": null
+        },
+        {
+          "id": "dq-143c311286d6bbd330095872636187b2",
+          "code": "DETAIL_PITCHER_EARNED_RUNS",
+          "message": "투수 자책점이 실점보다 많습니다.",
+          "sourceGameId": "up-0088e6274ebf27d5d6a46aa2",
+          "teamName": "서울시립대학교 FALCONS",
+          "field": "pitchers.earnedRuns",
+          "rowKey": "up-row-f2f90f1242cfcfaceae0fcb4",
+          "observed": 2,
+          "expected": 0,
+          "playerName": "장재현"
+        },
+        {
+          "id": "dq-0d4298c84a12d040f1771d26df25546a",
+          "code": "DETAIL_PITCHER_EARNED_RUNS",
+          "message": "투수 자책점이 실점보다 많습니다.",
+          "sourceGameId": "up-0088e6274ebf27d5d6a46aa2",
+          "teamName": "서울시립대학교 FALCONS",
+          "field": "pitchers.earnedRuns",
+          "rowKey": "up-row-b64d13b455db62d8893a5f57",
+          "observed": 1,
+          "expected": 0,
+          "playerName": "오창연"
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "서울시립대학교 FALCONS",
+          "totals": {
+            "runs": 5,
+            "hits": 4,
+            "errors": 1,
+            "walks": 6
+          },
+          "batterRows": 18,
+          "pitcherRows": 5,
+          "atBats": 20,
+          "hits": 4,
+          "runs": 0,
+          "rbi": 0,
+          "pitcherHits": 4,
+          "pitcherRuns": 6
+        },
+        {
+          "teamName": "한성대학교 TURTLES",
+          "totals": {
+            "runs": 6,
+            "hits": 4,
+            "errors": 2,
+            "walks": 5
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 20,
+          "hits": 4,
+          "runs": 6,
+          "rbi": 4,
+          "pitcherHits": 4,
+          "pitcherRuns": 5
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55214/boxscore",
+      "homeRunChecks": [
+        {
+          "teamName": "서울시립대학교 FALCONS",
+          "playerName": "박휴준",
+          "plateAppearances": [
+            {
+              "inning": 1,
+              "result": "중월홈"
+            }
+          ],
+          "rbi": 0,
+          "runs": 0
+        }
+      ],
+      "rbiSourceVerified": true
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-31T15:00:00+09:00",
+      "groupCode": "E",
+      "venue": "연세대학교(신촌) 야구장",
+      "homeTeamName": "한신대학교 갱스터",
+      "awayTeamName": "연세대학교 EAGLES",
+      "homeScore": 0,
+      "awayScore": 23,
+      "sourceGameId": "up-21ec9a09e2d726807723215c",
+      "providerGameId": "55213",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "한신대학교 갱스터",
+          "totals": {
+            "runs": 0,
+            "hits": 4,
+            "errors": 2,
+            "walks": 1
+          },
+          "batterRows": 14,
+          "pitcherRows": 3,
+          "atBats": 16,
+          "hits": 4,
+          "runs": 0,
+          "rbi": 0,
+          "pitcherHits": 17,
+          "pitcherRuns": 23
+        },
+        {
+          "teamName": "연세대학교 EAGLES",
+          "totals": {
+            "runs": 23,
+            "hits": 17,
+            "errors": 1,
+            "walks": 8
+          },
+          "batterRows": 12,
+          "pitcherRows": 2,
+          "atBats": 27,
+          "hits": 17,
+          "runs": 23,
+          "rbi": 20,
+          "pitcherHits": 4,
+          "pitcherRuns": 0
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55213/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-31T15:00:00+09:00",
+      "groupCode": "G",
+      "venue": "송도랜드마크 야구장",
+      "homeTeamName": "홍익대학교 위너스",
+      "awayTeamName": "인천대학교 바이킹",
+      "homeScore": 11,
+      "awayScore": 3,
+      "sourceGameId": "up-c2dce1b0d628c3851152fb29",
+      "providerGameId": "55215",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "홍익대학교 위너스",
+          "totals": {
+            "runs": 11,
+            "hits": 6,
+            "errors": 2,
+            "walks": 9
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 20,
+          "hits": 6,
+          "runs": 11,
+          "rbi": 10,
+          "pitcherHits": 8,
+          "pitcherRuns": 3
+        },
+        {
+          "teamName": "인천대학교 바이킹",
+          "totals": {
+            "runs": 3,
+            "hits": 8,
+            "errors": 1,
+            "walks": 2
+          },
+          "batterRows": 10,
+          "pitcherRows": 4,
+          "atBats": 28,
+          "hits": 8,
+          "runs": 3,
+          "rbi": 3,
+          "pitcherHits": 6,
+          "pitcherRuns": 11
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55215/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-05-31T18:00:00+09:00",
+      "groupCode": "A",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "서경대학교 JUKSITA",
+      "awayTeamName": "고려대학교 백구회",
+      "homeScore": 7,
+      "awayScore": 13,
+      "sourceGameId": "up-ede0b3c6a6c7e0c9bd3780e3",
+      "providerGameId": "55210",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "서경대학교 JUKSITA",
+          "totals": {
+            "runs": 7,
+            "hits": 3,
+            "errors": 6,
+            "walks": 3
+          },
+          "batterRows": 13,
+          "pitcherRows": 3,
+          "atBats": 19,
+          "hits": 3,
+          "runs": 7,
+          "rbi": 4,
+          "pitcherHits": 10,
+          "pitcherRuns": 13
+        },
+        {
+          "teamName": "고려대학교 백구회",
+          "totals": {
+            "runs": 13,
+            "hits": 10,
+            "errors": 5,
+            "walks": 7
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 21,
+          "hits": 10,
+          "runs": 13,
+          "rbi": 10,
+          "pitcherHits": 3,
+          "pitcherRuns": 7
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55210/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-06-06T18:00:00+09:00",
+      "groupCode": "D",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "건국대 팬서스",
+      "awayTeamName": "한국교통대학교 스윙스",
+      "homeScore": 12,
+      "awayScore": 1,
+      "sourceGameId": "up-34508a72fc3ccde282f4a629",
+      "providerGameId": "55370",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "건국대 팬서스",
+          "totals": {
+            "runs": 12,
+            "hits": 16,
+            "errors": 2,
+            "walks": 1
+          },
+          "batterRows": 13,
+          "pitcherRows": 1,
+          "atBats": 31,
+          "hits": 16,
+          "runs": 12,
+          "rbi": 12,
+          "pitcherHits": 1,
+          "pitcherRuns": 1
+        },
+        {
+          "teamName": "한국교통대학교 스윙스",
+          "totals": {
+            "runs": 1,
+            "hits": 1,
+            "errors": 0,
+            "walks": 2
+          },
+          "batterRows": 13,
+          "pitcherRows": 2,
+          "atBats": 17,
+          "hits": 1,
+          "runs": 1,
+          "rbi": 1,
+          "pitcherHits": 16,
+          "pitcherRuns": 12
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55370/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-06-07T18:00:00+09:00",
+      "groupCode": "A",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "경희대학교(서울) BRAVES",
+      "awayTeamName": "한양대학교 에리카 HIBA",
+      "homeScore": 11,
+      "awayScore": 14,
+      "sourceGameId": "up-8b1cccf5fe85f75971d67486",
+      "providerGameId": "55371",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "경희대학교(서울) BRAVES",
+          "totals": {
+            "runs": 11,
+            "hits": 7,
+            "errors": 4,
+            "walks": 5
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 24,
+          "hits": 7,
+          "runs": 11,
+          "rbi": 9,
+          "pitcherHits": 6,
+          "pitcherRuns": 14
+        },
+        {
+          "teamName": "한양대학교 에리카 HIBA",
+          "totals": {
+            "runs": 14,
+            "hits": 6,
+            "errors": 4,
+            "walks": 8
+          },
+          "batterRows": 11,
+          "pitcherRows": 1,
+          "atBats": 20,
+          "hits": 6,
+          "runs": 14,
+          "rbi": 7,
+          "pitcherHits": 7,
+          "pitcherRuns": 11
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55371/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-06-23T09:00:00+09:00",
+      "groupCode": "C",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "인하대학교 비룡",
+      "awayTeamName": "한국항공대 Astros",
+      "homeScore": 8,
+      "awayScore": 1,
+      "sourceGameId": "up-c071442c5bb8ab045f033706",
+      "providerGameId": "55551",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "인하대학교 비룡",
+          "totals": {
+            "runs": 8,
+            "hits": 6,
+            "errors": 1,
+            "walks": 4
+          },
+          "batterRows": 11,
+          "pitcherRows": 3,
+          "atBats": 25,
+          "hits": 6,
+          "runs": 8,
+          "rbi": 8,
+          "pitcherHits": 3,
+          "pitcherRuns": 1
+        },
+        {
+          "teamName": "한국항공대 Astros",
+          "totals": {
+            "runs": 1,
+            "hits": 3,
+            "errors": 2,
+            "walks": 4
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 20,
+          "hits": 3,
+          "runs": 1,
+          "rbi": 1,
+          "pitcherHits": 6,
+          "pitcherRuns": 8
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55551/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-06-23T12:00:00+09:00",
+      "groupCode": "G",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "광운대학교 페가수스",
+      "awayTeamName": "인천대학교 바이킹",
+      "homeScore": 3,
+      "awayScore": 13,
+      "sourceGameId": "up-acdc3500931ab64a21d16433",
+      "providerGameId": "55552",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-b241bc07cdd55d0ca4404cde512ae676",
+          "code": "DETAIL_PITCHER_RUNS_TOTAL",
+          "message": "투수 실점 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-acdc3500931ab64a21d16433",
+          "teamName": "광운대학교 페가수스",
+          "field": "pitchers.runsAllowed",
+          "rowKey": null,
+          "observed": 14,
+          "expected": 13,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "광운대학교 페가수스",
+          "totals": {
+            "runs": 3,
+            "hits": 5,
+            "errors": 3,
+            "walks": 2
+          },
+          "batterRows": 12,
+          "pitcherRows": 3,
+          "atBats": 18,
+          "hits": 5,
+          "runs": 3,
+          "rbi": 3,
+          "pitcherHits": 9,
+          "pitcherRuns": 14
+        },
+        {
+          "teamName": "인천대학교 바이킹",
+          "totals": {
+            "runs": 13,
+            "hits": 9,
+            "errors": 1,
+            "walks": 9
+          },
+          "batterRows": 12,
+          "pitcherRows": 2,
+          "atBats": 23,
+          "hits": 9,
+          "runs": 13,
+          "rbi": 10,
+          "pitcherHits": 5,
+          "pitcherRuns": 3
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55552/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-06-23T18:00:00+09:00",
+      "groupCode": "C",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "국민대 윈드밀스",
+      "awayTeamName": "한국체대 루나틱스",
+      "homeScore": 12,
+      "awayScore": 9,
+      "sourceGameId": "up-85989f8700b8e97737d881f1",
+      "providerGameId": "55554",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "국민대 윈드밀스",
+          "totals": {
+            "runs": 12,
+            "hits": 11,
+            "errors": 1,
+            "walks": 6
+          },
+          "batterRows": 11,
+          "pitcherRows": 1,
+          "atBats": 33,
+          "hits": 11,
+          "runs": 12,
+          "rbi": 10,
+          "pitcherHits": 9,
+          "pitcherRuns": 9
+        },
+        {
+          "teamName": "한국체대 루나틱스",
+          "totals": {
+            "runs": 9,
+            "hits": 9,
+            "errors": 1,
+            "walks": 2
+          },
+          "batterRows": 17,
+          "pitcherRows": 2,
+          "atBats": 31,
+          "hits": 9,
+          "runs": 9,
+          "rbi": 8,
+          "pitcherHits": 11,
+          "pitcherRuns": 12
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55554/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-06-28T12:00:00+09:00",
+      "groupCode": "F",
+      "venue": "서강대학교",
+      "homeTeamName": "서강대학교 알바트로스",
+      "awayTeamName": "한국공학대학교 WINNERS",
+      "homeScore": 10,
+      "awayScore": 7,
+      "sourceGameId": "up-34658b3bcdb1ad2aff44e713",
+      "providerGameId": "55558",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-f4a7dd5c2de9e5542327c50c9be95848",
+          "code": "DETAIL_BATTER_TOTAL",
+          "message": "개별 타자 득점 합계와 팀 기록이 다릅니다.",
+          "sourceGameId": "up-34658b3bcdb1ad2aff44e713",
+          "teamName": "서강대학교 알바트로스",
+          "field": "batters.runs",
+          "rowKey": null,
+          "observed": 0,
+          "expected": 10,
+          "playerName": null
+        },
+        {
+          "id": "dq-c42b517c48cc7d0ff7f7d168f92258ea",
+          "code": "DETAIL_TEAM_RBI_ZERO",
+          "message": "득점이 있으나 선수 타점 합계가 0입니다. 실책·주루 득점일 수 있으므로 원천 타석 기록을 확인해 주세요.",
+          "sourceGameId": "up-34658b3bcdb1ad2aff44e713",
+          "teamName": "서강대학교 알바트로스",
+          "field": "batters.rbi",
+          "rowKey": null,
+          "observed": 0,
+          "expected": 10,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "서강대학교 알바트로스",
+          "totals": {
+            "runs": 10,
+            "hits": 10,
+            "errors": 1,
+            "walks": 6
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 25,
+          "hits": 10,
+          "runs": 0,
+          "rbi": 0,
+          "pitcherHits": 6,
+          "pitcherRuns": 7
+        },
+        {
+          "teamName": "한국공학대학교 WINNERS",
+          "totals": {
+            "runs": 7,
+            "hits": 6,
+            "errors": 4,
+            "walks": 7
+          },
+          "batterRows": 10,
+          "pitcherRows": 3,
+          "atBats": 21,
+          "hits": 6,
+          "runs": 7,
+          "rbi": 7,
+          "pitcherHits": 10,
+          "pitcherRuns": 10
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55558/boxscore",
+      "homeRunChecks": [
+        {
+          "teamName": "서강대학교 알바트로스",
+          "playerName": "한정우",
+          "plateAppearances": [
+            {
+              "inning": 3,
+              "result": "좌월홈"
+            }
+          ],
+          "rbi": 0,
+          "runs": 0
+        }
+      ],
+      "rbiSourceVerified": true
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-06-28T18:00:00+09:00",
+      "groupCode": "G",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "홍익대학교 위너스",
+      "awayTeamName": "성균관대학교 킹고야구반",
+      "homeScore": 6,
+      "awayScore": 3,
+      "sourceGameId": "up-69d84b1ec105b8c762f9dc85",
+      "providerGameId": "55559",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "홍익대학교 위너스",
+          "totals": {
+            "runs": 6,
+            "hits": 5,
+            "errors": 1,
+            "walks": 4
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 26,
+          "hits": 5,
+          "runs": 6,
+          "rbi": 6,
+          "pitcherHits": 2,
+          "pitcherRuns": 3
+        },
+        {
+          "teamName": "성균관대학교 킹고야구반",
+          "totals": {
+            "runs": 3,
+            "hits": 2,
+            "errors": 0,
+            "walks": 6
+          },
+          "batterRows": 12,
+          "pitcherRows": 3,
+          "atBats": 23,
+          "hits": 2,
+          "runs": 3,
+          "rbi": 3,
+          "pitcherHits": 5,
+          "pitcherRuns": 6
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55559/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-06-29T12:00:00+09:00",
+      "groupCode": "F",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "상명대학교 BUCKS",
+      "awayTeamName": "한양대학교 불새",
+      "homeScore": 1,
+      "awayScore": 19,
+      "sourceGameId": "up-dbdaeceb66e818734ac70a19",
+      "providerGameId": "55560",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "상명대학교 BUCKS",
+          "totals": {
+            "runs": 1,
+            "hits": 0,
+            "errors": 3,
+            "walks": 4
+          },
+          "batterRows": 10,
+          "pitcherRows": 4,
+          "atBats": 11,
+          "hits": 0,
+          "runs": 1,
+          "rbi": 1,
+          "pitcherHits": 7,
+          "pitcherRuns": 19
+        },
+        {
+          "teamName": "한양대학교 불새",
+          "totals": {
+            "runs": 19,
+            "hits": 7,
+            "errors": 0,
+            "walks": 11
+          },
+          "batterRows": 14,
+          "pitcherRows": 2,
+          "atBats": 18,
+          "hits": 7,
+          "runs": 19,
+          "rbi": 15,
+          "pitcherHits": 0,
+          "pitcherRuns": 1
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55560/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-06-29T15:00:00+09:00",
+      "groupCode": "C",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "인하대학교 비룡",
+      "awayTeamName": "국민대 윈드밀스",
+      "homeScore": 6,
+      "awayScore": 7,
+      "sourceGameId": "up-3524c554498fd7c7137ad03f",
+      "providerGameId": "55561",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-ffddd3c4a223e03e55840da052da1d8e",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-3524c554498fd7c7137ad03f",
+          "teamName": "국민대 윈드밀스",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 2,
+          "expected": 3,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "인하대학교 비룡",
+          "totals": {
+            "runs": 6,
+            "hits": 3,
+            "errors": 2,
+            "walks": 3
+          },
+          "batterRows": 9,
+          "pitcherRows": 3,
+          "atBats": 22,
+          "hits": 3,
+          "runs": 6,
+          "rbi": 4,
+          "pitcherHits": 9,
+          "pitcherRuns": 7
+        },
+        {
+          "teamName": "국민대 윈드밀스",
+          "totals": {
+            "runs": 7,
+            "hits": 9,
+            "errors": 3,
+            "walks": 7
+          },
+          "batterRows": 9,
+          "pitcherRows": 3,
+          "atBats": 26,
+          "hits": 9,
+          "runs": 7,
+          "rbi": 7,
+          "pitcherHits": 2,
+          "pitcherRuns": 6
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55561/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-06-30T10:00:00+09:00",
+      "groupCode": "A",
+      "venue": "신길야구장",
+      "homeTeamName": "한양대학교 에리카 HIBA",
+      "awayTeamName": "고려대학교 백구회",
+      "homeScore": 3,
+      "awayScore": 9,
+      "sourceGameId": "up-357ef087fe00d06ea90ae884",
+      "providerGameId": "55567",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "한양대학교 에리카 HIBA",
+          "totals": {
+            "runs": 3,
+            "hits": 7,
+            "errors": 2,
+            "walks": 4
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 24,
+          "hits": 7,
+          "runs": 3,
+          "rbi": 3,
+          "pitcherHits": 8,
+          "pitcherRuns": 9
+        },
+        {
+          "teamName": "고려대학교 백구회",
+          "totals": {
+            "runs": 9,
+            "hits": 8,
+            "errors": 2,
+            "walks": 6
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 22,
+          "hits": 8,
+          "runs": 9,
+          "rbi": 8,
+          "pitcherHits": 7,
+          "pitcherRuns": 3
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55567/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-06-30T14:00:00+09:00",
+      "groupCode": "D",
+      "venue": "난지 야구장1",
+      "homeTeamName": "가천대학교 Wind",
+      "awayTeamName": "숭실대학교 ONERS",
+      "homeScore": 9,
+      "awayScore": 8,
+      "sourceGameId": "up-d0443f6d5b9df0a7e94dd8ed",
+      "providerGameId": "55565",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-356ad2485de8e2b5ec3f24851981543e",
+          "code": "DETAIL_PITCHER_EARNED_RUNS",
+          "message": "투수 자책점이 실점보다 많습니다.",
+          "sourceGameId": "up-d0443f6d5b9df0a7e94dd8ed",
+          "teamName": "가천대학교 Wind",
+          "field": "pitchers.earnedRuns",
+          "rowKey": "up-row-d7168a6267741d60e90d6d5d",
+          "observed": 1,
+          "expected": 0,
+          "playerName": "김진륜"
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "가천대학교 Wind",
+          "totals": {
+            "runs": 9,
+            "hits": 7,
+            "errors": 1,
+            "walks": 4
+          },
+          "batterRows": 10,
+          "pitcherRows": 4,
+          "atBats": 21,
+          "hits": 7,
+          "runs": 9,
+          "rbi": 8,
+          "pitcherHits": 6,
+          "pitcherRuns": 8
+        },
+        {
+          "teamName": "숭실대학교 ONERS",
+          "totals": {
+            "runs": 8,
+            "hits": 6,
+            "errors": 2,
+            "walks": 7
+          },
+          "batterRows": 12,
+          "pitcherRows": 3,
+          "atBats": 21,
+          "hits": 6,
+          "runs": 8,
+          "rbi": 8,
+          "pitcherHits": 7,
+          "pitcherRuns": 9
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55565/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-06-30T15:00:00+09:00",
+      "groupCode": "A",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "경희대학교(서울) BRAVES",
+      "awayTeamName": "동국대학교 L.A.E",
+      "homeScore": 8,
+      "awayScore": 12,
+      "sourceGameId": "up-1dedd0b5d062ed624b5d8f14",
+      "providerGameId": "55564",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "경희대학교(서울) BRAVES",
+          "totals": {
+            "runs": 8,
+            "hits": 6,
+            "errors": 0,
+            "walks": 5
+          },
+          "batterRows": 10,
+          "pitcherRows": 3,
+          "atBats": 21,
+          "hits": 6,
+          "runs": 8,
+          "rbi": 5,
+          "pitcherHits": 5,
+          "pitcherRuns": 12
+        },
+        {
+          "teamName": "동국대학교 L.A.E",
+          "totals": {
+            "runs": 12,
+            "hits": 5,
+            "errors": 4,
+            "walks": 7
+          },
+          "batterRows": 9,
+          "pitcherRows": 2,
+          "atBats": 17,
+          "hits": 5,
+          "runs": 12,
+          "rbi": 12,
+          "pitcherHits": 6,
+          "pitcherRuns": 8
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55564/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-07-02T12:00:00+09:00",
+      "groupCode": "E",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "연세대학교 EAGLES",
+      "awayTeamName": "한신대학교 갱스터",
+      "homeScore": 13,
+      "awayScore": 1,
+      "sourceGameId": "up-ffb952925dcd1664998faa89",
+      "providerGameId": "55783",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-e32f7bd8c2bd41a054a21eef6abeab73",
+          "code": "DETAIL_TEAM_RBI_ZERO",
+          "message": "득점이 있으나 선수 타점 합계가 0입니다. 실책·주루 득점일 수 있으므로 원천 타석 기록을 확인해 주세요.",
+          "sourceGameId": "up-ffb952925dcd1664998faa89",
+          "teamName": "한신대학교 갱스터",
+          "field": "batters.rbi",
+          "rowKey": null,
+          "observed": 0,
+          "expected": 1,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "연세대학교 EAGLES",
+          "totals": {
+            "runs": 13,
+            "hits": 15,
+            "errors": 1,
+            "walks": 3
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 29,
+          "hits": 15,
+          "runs": 13,
+          "rbi": 11,
+          "pitcherHits": 2,
+          "pitcherRuns": 1
+        },
+        {
+          "teamName": "한신대학교 갱스터",
+          "totals": {
+            "runs": 1,
+            "hits": 2,
+            "errors": 2,
+            "walks": 1
+          },
+          "batterRows": 11,
+          "pitcherRows": 1,
+          "atBats": 17,
+          "hits": 2,
+          "runs": 1,
+          "rbi": 0,
+          "pitcherHits": 15,
+          "pitcherRuns": 13
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55783/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": true
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-07-02T14:00:00+09:00",
+      "groupCode": "H",
+      "venue": "난지 야구장1",
+      "homeTeamName": "단국대학교 HOUND",
+      "awayTeamName": "세종킹스",
+      "homeScore": 6,
+      "awayScore": 7,
+      "sourceGameId": "up-3b03c2c332aa64f7e8b40fbf",
+      "providerGameId": "55784",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "단국대학교 HOUND",
+          "totals": {
+            "runs": 6,
+            "hits": 6,
+            "errors": 2,
+            "walks": 4
+          },
+          "batterRows": 10,
+          "pitcherRows": 4,
+          "atBats": 23,
+          "hits": 6,
+          "runs": 6,
+          "rbi": 3,
+          "pitcherHits": 6,
+          "pitcherRuns": 7
+        },
+        {
+          "teamName": "세종킹스",
+          "totals": {
+            "runs": 7,
+            "hits": 6,
+            "errors": 3,
+            "walks": 4
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 23,
+          "hits": 6,
+          "runs": 7,
+          "rbi": 6,
+          "pitcherHits": 6,
+          "pitcherRuns": 6
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55784/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-07-04T15:00:00+09:00",
+      "groupCode": "G",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "중앙대학교 랑데뷰",
+      "awayTeamName": "광운대학교 페가수스",
+      "homeScore": 15,
+      "awayScore": 4,
+      "sourceGameId": "up-9560ccb79e44484fae321d9d",
+      "providerGameId": "55785",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-ed7193fbd8cdbf102fc8e6a49cad1cdc",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-9560ccb79e44484fae321d9d",
+          "teamName": "광운대학교 페가수스",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 12,
+          "expected": 14,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "중앙대학교 랑데뷰",
+          "totals": {
+            "runs": 15,
+            "hits": 14,
+            "errors": 0,
+            "walks": 9
+          },
+          "batterRows": 17,
+          "pitcherRows": 4,
+          "atBats": 29,
+          "hits": 14,
+          "runs": 15,
+          "rbi": 15,
+          "pitcherHits": 2,
+          "pitcherRuns": 4
+        },
+        {
+          "teamName": "광운대학교 페가수스",
+          "totals": {
+            "runs": 4,
+            "hits": 2,
+            "errors": 2,
+            "walks": 6
+          },
+          "batterRows": 13,
+          "pitcherRows": 4,
+          "atBats": 19,
+          "hits": 2,
+          "runs": 4,
+          "rbi": 4,
+          "pitcherHits": 12,
+          "pitcherRuns": 15
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55785/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-07-05T12:00:00+09:00",
+      "groupCode": "E",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "건국대학교 불소야구부",
+      "awayTeamName": "단국대 PANDAS",
+      "homeScore": 10,
+      "awayScore": 5,
+      "sourceGameId": "up-538d91fd1a1c6d8291805831",
+      "providerGameId": "55786",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-89d2edf10641a3b2e49d06086ccaa548",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-538d91fd1a1c6d8291805831",
+          "teamName": "단국대 PANDAS",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 9,
+          "expected": 10,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "건국대학교 불소야구부",
+          "totals": {
+            "runs": 10,
+            "hits": 10,
+            "errors": 3,
+            "walks": 7
+          },
+          "batterRows": 9,
+          "pitcherRows": 2,
+          "atBats": 23,
+          "hits": 10,
+          "runs": 10,
+          "rbi": 10,
+          "pitcherHits": 4,
+          "pitcherRuns": 5
+        },
+        {
+          "teamName": "단국대 PANDAS",
+          "totals": {
+            "runs": 5,
+            "hits": 4,
+            "errors": 0,
+            "walks": 4
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 21,
+          "hits": 4,
+          "runs": 5,
+          "rbi": 4,
+          "pitcherHits": 9,
+          "pitcherRuns": 10
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55786/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-07-05T15:00:00+09:00",
+      "groupCode": "F",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "상명대학교 BUCKS",
+      "awayTeamName": "강남대학교 타키온즈",
+      "homeScore": 5,
+      "awayScore": 3,
+      "sourceGameId": "up-cdb95db1dfa4afb13b7e26c9",
+      "providerGameId": "55787",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-24345c5fdd41a6af945365f150ccc0b3",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-cdb95db1dfa4afb13b7e26c9",
+          "teamName": "상명대학교 BUCKS",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 2,
+          "expected": 3,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "상명대학교 BUCKS",
+          "totals": {
+            "runs": 5,
+            "hits": 3,
+            "errors": 1,
+            "walks": 7
+          },
+          "batterRows": 10,
+          "pitcherRows": 1,
+          "atBats": 20,
+          "hits": 3,
+          "runs": 5,
+          "rbi": 3,
+          "pitcherHits": 2,
+          "pitcherRuns": 3
+        },
+        {
+          "teamName": "강남대학교 타키온즈",
+          "totals": {
+            "runs": 3,
+            "hits": 3,
+            "errors": 2,
+            "walks": 8
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 17,
+          "hits": 3,
+          "runs": 3,
+          "rbi": 2,
+          "pitcherHits": 3,
+          "pitcherRuns": 5
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55787/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-07-07T12:00:00+09:00",
+      "groupCode": "D",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "경기대학교 KGB",
+      "awayTeamName": "건국대 팬서스",
+      "homeScore": 15,
+      "awayScore": 4,
+      "sourceGameId": "up-30ed2a29cc54d524b49ef089",
+      "providerGameId": "55825",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "경기대학교 KGB",
+          "totals": {
+            "runs": 15,
+            "hits": 9,
+            "errors": 1,
+            "walks": 6
+          },
+          "batterRows": 13,
+          "pitcherRows": 2,
+          "atBats": 27,
+          "hits": 9,
+          "runs": 15,
+          "rbi": 13,
+          "pitcherHits": 6,
+          "pitcherRuns": 4
+        },
+        {
+          "teamName": "건국대 팬서스",
+          "totals": {
+            "runs": 4,
+            "hits": 6,
+            "errors": 6,
+            "walks": 2
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 22,
+          "hits": 6,
+          "runs": 4,
+          "rbi": 4,
+          "pitcherHits": 9,
+          "pitcherRuns": 15
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55825/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-07-07T15:00:00+09:00",
+      "groupCode": "H",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "아주대학교 ABBA",
+      "awayTeamName": "명지대학교 나이너스",
+      "homeScore": 12,
+      "awayScore": 5,
+      "sourceGameId": "up-182e3b1594460977d6b8f01e",
+      "providerGameId": "55826",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "아주대학교 ABBA",
+          "totals": {
+            "runs": 12,
+            "hits": 11,
+            "errors": 1,
+            "walks": 5
+          },
+          "batterRows": 14,
+          "pitcherRows": 3,
+          "atBats": 26,
+          "hits": 11,
+          "runs": 12,
+          "rbi": 10,
+          "pitcherHits": 9,
+          "pitcherRuns": 5
+        },
+        {
+          "teamName": "명지대학교 나이너스",
+          "totals": {
+            "runs": 5,
+            "hits": 9,
+            "errors": 0,
+            "walks": 1
+          },
+          "batterRows": 9,
+          "pitcherRows": 2,
+          "atBats": 21,
+          "hits": 9,
+          "runs": 5,
+          "rbi": 3,
+          "pitcherHits": 11,
+          "pitcherRuns": 12
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55826/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-07-12T16:00:00+09:00",
+      "groupCode": "F",
+      "venue": "서강대학교",
+      "homeTeamName": "상명대학교 BUCKS",
+      "awayTeamName": "서강대학교 알바트로스",
+      "homeScore": 9,
+      "awayScore": 15,
+      "sourceGameId": "up-605895a93d0f9ab527ee2656",
+      "providerGameId": "55831",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-266e4efb99acc5a845bb518218084a44",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-605895a93d0f9ab527ee2656",
+          "teamName": "서강대학교 알바트로스",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 6,
+          "expected": 5,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "상명대학교 BUCKS",
+          "totals": {
+            "runs": 9,
+            "hits": 5,
+            "errors": 0,
+            "walks": 8
+          },
+          "batterRows": 13,
+          "pitcherRows": 2,
+          "atBats": 19,
+          "hits": 5,
+          "runs": 9,
+          "rbi": 8,
+          "pitcherHits": 10,
+          "pitcherRuns": 15
+        },
+        {
+          "teamName": "서강대학교 알바트로스",
+          "totals": {
+            "runs": 15,
+            "hits": 10,
+            "errors": 1,
+            "walks": 14
+          },
+          "batterRows": 12,
+          "pitcherRows": 2,
+          "atBats": 18,
+          "hits": 10,
+          "runs": 15,
+          "rbi": 14,
+          "pitcherHits": 6,
+          "pitcherRuns": 9
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55831/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-07-14T12:00:00+09:00",
+      "groupCode": "H",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "세종킹스",
+      "awayTeamName": "단국대학교 HOUND",
+      "homeScore": 19,
+      "awayScore": 5,
+      "sourceGameId": "up-1e2f22dacd43988ebb3fb5e8",
+      "providerGameId": "55836",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "세종킹스",
+          "totals": {
+            "runs": 19,
+            "hits": 16,
+            "errors": 5,
+            "walks": 5
+          },
+          "batterRows": 12,
+          "pitcherRows": 3,
+          "atBats": 32,
+          "hits": 16,
+          "runs": 19,
+          "rbi": 18,
+          "pitcherHits": 5,
+          "pitcherRuns": 5
+        },
+        {
+          "teamName": "단국대학교 HOUND",
+          "totals": {
+            "runs": 5,
+            "hits": 5,
+            "errors": 5,
+            "walks": 4
+          },
+          "batterRows": 13,
+          "pitcherRows": 5,
+          "atBats": 18,
+          "hits": 5,
+          "runs": 5,
+          "rbi": 2,
+          "pitcherHits": 16,
+          "pitcherRuns": 19
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55836/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-07-15T09:00:00+09:00",
+      "groupCode": "A",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "고려대학교 백구회",
+      "awayTeamName": "동국대학교 L.A.E",
+      "homeScore": 8,
+      "awayScore": 9,
+      "sourceGameId": "up-03d8488d95822d90c71a1ade",
+      "providerGameId": "55838",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-88d688a967616c919acf6f5d487f21d2",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-03d8488d95822d90c71a1ade",
+          "teamName": "고려대학교 백구회",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 6,
+          "expected": 7,
+          "playerName": null
+        },
+        {
+          "id": "dq-d0b1145054194bc3d5294ef3069f2b36",
+          "code": "DETAIL_PITCHER_EARNED_RUNS",
+          "message": "투수 자책점이 실점보다 많습니다.",
+          "sourceGameId": "up-03d8488d95822d90c71a1ade",
+          "teamName": "동국대학교 L.A.E",
+          "field": "pitchers.earnedRuns",
+          "rowKey": "up-row-56965d33a4eb4447a33d94ac",
+          "observed": 2,
+          "expected": 0,
+          "playerName": "김성주"
+        },
+        {
+          "id": "dq-69f7c2f73c2a504915c4d1f32d02bd48",
+          "code": "DETAIL_PITCHER_RUNS_TOTAL",
+          "message": "투수 실점 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-03d8488d95822d90c71a1ade",
+          "teamName": "동국대학교 L.A.E",
+          "field": "pitchers.runsAllowed",
+          "rowKey": null,
+          "observed": 4,
+          "expected": 8,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "고려대학교 백구회",
+          "totals": {
+            "runs": 8,
+            "hits": 7,
+            "errors": 1,
+            "walks": 6
+          },
+          "batterRows": 10,
+          "pitcherRows": 3,
+          "atBats": 23,
+          "hits": 7,
+          "runs": 8,
+          "rbi": 7,
+          "pitcherHits": 6,
+          "pitcherRuns": 9
+        },
+        {
+          "teamName": "동국대학교 L.A.E",
+          "totals": {
+            "runs": 9,
+            "hits": 7,
+            "errors": 3,
+            "walks": 7
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 19,
+          "hits": 7,
+          "runs": 9,
+          "rbi": 7,
+          "pitcherHits": 7,
+          "pitcherRuns": 4
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55838/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-07-15T15:00:00+09:00",
+      "groupCode": "A",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "한양대학교 에리카 HIBA",
+      "awayTeamName": "서경대학교 JUKSITA",
+      "homeScore": 11,
+      "awayScore": 7,
+      "sourceGameId": "up-505c339df8ab77e7a34b967e",
+      "providerGameId": "55840",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-c853c4d948e3f6d9822acdd07bd63bdf",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-505c339df8ab77e7a34b967e",
+          "teamName": "한양대학교 에리카 HIBA",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 5,
+          "expected": 7,
+          "playerName": null
+        },
+        {
+          "id": "dq-cbdb98fa46efd9d819083d3c89215118",
+          "code": "DETAIL_TEAM_RBI",
+          "message": "타자 타점 합계가 팀 득점보다 많습니다.",
+          "sourceGameId": "up-505c339df8ab77e7a34b967e",
+          "teamName": "서경대학교 JUKSITA",
+          "field": "batters.rbi",
+          "rowKey": null,
+          "observed": 10,
+          "expected": 7,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "한양대학교 에리카 HIBA",
+          "totals": {
+            "runs": 11,
+            "hits": 10,
+            "errors": 1,
+            "walks": 5
+          },
+          "batterRows": 9,
+          "pitcherRows": 3,
+          "atBats": 26,
+          "hits": 10,
+          "runs": 11,
+          "rbi": 10,
+          "pitcherHits": 5,
+          "pitcherRuns": 7
+        },
+        {
+          "teamName": "서경대학교 JUKSITA",
+          "totals": {
+            "runs": 7,
+            "hits": 7,
+            "errors": 3,
+            "walks": 5
+          },
+          "batterRows": 10,
+          "pitcherRows": 3,
+          "atBats": 21,
+          "hits": 7,
+          "runs": 7,
+          "rbi": 10,
+          "pitcherHits": 10,
+          "pitcherRuns": 11
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55840/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": true
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-07-19T15:30:00+09:00",
+      "groupCode": "E",
+      "venue": "연세대학교(신촌) 야구장",
+      "homeTeamName": "건국대학교 불소야구부",
+      "awayTeamName": "연세대학교 EAGLES",
+      "homeScore": 8,
+      "awayScore": 8,
+      "sourceGameId": "up-6ac54724926942acd121cb3e",
+      "providerGameId": "55843",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "건국대학교 불소야구부",
+          "totals": {
+            "runs": 8,
+            "hits": 8,
+            "errors": 4,
+            "walks": 8
+          },
+          "batterRows": 9,
+          "pitcherRows": 1,
+          "atBats": 26,
+          "hits": 8,
+          "runs": 8,
+          "rbi": 5,
+          "pitcherHits": 9,
+          "pitcherRuns": 8
+        },
+        {
+          "teamName": "연세대학교 EAGLES",
+          "totals": {
+            "runs": 8,
+            "hits": 9,
+            "errors": 3,
+            "walks": 0
+          },
+          "batterRows": 9,
+          "pitcherRows": 2,
+          "atBats": 29,
+          "hits": 9,
+          "runs": 8,
+          "rbi": 8,
+          "pitcherHits": 8,
+          "pitcherRuns": 8
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55843/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-07-25T12:00:00+09:00",
+      "groupCode": "H",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "명지대학교 나이너스",
+      "awayTeamName": "가톨릭대 텀블러즈",
+      "homeScore": 13,
+      "awayScore": 2,
+      "sourceGameId": "up-4cc4c85b96aa98e8cfb11c3e",
+      "providerGameId": "55886",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "명지대학교 나이너스",
+          "totals": {
+            "runs": 13,
+            "hits": 7,
+            "errors": 0,
+            "walks": 7
+          },
+          "batterRows": 15,
+          "pitcherRows": 4,
+          "atBats": 25,
+          "hits": 7,
+          "runs": 13,
+          "rbi": 8,
+          "pitcherHits": 3,
+          "pitcherRuns": 2
+        },
+        {
+          "teamName": "가톨릭대 텀블러즈",
+          "totals": {
+            "runs": 2,
+            "hits": 3,
+            "errors": 5,
+            "walks": 5
+          },
+          "batterRows": 12,
+          "pitcherRows": 4,
+          "atBats": 17,
+          "hits": 3,
+          "runs": 2,
+          "rbi": 2,
+          "pitcherHits": 7,
+          "pitcherRuns": 13
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55886/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-07-25T18:00:00+09:00",
+      "groupCode": "B",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "서울과학기술대학교 미르",
+      "awayTeamName": "서울시립대학교 FALCONS",
+      "homeScore": 9,
+      "awayScore": 13,
+      "sourceGameId": "up-bb065ff0b5be4648998f093b",
+      "providerGameId": "55887",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-6516d4cefbef34f6ae06fc6916ef74ca",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-bb065ff0b5be4648998f093b",
+          "teamName": "서울시립대학교 FALCONS",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 9,
+          "expected": 10,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "서울과학기술대학교 미르",
+          "totals": {
+            "runs": 9,
+            "hits": 10,
+            "errors": 4,
+            "walks": 3
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 24,
+          "hits": 10,
+          "runs": 9,
+          "rbi": 9,
+          "pitcherHits": 13,
+          "pitcherRuns": 13
+        },
+        {
+          "teamName": "서울시립대학교 FALCONS",
+          "totals": {
+            "runs": 13,
+            "hits": 13,
+            "errors": 4,
+            "walks": 8
+          },
+          "batterRows": 10,
+          "pitcherRows": 3,
+          "atBats": 24,
+          "hits": 13,
+          "runs": 13,
+          "rbi": 11,
+          "pitcherHits": 9,
+          "pitcherRuns": 9
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55887/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-07-30T09:00:00+09:00",
+      "groupCode": "B",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "한성대학교 TURTLES",
+      "awayTeamName": "외대(서울) 야구부",
+      "homeScore": 7,
+      "awayScore": 6,
+      "sourceGameId": "up-9e083c6dbfa4f958379e1bb2",
+      "providerGameId": "55943",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "한성대학교 TURTLES",
+          "totals": {
+            "runs": 7,
+            "hits": 5,
+            "errors": 4,
+            "walks": 8
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 22,
+          "hits": 5,
+          "runs": 7,
+          "rbi": 6,
+          "pitcherHits": 6,
+          "pitcherRuns": 6
+        },
+        {
+          "teamName": "외대(서울) 야구부",
+          "totals": {
+            "runs": 6,
+            "hits": 6,
+            "errors": 2,
+            "walks": 2
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 21,
+          "hits": 6,
+          "runs": 6,
+          "rbi": 4,
+          "pitcherHits": 5,
+          "pitcherRuns": 7
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55943/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-07-30T15:00:00+09:00",
+      "groupCode": "D",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "숭실대학교 ONERS",
+      "awayTeamName": "건국대 팬서스",
+      "homeScore": 7,
+      "awayScore": 4,
+      "sourceGameId": "up-017a4e5613aac904aaa04b35",
+      "providerGameId": "55944",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "숭실대학교 ONERS",
+          "totals": {
+            "runs": 7,
+            "hits": 6,
+            "errors": 1,
+            "walks": 8
+          },
+          "batterRows": 15,
+          "pitcherRows": 3,
+          "atBats": 24,
+          "hits": 6,
+          "runs": 7,
+          "rbi": 7,
+          "pitcherHits": 6,
+          "pitcherRuns": 4
+        },
+        {
+          "teamName": "건국대 팬서스",
+          "totals": {
+            "runs": 4,
+            "hits": 6,
+            "errors": 2,
+            "walks": 7
+          },
+          "batterRows": 11,
+          "pitcherRows": 1,
+          "atBats": 23,
+          "hits": 6,
+          "runs": 4,
+          "rbi": 2,
+          "pitcherHits": 6,
+          "pitcherRuns": 7
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55944/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-07-30T16:00:00+09:00",
+      "groupCode": "F",
+      "venue": "서강대학교",
+      "homeTeamName": "한양대학교 불새",
+      "awayTeamName": "서강대학교 알바트로스",
+      "homeScore": 5,
+      "awayScore": 3,
+      "sourceGameId": "up-afd50292fe694ed6b51c25f0",
+      "providerGameId": "55945",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "한양대학교 불새",
+          "totals": {
+            "runs": 5,
+            "hits": 7,
+            "errors": 1,
+            "walks": 7
+          },
+          "batterRows": 9,
+          "pitcherRows": 2,
+          "atBats": 22,
+          "hits": 7,
+          "runs": 5,
+          "rbi": 5,
+          "pitcherHits": 3,
+          "pitcherRuns": 3
+        },
+        {
+          "teamName": "서강대학교 알바트로스",
+          "totals": {
+            "runs": 3,
+            "hits": 3,
+            "errors": 0,
+            "walks": 6
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 22,
+          "hits": 3,
+          "runs": 3,
+          "rbi": 1,
+          "pitcherHits": 7,
+          "pitcherRuns": 5
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55945/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-07-31T12:00:00+09:00",
+      "groupCode": "H",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "가톨릭대 텀블러즈",
+      "awayTeamName": "단국대학교 HOUND",
+      "homeScore": 0,
+      "awayScore": 15,
+      "sourceGameId": "up-40c3e14a0fa2d15dd72321bf",
+      "providerGameId": "55946",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "가톨릭대 텀블러즈",
+          "totals": {
+            "runs": 0,
+            "hits": 2,
+            "errors": 1,
+            "walks": 2
+          },
+          "batterRows": 14,
+          "pitcherRows": 3,
+          "atBats": 14,
+          "hits": 2,
+          "runs": 0,
+          "rbi": 0,
+          "pitcherHits": 12,
+          "pitcherRuns": 15
+        },
+        {
+          "teamName": "단국대학교 HOUND",
+          "totals": {
+            "runs": 15,
+            "hits": 12,
+            "errors": 0,
+            "walks": 5
+          },
+          "batterRows": 13,
+          "pitcherRows": 2,
+          "atBats": 21,
+          "hits": 12,
+          "runs": 15,
+          "rbi": 12,
+          "pitcherHits": 2,
+          "pitcherRuns": 0
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55946/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-07-31T15:00:00+09:00",
+      "groupCode": "B",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "외대(글로벌) 유니온",
+      "awayTeamName": "서울과학기술대학교 미르",
+      "homeScore": 4,
+      "awayScore": 5,
+      "sourceGameId": "up-197accbbd388d6205c88da29",
+      "providerGameId": "55947",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-fca613d8431b001ba6764d34efe95626",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-197accbbd388d6205c88da29",
+          "teamName": "서울과학기술대학교 미르",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 6,
+          "expected": 7,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "외대(글로벌) 유니온",
+          "totals": {
+            "runs": 4,
+            "hits": 7,
+            "errors": 2,
+            "walks": 0
+          },
+          "batterRows": 9,
+          "pitcherRows": 2,
+          "atBats": 19,
+          "hits": 7,
+          "runs": 4,
+          "rbi": 3,
+          "pitcherHits": 5,
+          "pitcherRuns": 5
+        },
+        {
+          "teamName": "서울과학기술대학교 미르",
+          "totals": {
+            "runs": 5,
+            "hits": 5,
+            "errors": 0,
+            "walks": 6
+          },
+          "batterRows": 9,
+          "pitcherRows": 3,
+          "atBats": 18,
+          "hits": 5,
+          "runs": 5,
+          "rbi": 3,
+          "pitcherHits": 6,
+          "pitcherRuns": 4
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55947/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-07-31T18:00:00+09:00",
+      "groupCode": "D",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "경기대학교 KGB",
+      "awayTeamName": "가천대학교 Wind",
+      "homeScore": 2,
+      "awayScore": 10,
+      "sourceGameId": "up-01140d698f77ac1bab3c30a8",
+      "providerGameId": "55948",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-07933709e6414e6f8134345e1e8d7b11",
+          "code": "DETAIL_PITCHER_RUNS_TOTAL",
+          "message": "투수 실점 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-01140d698f77ac1bab3c30a8",
+          "teamName": "가천대학교 Wind",
+          "field": "pitchers.runsAllowed",
+          "rowKey": null,
+          "observed": 1,
+          "expected": 2,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "경기대학교 KGB",
+          "totals": {
+            "runs": 2,
+            "hits": 2,
+            "errors": 2,
+            "walks": 8
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 18,
+          "hits": 2,
+          "runs": 2,
+          "rbi": 2,
+          "pitcherHits": 12,
+          "pitcherRuns": 10
+        },
+        {
+          "teamName": "가천대학교 Wind",
+          "totals": {
+            "runs": 10,
+            "hits": 12,
+            "errors": 0,
+            "walks": 2
+          },
+          "batterRows": 12,
+          "pitcherRows": 4,
+          "atBats": 28,
+          "hits": 12,
+          "runs": 10,
+          "rbi": 7,
+          "pitcherHits": 2,
+          "pitcherRuns": 1
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/55948/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-08-02T12:00:00+09:00",
+      "groupCode": "E",
+      "venue": "신월야구장",
+      "homeTeamName": "백석대 KAHLOS",
+      "awayTeamName": "건국대학교 불소야구부",
+      "homeScore": 2,
+      "awayScore": 9,
+      "sourceGameId": "up-30b8525005800e29798927a3",
+      "providerGameId": "56050",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "백석대 KAHLOS",
+          "totals": {
+            "runs": 2,
+            "hits": 1,
+            "errors": 3,
+            "walks": 4
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 16,
+          "hits": 1,
+          "runs": 2,
+          "rbi": 2,
+          "pitcherHits": 12,
+          "pitcherRuns": 9
+        },
+        {
+          "teamName": "건국대학교 불소야구부",
+          "totals": {
+            "runs": 9,
+            "hits": 12,
+            "errors": 1,
+            "walks": 3
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 30,
+          "hits": 12,
+          "runs": 9,
+          "rbi": 8,
+          "pitcherHits": 1,
+          "pitcherRuns": 2
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/56050/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-08-02T15:00:00+09:00",
+      "groupCode": "C",
+      "venue": "신월야구장",
+      "homeTeamName": "경희 LIONS",
+      "awayTeamName": "한국항공대 Astros",
+      "homeScore": 8,
+      "awayScore": 4,
+      "sourceGameId": "up-9ce14f549dd032bc9ee1a6b7",
+      "providerGameId": "56051",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "경희 LIONS",
+          "totals": {
+            "runs": 8,
+            "hits": 9,
+            "errors": 0,
+            "walks": 6
+          },
+          "batterRows": 9,
+          "pitcherRows": 2,
+          "atBats": 28,
+          "hits": 9,
+          "runs": 8,
+          "rbi": 6,
+          "pitcherHits": 4,
+          "pitcherRuns": 4
+        },
+        {
+          "teamName": "한국항공대 Astros",
+          "totals": {
+            "runs": 4,
+            "hits": 4,
+            "errors": 2,
+            "walks": 2
+          },
+          "batterRows": 10,
+          "pitcherRows": 1,
+          "atBats": 21,
+          "hits": 4,
+          "runs": 4,
+          "rbi": 3,
+          "pitcherHits": 9,
+          "pitcherRuns": 8
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/56051/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-08-02T15:00:00+09:00",
+      "groupCode": "C",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "한국체대 루나틱스",
+      "awayTeamName": "인하대학교 비룡",
+      "homeScore": 9,
+      "awayScore": 12,
+      "sourceGameId": "up-b81c68c8528dd9afb88a3286",
+      "providerGameId": "56054",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-51103973c14e7bc0a4c4343226e1299b",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-b81c68c8528dd9afb88a3286",
+          "teamName": "인하대학교 비룡",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 7,
+          "expected": 8,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "한국체대 루나틱스",
+          "totals": {
+            "runs": 9,
+            "hits": 8,
+            "errors": 3,
+            "walks": 9
+          },
+          "batterRows": 11,
+          "pitcherRows": 3,
+          "atBats": 19,
+          "hits": 8,
+          "runs": 9,
+          "rbi": 9,
+          "pitcherHits": 7,
+          "pitcherRuns": 12
+        },
+        {
+          "teamName": "인하대학교 비룡",
+          "totals": {
+            "runs": 12,
+            "hits": 7,
+            "errors": 3,
+            "walks": 10
+          },
+          "batterRows": 11,
+          "pitcherRows": 4,
+          "atBats": 19,
+          "hits": 7,
+          "runs": 12,
+          "rbi": 12,
+          "pitcherHits": 7,
+          "pitcherRuns": 9
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/56054/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-08-02T15:00:00+09:00",
+      "groupCode": "E",
+      "venue": "단국대(죽전) 운동장",
+      "homeTeamName": "단국대 PANDAS",
+      "awayTeamName": "한신대학교 갱스터",
+      "homeScore": 7,
+      "awayScore": 0,
+      "sourceGameId": "up-e5157dd60924939f75aa75a2",
+      "providerGameId": "56052",
+      "detailStatus": "NOT_PUBLISHED",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [],
+      "sourceUrl": "https://unique-play.com/game/56052/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-08-04T09:00:00+09:00",
+      "groupCode": "B",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "한성대학교 TURTLES",
+      "awayTeamName": "서울과학기술대학교 미르",
+      "homeScore": 9,
+      "awayScore": 5,
+      "sourceGameId": "up-69fc93b5f0c062be1fd37cb3",
+      "providerGameId": "56261",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "한성대학교 TURTLES",
+          "totals": {
+            "runs": 9,
+            "hits": 8,
+            "errors": 2,
+            "walks": 3
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 23,
+          "hits": 8,
+          "runs": 9,
+          "rbi": 8,
+          "pitcherHits": 5,
+          "pitcherRuns": 5
+        },
+        {
+          "teamName": "서울과학기술대학교 미르",
+          "totals": {
+            "runs": 5,
+            "hits": 5,
+            "errors": 1,
+            "walks": 8
+          },
+          "batterRows": 10,
+          "pitcherRows": 1,
+          "atBats": 20,
+          "hits": 5,
+          "runs": 5,
+          "rbi": 4,
+          "pitcherHits": 8,
+          "pitcherRuns": 9
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/56261/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-08-07T15:00:00+09:00",
+      "groupCode": "D",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "건국대 팬서스",
+      "awayTeamName": "경기대학교 KGB",
+      "homeScore": 12,
+      "awayScore": 16,
+      "sourceGameId": "up-eef8479a5b60573dd93dd828",
+      "providerGameId": "56262",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-9b68fe831c6f3c8c59c7c7bcd9f3fffa",
+          "code": "DETAIL_BATTER_TOTAL",
+          "message": "개별 타자 득점 합계와 팀 기록이 다릅니다.",
+          "sourceGameId": "up-eef8479a5b60573dd93dd828",
+          "teamName": "건국대 팬서스",
+          "field": "batters.runs",
+          "rowKey": null,
+          "observed": 6,
+          "expected": 12,
+          "playerName": null
+        },
+        {
+          "id": "dq-c021576f554f8da87bcb3014ac140bba",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-eef8479a5b60573dd93dd828",
+          "teamName": "경기대학교 KGB",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 12,
+          "expected": 14,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "건국대 팬서스",
+          "totals": {
+            "runs": 12,
+            "hits": 14,
+            "errors": 2,
+            "walks": 7
+          },
+          "batterRows": 10,
+          "pitcherRows": 1,
+          "atBats": 23,
+          "hits": 14,
+          "runs": 6,
+          "rbi": 9,
+          "pitcherHits": 8,
+          "pitcherRuns": 16
+        },
+        {
+          "teamName": "경기대학교 KGB",
+          "totals": {
+            "runs": 16,
+            "hits": 8,
+            "errors": 0,
+            "walks": 12
+          },
+          "batterRows": 12,
+          "pitcherRows": 2,
+          "atBats": 17,
+          "hits": 8,
+          "runs": 16,
+          "rbi": 13,
+          "pitcherHits": 12,
+          "pitcherRuns": 12
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/56262/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-08-08T15:00:00+09:00",
+      "groupCode": "E",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "백석대 KAHLOS",
+      "awayTeamName": "단국대 PANDAS",
+      "homeScore": 3,
+      "awayScore": 5,
+      "sourceGameId": "up-685375d8ea9d7580e89d266c",
+      "providerGameId": "56263",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "백석대 KAHLOS",
+          "totals": {
+            "runs": 3,
+            "hits": 7,
+            "errors": 3,
+            "walks": 2
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 22,
+          "hits": 7,
+          "runs": 3,
+          "rbi": 2,
+          "pitcherHits": 3,
+          "pitcherRuns": 5
+        },
+        {
+          "teamName": "단국대 PANDAS",
+          "totals": {
+            "runs": 5,
+            "hits": 3,
+            "errors": 2,
+            "walks": 7
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 18,
+          "hits": 3,
+          "runs": 5,
+          "rbi": 5,
+          "pitcherHits": 7,
+          "pitcherRuns": 3
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/56263/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-08-09T15:00:00+09:00",
+      "groupCode": "B",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "한성대학교 TURTLES",
+      "awayTeamName": "외대(글로벌) 유니온",
+      "homeScore": 4,
+      "awayScore": 5,
+      "sourceGameId": "up-7d08b5cdfb3a7a606a3f9f84",
+      "providerGameId": "56264",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "한성대학교 TURTLES",
+          "totals": {
+            "runs": 4,
+            "hits": 5,
+            "errors": 0,
+            "walks": 3
+          },
+          "batterRows": 13,
+          "pitcherRows": 2,
+          "atBats": 24,
+          "hits": 5,
+          "runs": 4,
+          "rbi": 2,
+          "pitcherHits": 4,
+          "pitcherRuns": 5
+        },
+        {
+          "teamName": "외대(글로벌) 유니온",
+          "totals": {
+            "runs": 5,
+            "hits": 4,
+            "errors": 2,
+            "walks": 3
+          },
+          "batterRows": 9,
+          "pitcherRows": 2,
+          "atBats": 19,
+          "hits": 4,
+          "runs": 5,
+          "rbi": 5,
+          "pitcherHits": 5,
+          "pitcherRuns": 4
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/56264/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-08-09T18:00:00+09:00",
+      "groupCode": "A",
+      "venue": "서울대공원야구장",
+      "homeTeamName": "동국대학교 L.A.E",
+      "awayTeamName": "서경대학교 JUKSITA",
+      "homeScore": 10,
+      "awayScore": 5,
+      "sourceGameId": "up-c5ba64e51392644fc6fd3de4",
+      "providerGameId": "56265",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "동국대학교 L.A.E",
+          "totals": {
+            "runs": 10,
+            "hits": 11,
+            "errors": 4,
+            "walks": 6
+          },
+          "batterRows": 11,
+          "pitcherRows": 1,
+          "atBats": 27,
+          "hits": 11,
+          "runs": 10,
+          "rbi": 6,
+          "pitcherHits": 5,
+          "pitcherRuns": 5
+        },
+        {
+          "teamName": "서경대학교 JUKSITA",
+          "totals": {
+            "runs": 5,
+            "hits": 5,
+            "errors": 3,
+            "walks": 7
+          },
+          "batterRows": 12,
+          "pitcherRows": 3,
+          "atBats": 22,
+          "hits": 5,
+          "runs": 5,
+          "rbi": 5,
+          "pitcherHits": 11,
+          "pitcherRuns": 10
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/56265/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-08-23T12:00:00+09:00",
+      "groupCode": "C",
+      "venue": "신월야구장",
+      "homeTeamName": "인하대학교 비룡",
+      "awayTeamName": "경희 LIONS",
+      "homeScore": 2,
+      "awayScore": 6,
+      "sourceGameId": "up-7f62a8edbcf8ecc548d9403d",
+      "providerGameId": "56553",
+      "detailStatus": "AVAILABLE",
+      "quality": "CORRECTION_PENDING",
+      "issues": [
+        {
+          "id": "dq-0d7bca460910560f7ca592d064c0c2d0",
+          "code": "DETAIL_PITCHER_HITS_TOTAL",
+          "message": "투수 피안타 합계와 상대 팀 기록이 다릅니다.",
+          "sourceGameId": "up-7f62a8edbcf8ecc548d9403d",
+          "teamName": "인하대학교 비룡",
+          "field": "pitchers.hitsAllowed",
+          "rowKey": null,
+          "observed": 7,
+          "expected": 8,
+          "playerName": null
+        }
+      ],
+      "teams": [
+        {
+          "teamName": "인하대학교 비룡",
+          "totals": {
+            "runs": 2,
+            "hits": 8,
+            "errors": 3,
+            "walks": 1
+          },
+          "batterRows": 9,
+          "pitcherRows": 3,
+          "atBats": 24,
+          "hits": 8,
+          "runs": 2,
+          "rbi": 1,
+          "pitcherHits": 7,
+          "pitcherRuns": 6
+        },
+        {
+          "teamName": "경희 LIONS",
+          "totals": {
+            "runs": 6,
+            "hits": 8,
+            "errors": 0,
+            "walks": 7
+          },
+          "batterRows": 11,
+          "pitcherRows": 1,
+          "atBats": 24,
+          "hits": 8,
+          "runs": 6,
+          "rbi": 4,
+          "pitcherHits": 8,
+          "pitcherRuns": 2
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/56553/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-08-23T15:00:00+09:00",
+      "groupCode": "G",
+      "venue": "신월야구장",
+      "homeTeamName": "광운대학교 페가수스",
+      "awayTeamName": "성균관대학교 킹고야구반",
+      "homeScore": 0,
+      "awayScore": 5,
+      "sourceGameId": "up-e1586b6dadc6814ad9cd289c",
+      "providerGameId": "56554",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "광운대학교 페가수스",
+          "totals": {
+            "runs": 0,
+            "hits": 4,
+            "errors": 4,
+            "walks": 6
+          },
+          "batterRows": 10,
+          "pitcherRows": 1,
+          "atBats": 19,
+          "hits": 4,
+          "runs": 0,
+          "rbi": 0,
+          "pitcherHits": 4,
+          "pitcherRuns": 5
+        },
+        {
+          "teamName": "성균관대학교 킹고야구반",
+          "totals": {
+            "runs": 5,
+            "hits": 4,
+            "errors": 0,
+            "walks": 2
+          },
+          "batterRows": 10,
+          "pitcherRows": 1,
+          "atBats": 22,
+          "hits": 4,
+          "runs": 5,
+          "rbi": 4,
+          "pitcherHits": 4,
+          "pitcherRuns": 0
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/56554/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-08-23T16:00:00+09:00",
+      "groupCode": "H",
+      "venue": "장흥야구장",
+      "homeTeamName": "단국대학교 HOUND",
+      "awayTeamName": "아주대학교 ABBA",
+      "homeScore": 9,
+      "awayScore": 10,
+      "sourceGameId": "up-15656847f2ed41fb6595ddad",
+      "providerGameId": "56555",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "단국대학교 HOUND",
+          "totals": {
+            "runs": 9,
+            "hits": 11,
+            "errors": 4,
+            "walks": 3
+          },
+          "batterRows": 10,
+          "pitcherRows": 1,
+          "atBats": 30,
+          "hits": 11,
+          "runs": 9,
+          "rbi": 6,
+          "pitcherHits": 10,
+          "pitcherRuns": 10
+        },
+        {
+          "teamName": "아주대학교 ABBA",
+          "totals": {
+            "runs": 10,
+            "hits": 10,
+            "errors": 4,
+            "walks": 0
+          },
+          "batterRows": 11,
+          "pitcherRows": 2,
+          "atBats": 27,
+          "hits": 10,
+          "runs": 10,
+          "rbi": 7,
+          "pitcherHits": 11,
+          "pitcherRuns": 9
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/56555/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-08-24T14:00:00+09:00",
+      "groupCode": "D",
+      "venue": "난지 야구장1",
+      "homeTeamName": "경기대학교 KGB",
+      "awayTeamName": "한국교통대학교 스윙스",
+      "homeScore": 5,
+      "awayScore": 4,
+      "sourceGameId": "up-128e7df2a7f16b518ad7ded0",
+      "providerGameId": "56557",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "경기대학교 KGB",
+          "totals": {
+            "runs": 5,
+            "hits": 7,
+            "errors": 0,
+            "walks": 8
+          },
+          "batterRows": 12,
+          "pitcherRows": 3,
+          "atBats": 26,
+          "hits": 7,
+          "runs": 5,
+          "rbi": 4,
+          "pitcherHits": 5,
+          "pitcherRuns": 4
+        },
+        {
+          "teamName": "한국교통대학교 스윙스",
+          "totals": {
+            "runs": 4,
+            "hits": 5,
+            "errors": 2,
+            "walks": 4
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 26,
+          "hits": 5,
+          "runs": 4,
+          "rbi": 3,
+          "pitcherHits": 7,
+          "pitcherRuns": 5
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/56557/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    },
+    {
+      "status": "COMPLETED",
+      "playedAt": "2026-08-24T15:00:00+09:00",
+      "groupCode": "A",
+      "venue": "신월야구장",
+      "homeTeamName": "경희대학교(서울) BRAVES",
+      "awayTeamName": "고려대학교 백구회",
+      "homeScore": 5,
+      "awayScore": 10,
+      "sourceGameId": "up-f1e054d7678bf5467580de7d",
+      "providerGameId": "56556",
+      "detailStatus": "AVAILABLE",
+      "quality": "CLEAN",
+      "issues": [],
+      "teams": [
+        {
+          "teamName": "경희대학교(서울) BRAVES",
+          "totals": {
+            "runs": 5,
+            "hits": 3,
+            "errors": 2,
+            "walks": 5
+          },
+          "batterRows": 9,
+          "pitcherRows": 3,
+          "atBats": 19,
+          "hits": 3,
+          "runs": 5,
+          "rbi": 5,
+          "pitcherHits": 5,
+          "pitcherRuns": 10
+        },
+        {
+          "teamName": "고려대학교 백구회",
+          "totals": {
+            "runs": 10,
+            "hits": 5,
+            "errors": 1,
+            "walks": 5
+          },
+          "batterRows": 10,
+          "pitcherRows": 2,
+          "atBats": 20,
+          "hits": 5,
+          "runs": 10,
+          "rbi": 9,
+          "pitcherHits": 3,
+          "pitcherRuns": 5
+        }
+      ],
+      "sourceUrl": "https://unique-play.com/game/56556/boxscore",
+      "homeRunChecks": [],
+      "rbiSourceVerified": false
+    }
+  ],
+  "inputSha256": "633105a0f51d8e6483d28a62c8568641a145a54cef48998e611c6354b9258368"
+}

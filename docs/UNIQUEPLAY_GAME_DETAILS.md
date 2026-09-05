@@ -60,6 +60,30 @@ candidate.gameDetails[]
 
 ## 공개 API
 
+### v25 상세 품질과 관리자 정정
+
+2026-09-05 v25는 기존 `AVAILABLE` 같은 상세 상태와 별도로 `quality`, `issues`, `resolutionSource`, `resolvedAt`을 제공한다. 공개 API에는 관리자 메모·행위자·원본/정정 감사 이력을 포함하지 않는다.
+
+- `CLEAN`: 현재 적용된 산술 검사에서 경고 없음. 실제 경기 전체에 대한 공식 정상 판정은 아니다.
+- `CORRECTION_PENDING`: 공개 가능하나 수정 확인이 필요한 상세 경고. 경기/선수 화면에 `오류 수정 중` 표시.
+- `RESOLVED`: 이전 문제 해결. `MANUAL` 또는 `SOURCE`로 수동 정정과 원천 수정의 출처 구분.
+- 구 리비전의 품질 필드 부재는 정상/해결로 추정하지 않는다.
+
+타자 득점·타점 합계, 안타/타수, 투수 피안타·실점·자책점 등 산술 경고는 관리자 확인 후 게시할 수 있다. 식별·구조·개인정보·누락·부모 경기 점수 오류는 계속 차단한다. 0과 null은 그대로 보존하며 타점=득점, 빈 이닝=0처럼 추정하지 않는다.
+
+| 관리자 API | 기능 |
+| --- | --- |
+| `GET /runs/{runId}/game-records` | 전체 상세 원본/유효 기록, 품질, 정정 이력과 검수 체크섬 |
+| `PATCH /runs/{runId}/game-records/{sourceGameId}/corrections` | 필드별 예상값/정정값, 사유, 검수 체크섬과 기준 리비전으로 정정 |
+| `PATCH /runs/{runId}/game-records/{sourceGameId}/corrections/{correctionId}` | `USE_SOURCE` 또는 `KEEP_AUBL` 충돌 결정 |
+| `POST /revisions/{revisionId}/correction-runs` | 게시본을 새 수정 후보로 복제. 재수집·재게시 없음 |
+
+접두사는 `/api/admin/sync/unique-play`다. 원본 후보는 수정하지 않으며 `GAME_CORRECTION` 항목이 필드별 변경과 감사 이력을 보존한다. 원천이 정정값을 따라잡으면 원천 해결 알림을 반환한다. 원천이 다르게 변경되거나 경기/선수 행이 사라지면 해결로 처리하지 않고 충돌을 남긴다. 행이 모호할 때 이름만으로 다른 선수에게 정정을 옮기지 않는다.
+
+상세가 있는 후보의 게시 요청은 기존 원본 `checksum` 외에 `reviewChecksum`과 경고 확인 `acknowledgeDetailWarnings`를 포함해야 한다. 기준 활성 리비전이 달라지거나 예상값/체크섬이 맞지 않으면 409로 중단한다. 새 후보/정정/알림 조회가 자동 수집 또는 공개 활성화를 실행하지 않는다.
+
+관리자 검수 다운로드는 공개 경기·선수·기록과 품질 필드만 포함한다. 이 데이터로 만든 [전체 검수 보고서](reports/AUBL_2026_경기기록_전수검수_보고서_2026-09-05.docx)는 수집 후보 117경기를 포함하며 원본 추가 대조 7경기와 그 외 산술 검사를 구분한다.
+
 | 경로 | 의미 |
 | --- | --- |
 | `GET /api/games/source/{sourceGameId}/details?seasonId=` | 활성 게시본의 경기 메타·양 팀 상세·최신성 |
