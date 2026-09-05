@@ -263,66 +263,170 @@ export function sanitizeGameDetail(raw) {
   return { schemaVersion: 1, sourceGameId: identifier(raw.sourceGameId), providerGameId, status: raw.status, teams };
 }
 
-export function validateGameDetails(candidate) {
-  const issues = [];
-  if (candidate.gameDetails === undefined) return issues; // Revisions from older workers remain valid.
-  const add = (code, path) => issues.push({ code, message: '경기 상세의 구조·원천·기록 일치 여부를 확인하세요.', path });
-  if (!Array.isArray(candidate.gameDetails) || candidate.gameDetails.length > 2000) { add('GAME_DETAILS_SCHEMA', '$.gameDetails'); return issues; }
+function isCompleteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function detailIdentity(detail, team, field, rowKey, observed, expected) {
+  return {
+    sourceGameId: detail.sourceGameId,
+    teamName: team.teamName,
+    field,
+    ...(rowKey ? { rowKey } : {}),
+    ...(isCompleteNumber(observed) ? { observed } : {}),
+    ...(isCompleteNumber(expected) ? { expected } : {}),
+  };
+}
+
+export function validateGameDetailIntegrity(candidate) {
+  const blockingErrors = [];
+  const warnings = [];
+  if (candidate.gameDetails === undefined) return { blockingErrors, warnings }; // Revisions from older workers remain valid.
+  const addBlocking = (code, path) => blockingErrors.push({ code, message: '경기 상세의 구조·원천·기록 일치 여부를 확인하세요.', path });
+  const addWarning = (code, message, path, details) => warnings.push({ code, message, path, details });
+  if (!Array.isArray(candidate.gameDetails) || candidate.gameDetails.length > 2000) {
+    addBlocking('GAME_DETAILS_SCHEMA', '$.gameDetails');
+    return { blockingErrors, warnings };
+  }
   const games = new Map((candidate.games || []).map((game) => [game.sourceGameId, game]));
   const seenGames = new Set();
   const seenProviderIds = new Set();
   for (const [index, detail] of candidate.gameDetails.entries()) {
     const path = `$.gameDetails[${index}]`;
     let normalized;
-    try { normalized = sanitizeGameDetail(detail); } catch (error) { add(error.code || 'GAME_DETAIL_SCHEMA', path); continue; }
+    try { normalized = sanitizeGameDetail(detail); } catch (error) { addBlocking(error.code || 'GAME_DETAIL_SCHEMA', path); continue; }
     const game = games.get(normalized.sourceGameId);
-    if (!game || game.status !== 'COMPLETED') add('GAME_DETAIL_PARENT', path);
-    if (seenGames.has(normalized.sourceGameId) || seenProviderIds.has(normalized.providerGameId)) add('GAME_DETAIL_DUPLICATE', path);
+    if (!game || game.status !== 'COMPLETED') addBlocking('GAME_DETAIL_PARENT', path);
+    if (seenGames.has(normalized.sourceGameId) || seenProviderIds.has(normalized.providerGameId)) addBlocking('GAME_DETAIL_DUPLICATE', path);
     seenGames.add(normalized.sourceGameId); seenProviderIds.add(normalized.providerGameId);
     if (normalized.status === 'NOT_PUBLISHED') {
-      if (normalized.teams.length !== 0) add('GAME_DETAIL_NOT_PUBLISHED', path);
+      if (normalized.teams.length !== 0) addBlocking('GAME_DETAIL_NOT_PUBLISHED', path);
       continue;
     }
-    if (normalized.teams.length !== 2 || new Set(normalized.teams.map((team) => team.teamName)).size !== 2) add('GAME_DETAIL_TEAMS', path);
+    if (normalized.teams.length !== 2 || new Set(normalized.teams.map((team) => team.teamName)).size !== 2) addBlocking('GAME_DETAIL_TEAMS', path);
     const rowKeys = new Set();
     for (const [teamIndex, team] of normalized.teams.entries()) {
       const teamPath = `${path}.teams[${teamIndex}]`;
       const names = [text(game?.homeTeamName, 160), text(game?.awayTeamName, 160)];
       const side = names.indexOf(team.teamName);
-      if (game && side === -1) add('GAME_DETAIL_TEAM_MAPPING', teamPath);
+      if (game && side === -1) addBlocking('GAME_DETAIL_TEAM_MAPPING', teamPath);
       const score = side === 0 ? game?.homeScore : side === 1 ? game?.awayScore : null;
-      if (score != null && team.totals.runs !== score) add('GAME_DETAIL_SCORE', teamPath);
+      if (score != null && team.totals.runs !== score) addBlocking('GAME_DETAIL_SCORE', teamPath);
       const innings = new Set();
       for (const inning of team.innings) {
-        if (!inning.inning || innings.has(inning.inning) || inning.inning !== innings.size + 1 || (inning.notPlayed && inning.runs !== null)) add('GAME_DETAIL_INNINGS', teamPath);
+        if (!inning.inning || innings.has(inning.inning) || inning.inning !== innings.size + 1 || (inning.notPlayed && inning.runs !== null)) addBlocking('GAME_DETAIL_INNINGS', teamPath);
         innings.add(inning.inning);
       }
-      if (!team.innings.length || team.innings.every((inning) => inning.runs === null) || !team.batters.length || !team.pitchers.length) add('GAME_DETAIL_EMPTY', teamPath);
-      if (team.innings.length && team.innings.every((inning) => inning.runs !== null || inning.notPlayed)
-          && team.totals.runs !== null && team.innings.reduce((sum, inning) => sum + (inning.runs ?? 0), 0) !== team.totals.runs) add('GAME_DETAIL_INNING_SUM', teamPath);
+      if (!team.batters.length || !team.pitchers.length) addBlocking('GAME_DETAIL_EMPTY', teamPath);
+      const hasInningRuns = team.innings.some((inning) => isCompleteNumber(inning.runs));
+      const allInningsKnown = team.innings.every((inning) => isCompleteNumber(inning.runs) || inning.notPlayed);
+      const inningRunSum = team.innings.reduce((sum, inning) => sum + (isCompleteNumber(inning.runs) ? inning.runs : 0), 0);
+      if (!team.innings.length || !hasInningRuns
+          || (allInningsKnown && isCompleteNumber(team.totals.runs) && inningRunSum !== team.totals.runs)) {
+        addWarning(
+          'DETAIL_LINE_SCORE',
+          '이닝별 득점과 팀 득점 합계가 다릅니다. 원천 라인스코어를 확인하세요.',
+          `${teamPath}.innings`,
+          detailIdentity(normalized, team, 'innings.runs', null, hasInningRuns ? inningRunSum : null, team.totals.runs),
+        );
+      }
       for (const row of [...team.batters, ...team.pitchers]) {
-        if (rowKeys.has(row.rowKey)) add('GAME_DETAIL_ROW_DUPLICATE', teamPath);
+        if (rowKeys.has(row.rowKey)) addBlocking('GAME_DETAIL_ROW_DUPLICATE', teamPath);
         rowKeys.add(row.rowKey);
       }
-      for (const batter of team.batters) {
-        if (batter.battingOrder === 0 || (batter.stats.atBats !== null && batter.stats.hits !== null && batter.stats.hits > batter.stats.atBats)) add('GAME_DETAIL_BATTER_RANGE', teamPath);
-        if (batter.plateAppearances.some((entry) => !entry.inning || !innings.has(entry.inning))) add('GAME_DETAIL_PLATE_APPEARANCE', teamPath);
+      for (const [batterIndex, batter] of team.batters.entries()) {
+        if (batter.battingOrder === 0) addBlocking('GAME_DETAIL_BATTER_RANGE', `${teamPath}.batters[${batterIndex}]`);
+        if (batter.stats.rbi === null && ([batter.stats.atBats, batter.stats.hits, batter.stats.runs].some(value => value > 0)
+            || batter.plateAppearances.some(plate => plate.result?.trim()))) {
+          addWarning('DETAIL_BATTER_RBI_MISSING', '출전 기록이 있으나 타점이 미기재입니다. 0으로 추정하지 않고 원천 기록을 확인하세요.',
+            `${teamPath}.batters[${batterIndex}].stats.rbi`, detailIdentity(normalized, team, 'batters.rbi', batter.rowKey, null, null));
+        }
+        if (isCompleteNumber(batter.stats.atBats) && isCompleteNumber(batter.stats.hits) && batter.stats.hits > batter.stats.atBats) {
+          addWarning(
+            'DETAIL_BATTER_HITS_AB',
+            '타자의 안타 수가 타수보다 큽니다. 원천 타자 기록을 확인하세요.',
+            `${teamPath}.batters[${batterIndex}].stats.hits`,
+            detailIdentity(normalized, team, 'batters.hits', batter.rowKey, batter.stats.hits, batter.stats.atBats),
+          );
+        }
+        if (batter.plateAppearances.some((entry) => !entry.inning || !innings.has(entry.inning))) addBlocking('GAME_DETAIL_PLATE_APPEARANCE', teamPath);
       }
       for (const key of ['runs', 'hits']) {
-        if (team.batters.length && team.totals[key] !== null && team.batters.every((row) => row.stats[key] !== null)
-            && team.batters.reduce((sum, row) => sum + row.stats[key], 0) !== team.totals[key]) add('GAME_DETAIL_BATTER_SUM', teamPath);
+        if (team.batters.length && isCompleteNumber(team.totals[key]) && team.batters.every((row) => isCompleteNumber(row.stats[key]))
+            && team.batters.reduce((sum, row) => sum + row.stats[key], 0) !== team.totals[key]) {
+          const batterTotal = team.batters.reduce((sum, row) => sum + row.stats[key], 0);
+          addWarning(
+            'DETAIL_BATTER_TOTAL',
+            `개별 타자의 ${key === 'runs' ? '득점' : '안타'} 합계와 팀 ${key === 'runs' ? 'R' : 'H'}가 다릅니다. 원천 기록을 확인하세요.`,
+            `${teamPath}.batters`,
+            detailIdentity(normalized, team, `batters.${key}`, null, batterTotal, team.totals[key]),
+          );
+        }
       }
-      for (const pitcher of team.pitchers) {
+      if (team.batters.length && isCompleteNumber(team.totals.runs) && team.batters.every((row) => isCompleteNumber(row.stats.rbi))) {
+        const rbiTotal = team.batters.reduce((sum, row) => sum + row.stats.rbi, 0);
+        if (rbiTotal > team.totals.runs) {
+          addWarning(
+            'DETAIL_TEAM_RBI',
+            '타자 타점 합계가 팀 득점보다 큽니다. 원천 타점 열을 확인하세요.',
+            `${teamPath}.batters`,
+            detailIdentity(normalized, team, 'batters.rbi', null, rbiTotal, team.totals.runs),
+          );
+        } else if (rbiTotal === 0 && team.totals.runs > 0) {
+          addWarning(
+            'DETAIL_TEAM_RBI_ZERO',
+            '팀 득점이 있으나 타점 합계가 0입니다. 실책·주루 득점일 수 있으므로 원천 타점 열의 누락 여부를 확인하세요.',
+            `${teamPath}.batters`,
+            detailIdentity(normalized, team, 'batters.rbi', null, rbiTotal, team.totals.runs),
+          );
+        }
+      }
+      for (const [pitcherIndex, pitcher] of team.pitchers.entries()) {
         try {
-          if (parseInningsPitched(pitcher.stats.inningsPitched).outs !== pitcher.stats.outs) add('GAME_DETAIL_OUTS', teamPath);
-        } catch { add('GAME_DETAIL_OUTS', teamPath); }
-        if (pitcher.stats.earnedRuns !== null && pitcher.stats.runsAllowed !== null && pitcher.stats.earnedRuns > pitcher.stats.runsAllowed) add('GAME_DETAIL_PITCHER_RANGE', teamPath);
+          if (parseInningsPitched(pitcher.stats.inningsPitched).outs !== pitcher.stats.outs) addBlocking('GAME_DETAIL_OUTS', teamPath);
+        } catch { addBlocking('GAME_DETAIL_OUTS', teamPath); }
+        if (isCompleteNumber(pitcher.stats.earnedRuns) && isCompleteNumber(pitcher.stats.runsAllowed)
+            && pitcher.stats.earnedRuns > pitcher.stats.runsAllowed) {
+          addWarning(
+            'DETAIL_PITCHER_EARNED_RUNS',
+            '투수 자책점이 실점보다 큽니다. 원천 투수 기록을 확인하세요.',
+            `${teamPath}.pitchers[${pitcherIndex}].stats.earnedRuns`,
+            detailIdentity(normalized, team, 'pitchers.earnedRuns', pitcher.rowKey, pitcher.stats.earnedRuns, pitcher.stats.runsAllowed),
+          );
+        }
+      }
+      const opponent = normalized.teams.length === 2 ? normalized.teams[teamIndex === 0 ? 1 : 0] : null;
+      for (const [key, warningCode, label] of [
+        ['runsAllowed', 'DETAIL_PITCHER_RUNS_TOTAL', '실점'],
+        ['hitsAllowed', 'DETAIL_PITCHER_HITS_TOTAL', '피안타'],
+      ]) {
+        const opponentKey = key === 'runsAllowed' ? 'runs' : 'hits';
+        if (opponent && team.pitchers.length && isCompleteNumber(opponent.totals[opponentKey])
+            && team.pitchers.every((row) => isCompleteNumber(row.stats[key]))) {
+          const pitcherTotal = team.pitchers.reduce((sum, row) => sum + row.stats[key], 0);
+          if (pitcherTotal !== opponent.totals[opponentKey]) {
+            addWarning(
+              warningCode,
+              `투수 ${label} 합계와 상대 팀 ${opponentKey === 'runs' ? 'R' : 'H'}가 다릅니다. 원천 투수 기록을 확인하세요.`,
+              `${teamPath}.pitchers`,
+              detailIdentity(normalized, team, `pitchers.${key}`, null, pitcherTotal, opponent.totals[opponentKey]),
+            );
+          }
+        }
       }
     }
   }
   // A new collector must account for every completed game, never silently omit a failed detail.
   for (const game of games.values()) {
-    if (game.status === 'COMPLETED' && !seenGames.has(game.sourceGameId)) add('GAME_DETAIL_MISSING', '$.gameDetails');
+    if (game.status === 'COMPLETED' && !seenGames.has(game.sourceGameId)) addBlocking('GAME_DETAIL_MISSING', '$.gameDetails');
   }
-  return issues;
+  return { blockingErrors, warnings };
+}
+
+// Preserve the established array API for parser/unit callers. Candidate
+// publication uses validateGameDetailIntegrity so advisory discrepancies do
+// not become blocking errors.
+export function validateGameDetails(candidate) {
+  const { blockingErrors, warnings } = validateGameDetailIntegrity(candidate);
+  return [...blockingErrors, ...warnings];
 }

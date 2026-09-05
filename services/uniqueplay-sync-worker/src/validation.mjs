@@ -1,5 +1,5 @@
 import { findPrivatePaths, normalizeText } from './normalization.mjs';
-import { validateGameDetails } from './game-details.mjs';
+import { validateGameDetailIntegrity } from './game-details.mjs';
 
 export const EXPECTED_GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 
@@ -134,7 +134,9 @@ export function validateCandidate(candidate) {
     }
   }
 
-  blockingErrors.push(...validateGameDetails(candidate));
+  const gameDetailValidation = validateGameDetailIntegrity(candidate);
+  blockingErrors.push(...gameDetailValidation.blockingErrors);
+  warnings.push(...gameDetailValidation.warnings);
 
   return {
     valid: blockingErrors.length === 0,

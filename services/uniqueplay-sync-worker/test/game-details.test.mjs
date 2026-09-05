@@ -1,8 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { checksum, sanitizeCandidate } from '../src/normalization.mjs';
-import { contextualizeDetailError, detailError, parseInningsPitched, parseInningRuns, parseLineScore, parseTeamTables, providerGameIdFromUrl, sanitizeGameDetail, validateGameDetails } from '../src/game-details.mjs';
+import { contextualizeDetailError, detailError, parseInningsPitched, parseInningRuns, parseLineScore, parseTeamTables, providerGameIdFromUrl, sanitizeGameDetail, validateGameDetailIntegrity, validateGameDetails } from '../src/game-details.mjs';
 import { boxscoreSnapshots, candidateFixture, detailFixture } from './fixtures/game-detail-fixture.mjs';
+
+test('participating batter with missing RBI is a review warning and remains null', () => {
+  const candidate = candidateFixture();
+  const batter = candidate.gameDetails[0].teams[0].batters[0];
+  batter.stats.rbi = null;
+  batter.stats.atBats = 1;
+  const review = validateGameDetailIntegrity(candidate);
+  const issue = review.warnings.find(issue => issue.code === 'DETAIL_BATTER_RBI_MISSING');
+  assert.ok(issue);
+  assert.equal(batter.stats.rbi, null);
+  assert.equal(review.blockingErrors.length, 0);
+});
 
 test('detail diagnostics allow only fixed codes/stages and bounded public IDs, never raw private context', () => {
   const privateText = 'private@example.invalid <html> https://auth.invalid/?password=secret';
@@ -162,20 +174,77 @@ test('detail coverage, duplicate provider IDs, unknown parents and team mapping 
   }
 });
 
-test('score, inning sum, player sum, outs and numeric ranges are checked without using incorrect aggregate rows', () => {
+test('hard and advisory integrity checks remain visible through the established array API', () => {
   const cases = [
     ['GAME_DETAIL_SCORE', (detail) => { detail.teams[0].totals.runs = 9; }],
-    ['GAME_DETAIL_INNING_SUM', (detail) => { detail.teams[0].innings[0].runs = 2; }],
-    ['GAME_DETAIL_BATTER_SUM', (detail) => { detail.teams[0].batters[0].stats.runs = 1; }],
+    ['DETAIL_LINE_SCORE', (detail) => { detail.teams[0].innings[0].runs = 2; }],
+    ['DETAIL_BATTER_TOTAL', (detail) => { detail.teams[0].batters[0].stats.runs = 1; }],
     ['GAME_DETAIL_OUTS', (detail) => { detail.teams[0].pitchers[0].stats.outs = 6; }],
-    ['GAME_DETAIL_BATTER_RANGE', (detail) => { detail.teams[0].batters[0].stats.hits = 3; }],
-    ['GAME_DETAIL_PITCHER_RANGE', (detail) => { detail.teams[0].pitchers[0].stats.earnedRuns = 2; }],
+    ['DETAIL_BATTER_HITS_AB', (detail) => { detail.teams[0].batters[0].stats.atBats = 1; }],
+    ['DETAIL_PITCHER_EARNED_RUNS', (detail) => { detail.teams[0].pitchers[0].stats.earnedRuns = 2; }],
     ['GAME_DETAIL_INNINGS', (detail) => { detail.teams[0].innings[3].runs = 0; }],
   ];
   for (const [code, mutate] of cases) {
     const candidate = candidateFixture(); mutate(candidate.gameDetails[0]);
     assert.ok(validateGameDetails(candidate).some((issue) => issue.code === code), code);
   }
+});
+
+test('classifies only source arithmetic discrepancies as warnings', () => {
+  const cases = [
+    ['DETAIL_LINE_SCORE', (detail) => { detail.teams[0].innings[0].runs = 2; }],
+    ['DETAIL_BATTER_TOTAL', (detail) => { detail.teams[0].batters[0].stats.runs = 1; }],
+    ['DETAIL_BATTER_HITS_AB', (detail) => { detail.teams[0].batters[0].stats.atBats = 1; }],
+    ['DETAIL_TEAM_RBI', (detail) => { detail.teams[0].batters[0].stats.rbi = 4; }],
+    ['DETAIL_TEAM_RBI_ZERO', (detail) => { detail.teams[0].batters.forEach((row) => { row.stats.rbi = 0; }); }],
+    ['DETAIL_PITCHER_EARNED_RUNS', (detail) => { detail.teams[0].pitchers[0].stats.earnedRuns = 2; }],
+    ['DETAIL_PITCHER_RUNS_TOTAL', (detail) => { detail.teams[0].pitchers[0].stats.runsAllowed = 2; }],
+    ['DETAIL_PITCHER_HITS_TOTAL', (detail) => { detail.teams[0].pitchers[0].stats.hitsAllowed = 2; }],
+  ];
+
+  for (const [code, mutate] of cases) {
+    const candidate = candidateFixture();
+    mutate(candidate.gameDetails[0]);
+    const result = validateGameDetailIntegrity(candidate);
+    assert.ok(result.warnings.some((entry) => entry.code === code), code);
+    assert.equal(result.blockingErrors.some((entry) => entry.code === code), false, code);
+  }
+});
+
+test('does not infer integrity totals when a required source number is null', () => {
+  const candidate = candidateFixture();
+  const team = candidate.gameDetails[0].teams[0];
+  team.batters[0].stats.atBats = null;
+  team.batters[0].stats.rbi = null;
+  team.pitchers[0].stats.earnedRuns = null;
+  team.pitchers[0].stats.runsAllowed = null;
+  team.pitchers[0].stats.hitsAllowed = null;
+  const result = validateGameDetailIntegrity(candidate);
+  const guardedCodes = new Set([
+    'DETAIL_BATTER_HITS_AB',
+    'DETAIL_TEAM_RBI',
+    'DETAIL_TEAM_RBI_ZERO',
+    'DETAIL_PITCHER_EARNED_RUNS',
+    'DETAIL_PITCHER_RUNS_TOTAL',
+    'DETAIL_PITCHER_HITS_TOTAL',
+  ]);
+
+  assert.equal(result.warnings.some((entry) => guardedCodes.has(entry.code)), false);
+});
+
+test('line-score absence is advisory while malformed inning identity remains blocking', () => {
+  const candidate = candidateFixture();
+  candidate.gameDetails[0].teams[0].innings = [];
+  let result = validateGameDetailIntegrity(candidate);
+  assert.ok(result.warnings.some((entry) => entry.code === 'DETAIL_LINE_SCORE'));
+  assert.equal(result.blockingErrors.some((entry) => entry.code === 'GAME_DETAIL_EMPTY'), false);
+
+  candidate.gameDetails[0].teams[0].innings = [
+    { inning: 1, runs: 3, notPlayed: false },
+    { inning: 1, runs: null, notPlayed: true },
+  ];
+  result = validateGameDetailIntegrity(candidate);
+  assert.ok(result.blockingErrors.some((entry) => entry.code === 'GAME_DETAIL_INNINGS'));
 });
 
 test('NOT_PUBLISHED is a distinct explicit state, never an AVAILABLE empty table', () => {

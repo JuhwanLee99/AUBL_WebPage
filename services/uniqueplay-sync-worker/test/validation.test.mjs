@@ -122,3 +122,23 @@ test('candidate validation includes game-detail coverage, privacy and source-sco
   candidate.gameDetails = [];
   assert.ok(validateCandidate(candidate).blockingErrors.some((entry) => entry.code === 'GAME_DETAIL_MISSING'));
 });
+
+test('keeps source boxscore arithmetic discrepancies advisory at candidate level', () => {
+  const candidate = completeCandidate();
+  for (const group of Object.values(candidate.groups)) {
+    group.standings = group.standings.map((row) => ({ ...row, games: 0, wins: 0, losses: 0, draws: 0 }));
+  }
+  Object.assign(candidate.groups.A.standings[0], { games: 1, wins: 1 });
+  Object.assign(candidate.groups.A.standings[1], { games: 1, losses: 1 });
+  const detail = detailFixture();
+  detail.teams[0].teamName = 'A-1';
+  detail.teams[1].teamName = 'A-2';
+  detail.teams[0].batters[0].stats.runs = 1;
+  candidate.games = [{ sourceGameId: detail.sourceGameId, groupCode: 'A', homeTeamName: 'A-1', awayTeamName: 'A-2', homeScore: 3, awayScore: 1, status: 'COMPLETED' }];
+  candidate.gameDetails = [detail];
+
+  const result = validateCandidate(candidate);
+  assert.equal(result.valid, true);
+  assert.ok(result.warnings.some((entry) => entry.code === 'DETAIL_BATTER_TOTAL'));
+  assert.equal(result.blockingErrors.some((entry) => entry.code === 'DETAIL_BATTER_TOTAL'), false);
+});

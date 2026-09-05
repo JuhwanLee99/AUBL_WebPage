@@ -1,0 +1,1142 @@
+diff --git a/src/main/java/com/aubl/webpage/api/UniquePlaySyncController.java b/src/main/java/com/aubl/webpage/api/UniquePlaySyncController.java
+--- a/src/main/java/com/aubl/webpage/api/UniquePlaySyncController.java
++++ b/src/main/java/com/aubl/webpage/api/UniquePlaySyncController.java
+@@ -91,6 +91,27 @@
+         return service.session();
+     }
+ 
++    @GetMapping("/runs/{runId}/game-records")
++    public tools.jackson.databind.JsonNode gameRecords(@PathVariable String runId) { return service.gameRecords(runId); }
++
++    @PatchMapping("/runs/{runId}/game-records/{sourceGameId}/corrections")
++    public tools.jackson.databind.JsonNode correct(@PathVariable String runId, @PathVariable String sourceGameId,
++        @RequestBody com.aubl.webpage.api.dto.UniquePlaySyncDtos.DetailCorrectionRequest request, Authentication authentication) {
++        return service.correctGameRecord(runId, sourceGameId, request, actor(authentication));
++    }
++
++    @PatchMapping("/runs/{runId}/game-records/{sourceGameId}/corrections/{correctionId}")
++    public tools.jackson.databind.JsonNode resolveCorrection(@PathVariable String runId, @PathVariable String sourceGameId, @PathVariable String correctionId,
++        @RequestBody com.aubl.webpage.api.dto.UniquePlaySyncDtos.DetailCorrectionResolution request, Authentication authentication) {
++        return service.resolveGameCorrection(runId, sourceGameId, correctionId, request, actor(authentication));
++    }
++
++    @PostMapping("/revisions/{revisionId}/correction-runs")
++    public RunResponse correctionDraft(@PathVariable String revisionId,
++        @RequestBody com.aubl.webpage.api.dto.UniquePlaySyncDtos.CorrectionDraftRequest request, Authentication authentication) {
++        return service.createCorrectionDraft(revisionId, request, actor(authentication));
++    }
++
+     private String actor(Authentication authentication) {
+         return authentication == null ? "system" : authentication.getName();
+     }
+diff --git a/src/main/java/com/aubl/webpage/api/dto/OfficialGameDetailDtos.java b/src/main/java/com/aubl/webpage/api/dto/OfficialGameDetailDtos.java
+--- a/src/main/java/com/aubl/webpage/api/dto/OfficialGameDetailDtos.java
++++ b/src/main/java/com/aubl/webpage/api/dto/OfficialGameDetailDtos.java
+@@ -12,11 +12,16 @@
+ 
+     public record GameDetailResponse(String sourceGameId, Long backendGameId, Long seasonId, String provider,
+                                      String syncRevision, LocalDateTime capturedAt, LocalDateTime publishedAt,
+-                                     String status, GameSummary game, JsonNode detail) {}
++                                     String status, GameSummary game, JsonNode detail, String quality,
++                                     List<DetailIssue> issues, String resolutionSource, String resolvedAt) {}
+ 
++    public record DetailIssue(String id, String code, String message, String sourceGameId, String teamName,
++                              String field, String rowKey, Integer observed, Integer expected) {}
++
+     public record PlayerGameRow(String sourceGameId, Long backendGameId, String playedAt, String groupCode,
+                                 String venue, String homeTeamName, String awayTeamName, Integer homeScore,
+-                                Integer awayScore, String teamName, List<JsonNode> batters, List<JsonNode> pitchers) {}
++                                Integer awayScore, String teamName, List<JsonNode> batters, List<JsonNode> pitchers,
++                                String quality, List<DetailIssue> issues, String resolutionSource, String resolvedAt) {}
+ 
+     public record PlayerOfficialGameLogsResponse(Long playerId, Long seasonId, String provider, String syncRevision,
+                                                 LocalDateTime capturedAt, LocalDateTime publishedAt, String status,
+diff --git a/src/main/java/com/aubl/webpage/api/dto/UniquePlaySyncDtos.java b/src/main/java/com/aubl/webpage/api/dto/UniquePlaySyncDtos.java
+--- a/src/main/java/com/aubl/webpage/api/dto/UniquePlaySyncDtos.java
++++ b/src/main/java/com/aubl/webpage/api/dto/UniquePlaySyncDtos.java
+@@ -8,7 +8,14 @@
+     private UniquePlaySyncDtos() {}
+ 
+     public record StartRequest(Integer seasonYear) {}
+-    public record PublishRequest(String checksum, String expectedPublishedRevision) {}
++    public record PublishRequest(String checksum, String expectedPublishedRevision, Boolean acknowledgeDetailWarnings, String reviewChecksum) {
++        public PublishRequest(String checksum, String expectedPublishedRevision) { this(checksum, expectedPublishedRevision, false, null); }
++    }
++    public record CorrectionDraftRequest(String expectedChecksum, String expectedRevision, String note) {}
++    public record DetailChange(String teamName, String section, String rowKey, Integer inning, String field,
++                               tools.jackson.databind.JsonNode expectedValue, tools.jackson.databind.JsonNode value) {}
++    public record DetailCorrectionRequest(String expectedChecksum, String expectedRevision, String note, List<DetailChange> changes) {}
++    public record DetailCorrectionResolution(String expectedChecksum, String expectedRevision, String note, String resolution) {}
+     public record ActivateRequest(String expectedPublishedRevision) {}
+     public record ResolutionRequest(String resolution, Long localEntityId, String note) {}
+     public record ProgressRequest(String stage, String groupCode, Integer count) {}
+diff --git a/src/main/java/com/aubl/webpage/domain/repository/UniquePlaySyncRunRepository.java b/src/main/java/com/aubl/webpage/domain/repository/UniquePlaySyncRunRepository.java
+--- a/src/main/java/com/aubl/webpage/domain/repository/UniquePlaySyncRunRepository.java
++++ b/src/main/java/com/aubl/webpage/domain/repository/UniquePlaySyncRunRepository.java
+@@ -6,4 +6,7 @@
+ 
+ public interface UniquePlaySyncRunRepository extends JpaRepository<UniquePlaySyncRun, String> {
+     List<UniquePlaySyncRun> findTop20ByOrderByCreatedAtDesc();
++    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
++    @org.springframework.data.jpa.repository.Query("select r from UniquePlaySyncRun r where r.id = :id")
++    java.util.Optional<UniquePlaySyncRun> findForUpdate(@org.springframework.data.repository.query.Param("id") String id);
+ }
+diff --git a/src/main/java/com/aubl/webpage/service/OfficialGameDetailService.java b/src/main/java/com/aubl/webpage/service/OfficialGameDetailService.java
+--- a/src/main/java/com/aubl/webpage/service/OfficialGameDetailService.java
++++ b/src/main/java/com/aubl/webpage/service/OfficialGameDetailService.java
+@@ -67,9 +67,13 @@
+         if (summary == null) throw missing("Official game is not in the active snapshot");
+         JsonNode detail = UniquePlayGameDetailSupport.index(snapshot.path("gameDetails")).get(sourceGameId);
+         boolean reviewRequired = detail != null && "AVAILABLE".equals(detail.path("status").asText()) && !UniquePlayGameDetailSupport.matchesPublishedResult(game, summary);
++        JsonNode review = UniquePlayDetailCorrections.reviewGame(snapshot, sourceGameId);
++        var issues = reviewRequired ? List.<com.aubl.webpage.api.dto.OfficialGameDetailDtos.DetailIssue>of() : UniquePlayDetailQuality.issues(detail);
+         return new GameDetailResponse(sourceGameId, game.getId(), game.getSeason().getId(), PROVIDER,
+             revision.getId(), revision.getCapturedAt(), publishedAt(revision),
+-            reviewRequired ? "REVIEW_REQUIRED" : detail == null ? "NOT_COLLECTED" : detail.path("status").asText(), publicSummary(game, summary), reviewRequired ? null : detail);
++            reviewRequired ? "REVIEW_REQUIRED" : detail == null ? "NOT_COLLECTED" : detail.path("status").asText(), publicSummary(game, summary), reviewRequired ? null : detail,
++            reviewRequired ? "CORRECTION_PENDING" : !issues.isEmpty() ? "CORRECTION_PENDING" : review.path("quality").asText("CLEAN"), issues,
++            reviewRequired ? null : review.path("resolutionSource").asText(null), reviewRequired ? null : review.path("resolvedAt").asText(null));
+     }
+ 
+     public PlayerOfficialGameLogsResponse playerGameLogs(Long playerId, Long seasonId) {
+@@ -117,9 +121,12 @@
+                     return response(playerId, season, revision, "IDENTITY_UNRESOLVED", List.of());
+                 }
+                 GameSummary summary = publicSummary(publishedGames.get(sourceId), game);
++                JsonNode review = UniquePlayDetailCorrections.reviewGame(snapshot, sourceId);
++                var issues = UniquePlayDetailQuality.issues(detail);
+                 result.add(new PlayerGameRow(sourceId, backendIds.get(sourceId), summary.playedAt(), summary.groupCode(),
+                     summary.venue(), summary.homeTeamName(), summary.awayTeamName(), summary.homeScore(), summary.awayScore(),
+-                    team.path("teamName").asText(), batting, pitching));
++                    team.path("teamName").asText(), batting, pitching, !issues.isEmpty() ? "CORRECTION_PENDING" : review.path("quality").asText("CLEAN"), issues,
++                    review.path("resolutionSource").asText(null), review.path("resolvedAt").asText(null)));
+             }
+         }
+         result.sort(Comparator.comparing(PlayerGameRow::playedAt).reversed().thenComparing(PlayerGameRow::sourceGameId));
+diff --git a/src/main/java/com/aubl/webpage/service/UniquePlayDetailCorrections.java b/src/main/java/com/aubl/webpage/service/UniquePlayDetailCorrections.java
+--- /dev/null
++++ b/src/main/java/com/aubl/webpage/service/UniquePlayDetailCorrections.java
+@@ -0,0 +1,211 @@
++package com.aubl.webpage.service;
++
++import com.aubl.webpage.api.dto.UniquePlaySyncDtos.DetailChange;
++import com.aubl.webpage.domain.entity.UniquePlaySyncItem;
++import java.time.OffsetDateTime;
++import java.util.ArrayList;
++import java.util.Comparator;
++import java.util.HashSet;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Map;
++import java.util.Objects;
++import java.util.Set;
++import java.util.UUID;
++import org.springframework.http.HttpStatus;
++import org.springframework.web.server.ResponseStatusException;
++import tools.jackson.databind.JsonNode;
++import tools.jackson.databind.ObjectMapper;
++import tools.jackson.databind.node.ArrayNode;
++import tools.jackson.databind.node.ObjectNode;
++
++/** Server-owned audit metadata. Never accepted from a worker or exposed by public detail endpoints. */
++final class UniquePlayDetailCorrections {
++    static final String META = "detailReview";
++    static final String ENTITY = "GAME_CORRECTION";
++    private static final Set<String> BATTER_FIELDS = Set.of("atBats", "hits", "rbi", "stolenBases", "runs", "battingAverage", "seasonBattingAverage");
++    private static final Set<String> PITCHER_FIELDS = Set.of("outs", "inningsPitched", "hitsAllowed", "runsAllowed", "earnedRuns", "walksAndHitByPitch", "strikeouts", "era");
++    private UniquePlayDetailCorrections() {}
++
++    static JsonNode effective(JsonNode candidate, JsonNode base, List<UniquePlaySyncItem> items, ObjectMapper mapper) {
++        if (!candidate.has("gameDetails")) return candidate;
++        JsonNode chosen = UniquePlayGameDetailSupport.resolvedCandidate(candidate, items, mapper);
++        ObjectNode result = ((ObjectNode) chosen).deepCopy();
++        result.remove(META);
++        ArrayNode metadata = result.putObject(META).putArray("games");
++        Set<String> present = new HashSet<>();
++        for (JsonNode source : chosen.path("gameDetails")) {
++            String sourceId = source.path("sourceGameId").asText();
++            present.add(sourceId);
++            ObjectNode detail = (ObjectNode) UniquePlayGameDetailSupport.index(result.path("gameDetails")).get(sourceId);
++            JsonNode previous = reviewGame(base, sourceId);
++            boolean retainedDetail = items.stream().anyMatch(item -> "GAME_RECORD".equals(item.getEntityType())
++                && sourceId.equals(item.getSourceKey()) && "KEEP_AUBL".equals(item.getResolution()));
++            if (retainedDetail && previous.path("originalDetail").isObject()) {
++                // Keeping a previously corrected official detail is not evidence that UniquePlay fixed its raw value.
++                source = previous.path("originalDetail");
++                detail.removeAll(); detail.setAll((ObjectNode) source.deepCopy());
++            }
++            LinkedHashMap<String, JsonNode> patches = new LinkedHashMap<>();
++            for (JsonNode patch : previous.path("corrections")) patches.put(targetKey(patch), patch);
++            items.stream().filter(item -> ENTITY.equals(item.getEntityType()) && item.getAfterJson() != null)
++                .sorted(Comparator.comparing(UniquePlaySyncItem::getId, Comparator.nullsLast(Comparator.naturalOrder())))
++                .map(item -> mapper.readTree(item.getAfterJson())).filter(patch -> sourceId.equals(patch.path("sourceGameId").asText()))
++                .forEach(patch -> patches.put(targetKey(patch), patch));
++            ObjectNode review = metadata.addObject();
++            review.put("sourceGameId", sourceId);
++            review.set("originalDetail", source.deepCopy());
++            ArrayNode corrections = review.putArray("corrections"), notifications = review.putArray("notifications");
++            boolean manual = false, newlyResolved = false;
++            boolean available = "AVAILABLE".equals(detail.path("status").asText());
++            for (JsonNode stored : patches.values()) {
++                ObjectNode patch = ((ObjectNode) stored).deepCopy();
++                String oldStatus = stored.path("status").asText();
++                if ("RETIRED".equals(oldStatus)) { corrections.add(patch); continue; }
++                JsonNode container = locate(source, patch, false);
++                JsonNode actual = container == null ? null : container.get(patch.path("field").asText());
++                if ("SOURCE_RESOLVED".equals(oldStatus)) {
++                    // The override has retired. Future source edits are no longer constrained by its old expected value.
++                    if (actual == null || !same(actual, patch.path("value"))) patch.put("status", "RETIRED");
++                } else if (actual != null && same(actual, patch.path("value"))) {
++                    patch.put("status", "SOURCE_RESOLVED");
++                    if (!"SOURCE_RESOLVED".equals(oldStatus)) {
++                        notify(notifications, "SOURCE_RESOLVED", "원천 기록이 관리자 수정값과 같아져 수동 보정을 해제했습니다.", sourceId, patch.path("id").asText());
++                        newlyResolved = true;
++                    }
++                } else if (!"SOURCE_RESOLVED".equals(oldStatus) && actual != null && same(actual, patch.path("expectedValue"))) {
++                    ((ObjectNode) locate(detail, patch, true)).set(patch.path("field").asText(), patch.path("value"));
++                    patch.put("status", "APPLIED"); manual = true;
++                } else {
++                    patch.put("status", "CONFLICT");
++                    notify(notifications, "CORRECTION_CONFLICT", "원천 값 또는 선수 행 식별자가 바뀌었습니다. 수동 보정 유지 여부를 다시 확인하세요.", sourceId, patch.path("id").asText());
++                }
++                corrections.add(patch);
++            }
++            var issues = UniquePlayDetailQuality.issues(detail);
++            review.set("issues", mapper.valueToTree(issues));
++            Set<String> current = new HashSet<>(); issues.forEach(issue -> current.add(issue.id()));
++            Map<String, JsonNode> priorIssues = new LinkedHashMap<>();
++            for (JsonNode oldIssue : previous.path("issues")) priorIssues.put(oldIssue.path("id").asText(), oldIssue);
++            if (manual) for (var oldIssue : UniquePlayDetailQuality.issues(source)) priorIssues.putIfAbsent(oldIssue.id(), mapper.valueToTree(oldIssue));
++            for (JsonNode oldIssue : priorIssues.values()) if (available && !current.contains(oldIssue.path("id").asText())) {
++                notify(notifications, manual ? "MANUAL_RESOLVED" : "SOURCE_RESOLVED", manual ? "관리자 보정으로 기존 검수 경고가 해결되었습니다." : "이번 원천 수집에서 기존 검수 경고가 해결되었습니다.", sourceId, oldIssue.path("id").asText());
++                newlyResolved = true;
++            }
++            boolean conflict = java.util.stream.StreamSupport.stream(corrections.spliterator(), false).anyMatch(p -> "CONFLICT".equals(p.path("status").asText()));
++            boolean history = !previous.isMissingNode() && (!"CLEAN".equals(previous.path("quality").asText("CLEAN")) || !previous.path("corrections").isEmpty());
++            boolean originalWarning = !UniquePlayDetailQuality.issues(source).isEmpty();
++            String quality = !issues.isEmpty() || conflict || (!available && history) ? "CORRECTION_PENDING" : (history || !corrections.isEmpty() || originalWarning ? "RESOLVED" : "CLEAN");
++            review.put("quality", quality);
++            if ("RESOLVED".equals(quality)) {
++                review.put("resolutionSource", manual ? "MANUAL" : previous.path("quality").asText().equals("RESOLVED") && !newlyResolved ? previous.path("resolutionSource").asText("SOURCE") : "SOURCE");
++                String resolvedAt = previous.path("resolvedAt").asText(null);
++                if (resolvedAt == null || newlyResolved || !previous.path("quality").asText().equals("RESOLVED")) {
++                    resolvedAt = manual ? java.util.stream.StreamSupport.stream(corrections.spliterator(), false).map(p -> p.path("correctedAt").asText()).max(String::compareTo).orElse(candidate.path("capturedAt").asText()) : candidate.path("capturedAt").asText();
++                }
++                review.put("resolvedAt", resolvedAt);
++            } else { review.putNull("resolutionSource"); review.putNull("resolvedAt"); }
++        }
++        // A missing game must not silently discard an administrator's active correction.
++        if (base != null) for (JsonNode previous : base.path(META).path("games")) {
++            String id = previous.path("sourceGameId").asText();
++            if (present.contains(id) || previous.path("corrections").isEmpty()) continue;
++            LinkedHashMap<String, JsonNode> patches = new LinkedHashMap<>();
++            previous.path("corrections").forEach(patch -> patches.put(targetKey(patch), patch));
++            items.stream().filter(item -> ENTITY.equals(item.getEntityType()) && item.getAfterJson() != null)
++                .sorted(Comparator.comparing(UniquePlaySyncItem::getId, Comparator.nullsLast(Comparator.naturalOrder())))
++                .map(item -> mapper.readTree(item.getAfterJson())).filter(patch -> id.equals(patch.path("sourceGameId").asText())).forEach(patch -> patches.put(targetKey(patch), patch));
++            ObjectNode review = metadata.addObject(); review.put("sourceGameId", id); review.putNull("originalDetail");
++            review.putArray("issues"); ArrayNode corrections = review.putArray("corrections"), notifications = review.putArray("notifications");
++            boolean conflict = false;
++            for (JsonNode stored : patches.values()) {
++                ObjectNode patch = ((ObjectNode) stored).deepCopy();
++                if (!Set.of("RETIRED", "SOURCE_RESOLVED").contains(patch.path("status").asText())) {
++                    patch.put("status", "CONFLICT"); conflict = true;
++                    notify(notifications, "CORRECTION_CONFLICT", "보정한 경기의 원천 상세가 사라졌습니다. 수동 보정 해제를 명시적으로 확인하세요.", id, patch.path("id").asText());
++                }
++                corrections.add(patch);
++            }
++            review.put("quality", conflict ? "CORRECTION_PENDING" : "RESOLVED"); review.putNull("resolutionSource"); review.putNull("resolvedAt");
++        }
++        return result;
++    }
++
++    static JsonNode reviewGame(JsonNode snapshot, String sourceId) {
++        if (snapshot != null) for (JsonNode game : snapshot.path(META).path("games")) if (sourceId.equals(game.path("sourceGameId").asText())) return game;
++        return tools.jackson.databind.node.MissingNode.getInstance();
++    }
++
++    static ObjectNode sourceSnapshot(JsonNode published, ObjectMapper mapper) {
++        ObjectNode source = ((ObjectNode) published).deepCopy();
++        if (source.has("gameDetails")) {
++            ArrayNode details = source.putArray("gameDetails");
++            for (JsonNode detail : published.path("gameDetails")) {
++                JsonNode original = reviewGame(published, detail.path("sourceGameId").asText()).path("originalDetail");
++                details.add(original.isObject() ? original.deepCopy() : detail.deepCopy());
++            }
++        }
++        source.remove(META); source.remove("checksum");
++        return source;
++    }
++
++    static ObjectNode patch(JsonNode original, JsonNode effective, DetailChange change, String note, String actor, ObjectMapper mapper) {
++        if (change == null || change.section() == null || change.field() == null || change.teamName() == null || change.expectedValue() == null || change.value() == null) throw bad("Correction target, expectedValue and value are required (explicit null is allowed)");
++        Set<String> allowed = switch (change.section()) {
++            case "innings" -> Set.of("runs", "notPlayed");
++            case "totals" -> Set.of("hits", "errors", "walks"); // Final team score remains source-owned.
++            case "batters" -> BATTER_FIELDS;
++            case "pitchers" -> PITCHER_FIELDS;
++            default -> throw bad("Unsupported correction section");
++        };
++        if (!allowed.contains(change.field())) throw bad("This field cannot be corrected");
++        ObjectNode patch = mapper.createObjectNode();
++        patch.put("id", UUID.randomUUID().toString()); patch.put("sourceGameId", original.path("sourceGameId").asText());
++        patch.put("teamName", change.teamName()); patch.put("section", change.section());
++        if (change.rowKey() == null) patch.putNull("rowKey"); else patch.put("rowKey", change.rowKey());
++        if (change.inning() == null) patch.putNull("inning"); else patch.put("inning", change.inning());
++        patch.put("field", change.field());
++        JsonNode effectiveTarget = locate(effective, patch, true), sourceTarget = locate(original, patch, true);
++        if (!same(effectiveTarget.path(change.field()), change.expectedValue())) throw conflict("The correction field changed after preview");
++        patch.set("expectedValue", sourceTarget.path(change.field()).deepCopy()); patch.set("value", change.value().deepCopy());
++        if (Set.of("batters", "pitchers").contains(change.section())) {
++            JsonNode row = locateRow(original, patch);
++            patch.set("playerName", row.path("playerName")); patch.set("jerseyNumber", row.path("jerseyNumber"));
++        } else { patch.putNull("playerName"); patch.putNull("jerseyNumber"); }
++        patch.put("status", "APPLIED"); patch.put("note", note); patch.put("actor", actor); patch.put("correctedAt", OffsetDateTime.now(java.time.ZoneId.of("Asia/Seoul")).toString());
++        return patch;
++    }
++
++    static JsonNode locate(JsonNode detail, JsonNode patch, boolean required) {
++        JsonNode row = locateRow(detail, patch);
++        if (row == null) { if (required) throw conflict("The original game/team/player/inning identity no longer exists"); return null; }
++        if (Set.of("batters", "pitchers").contains(patch.path("section").asText())) {
++            if (patch.hasNonNull("playerName") && (!same(row.path("playerName"), patch.path("playerName")) || !same(row.path("jerseyNumber"), patch.path("jerseyNumber")))) {
++                if (required) throw conflict("The player row identity changed"); return null;
++            }
++            return row.path("stats");
++        }
++        return row;
++    }
++    private static JsonNode locateRow(JsonNode detail, JsonNode patch) {
++        if (detail == null || !"AVAILABLE".equals(detail.path("status").asText())) return null;
++        List<JsonNode> matchingTeams = new ArrayList<>();
++        for (JsonNode team : detail.path("teams")) if (UniquePlayGameDetailSupport.normalize(team.path("teamName").asText()).equals(UniquePlayGameDetailSupport.normalize(patch.path("teamName").asText()))) matchingTeams.add(team);
++        if (matchingTeams.size() != 1) return null;
++        JsonNode team = matchingTeams.getFirst(); String section = patch.path("section").asText();
++        if ("totals".equals(section)) return team.path("totals");
++        List<JsonNode> found = new ArrayList<>();
++        for (JsonNode row : team.path(section)) {
++            if ("innings".equals(section) ? patch.path("inning").isIntegralNumber() && row.path("inning").asInt() == patch.path("inning").asInt()
++                : patch.hasNonNull("rowKey") && row.path("rowKey").asText().equals(patch.path("rowKey").asText())) found.add(row);
++        }
++        return found.size() == 1 ? found.getFirst() : null;
++    }
++    static String targetKey(JsonNode patch) { return UniquePlayDetailQuality.id(patch.path("sourceGameId").asText(), UniquePlayGameDetailSupport.normalize(patch.path("teamName").asText()), patch.path("section").asText(), patch.path("rowKey").asText(""), patch.path("inning").asText(""), patch.path("field").asText()); }
++    static boolean same(JsonNode a, JsonNode b) { return a != null && b != null && (a.isNumber() && b.isNumber() ? a.decimalValue().compareTo(b.decimalValue()) == 0 : Objects.equals(a, b)); }
++    static void notify(ArrayNode array, String code, String message, String sourceGameId, String referenceId) {
++        ObjectNode value = array.addObject(); value.put("code", code); value.put("message", message); value.put("sourceGameId", sourceGameId); value.put("referenceId", referenceId);
++    }
++    static ResponseStatusException conflict(String message) { return new ResponseStatusException(HttpStatus.CONFLICT, message); }
++    static ResponseStatusException bad(String message) { return new ResponseStatusException(HttpStatus.BAD_REQUEST, message); }
++}
+diff --git a/src/main/java/com/aubl/webpage/service/UniquePlayDetailQuality.java b/src/main/java/com/aubl/webpage/service/UniquePlayDetailQuality.java
+--- /dev/null
++++ b/src/main/java/com/aubl/webpage/service/UniquePlayDetailQuality.java
+@@ -0,0 +1,87 @@
++package com.aubl.webpage.service;
++
++import com.aubl.webpage.api.dto.OfficialGameDetailDtos.DetailIssue;
++import java.nio.charset.StandardCharsets;
++import java.security.MessageDigest;
++import java.util.ArrayList;
++import java.util.HexFormat;
++import java.util.List;
++import java.util.Set;
++import tools.jackson.databind.JsonNode;
++
++/** Conservative cross-field warnings, never an inference from free-form plate appearance text. */
++final class UniquePlayDetailQuality {
++    private UniquePlayDetailQuality() {}
++    static final Set<String> SOFT_CODES = Set.of("DETAIL_LINE_SCORE", "DETAIL_BATTER_TOTAL", "DETAIL_BATTER_HITS_AB",
++        "DETAIL_TEAM_RBI", "DETAIL_TEAM_RBI_ZERO", "DETAIL_BATTER_RBI_MISSING", "DETAIL_PITCHER_EARNED_RUNS", "DETAIL_PITCHER_RUNS_TOTAL", "DETAIL_PITCHER_HITS_TOTAL");
++
++    static List<DetailIssue> issues(JsonNode detail) {
++        List<DetailIssue> result = new ArrayList<>();
++        if (detail == null || !"AVAILABLE".equals(detail.path("status").asText())) return result;
++        String gameId = detail.path("sourceGameId").asText();
++        for (JsonNode team : detail.path("teams")) {
++            String teamName = team.path("teamName").asText();
++            JsonNode totals = team.path("totals");
++            int inningSum = 0; boolean hasRuns = false, allKnown = true;
++            for (JsonNode inning : team.path("innings")) {
++                if (inning.path("runs").isIntegralNumber()) { inningSum += inning.path("runs").asInt(); hasRuns = true; }
++                else if (!inning.path("notPlayed").asBoolean()) allKnown = false;
++            }
++            if (team.path("innings").isEmpty() || !hasRuns || (allKnown && totals.path("runs").isIntegralNumber() && inningSum != totals.path("runs").asInt())) {
++                add(result, "DETAIL_LINE_SCORE", "이닝별 점수가 비어 있거나 팀 득점 합계와 다릅니다.", gameId, teamName, "innings.runs", null,
++                    hasRuns ? inningSum : null, integer(totals.path("runs")));
++            }
++            for (String field : List.of("runs", "hits")) {
++                Integer sum = sum(team.path("batters"), field), expected = integer(totals.path(field));
++                if (sum != null && expected != null && !sum.equals(expected)) add(result, "DETAIL_BATTER_TOTAL",
++                    "개별 타자 " + (field.equals("runs") ? "득점" : "안타") + " 합계와 팀 기록이 다릅니다.", gameId, teamName, "batters." + field, null, sum, expected);
++            }
++            for (JsonNode row : team.path("batters")) {
++                boolean participated = List.of("atBats", "hits", "runs").stream().anyMatch(field -> row.path("stats").path(field).asInt(0) > 0)
++                    || java.util.stream.StreamSupport.stream(row.path("plateAppearances").spliterator(), false).anyMatch(plate -> !plate.path("result").asText("").isBlank());
++                if (row.path("stats").path("rbi").isNull() && participated) add(result, "DETAIL_BATTER_RBI_MISSING",
++                    "출전 기록이 있으나 타점이 미기재입니다. 0으로 추정하지 않고 원천 기록을 확인하세요.", gameId, teamName, "batters.rbi", row.path("rowKey").asText(), null, null);
++                Integer hits = integer(row.path("stats").path("hits")), ab = integer(row.path("stats").path("atBats"));
++                if (hits != null && ab != null && hits > ab) add(result, "DETAIL_BATTER_HITS_AB", "타자의 안타 수가 타수보다 많습니다.", gameId, teamName,
++                    "batters.hits", row.path("rowKey").asText(), hits, ab);
++            }
++            Integer rbi = sum(team.path("batters"), "rbi"), runs = integer(totals.path("runs"));
++            if (rbi != null && runs != null && rbi > runs) add(result, "DETAIL_TEAM_RBI", "타자 타점 합계가 팀 득점보다 많습니다.", gameId, teamName, "batters.rbi", null, rbi, runs);
++            if (rbi != null && runs != null && rbi == 0 && runs > 0) add(result, "DETAIL_TEAM_RBI_ZERO",
++                "득점이 있으나 선수 타점 합계가 0입니다. 실책·주루 득점일 수 있으므로 원천 타석 기록을 확인해 주세요.", gameId, teamName, "batters.rbi", null, rbi, runs);
++            for (JsonNode row : team.path("pitchers")) {
++                Integer earned = integer(row.path("stats").path("earnedRuns")), allowed = integer(row.path("stats").path("runsAllowed"));
++                if (earned != null && allowed != null && earned > allowed) add(result, "DETAIL_PITCHER_EARNED_RUNS", "투수 자책점이 실점보다 많습니다.",
++                    gameId, teamName, "pitchers.earnedRuns", row.path("rowKey").asText(), earned, allowed);
++            }
++            if (detail.path("teams").size() == 2) for (JsonNode opponent : detail.path("teams")) {
++                if (opponent == team || UniquePlayGameDetailSupport.normalize(opponent.path("teamName").asText()).equals(UniquePlayGameDetailSupport.normalize(teamName))) continue;
++                for (String field : List.of("runsAllowed", "hitsAllowed")) {
++                    Integer observed = sum(team.path("pitchers"), field);
++                    Integer expected = integer(opponent.path("totals").path(field.equals("runsAllowed") ? "runs" : "hits"));
++                    if (observed != null && expected != null && !observed.equals(expected)) add(result,
++                        field.equals("runsAllowed") ? "DETAIL_PITCHER_RUNS_TOTAL" : "DETAIL_PITCHER_HITS_TOTAL",
++                        "투수 " + (field.equals("runsAllowed") ? "실점" : "피안타") + " 합계와 상대 팀 기록이 다릅니다.", gameId, teamName, "pitchers." + field, null, observed, expected);
++                }
++            }
++        }
++        return result;
++    }
++    static List<UniquePlayGameDetailSupport.Problem> blocking(JsonNode candidate) {
++        return UniquePlayGameDetailSupport.validate(candidate).stream().filter(problem -> !SOFT_CODES.contains(problem.code())).toList();
++    }
++    static String id(String... fields) {
++        try { return "dq-" + HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(String.join("|", fields).getBytes(StandardCharsets.UTF_8))).substring(0, 32); }
++        catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
++    }
++    static Integer integer(JsonNode value) { return value.isIntegralNumber() && value.canConvertToInt() ? value.asInt() : null; }
++    private static Integer sum(JsonNode rows, String field) {
++        if (rows.isEmpty()) return null;
++        int total = 0;
++        for (JsonNode row : rows) { Integer value = integer(row.path("stats").path(field)); if (value == null) return null; total += value; }
++        return total;
++    }
++    private static void add(List<DetailIssue> result, String code, String message, String game, String team, String field, String row, Integer observed, Integer expected) {
++        result.add(new DetailIssue(id(game, UniquePlayGameDetailSupport.normalize(team), field, row == null ? "" : row, code), code, message, game, team, field, row, observed, expected));
++    }
++}
+diff --git a/src/main/java/com/aubl/webpage/service/UniquePlaySyncService.java b/src/main/java/com/aubl/webpage/service/UniquePlaySyncService.java
+--- a/src/main/java/com/aubl/webpage/service/UniquePlaySyncService.java
++++ b/src/main/java/com/aubl/webpage/service/UniquePlaySyncService.java
+@@ -229,8 +229,147 @@
+     @Transactional(readOnly = true)
+     public RunResponse getRun(String runId) {
+         return toRunResponse(requireRun(runId));
++    }
++
++    @Transactional(readOnly = true)
++    public JsonNode gameRecords(String runId) {
++        UniquePlaySyncRun run = requireRun(runId);
++        return gameRecordReview(run, effectiveCandidate(run, requireCandidate(run)));
++    }
++
++    @Transactional
++    public JsonNode correctGameRecord(String runId, String sourceGameId,
++        com.aubl.webpage.api.dto.UniquePlaySyncDtos.DetailCorrectionRequest request, String actor) {
++        UniquePlaySyncRun run = requireMutableRun(runId);
++        if (request == null) throw UniquePlayDetailCorrections.bad("Correction request is required");
++        JsonNode effective = requireCorrectionPreview(run, request.expectedChecksum(), request.expectedRevision(), request.note());
++        if (request.changes() == null || request.changes().isEmpty() || request.changes().size() > 100) throw UniquePlayDetailCorrections.bad("Provide 1 to 100 explicit field changes");
++        JsonNode original = UniquePlayDetailCorrections.reviewGame(effective, sourceGameId).path("originalDetail");
++        JsonNode current = UniquePlayGameDetailSupport.index(effective.path("gameDetails")).get(sourceGameId);
++        if (current == null || !"AVAILABLE".equals(current.path("status").asText())) throw UniquePlayDetailCorrections.bad("Only available game details can be corrected");
++        List<UniquePlaySyncItem> all = new ArrayList<>(itemRepository.findByRunId(runId));
++        List<UniquePlaySyncItem> added = new ArrayList<>();
++        Set<String> targets = new HashSet<>();
++        for (var change : request.changes()) {
++            ObjectNode patch = UniquePlayDetailCorrections.patch(original, current, change, request.note().trim(), normalizeActor(actor), objectMapper);
++            if (!targets.add(UniquePlayDetailCorrections.targetKey(patch))) throw UniquePlayDetailCorrections.bad("Duplicate correction target in one request");
++            UniquePlaySyncItem item = newItem(run, UniquePlayDetailCorrections.ENTITY, patch.path("id").asText(), "UPDATE",
++                "경기 기록 보정 · " + sourceGameId, original, patch);
++            item.setResolution("APPLY_CORRECTION"); item.setNote(request.note().trim());
++            all.add(item); added.add(item);
++        }
++        JsonNode reviewed = UniquePlayDetailCorrections.effective(requireCandidate(run), baseCandidate(run), all, objectMapper);
++        UniquePlayGameDetailSupport.assertShape(reviewed);
++        if (!UniquePlayDetailQuality.blocking(reviewed).isEmpty()) throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Correction violates record shape, identity, score or numeric integrity");
++        added.forEach(itemRepository::save);
++        invalidateReview(run);
++        return gameRecordReview(run, reviewed);
++    }
++
++    @Transactional
++    public JsonNode resolveGameCorrection(String runId, String sourceGameId, String correctionId,
++        com.aubl.webpage.api.dto.UniquePlaySyncDtos.DetailCorrectionResolution request, String actor) {
++        UniquePlaySyncRun run = requireMutableRun(runId);
++        if (request == null || !Set.of("USE_SOURCE", "KEEP_AUBL").contains(request.resolution())) throw UniquePlayDetailCorrections.bad("Choose USE_SOURCE or KEEP_AUBL");
++        JsonNode effective = requireCorrectionPreview(run, request.expectedChecksum(), request.expectedRevision(), request.note());
++        JsonNode review = UniquePlayDetailCorrections.reviewGame(effective, sourceGameId);
++        JsonNode previous = null;
++        for (JsonNode correction : review.path("corrections")) if (correctionId.equals(correction.path("id").asText())) previous = correction;
++        if (previous == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Correction not found in the current review");
++        ObjectNode patch = ((ObjectNode) previous).deepCopy();
++        patch.put("id", UUID.randomUUID().toString());
++        patch.put("note", request.note().trim()); patch.put("actor", normalizeActor(actor)); patch.put("correctedAt", OffsetDateTime.now(SEOUL).toString());
++        if ("USE_SOURCE".equals(request.resolution())) patch.put("status", "RETIRED");
++        else {
++            JsonNode target = UniquePlayDetailCorrections.locate(review.path("originalDetail"), patch, true);
++            patch.set("expectedValue", target.path(patch.path("field").asText()).deepCopy());
++            patch.put("status", "APPLIED");
++        }
++        UniquePlaySyncItem item = newItem(run, UniquePlayDetailCorrections.ENTITY, patch.path("id").asText(), "UPDATE",
++            "경기 보정 충돌 판정 · " + sourceGameId, previous, patch);
++        item.setResolution(request.resolution()); item.setNote(request.note().trim());
++        List<UniquePlaySyncItem> all = new ArrayList<>(itemRepository.findByRunId(runId)); all.add(item);
++        JsonNode reviewed = UniquePlayDetailCorrections.effective(requireCandidate(run), baseCandidate(run), all, objectMapper);
++        UniquePlayGameDetailSupport.assertShape(reviewed);
++        if (!UniquePlayDetailQuality.blocking(reviewed).isEmpty()) throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Correction violates record integrity");
++        itemRepository.save(item); invalidateReview(run);
++        return gameRecordReview(run, reviewed);
++    }
++
++    @Transactional
++    public RunResponse createCorrectionDraft(String revisionId,
++        com.aubl.webpage.api.dto.UniquePlaySyncDtos.CorrectionDraftRequest request, String actor) {
++        if (request == null) throw UniquePlayDetailCorrections.bad("Draft request is required");
++        requireCorrectionNote(request.note());
++        UniquePlaySyncRevision revision = revisionRepository.findById(revisionId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Revision not found"));
++        String active = revisionRepository.findBySeasonYearAndActiveTrue(revision.getSeasonYear()).map(UniquePlaySyncRevision::getId).orElse(NO_REVISION);
++        if (!revision.isActive() || !revisionId.equals(active) || !revisionId.equals(request.expectedRevision()) || !constantTimeEquals(revision.getChecksum(), request.expectedChecksum())) throw UniquePlayDetailCorrections.conflict("Only the unchanged active revision can seed a correction draft");
++        JsonNode published = readJson(revision.getCandidateJson());
++        if (!constantTimeEquals(revision.getChecksum(), candidateChecksum(published))) throw UniquePlayDetailCorrections.conflict("Published snapshot checksum verification failed");
++        if (!published.has("gameDetails")) throw UniquePlayDetailCorrections.conflict("This revision has no collected game details");
++        ObjectNode original = UniquePlayDetailCorrections.sourceSnapshot(published, objectMapper);
++        assertAllowedCandidate(original); // Metadata is removed; even stored originals must pass the worker allowlist.
++        String checksum = candidateChecksum(original); original.put("checksum", checksum);
++        UniquePlaySyncRun run = new UniquePlaySyncRun();
++        run.setId(UUID.randomUUID().toString()); run.setSeasonYear(revision.getSeasonYear()); run.setLeagueId(original.path("leagueId").asText());
++        run.setBaseRevision(revisionId); run.setStatus("REVIEW_REQUIRED"); run.setProgressStage("CORRECTION_DRAFT"); run.setProgressCount(0);
++        run.setCreatedBy(normalizeActor(actor)); run.setAdapterVersion("manual-correction-v1"); run.setCandidateJson(writeJson(original)); run.setChecksum(checksum);
++        runRepository.saveAndFlush(run);
++        generateDiff(run, original);
++        ObjectNode note = objectMapper.createObjectNode().put("note", request.note().trim()).put("actor", normalizeActor(actor)).put("baseRevision", revisionId);
++        UniquePlaySyncItem audit = newItem(run, "CORRECTION_DRAFT", revisionId, "CREATE", "관리자 경기 상세 수정 초안", null, note);
++        audit.setResolution("DRAFT_CREATED"); audit.setNote(request.note().trim()); itemRepository.save(audit);
++        ObjectNode validation = evaluateCandidate(effectiveCandidate(run, original));
++        run.setValidationJson(writeJson(validation)); run.setBlockingErrorCount(validation.withArray("errors").size()); run.setWarningCount(validation.withArray("warnings").size());
++        return toRunResponse(runRepository.save(run));
+     }
+ 
++    private JsonNode requireCorrectionPreview(UniquePlaySyncRun run, String checksum, String expectedRevision, String note) {
++        if (!Set.of("REVIEW_REQUIRED", "VALIDATION_FAILED", "READY_TO_PUBLISH").contains(run.getStatus())) throw UniquePlayDetailCorrections.conflict("This run is not open for correction; clone a published revision first");
++        requireCorrectionNote(note);
++        String current = revisionRepository.findBySeasonYearAndActiveTrue(run.getSeasonYear()).map(UniquePlaySyncRevision::getId).orElse(NO_REVISION);
++        if (expectedRevision == null || !Objects.equals(run.getBaseRevision(), expectedRevision) || !current.equals(expectedRevision)) throw UniquePlayDetailCorrections.conflict("Published revision changed after preview");
++        JsonNode raw = requireCandidate(run);
++        if (!constantTimeEquals(run.getChecksum(), candidateChecksum(raw))) throw UniquePlayDetailCorrections.conflict("Original candidate checksum verification failed");
++        JsonNode effective = effectiveCandidate(run, raw);
++        if (checksum == null || !constantTimeEquals(checksum, candidateChecksum(effective))) throw UniquePlayDetailCorrections.conflict("Correction review changed after preview");
++        return effective;
++    }
++
++    private void requireCorrectionNote(String note) {
++        if (note == null || note.isBlank() || note.trim().length() > 500 || note.matches("(?s).*[<>@\\p{Cntrl}].*") || note.matches(".*0[0-9]{1,2}[- ]?[0-9]{3,4}[- ]?[0-9]{4}.*")) throw UniquePlayDetailCorrections.bad("A public-safe correction reason of 1 to 500 characters is required; do not include personal contact information");
++    }
++
++    private void invalidateReview(UniquePlaySyncRun run) {
++        run.setStatus("REVIEW_REQUIRED"); run.setValidationJson(withValidationStatus(run.getValidationJson(), "NOT_RUN", null)); runRepository.save(run);
++    }
++
++    private ObjectNode gameRecordReview(UniquePlaySyncRun run, JsonNode effective) {
++        ObjectNode result = objectMapper.createObjectNode(); result.put("runId", run.getId()); result.put("checksum", run.getChecksum());
++        result.put("reviewChecksum", candidateChecksum(effective)); result.put("expectedRevision", run.getBaseRevision() == null ? NO_REVISION : run.getBaseRevision());
++        ArrayNode rows = result.putArray("games"), notifications = result.putArray("notifications");
++        Map<String, JsonNode> summaries = UniquePlayGameDetailSupport.index(effective.path("games"));
++        Map<String, JsonNode> details = UniquePlayGameDetailSupport.index(effective.path("gameDetails"));
++        Map<String, JsonNode> previousGames = baseCandidate(run) == null ? Map.of() : UniquePlayGameDetailSupport.index(baseCandidate(run).path("games"));
++        for (JsonNode meta : effective.path(UniquePlayDetailCorrections.META).path("games")) {
++            String id = meta.path("sourceGameId").asText();
++            ObjectNode row = rows.addObject(); row.put("sourceGameId", id); row.set("game", summaries.getOrDefault(id, previousGames.get(id))); row.set("detail", details.get(id));
++            for (String key : List.of("originalDetail", "quality", "issues", "corrections", "notifications", "resolutionSource", "resolvedAt")) row.set(key, meta.path(key));
++            meta.path("notifications").forEach(notifications::add);
++        }
++        return result;
++    }
++
++    private JsonNode baseCandidate(UniquePlaySyncRun run) {
++        return run.getBaseRevision() == null || NO_REVISION.equals(run.getBaseRevision()) ? null : revisionRepository.findById(run.getBaseRevision()).map(revision -> readJson(revision.getCandidateJson())).orElse(null);
++    }
++    private JsonNode effectiveCandidate(UniquePlaySyncRun run, JsonNode raw) { return UniquePlayDetailCorrections.effective(raw, baseCandidate(run), itemRepository.findByRunId(run.getId()), objectMapper); }
++    private void addCorrectionConflictErrors(JsonNode effective, ArrayNode errors) {
++        for (JsonNode game : effective.path(UniquePlayDetailCorrections.META).path("games")) for (JsonNode patch : game.path("corrections")) if ("CONFLICT".equals(patch.path("status").asText())) {
++            errors.add(issueNode("DETAIL_CORRECTION_CONFLICT", "원천 변경과 관리자 보정이 충돌합니다. 원본 반영 또는 보정 유지를 명시적으로 선택하세요.", "$.gameDetails[" + game.path("sourceGameId").asText() + "]." + patch.path("field").asText()));
++        }
++    }
++
+     @Transactional(readOnly = true)
+     public DiffResponse getDiff(String runId, String entity, String action, int page, int size) {
+         requireRun(runId);
+@@ -262,7 +401,7 @@
+ 
+     @Transactional
+     public RunResponse resolve(String runId, Long itemId, ResolutionRequest request, String actor) {
+-        UniquePlaySyncRun run = requireRun(runId);
++        UniquePlaySyncRun run = requireMutableRun(runId);
+         if (!Set.of("REVIEW_REQUIRED", "VALIDATION_FAILED", "READY_TO_PUBLISH").contains(run.getStatus())) {
+             throw new ResponseStatusException(HttpStatus.CONFLICT, "This run is not open for review");
+         }
+@@ -276,6 +415,7 @@
+         UniquePlaySyncItem item = itemRepository.findById(itemId)
+             .filter(candidate -> candidate.getRun().getId().equals(runId))
+             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sync item not found"));
++        if (UniquePlayDetailCorrections.ENTITY.equals(item.getEntityType())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Use the checksum-protected game correction endpoint");
+         if ("GAME_RECORD".equals(item.getEntityType())) {
+             if ("MAP_ENTITY".equals(resolution)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Game details cannot be mapped to manual game logs");
+             if ("KEEP_AUBL".equals(resolution) && (item.getBeforeJson() == null || "DELETE".equals(item.getAction()))) {
+@@ -330,19 +470,18 @@
+ 
+     @Transactional
+     public RunResponse validate(String runId) {
+-        UniquePlaySyncRun run = requireRun(runId);
++        UniquePlaySyncRun run = requireMutableRun(runId);
++        if (!Set.of("REVIEW_REQUIRED", "VALIDATION_FAILED", "READY_TO_PUBLISH").contains(run.getStatus())) throw new ResponseStatusException(HttpStatus.CONFLICT, "This run is not open for validation");
+         JsonNode candidate = requireCandidate(run);
+         run.setStatus("VALIDATING");
+         runRepository.save(run);
+ 
+-        ObjectNode validation = evaluateCandidate(candidate);
++        JsonNode effectiveCandidate = effectiveCandidate(run, candidate);
++        ObjectNode validation = evaluateCandidate(effectiveCandidate);
+         long unresolved = itemRepository.countByRunIdAndBlockingTrueAndResolutionIsNull(runId);
+         ArrayNode errors = (ArrayNode) validation.withArray("errors");
+         addDetailDowngradeError(run, candidate, errors);
+-        JsonNode effectiveCandidate = UniquePlayGameDetailSupport.resolvedCandidate(candidate, itemRepository.findByRunId(runId), objectMapper);
+-        if (effectiveCandidate != candidate) {
+-            UniquePlayGameDetailSupport.validate(effectiveCandidate).forEach(problem -> errors.add(issueNode(problem.code(), problem.message(), problem.path())));
+-        }
++        addCorrectionConflictErrors(effectiveCandidate, errors);
+         addGameDetailOverrideErrors(run, effectiveCandidate, errors);
+         if (unresolved > 0) {
+             errors.add(issueNode("UNRESOLVED_CONFLICT", "검수되지 않은 차단 항목이 " + unresolved + "건 있습니다.", "$.diff"));
+@@ -362,6 +501,7 @@
+         validation.put("validatedAt", LocalDateTime.now().toString());
+         validation.put("errorCount", errors.size());
+         validation.put("warningCount", validation.withArray("warnings").size());
++        validation.put("reviewChecksum", candidateChecksum(effectiveCandidate));
+         run.setValidationJson(writeJson(validation));
+         run.setBlockingErrorCount(errors.size());
+         run.setWarningCount(validation.withArray("warnings").size());
+@@ -371,7 +511,7 @@
+ 
+     @Transactional
+     public PublishResponse publish(String runId, PublishRequest request, String actor) {
+-        UniquePlaySyncRun run = requireRun(runId);
++        UniquePlaySyncRun run = requireMutableRun(runId);
+         if (!"READY_TO_PUBLISH".equals(run.getStatus())) {
+             throw new ResponseStatusException(HttpStatus.CONFLICT, "The run must pass validation before publication");
+         }
+@@ -393,13 +533,17 @@
+             throw new ResponseStatusException(HttpStatus.CONFLICT, "Published revision changed after preview");
+         }
+         ensureSeasonForSync(run.getSeasonYear());
+-        JsonNode resolvedCandidate = UniquePlayGameDetailSupport.resolvedCandidate(candidate, itemRepository.findByRunId(runId), objectMapper);
+-        if (!UniquePlayGameDetailSupport.validate(resolvedCandidate).isEmpty()) {
++        JsonNode resolvedCandidate = effectiveCandidate(run, candidate);
++        if (candidate.has("gameDetails") && (request.reviewChecksum() == null || !constantTimeEquals(candidateChecksum(resolvedCandidate), request.reviewChecksum()))) throw new ResponseStatusException(HttpStatus.CONFLICT, "Reviewed correction checksum changed after preview");
++        if (!UniquePlayDetailQuality.blocking(resolvedCandidate).isEmpty()) {
+             throw new ResponseStatusException(HttpStatus.CONFLICT, "Reviewed official game details no longer match the candidate games");
+         }
+         ArrayNode overrideErrors = objectMapper.createArrayNode();
++        addCorrectionConflictErrors(resolvedCandidate, overrideErrors);
+         addGameDetailOverrideErrors(run, resolvedCandidate, overrideErrors);
+         if (!overrideErrors.isEmpty()) throw new ResponseStatusException(HttpStatus.CONFLICT, "DETAIL_GAME_OVERRIDE: retained AUBL game result conflicts with official game details");
++        boolean hasDetailWarnings = java.util.stream.StreamSupport.stream(resolvedCandidate.path("gameDetails").spliterator(), false).anyMatch(detail -> !UniquePlayDetailQuality.issues(detail).isEmpty());
++        if (hasDetailWarnings && !Boolean.TRUE.equals(request.acknowledgeDetailWarnings())) throw new ResponseStatusException(HttpStatus.CONFLICT, "Explicit acknowledgement of public detail correction warnings is required");
+         persistMappings(run, normalizeActor(actor));
+         String revisionChecksum = candidateChecksum(resolvedCandidate);
+         ObjectNode publishedCandidate = ((ObjectNode) resolvedCandidate).deepCopy();
+@@ -672,10 +816,11 @@
+ 
+     @Transactional
+     public void candidate(String runId, JsonNode payload) {
+-        UniquePlaySyncRun run = requireRun(runId);
++        UniquePlaySyncRun run = requireMutableRun(runId);
+         if (TERMINAL_RUN_STATUSES.contains(run.getStatus()) || Set.of("PUBLISHED", "ACTIVATING").contains(run.getStatus())) {
+             throw new ResponseStatusException(HttpStatus.CONFLICT, "This run no longer accepts a candidate");
+         }
++        if (run.getCandidateJson() != null) throw new ResponseStatusException(HttpStatus.CONFLICT, "The sanitized candidate is immutable; start a new run");
+         JsonNode candidate = payload == null ? null : payload.path("candidate");
+         if (candidate == null || !candidate.isObject() || candidate.isMissingNode()) {
+             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "candidate payload is required");
+@@ -693,7 +838,7 @@
+             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Candidate checksum verification failed");
+         }
+ 
+-        ObjectNode validation = evaluateCandidate(candidate);
++        ObjectNode validation = evaluateCandidate(effectiveCandidate(run, candidate));
+         addDetailDowngradeError(run, candidate, (ArrayNode) validation.withArray("errors"));
+         validation.put("valid", validation.withArray("errors").isEmpty());
+         validation.put("status", validation.withArray("errors").isEmpty() ? "NOT_RUN" : "FAILED");
+@@ -994,7 +1139,12 @@
+             }
+         }
+ 
+-        UniquePlayGameDetailSupport.validate(candidate).forEach(problem -> errors.add(issueNode(problem.code(), problem.message(), problem.path())));
++        UniquePlayDetailQuality.blocking(candidate).forEach(problem -> errors.add(issueNode(problem.code(), problem.message(), problem.path())));
++        for (JsonNode detail : candidate.path("gameDetails")) for (var problem : UniquePlayDetailQuality.issues(detail)) {
++            ObjectNode issue = objectMapper.valueToTree(problem);
++            issue.put("path", "$.gameDetails[" + problem.sourceGameId() + "]." + problem.field());
++            warnings.add(issue);
++        }
+         ObjectNode result = objectMapper.createObjectNode();
+         result.put("status", "NOT_RUN");
+         result.put("valid", errors.isEmpty());
+@@ -1092,7 +1242,7 @@
+     private void persistMappings(UniquePlaySyncRun run, String actor) {
+         for (UniquePlaySyncItem item : itemRepository.findByRunId(run.getId())) {
+             // GAME_RECORD decisions are frozen in the revision snapshot, never in mutable manual-log overrides.
+-            if ("GAME_RECORD".equals(item.getEntityType())) continue;
++            if (Set.of("GAME_RECORD", UniquePlayDetailCorrections.ENTITY, "CORRECTION_DRAFT").contains(item.getEntityType())) continue;
+             if (Set.of("TEAM", "GAME").contains(item.getEntityType())
+                 && "MAP_ENTITY".equals(item.getResolution()) && item.getLocalEntityId() != null) {
+                 persistEntityMapping(item, actor);
+@@ -1259,7 +1409,7 @@
+         item.setLabel(limit(label, 240));
+         item.setBeforeJson(before == null || before.isNull() ? null : writeJson(before));
+         item.setAfterJson(after == null || after.isNull() ? null : writeJson(after));
+-        if (!Set.of("TEAM", "GAME_RECORD").contains(entityType) && ("UPDATE".equals(action) || "DELETE".equals(action) || "CONFLICT".equals(action))) {
++        if (!Set.of("TEAM", "GAME_RECORD", UniquePlayDetailCorrections.ENTITY).contains(entityType) && ("UPDATE".equals(action) || "DELETE".equals(action) || "CONFLICT".equals(action))) {
+             mappingRepository.findByProviderAndEntityTypeAndExternalKey(PROVIDER, overrideType(entityType), item.getSourceKey())
+                 .ifPresent(override -> {
+                     item.setResolution("KEEP_AUBL");
+@@ -1349,6 +1499,10 @@
+     private UniquePlaySyncRun requireRun(String runId) {
+         return runRepository.findById(runId)
+             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "UniquePlay sync run not found"));
++    }
++
++    private UniquePlaySyncRun requireMutableRun(String runId) {
++        return runRepository.findForUpdate(runId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "UniquePlay sync run not found"));
+     }
+ 
+     private Season ensureSeasonForSync(int seasonYear) {
+diff --git a/src/test/java/com/aubl/webpage/service/UniquePlayDetailCorrectionServiceTest.java b/src/test/java/com/aubl/webpage/service/UniquePlayDetailCorrectionServiceTest.java
+--- /dev/null
++++ b/src/test/java/com/aubl/webpage/service/UniquePlayDetailCorrectionServiceTest.java
+@@ -0,0 +1,128 @@
++package com.aubl.webpage.service;
++
++import static org.junit.jupiter.api.Assertions.*;
++import static org.mockito.Mockito.*;
++import com.aubl.webpage.api.dto.UniquePlaySyncDtos.*;
++import com.aubl.webpage.domain.entity.*;
++import com.aubl.webpage.domain.repository.*;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Optional;
++import java.util.concurrent.atomic.AtomicReference;
++import org.junit.jupiter.api.BeforeEach;
++import org.junit.jupiter.api.Test;
++import org.springframework.test.util.ReflectionTestUtils;
++import org.springframework.web.server.ResponseStatusException;
++import tools.jackson.databind.JsonNode;
++import tools.jackson.databind.node.ObjectNode;
++
++class UniquePlayDetailCorrectionServiceTest {
++    private final UniquePlaySyncRunRepository runs = mock(UniquePlaySyncRunRepository.class);
++    private final UniquePlaySyncItemRepository items = mock(UniquePlaySyncItemRepository.class);
++    private final UniquePlaySyncRevisionRepository revisions = mock(UniquePlaySyncRevisionRepository.class);
++    private final ExternalEntityMappingRepository mappings = mock(ExternalEntityMappingRepository.class);
++    private final GameRepository games = mock(GameRepository.class);
++    private final UniquePlayPublisher publisher = mock(UniquePlayPublisher.class);
++    private final List<UniquePlaySyncItem> decisions = new ArrayList<>();
++    private final AtomicReference<UniquePlaySyncRevision> saved = new AtomicReference<>();
++    private final AtomicReference<UniquePlaySyncRevision> active = new AtomicReference<>();
++    private UniquePlaySyncService service;
++    private UniquePlaySyncRun run;
++    private ObjectNode raw;
++    @BeforeEach void setup() {
++        var seasons = mock(SeasonRepository.class); var season = new Season(); season.setId(12L); season.setYear(2026);
++        when(seasons.findByYear(2026)).thenReturn(Optional.of(season));
++        service = new UniquePlaySyncService(OfficialGameDetailFixture.MAPPER, runs, items, revisions, mappings,
++            mock(TeamRepository.class), mock(TeamPlayerRepository.class), seasons, games,
++            mock(BatterStatsRepository.class), mock(PitcherStatsRepository.class), publisher, new ImmediateTransactionManager(), "", "", "57", 2026);
++        raw = UniquePlayDetailCorrectionsTest.clean(); UniquePlayDetailCorrectionsTest.batter(raw).put("runs", 0);
++        run = new UniquePlaySyncRun(); run.setId("correction-run"); run.setSeasonYear(2026); run.setLeagueId("57"); run.setBaseRevision("NONE"); run.setStatus("VALIDATION_FAILED");
++        when(runs.findById(run.getId())).thenReturn(Optional.of(run)); when(runs.findForUpdate(run.getId())).thenReturn(Optional.of(run));
++        when(runs.save(any())).thenAnswer(call -> call.getArgument(0));
++        when(runs.saveAndFlush(any())).thenAnswer(call -> call.getArgument(0));
++        when(items.findByRunId(anyString())).thenReturn(decisions);
++        when(items.save(any())).thenAnswer(call -> { UniquePlaySyncItem item = call.getArgument(0); if (item.getId() == null) item.setId((long) decisions.size() + 1); if (!decisions.contains(item)) decisions.add(item); return item; });
++        when(revisions.findBySeasonYearAndActiveTrue(2026)).thenAnswer(call -> Optional.ofNullable(active.get()));
++        when(revisions.findById(anyString())).thenAnswer(call -> active.get() != null && active.get().getId().equals(call.getArgument(0)) ? Optional.of(active.get()) : Optional.empty());
++        when(revisions.save(any())).thenAnswer(call -> { saved.set(call.getArgument(0)); return call.getArgument(0); });
++        refresh();
++    }
++    @Test void oldFailedPreviewCanRevalidateAsWarningAndPublishOnlyAfterExplicitAcknowledgement() {
++        service.validate(run.getId()); assertEquals("READY_TO_PUBLISH", run.getStatus());
++        assertEquals(0, run.getBlockingErrorCount()); assertTrue(run.getWarningCount() > 0);
++        String review = preview().path("reviewChecksum").asText();
++        assertThrows(ResponseStatusException.class, () -> service.publish(run.getId(), new PublishRequest(run.getChecksum(), "NONE", false, review), "admin"));
++        service.publish(run.getId(), new PublishRequest(run.getChecksum(), "NONE", true, review), "admin");
++        var published = OfficialGameDetailFixture.MAPPER.readTree(saved.get().getCandidateJson());
++        assertEquals("CORRECTION_PENDING", UniquePlayDetailCorrectionsTest.review(published).path("quality").asText());
++        assertEquals("AVAILABLE", published.path("gameDetails").get(0).path("status").asText());
++        verifyNoInteractions(publisher); verify(games, never()).save(any());
++    }
++    @Test void numericCorrectionChangesReviewChecksumButNeverRawCandidateAndRequiresFreshPublishPreview() {
++        String original = run.getCandidateJson(), rawChecksum = run.getChecksum(); String oldReview = preview().path("reviewChecksum").asText();
++        JsonNode result = correct("runs", 0, 1);
++        assertNotEquals(oldReview, result.path("reviewChecksum").asText()); assertEquals(original, run.getCandidateJson()); assertEquals(rawChecksum, run.getChecksum());
++        assertEquals("RESOLVED", result.path("games").get(0).path("quality").asText());
++        assertEquals("MANUAL", result.path("games").get(0).path("resolutionSource").asText());
++        assertEquals("REVIEW_REQUIRED", run.getStatus());
++        service.validate(run.getId()); assertEquals("READY_TO_PUBLISH", run.getStatus());
++        assertThrows(ResponseStatusException.class, () -> service.publish(run.getId(), new PublishRequest(rawChecksum, "NONE", true, oldReview), "admin"));
++        service.publish(run.getId(), new PublishRequest(rawChecksum, "NONE", false, preview().path("reviewChecksum").asText()), "admin");
++        assertEquals(1, UniquePlayDetailCorrectionsTest.batter(OfficialGameDetailFixture.MAPPER.readTree(saved.get().getCandidateJson())).path("runs").asInt());
++        verify(mappings, never()).save(any()); verifyNoInteractions(publisher);
++    }
++    @Test void stalePatchRevisionMissingReasonAndPiiAreRejectedWithoutAuditWrites() {
++        var changes = List.of(UniquePlayDetailCorrectionsTest.change("runs", 0, 1));
++        String checksum = preview().path("reviewChecksum").asText();
++        for (var request : List.of(new DetailCorrectionRequest("stale", "NONE", "확인", changes),
++            new DetailCorrectionRequest(checksum, "another", "확인", changes), new DetailCorrectionRequest(checksum, "NONE", "", changes),
++            new DetailCorrectionRequest(checksum, "NONE", "name@example.com", changes))) {
++            assertThrows(ResponseStatusException.class, () -> service.correctGameRecord(run.getId(), "up-game-1", request, "admin"));
++        }
++        assertTrue(decisions.isEmpty());
++    }
++    @Test void hardNumericViolationsAndDuplicateTargetsCannotBeSaved() {
++        assertThrows(ResponseStatusException.class, () -> correct("runs", 0, -1));
++        var request = new DetailCorrectionRequest(preview().path("reviewChecksum").asText(), "NONE", "확인",
++            List.of(UniquePlayDetailCorrectionsTest.change("runs", 0, 1), UniquePlayDetailCorrectionsTest.change("runs", 0, 2)));
++        assertThrows(ResponseStatusException.class, () -> service.correctGameRecord(run.getId(), "up-game-1", request, "admin"));
++        assertTrue(decisions.isEmpty());
++    }
++    @Test void publishedRunRequiresCloneAndCloneDoesNotContactWorkerOrActivateAnything() {
++        correct("runs", 0, 1); service.validate(run.getId());
++        service.publish(run.getId(), new PublishRequest(run.getChecksum(), "NONE", false, preview().path("reviewChecksum").asText()), "admin");
++        assertThrows(ResponseStatusException.class, () -> correct("runs", 1, 0));
++        var revision = saved.get(); revision.setActive(true); active.set(revision);
++        var result = service.createCorrectionDraft(revision.getId(), new CorrectionDraftRequest(revision.getChecksum(), revision.getId(), "추가 원천 검토"), "admin");
++        assertEquals("REVIEW_REQUIRED", result.status()); assertEquals(revision.getId(), result.baseRevision());
++        assertEquals("CORRECTION_DRAFT", result.progress().get("phase"));
++        verify(revisions, times(1)).save(any()); verifyNoInteractions(publisher);
++        assertTrue(decisions.stream().anyMatch(item -> "CORRECTION_DRAFT".equals(item.getEntityType())));
++    }
++    @Test void sourceConflictBlocksUntilExplicitSourceDecisionAndRequiresChecksum() {
++        correct("runs", 0, 1); service.validate(run.getId()); service.publish(run.getId(), new PublishRequest(run.getChecksum(), "NONE", false, preview().path("reviewChecksum").asText()), "admin");
++        var revision = saved.get(); revision.setActive(true); active.set(revision); decisions.clear();
++        run.setStatus("REVIEW_REQUIRED"); run.setBaseRevision(revision.getId()); UniquePlayDetailCorrectionsTest.batter(raw).put("runs", 2); refresh();
++        service.validate(run.getId()); assertEquals("VALIDATION_FAILED", run.getStatus()); assertTrue(run.getValidationJson().contains("DETAIL_CORRECTION_CONFLICT"));
++        var record = preview(); String id = record.path("games").get(0).path("corrections").get(0).path("id").asText();
++        assertThrows(ResponseStatusException.class, () -> service.resolveGameCorrection(run.getId(), "up-game-1", id, new DetailCorrectionResolution("stale", revision.getId(), "원본 확인", "USE_SOURCE"), "admin"));
++        service.resolveGameCorrection(run.getId(), "up-game-1", id, new DetailCorrectionResolution(record.path("reviewChecksum").asText(), revision.getId(), "원본 확인", "USE_SOURCE"), "admin");
++        service.validate(run.getId()); assertEquals("READY_TO_PUBLISH", run.getStatus());
++        assertEquals(2, preview().path("games").get(0).path("detail").path("teams").get(0).path("batters").get(0).path("stats").path("runs").asInt());
++    }
++    @Test void externalCandidateCannotSupplyServerQualityMetadata() {
++        run.setCandidateJson(null); raw.putObject("detailReview").put("quality", "CLEAN");
++        ObjectNode payload = OfficialGameDetailFixture.MAPPER.createObjectNode(); payload.set("candidate", raw);
++        assertThrows(ResponseStatusException.class, () -> service.candidate(run.getId(), payload));
++        assertNull(run.getCandidateJson());
++    }
++    @Test void editingAndPublicationUsePessimisticRunLock() throws Exception {
++        var method = UniquePlaySyncRunRepository.class.getMethod("findForUpdate", String.class);
++        assertEquals(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE, method.getAnnotation(org.springframework.data.jpa.repository.Lock.class).value());
++        correct("runs", 0, 1); service.validate(run.getId()); service.publish(run.getId(), new PublishRequest(run.getChecksum(), "NONE", false, preview().path("reviewChecksum").asText()), "admin");
++        verify(runs, times(3)).findForUpdate(run.getId());
++    }
++    private JsonNode preview() { return service.gameRecords(run.getId()); }
++    private JsonNode correct(String field, int expected, int value) { return service.correctGameRecord(run.getId(), "up-game-1", new DetailCorrectionRequest(preview().path("reviewChecksum").asText(), run.getBaseRevision(), "원천 확인 후 기록 보정", List.of(UniquePlayDetailCorrectionsTest.change(field, expected, value))), "admin"); }
++    private void refresh() { String checksum = ReflectionTestUtils.invokeMethod(service, "candidateChecksum", raw); raw.put("checksum", checksum); run.setCandidateJson(raw.toString()); run.setChecksum(checksum); }
++}
+diff --git a/src/test/java/com/aubl/webpage/service/UniquePlayDetailCorrectionsTest.java b/src/test/java/com/aubl/webpage/service/UniquePlayDetailCorrectionsTest.java
+--- /dev/null
++++ b/src/test/java/com/aubl/webpage/service/UniquePlayDetailCorrectionsTest.java
+@@ -0,0 +1,125 @@
++package com.aubl.webpage.service;
++
++import static org.junit.jupiter.api.Assertions.*;
++import com.aubl.webpage.api.dto.UniquePlaySyncDtos.DetailChange;
++import com.aubl.webpage.domain.entity.UniquePlaySyncItem;
++import java.util.List;
++import org.junit.jupiter.api.Test;
++import org.springframework.web.server.ResponseStatusException;
++import tools.jackson.databind.JsonNode;
++import tools.jackson.databind.node.ObjectNode;
++
++class UniquePlayDetailCorrectionsTest {
++    private static final tools.jackson.databind.ObjectMapper M = OfficialGameDetailFixture.MAPPER;
++    @Test void correctionPreservesOriginalAndCarriesOnlyWhenSourceExpectedValueMatches() {
++        var raw = clean(); batter(raw).put("runs", 0);
++        var item = correction(raw, "runs", 0, 1);
++        var first = UniquePlayDetailCorrections.effective(raw, null, List.of(item), M);
++        assertEquals(0, batter(raw).path("runs").asInt()); assertEquals(1, batter(first).path("runs").asInt());
++        var review = review(first); assertEquals("RESOLVED", review.path("quality").asText()); assertEquals("MANUAL", review.path("resolutionSource").asText());
++        assertEquals(0, review.path("originalDetail").path("teams").get(0).path("batters").get(0).path("stats").path("runs").asInt());
++        var repeated = UniquePlayDetailCorrections.effective(raw, first, List.of(), M);
++        assertEquals(1, batter(repeated).path("runs").asInt());
++        assertEquals("APPLIED", review(repeated).path("corrections").get(0).path("status").asText());
++        var restored = UniquePlayDetailCorrections.sourceSnapshot(first, M);
++        assertEquals(0, batter(restored).path("runs").asInt()); assertFalse(restored.has("detailReview"));
++    }
++    @Test void sourceEqualsCorrectionRetiresOverrideAndSubsequentSourceChangeDoesNotReapplyIt() {
++        var raw = clean(); batter(raw).put("runs", 0);
++        var published = UniquePlayDetailCorrections.effective(raw, null, List.of(correction(raw, "runs", 0, 1)), M);
++        var fixedSource = clean();
++        var resolved = UniquePlayDetailCorrections.effective(fixedSource, published, List.of(), M);
++        assertEquals("SOURCE_RESOLVED", review(resolved).path("corrections").get(0).path("status").asText());
++        assertEquals("SOURCE", review(resolved).path("resolutionSource").asText());
++        assertTrue(review(resolved).path("notifications").toString().contains("SOURCE_RESOLVED"));
++        batter(fixedSource).put("runs", 2);
++        var later = UniquePlayDetailCorrections.effective(fixedSource, resolved, List.of(), M);
++        assertEquals(2, batter(later).path("runs").asInt()); assertEquals("RETIRED", review(later).path("corrections").get(0).path("status").asText());
++    }
++    @Test void changedSourceAndPlayerIdentityBecomeBlockingCorrectionConflicts() {
++        var raw = clean(); batter(raw).put("runs", 0);
++        var published = UniquePlayDetailCorrections.effective(raw, null, List.of(correction(raw, "runs", 0, 1)), M);
++        batter(raw).put("runs", 2);
++        var changed = UniquePlayDetailCorrections.effective(raw, published, List.of(), M);
++        assertEquals(2, batter(changed).path("runs").asInt()); assertEquals("CONFLICT", review(changed).path("corrections").get(0).path("status").asText());
++        batter(raw).put("runs", 0); ((ObjectNode) raw.path("gameDetails").get(0).path("teams").get(0).path("batters").get(0)).put("playerName", "다른선수");
++        var other = UniquePlayDetailCorrections.effective(raw, published, List.of(), M);
++        assertEquals("CONFLICT", review(other).path("corrections").get(0).path("status").asText()); assertEquals(0, batter(other).path("runs").asInt());
++    }
++    @Test void newPatchRequiresExactPreviewAndNeverAllowsIdentityOrParentScoreEditing() {
++        var raw = clean(); var detail = raw.path("gameDetails").get(0);
++        assertThrows(ResponseStatusException.class, () -> UniquePlayDetailCorrections.patch(detail, detail,
++            change("runs", 99, 1), "확인 후 보정", "admin", M));
++        assertThrows(ResponseStatusException.class, () -> UniquePlayDetailCorrections.patch(detail, detail,
++            new DetailChange("홈팀", "batters", "b-0", null, "playerName", M.valueToTree("김선수"), M.valueToTree("다른선수")), "수정", "admin", M));
++        assertThrows(ResponseStatusException.class, () -> UniquePlayDetailCorrections.patch(detail, detail,
++            new DetailChange("홈팀", "totals", null, null, "runs", M.valueToTree(1), M.valueToTree(2)), "수정", "admin", M));
++    }
++    @Test void correctionOrderIsAuditIdNotRepositoryIterationOrder() {
++        var raw = clean(); batter(raw).put("runs", 0);
++        var first = correction(raw, "runs", 0, 1); first.setId(1L);
++        var second = correction(raw, "runs", 0, 2); second.setId(2L);
++        var result = UniquePlayDetailCorrections.effective(raw, null, List.of(second, first), M);
++        assertEquals(2, batter(result).path("runs").asInt());
++    }
++    @Test void sourceCanResolveAnUncorrectedWarningAndGeneratePartialResolutionNotice() {
++        var raw = clean(); batter(raw).put("runs", 0).put("rbi", 0);
++        var first = UniquePlayDetailCorrections.effective(raw, null, List.of(), M);
++        batter(raw).put("runs", 1);
++        var second = UniquePlayDetailCorrections.effective(raw, first, List.of(), M);
++        assertEquals("CORRECTION_PENDING", review(second).path("quality").asText());
++        assertTrue(review(second).path("notifications").toString().contains("SOURCE_RESOLVED"));
++    }
++    @Test void unpublishedSourceMustNotBePresentedAsResolvedError() {
++        var raw = clean(); batter(raw).put("runs", 0);
++        var published = UniquePlayDetailCorrections.effective(raw, null, List.of(), M);
++        var unavailable = clean();
++        var detail = (ObjectNode) unavailable.path("gameDetails").get(0);
++        detail.put("status", "NOT_PUBLISHED"); detail.putArray("teams");
++        var next = UniquePlayDetailCorrections.effective(unavailable, published, List.of(), M);
++        assertEquals("CORRECTION_PENDING", review(next).path("quality").asText());
++        assertFalse(review(next).path("notifications").toString().contains("SOURCE_RESOLVED"));
++        assertTrue(review(next).path("resolvedAt").isNull());
++    }
++    @Test void disappearingGamePreservesCorrectionConflictInsteadOfDiscardingAudit() {
++        var raw = clean(); batter(raw).put("runs", 0);
++        var published = UniquePlayDetailCorrections.effective(raw, null, List.of(correction(raw, "runs", 0, 1)), M);
++        var missing = clean(); missing.putArray("gameDetails");
++        var next = UniquePlayDetailCorrections.effective(missing, published, List.of(), M);
++        assertEquals("CONFLICT", review(next).path("corrections").get(0).path("status").asText());
++        assertTrue(review(next).path("originalDetail").isNull());
++        assertEquals("CORRECTION_PENDING", review(next).path("quality").asText());
++    }
++    @Test void repeatedReadOnlyReviewIsStableAndContainsNoWallClockMutation() {
++        var raw = clean(); batter(raw).put("runs", 0);
++        var item = correction(raw, "runs", 0, 1);
++        var first = UniquePlayDetailCorrections.effective(raw, null, List.of(item), M);
++        var second = UniquePlayDetailCorrections.effective(raw, null, List.of(item), M);
++        assertEquals(first, second);
++    }
++    @Test void retainingPublishedDetailKeepsManualProvenanceRatherThanPretendingSourceWasFixed() {
++        var raw = clean(); batter(raw).put("runs", 0);
++        var published = UniquePlayDetailCorrections.effective(raw, null, List.of(correction(raw, "runs", 0, 1)), M);
++        var retain = new UniquePlaySyncItem(); retain.setEntityType("GAME_RECORD"); retain.setSourceKey("up-game-1");
++        retain.setResolution("KEEP_AUBL"); retain.setBeforeJson(published.path("gameDetails").get(0).toString());
++        var next = UniquePlayDetailCorrections.effective(raw, published, List.of(retain), M);
++        assertEquals(1, batter(next).path("runs").asInt());
++        assertEquals("APPLIED", review(next).path("corrections").get(0).path("status").asText());
++        assertEquals("MANUAL", review(next).path("resolutionSource").asText());
++        assertFalse(review(next).path("notifications").toString().contains("SOURCE_RESOLVED"));
++    }
++    static ObjectNode clean() {
++        var candidate = OfficialGameDetailFixture.candidate(); batter(candidate).put("rbi", 1);
++        var pitcher = (ObjectNode) candidate.path("gameDetails").get(0).path("teams").get(0).path("pitchers").get(0).path("stats");
++        pitcher.put("runsAllowed", 0).put("earnedRuns", 0);
++        return candidate;
++    }
++    static ObjectNode batter(JsonNode candidate) { return (ObjectNode) candidate.path("gameDetails").get(0).path("teams").get(0).path("batters").get(0).path("stats"); }
++    static JsonNode review(JsonNode candidate) { return UniquePlayDetailCorrections.reviewGame(candidate, "up-game-1"); }
++    static DetailChange change(String field, int expected, int value) { return new DetailChange("홈팀", "batters", "b-0", null, field, M.valueToTree(expected), M.valueToTree(value)); }
++    static UniquePlaySyncItem correction(ObjectNode raw, String field, int expected, int value) {
++        var detail = raw.path("gameDetails").get(0);
++        var patch = UniquePlayDetailCorrections.patch(detail, detail, change(field, expected, value), "원천 확인 후 보정", "admin", M);
++        var item = new UniquePlaySyncItem(); item.setEntityType("GAME_CORRECTION"); item.setAfterJson(patch.toString()); return item;
++    }
++}
+diff --git a/src/test/java/com/aubl/webpage/service/UniquePlayDetailQualityTest.java b/src/test/java/com/aubl/webpage/service/UniquePlayDetailQualityTest.java
+--- /dev/null
++++ b/src/test/java/com/aubl/webpage/service/UniquePlayDetailQualityTest.java
+@@ -0,0 +1,67 @@
++package com.aubl.webpage.service;
++
++import static org.junit.jupiter.api.Assertions.*;
++import java.util.List;
++import org.junit.jupiter.api.Test;
++import tools.jackson.databind.node.ObjectNode;
++
++class UniquePlayDetailQualityTest {
++    @Test void missingRbiForParticipatingBatterIsUnknownReviewWarningNotZero() {
++        var candidate = OfficialGameDetailFixture.candidate();
++        var stats = (ObjectNode) OfficialGameDetailFixture.team(candidate).path("batters").get(0).path("stats");
++        stats.putNull("rbi");
++        var issue = UniquePlayDetailQuality.issues(OfficialGameDetailFixture.detail(candidate)).stream().filter(i -> i.code().equals("DETAIL_BATTER_RBI_MISSING")).findFirst().orElseThrow();
++        assertNull(issue.observed()); assertNull(issue.expected()); assertNotNull(issue.rowKey());
++        assertTrue(stats.path("rbi").isNull()); assertTrue(UniquePlayDetailQuality.blocking(candidate).isEmpty());
++    }
++    @Test void onlySafeCrossFieldCodesAreSoft() {
++        var candidate = OfficialGameDetailFixture.candidate();
++        var team = OfficialGameDetailFixture.team(candidate);
++        ((ObjectNode) team.path("batters").get(0).path("stats")).put("runs", 0);
++        ((ObjectNode) team.path("innings").get(0)).putNull("runs");
++        var issues = UniquePlayDetailQuality.issues(OfficialGameDetailFixture.detail(candidate));
++        assertTrue(issues.stream().anyMatch(i -> i.code().equals("DETAIL_BATTER_TOTAL") && i.field().equals("batters.runs") && i.observed() == 0 && i.expected() == 1));
++        assertTrue(issues.stream().anyMatch(i -> i.code().equals("DETAIL_LINE_SCORE")));
++        assertTrue(UniquePlayDetailQuality.blocking(candidate).isEmpty());
++        team.withObject("totals").put("runs", 999);
++        assertTrue(UniquePlayDetailQuality.blocking(candidate).stream().anyMatch(p -> p.code().equals("DETAIL_SCORE")));
++    }
++    @Test void allNullIsUnknownNotZeroAndUnknownPitcherTotalsAreNotCompared() {
++        var candidate = OfficialGameDetailFixture.candidate(); var team = OfficialGameDetailFixture.team(candidate);
++        ((ObjectNode) team.path("batters").get(0).path("stats")).putNull("runs").putNull("rbi");
++        ((ObjectNode) team.path("pitchers").get(0).path("stats")).putNull("runsAllowed").putNull("earnedRuns");
++        var issues = UniquePlayDetailQuality.issues(OfficialGameDetailFixture.detail(candidate));
++        assertFalse(issues.stream().anyMatch(i -> i.teamName().equals("홈팀") && List.of("DETAIL_BATTER_TOTAL", "DETAIL_TEAM_RBI_ZERO", "DETAIL_PITCHER_RUNS_TOTAL", "DETAIL_PITCHER_EARNED_RUNS").contains(i.code())));
++    }
++    @Test void rbiZeroIsReviewNotAnAssertionAndLessThanTeamRunsIsValid() {
++        var candidate = OfficialGameDetailFixture.candidate();
++        assertTrue(UniquePlayDetailQuality.issues(OfficialGameDetailFixture.detail(candidate)).stream().anyMatch(i -> i.code().equals("DETAIL_TEAM_RBI_ZERO") && i.message().contains("실책")));
++        var team = OfficialGameDetailFixture.team(candidate); team.withObject("totals").put("runs", 3);
++        ((ObjectNode) team.path("batters").get(0).path("stats")).put("rbi", 2);
++        assertFalse(UniquePlayDetailQuality.issues(OfficialGameDetailFixture.detail(candidate)).stream().anyMatch(i -> i.code().startsWith("DETAIL_TEAM_RBI")));
++    }
++    @Test void safeBaseballWarningsPreserveSourceSevenInningEra() {
++        var candidate = OfficialGameDetailFixture.candidate(); var team = OfficialGameDetailFixture.team(candidate);
++        var batter = (ObjectNode) team.path("batters").get(0).path("stats"); batter.put("hits", 2).put("rbi", 2);
++        var pitcher = (ObjectNode) team.path("pitchers").get(0).path("stats"); pitcher.put("earnedRuns", 2).put("hitsAllowed", 2);
++        var codes = UniquePlayDetailQuality.issues(OfficialGameDetailFixture.detail(candidate)).stream().map(i -> i.code()).toList();
++        assertTrue(codes.containsAll(List.of("DETAIL_BATTER_HITS_AB", "DETAIL_TEAM_RBI", "DETAIL_PITCHER_EARNED_RUNS", "DETAIL_PITCHER_RUNS_TOTAL", "DETAIL_PITCHER_HITS_TOTAL")));
++        assertEquals(4.2, pitcher.path("era").asDouble());
++        assertTrue(UniquePlayDetailQuality.blocking(candidate).isEmpty());
++    }
++    @Test void issueIdsDoNotDependOnArrayPositionOrObservedValue() {
++        var candidate = OfficialGameDetailFixture.candidate(); var team = OfficialGameDetailFixture.team(candidate);
++        ((ObjectNode) team.path("batters").get(0).path("stats")).put("runs", 2);
++        var before = UniquePlayDetailQuality.issues(OfficialGameDetailFixture.detail(candidate)).stream().filter(i -> i.field().equals("batters.runs")).findFirst().orElseThrow();
++        ((ObjectNode) team.path("batters").get(0).path("stats")).put("runs", 3);
++        var after = UniquePlayDetailQuality.issues(OfficialGameDetailFixture.detail(candidate)).stream().filter(i -> i.field().equals("batters.runs")).findFirst().orElseThrow();
++        assertEquals(before.id(), after.id()); assertNotEquals(before.observed(), after.observed());
++    }
++    @Test void duplicateInningAndNegativeStatsRemainHardEvenWhenTotalsAreSoft() {
++        var candidate = OfficialGameDetailFixture.candidate(); var team = OfficialGameDetailFixture.team(candidate);
++        team.withArray("innings").add(team.path("innings").get(0).deepCopy());
++        ((ObjectNode) team.path("batters").get(0).path("stats")).put("runs", -1);
++        var codes = UniquePlayDetailQuality.blocking(candidate).stream().map(p -> p.code()).toList();
++        assertTrue(codes.containsAll(List.of("DETAIL_INNING", "DETAIL_STAT_RANGE")));
++    }
++}
+diff --git a/src/test/java/com/aubl/webpage/service/UniquePlayGameDetailPublicationTest.java b/src/test/java/com/aubl/webpage/service/UniquePlayGameDetailPublicationTest.java
+--- a/src/test/java/com/aubl/webpage/service/UniquePlayGameDetailPublicationTest.java
++++ b/src/test/java/com/aubl/webpage/service/UniquePlayGameDetailPublicationTest.java
+@@ -38,6 +38,7 @@
+         var season = new Season(); season.setId(10L); season.setYear(2026);
+         when(seasons.findByYear(2026)).thenReturn(Optional.of(season));
+         when(runs.findById(run.getId())).thenReturn(Optional.of(run));
++        when(runs.findForUpdate(run.getId())).thenReturn(Optional.of(run));
+         when(runs.save(any())).thenAnswer(call -> call.getArgument(0));
+         when(items.findByRunId(run.getId())).thenReturn(decisions);
+         when(revisions.save(any())).thenAnswer(call -> { UniquePlaySyncRevision revision = call.getArgument(0); saved.set(revision); return revision; });
+@@ -49,7 +50,7 @@
+         OfficialGameDetailFixture.detail(candidate).put("status", "NOT_PUBLISHED").putArray("teams");
+         var decision = new UniquePlaySyncItem(); decision.setEntityType("GAME_RECORD"); decision.setSourceKey("up-game-1"); decision.setResolution("KEEP_AUBL"); decision.setBeforeJson(prior.toString()); decisions.add(decision);
+         refreshCandidate(); String rawChecksum = run.getChecksum();
+-        service.publish(run.getId(), new PublishRequest(rawChecksum, "NONE"), "admin");
++        service.publish(run.getId(), request(rawChecksum, "NONE"), "admin");
+         assertNotEquals(rawChecksum, saved.get().getChecksum());
+         var published = OfficialGameDetailFixture.MAPPER.readTree(saved.get().getCandidateJson());
+         assertEquals(saved.get().getChecksum(), ReflectionTestUtils.invokeMethod(service, "candidateChecksum", published));
+@@ -60,10 +61,10 @@
+     }
+ 
+     @Test void repeatedSameSnapshotReusesRevisionWithoutWritingGameLogs() {
+-        service.publish(run.getId(), new PublishRequest(run.getChecksum(), "NONE"), "admin");
++        service.publish(run.getId(), request(run.getChecksum(), "NONE"), "admin");
+         var first = saved.get(); run.setStatus("READY_TO_PUBLISH");
+         when(revisions.findBySeasonYearAndChecksum(2026, first.getChecksum())).thenReturn(Optional.of(first));
+-        service.publish(run.getId(), new PublishRequest(run.getChecksum(), "NONE"), "admin");
++        service.publish(run.getId(), request(run.getChecksum(), "NONE"), "admin");
+         verify(revisions, times(1)).save(any()); verifyNoInteractions(games, publisher);
+     }
+ 
+@@ -73,7 +74,7 @@
+         var detail = OfficialGameDetailFixture.detail(candidate); detail.put("status", "NOT_PUBLISHED"); detail.putArray("teams");
+         var decision = new UniquePlaySyncItem(); decision.setEntityType("GAME_RECORD"); decision.setSourceKey("up-game-1"); decision.setResolution("KEEP_AUBL"); decision.setBeforeJson(prior.toString()); decisions.add(decision);
+         refreshCandidate();
+-        assertThrows(ResponseStatusException.class, () -> service.publish(run.getId(), new PublishRequest(run.getChecksum(), "NONE"), "admin"));
++        assertThrows(ResponseStatusException.class, () -> service.publish(run.getId(), request(run.getChecksum(), "NONE"), "admin"));
+         verify(revisions, never()).save(any()); verifyNoInteractions(games, publisher);
+     }
+ 
+@@ -121,7 +122,7 @@
+ 
+     @Test void legacyCandidateRemainsPublishableBeforeAnyDetailRevision() {
+         candidate.remove("gameDetails"); refreshCandidate();
+-        service.publish(run.getId(), new PublishRequest(run.getChecksum(), "NONE"), "admin");
++        service.publish(run.getId(), request(run.getChecksum(), "NONE"), "admin");
+         assertFalse(OfficialGameDetailFixture.MAPPER.readTree(saved.get().getCandidateJson()).has("gameDetails"));
+     }
+ 
+@@ -134,11 +135,11 @@
+         service.validate(run.getId());
+         assertEquals("VALIDATION_FAILED", run.getStatus()); assertTrue(run.getValidationJson().contains("DETAIL_GAME_OVERRIDE"));
+         run.setStatus("READY_TO_PUBLISH");
+-        assertThrows(ResponseStatusException.class, () -> service.publish(run.getId(), new PublishRequest(run.getChecksum(), "NONE"), "admin"));
++        assertThrows(ResponseStatusException.class, () -> service.publish(run.getId(), request(run.getChecksum(), "NONE"), "admin"));
+         verify(revisions, never()).save(any());
+         decision.setResolution("USE_SOURCE"); service.validate(run.getId());
+         assertEquals("READY_TO_PUBLISH", run.getStatus());
+-        service.publish(run.getId(), new PublishRequest(run.getChecksum(), "NONE"), "admin");
++        service.publish(run.getId(), request(run.getChecksum(), "NONE"), "admin");
+         assertNotNull(saved.get()); verify(mappings).delete(override);
+     }
+ 
+@@ -150,5 +151,6 @@
+         assertEquals("READY_TO_PUBLISH", run.getStatus());
+     }
+ 
++    private PublishRequest request(String checksum, String revision) { return new PublishRequest(checksum, revision, true, service.gameRecords(run.getId()).path("reviewChecksum").asText()); }
+     private void refreshCandidate() { String checksum = ReflectionTestUtils.invokeMethod(service, "candidateChecksum", candidate); candidate.put("checksum", checksum); run.setChecksum(checksum); run.setCandidateJson(candidate.toString()); }
+ }
+diff --git a/src/test/java/com/aubl/webpage/service/UniquePlaySyncGameMappingTest.java b/src/test/java/com/aubl/webpage/service/UniquePlaySyncGameMappingTest.java
+--- a/src/test/java/com/aubl/webpage/service/UniquePlaySyncGameMappingTest.java
++++ b/src/test/java/com/aubl/webpage/service/UniquePlaySyncGameMappingTest.java
+@@ -102,6 +102,7 @@
+         away = team(2L, "Away AUBL");
+ 
+         when(runRepository.findById(run.getId())).thenReturn(Optional.of(run));
++        when(runRepository.findForUpdate(run.getId())).thenReturn(Optional.of(run));
+         when(runRepository.save(any(UniquePlaySyncRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
+         when(itemRepository.findByRunId(run.getId())).thenAnswer(invocation -> savedItems);
+         when(itemRepository.save(any(UniquePlaySyncItem.class))).thenAnswer(invocation -> {
+diff --git a/src/test/java/com/aubl/webpage/service/UniquePlaySyncRevisionFreshnessTest.java b/src/test/java/com/aubl/webpage/service/UniquePlaySyncRevisionFreshnessTest.java
+--- a/src/test/java/com/aubl/webpage/service/UniquePlaySyncRevisionFreshnessTest.java
++++ b/src/test/java/com/aubl/webpage/service/UniquePlaySyncRevisionFreshnessTest.java
+@@ -83,6 +83,7 @@
+         run.setCreatedBy("admin@example.com");
+ 
+         when(runRepository.findById(run.getId())).thenReturn(Optional.of(run));
++        when(runRepository.findForUpdate(run.getId())).thenReturn(Optional.of(run));
+         when(runRepository.save(any(UniquePlaySyncRun.class))).thenAnswer(invocation -> invocation.getArgument(0));
+         when(itemRepository.findByRunId(run.getId())).thenReturn(List.of());
+         when(revisionRepository.findBySeasonYearAndActiveTrue(2026)).thenReturn(Optional.empty());

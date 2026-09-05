@@ -3,7 +3,7 @@ import { validateCandidate } from './validation.mjs';
 import { readOpenGameBoxscore, resultListIsReady } from './boxscore-adapter.mjs';
 import { contextualizeDetailError, detailError } from './game-details.mjs';
 
-export const ADAPTER_VERSION = '2026.09.05.9';
+export const ADAPTER_VERSION = '2026.09.05.10';
 const GROUP_CODES = [...'ABCDEFGH'];
 const BATTER_HEADERS = ['타율', '팀게임', '선수게임', '타석', '타수', '총안타', '1루타', '2루타', '3루타', '홈런', '타점', '득점', '도루', '볼넷', '삼진', '출루율', '장타율', 'OPS'];
 const PITCHER_HEADERS = ['ERA', '팀게임', '선수게임', '이닝', '승', '패', '세이브', '홀드', '삼진', '피안타', '피홈런', '실점', '볼넷', '사구', '승률', 'WHIP'];
@@ -100,31 +100,42 @@ async function readVisibleTable(page, anchor, expectedHeaders) {
   }, { anchor, expectedHeaders });
 }
 
-async function scrollTable(page, anchor) {
-  return page.evaluate((anchor) => {
+async function scrollTable(page, anchor, expectedHeaders) {
+  return page.evaluate(({ anchor, expectedHeaders }) => {
     const normalize = (value) => String(value || '').normalize('NFKC').replace(/\s+/g, ' ').replace(/[▲▼]/g, '').trim();
-    const headerCell = [...document.querySelectorAll('*')].find((node) => normalize(node.textContent) === anchor && node.children.length <= 1);
-    let scroll = headerCell?.parentElement?.parentElement?.parentElement;
+    const headerCandidates = [...document.querySelectorAll('*')]
+      .filter((node) => normalize(node.textContent) === anchor && node.children.length <= 1);
+    let headerRow = null;
+    for (const candidate of headerCandidates) {
+      const candidateRow = candidate.parentElement;
+      const candidateHeaders = candidateRow ? [...candidateRow.children].map((node) => normalize(node.textContent)) : [];
+      if (expectedHeaders.every((header, index) => candidateHeaders[index] === header)) {
+        headerRow = candidateRow;
+        break;
+      }
+    }
+    const valuesRoot = headerRow?.parentElement;
+    let scroll = valuesRoot?.parentElement;
     while (scroll && scroll !== document.body && scroll.scrollHeight <= scroll.clientHeight + 2) scroll = scroll.parentElement;
     if (!scroll || scroll === document.body) return false;
     const before = scroll.scrollTop;
     scroll.scrollTop = Math.min(scroll.scrollHeight, before + Math.max(180, Math.floor(scroll.clientHeight * 0.8)));
     return scroll.scrollTop > before;
-  }, anchor);
+  }, { anchor, expectedHeaders });
 }
 
 async function collectVirtualTable(page, anchor, headers) {
   return collectUntilStable({
     read: () => readVisibleTable(page, anchor, headers),
-    advance: () => scrollTable(page, anchor),
+    advance: () => scrollTable(page, anchor, headers),
     wait: () => page.waitForTimeout(120),
   });
 }
 
 export async function collectUntilStable({ read, advance, wait = async () => {}, maxPasses = 100 }) {
   const seen = new Map();
-  let unchangedSamples = 0;
-  for (let pass = 0; pass < maxPasses && unchangedSamples < 3; pass += 1) {
+  let settledAtEnd = 0;
+  for (let pass = 0; pass < maxPasses && settledAtEnd < 3; pass += 1) {
     const snapshot = await read();
     if (snapshot.reason) throw new Error(`UniquePlay table changed (${snapshot.reason})`);
     const before = seen.size;
@@ -132,11 +143,13 @@ export async function collectUntilStable({ read, advance, wait = async () => {},
       const key = row.fixed.join('|');
       if (key) seen.set(key, row);
     }
-    unchangedSamples = seen.size === before ? unchangedSamples + 1 : 0;
     const advanced = await advance();
-    if (!advanced) unchangedSamples += 1;
+    // Repeated rows inside a virtualized viewport are not completion evidence.
+    // Count stability only after the same scroll surface reports its actual end.
+    settledAtEnd = seen.size === before && !advanced ? settledAtEnd + 1 : 0;
     await wait();
   }
+  if (settledAtEnd < 3) throw incompleteCollectionError('table');
   return [...seen.values()];
 }
 
@@ -154,7 +167,15 @@ export async function collectLazyList({ read, advance, identify, wait = async ()
     settledAtEnd = seen.size === before && !advanced ? settledAtEnd + 1 : 0;
     await wait();
   }
+  if (settledAtEnd < 3) throw incompleteCollectionError('list');
   return [...seen.values()];
+}
+
+function incompleteCollectionError(kind) {
+  return Object.assign(
+    new Error(`UniquePlay ${kind} collection did not reach a stable end`),
+    { code: 'COLLECTION_INCOMPLETE' },
+  );
 }
 
 function standingFromRow(row) {
@@ -228,10 +249,24 @@ async function readVisibleGames(page, seasonYear) {
 
 async function scrollPageList(page) {
   return page.evaluate(() => {
-    const candidates = [...document.querySelectorAll('*')].filter((node) => node.scrollHeight > node.clientHeight + 2);
-    const target = candidates.sort(
-      (a, b) => (b.scrollHeight - b.clientHeight) - (a.scrollHeight - a.clientHeight),
-    )[0];
+    const normalize = (value) => String(value ?? '').normalize('NFKC').replace(/\s+/gu, ' ').trim();
+    const datePattern = /^\d{2}\/\d{2}\s+\S+\s+\d{2}:\d{2}$/u;
+    const leaves = [...document.querySelectorAll('*')]
+      .filter((node) => node.children.length === 0 && datePattern.test(normalize(node.textContent)));
+    const candidateCounts = new Map();
+    for (const leaf of leaves) {
+      let candidate = leaf.parentElement;
+      while (candidate && candidate !== document.body && candidate.scrollHeight <= candidate.clientHeight + 2) {
+        candidate = candidate.parentElement;
+      }
+      if (candidate && candidate !== document.body) {
+        candidateCounts.set(candidate, (candidateCounts.get(candidate) || 0) + 1);
+      }
+    }
+    const target = [...candidateCounts.entries()].sort((left, right) => (
+      right[1] - left[1]
+      || (right[0].scrollHeight - right[0].clientHeight) - (left[0].scrollHeight - left[0].clientHeight)
+    ))[0]?.[0];
     if (!target) return false;
     const before = target.scrollTop;
     target.scrollTop = Math.min(target.scrollHeight, before + Math.max(300, Math.floor(target.clientHeight * 0.8)));
