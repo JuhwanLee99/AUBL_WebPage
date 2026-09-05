@@ -14,7 +14,6 @@ import '../../core/services/moderation_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/editor/delta_utils.dart';
 import '../../core/widgets/editor/rich_text_editor.dart';
-import '../../core/widgets/season_components.dart';
 import 'inquiry_board_screen.dart';
 import 'notice_detail_screen.dart';
 import 'player_registration_board_screen.dart';
@@ -231,14 +230,6 @@ class CommunityScreenState extends State<CommunityScreen> {
                       child: ListView(
                         padding: EdgeInsets.symmetric(horizontal: outerInset),
                         children: [
-                          const Padding(
-                            padding: EdgeInsets.fromLTRB(12, 8, 12, 8),
-                            child: SeasonPageHero(
-                              eyebrow: 'AUBL COMMUNITY',
-                              title: Text('리그 커뮤니티'),
-                              description: '공식 공지와 리그 참여 채널을 한곳에서 확인하세요.',
-                            ),
-                          ),
                           // ── 갤러리 배너 ──
                           _buildGalleryBanner(),
 
@@ -347,11 +338,15 @@ class CommunityScreenState extends State<CommunityScreen> {
                                   horizontal: 12,
                                   vertical: 3,
                                 ),
-                                child: Card(
-                                  child: ListTile(
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
+                                child: Material(
+                                  color: colors.surface,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(4),
+                                    side: BorderSide(color: colors.line),
+                                  ),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(4),
                                     onTap: () {
                                       Navigator.of(context)
                                           .push(
@@ -362,90 +357,140 @@ class CommunityScreenState extends State<CommunityScreen> {
                                           )
                                           .then((_) => _loadNotices());
                                     },
-                                    leading: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: _categoryColor(
-                                          context,
-                                          n.category,
-                                        ).withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(3),
-                                        border: Border.all(
-                                          color: _categoryColor(
-                                            context,
-                                            n.category,
-                                          ).withValues(alpha: 0.4),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        n.category,
-                                        style: TextStyle(
-                                          color: _categoryColor(
-                                            context,
-                                            n.category,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Wrap(
+                                                  spacing: 8,
+                                                  runSpacing: 4,
+                                                  crossAxisAlignment:
+                                                      WrapCrossAlignment.center,
+                                                  children: [
+                                                    Container(
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 6,
+                                                            vertical: 2,
+                                                          ),
+                                                      decoration: BoxDecoration(
+                                                        color:
+                                                            _categoryColor(
+                                                              context,
+                                                              n.category,
+                                                            ).withValues(
+                                                              alpha: 0.1,
+                                                            ),
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              3,
+                                                            ),
+                                                        border: Border.all(
+                                                          color:
+                                                              _categoryColor(
+                                                                context,
+                                                                n.category,
+                                                              ).withValues(
+                                                                alpha: 0.4,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                      child: Text(
+                                                        n.category,
+                                                        style: TextStyle(
+                                                          color: _categoryColor(
+                                                            context,
+                                                            n.category,
+                                                          ),
+                                                          fontSize: 11,
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      ago,
+                                                      style: TextStyle(
+                                                        color: colors.muted,
+                                                        fontSize: 12,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 7),
+                                                Text(
+                                                  n.title,
+                                                  style: const TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                  maxLines: 2,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  n.author,
+                                                  style: TextStyle(
+                                                    color: colors.muted,
+                                                    fontSize: 12,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                                if (attachment.hasAny) ...[
+                                                  const SizedBox(height: 6),
+                                                  Wrap(
+                                                    spacing: 6,
+                                                    runSpacing: 4,
+                                                    children: [
+                                                      if (attachment.hasImage)
+                                                        _buildAttachmentBadge(
+                                                          context,
+                                                          icon: Icons
+                                                              .image_outlined,
+                                                          label: '이미지',
+                                                        ),
+                                                      if (attachment.hasVideo)
+                                                        _buildAttachmentBadge(
+                                                          context,
+                                                          icon: Icons
+                                                              .videocam_outlined,
+                                                          label: '동영상',
+                                                        ),
+                                                      if (attachment.hasLink)
+                                                        _buildAttachmentBadge(
+                                                          context,
+                                                          icon: Icons.link,
+                                                          label: '링크',
+                                                        ),
+                                                    ],
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
                                           ),
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                    title: Text(
-                                      n.title,
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    subtitle: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          '${n.author} · $ago',
-                                          style: TextStyle(
-                                            color: colors.muted,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                        if (attachment.hasAny) ...[
-                                          const SizedBox(height: 4),
-                                          Wrap(
-                                            spacing: 6,
-                                            runSpacing: 4,
-                                            children: [
-                                              if (attachment.hasImage)
-                                                _buildAttachmentBadge(
-                                                  context,
-                                                  icon: Icons.image_outlined,
-                                                  label: '이미지',
-                                                ),
-                                              if (attachment.hasVideo)
-                                                _buildAttachmentBadge(
-                                                  context,
-                                                  icon: Icons.videocam_outlined,
-                                                  label: '동영상',
-                                                ),
-                                              if (attachment.hasLink)
-                                                _buildAttachmentBadge(
-                                                  context,
-                                                  icon: Icons.link,
-                                                  label: '링크',
-                                                ),
-                                            ],
+                                          const SizedBox(width: 8),
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              top: 2,
+                                            ),
+                                            child: Icon(
+                                              Icons.arrow_forward_rounded,
+                                              size: 18,
+                                              color: colors.muted,
+                                            ),
                                           ),
                                         ],
-                                      ],
-                                    ),
-                                    trailing: Icon(
-                                      Icons.chevron_right,
-                                      size: 18,
-                                      color: colors.muted,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -604,7 +649,7 @@ class CommunityScreenState extends State<CommunityScreen> {
     return _CommunityLinkCard(
       icon: Icons.chat_bubble_outline_rounded,
       title: '건의/문의 게시판',
-      description: '기능 개선, 버그 신고, 사용 문의를 남겨주세요',
+      description: '오류 신고와 이용 문의',
       onTap: () {
         Navigator.of(context).push<void>(
           MaterialPageRoute(builder: (_) => const InquiryBoardScreen()),
@@ -618,9 +663,7 @@ class CommunityScreenState extends State<CommunityScreen> {
     return _CommunityLinkCard(
       icon: canAccess ? Icons.badge_outlined : Icons.lock_outline,
       title: '선수 등록 게시판',
-      description: canAccess
-          ? '선수 등록(관리자), 유니폼 등록(감독/관리자)'
-          : '선수/기록원 등급 이상만 접근 가능',
+      description: canAccess ? '선수·유니폼 등록 관리' : '선수·기록원 이상 이용 가능',
       locked: !canAccess,
       onTap: () async {
         final messenger = ScaffoldMessenger.of(context);
@@ -648,7 +691,7 @@ class CommunityScreenState extends State<CommunityScreen> {
     return _CommunityLinkCard(
       icon: Icons.photo_library_outlined,
       title: 'AUBL 갤러리',
-      description: 'DC인사이드 갤러리로 이동',
+      description: '사진과 소식 보기',
       external: true,
       onTap: () async {
         final uri = Uri.parse('https://m.dcinside.com/board/aubl');
@@ -681,7 +724,7 @@ class _CommunityLinkCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.aublColors;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
       child: Material(
         color: colors.surface,
         shape: RoundedRectangleBorder(
@@ -693,44 +736,44 @@ class _CommunityLinkCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(4),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(0, 0, 12, 0),
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
             child: Row(
               children: [
                 Container(
-                  width: 72,
-                  constraints: const BoxConstraints(minHeight: 78),
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
                     color: colors.surfaceMuted,
-                    border: Border(right: BorderSide(color: colors.line)),
+                    border: Border.all(color: colors.line),
+                    borderRadius: BorderRadius.circular(3),
                   ),
                   child: Icon(
                     icon,
                     color: locked ? colors.danger : colors.cobalt,
-                    size: 25,
+                    size: 22,
                   ),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: const TextStyle(fontWeight: FontWeight.w800),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: colors.muted,
+                          fontSize: 12,
+                          height: 1.35,
                         ),
-                        const SizedBox(height: 3),
-                        Text(
-                          description,
-                          style: TextStyle(
-                            color: colors.muted,
-                            fontSize: 12,
-                            height: 1.45,
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 8),

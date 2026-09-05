@@ -89,19 +89,7 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
                 child: CustomScrollView(
                   slivers: [
                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                      sliver: SliverToBoxAdapter(
-                        child: SeasonPageHero(
-                          eyebrow: '2026 SEASON TEAMS',
-                          title: const Text('팀 디렉터리'),
-                          description: _usingPublishedSeason
-                              ? 'A~H조의 공식 시즌 편성과 팀 정보를 확인하세요.'
-                              : '저장된 팀 편성을 표시하고 있습니다. 연결되면 공식 편성으로 갱신됩니다.',
-                        ),
-                      ),
-                    ),
-                    SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                       sliver: SliverToBoxAdapter(
                         child: TextField(
                           decoration: const InputDecoration(
@@ -132,7 +120,7 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
                         child: _TeamDirectorySummary(
                           label: _loading
                               ? '팀 정보를 불러오는 중'
-                              : '${filtered.length}개 팀',
+                              : '${filtered.length}개 팀 · ${_usingPublishedSeason ? '2026 공식 편성' : '저장된 편성'}',
                           sortLabel:
                               _viewModel.sortMode == TeamHubSortMode.group
                               ? '조별 정렬'
@@ -256,53 +244,43 @@ class _TeamGroupSelector extends StatelessWidget {
     final colors = context.aublColors;
     final options = <String?>[null, ...groupLetters];
     final textScale = MediaQuery.textScalerOf(context).scale(1);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 780
-            ? 9
-            : constraints.maxWidth >= 520
-            ? 5
-            : 3;
-        final itemHeight = textScale >= 1.6 ? 56.0 : 44.0;
-        final rows = (options.length / columns).ceil();
-        return SizedBox(
-          height: rows * itemHeight + (rows - 1) * 6,
-          child: GridView.builder(
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: columns,
-              mainAxisExtent: itemHeight,
-              mainAxisSpacing: 6,
-              crossAxisSpacing: 6,
-            ),
-            itemCount: options.length,
-            itemBuilder: (context, index) {
-              final group = options[index];
-              final selected = group == selectedGroup;
-              final selectedFill =
-                  Theme.of(context).brightness == Brightness.dark
-                  ? const Color(0xFF285FA9)
-                  : AppTheme.navy900;
-              return Semantics(
-                button: true,
-                selected: selected,
-                label: group == null ? '전체 팀 보기' : '$group조 팀 보기',
-                child: Material(
-                  color: selected ? selectedFill : colors.surface,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    side: BorderSide(
-                      color: selected ? selectedFill : colors.line,
-                    ),
+    final itemHeight = textScale >= 1.6 ? 56.0 : 44.0;
+    final selectedFill = Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFF285FA9)
+        : AppTheme.navy900;
+    return SizedBox(
+      height: itemHeight,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: options.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        itemBuilder: (context, index) {
+          final group = options[index];
+          final selected = group == selectedGroup;
+          return Semantics(
+            button: true,
+            selected: selected,
+            label: group == null ? '전체 팀 보기' : '$group조 팀 보기',
+            child: Material(
+              color: selected ? selectedFill : colors.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(4),
+                side: BorderSide(color: selected ? selectedFill : colors.line),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: () => onSelected(group),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: group == null ? 64 : 56,
+                    minHeight: itemHeight,
                   ),
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    onTap: () => onSelected(group),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Center(
                       child: Text(
                         group == null ? '전체' : '$group조',
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.labelLarge?.copyWith(
                           color: selected ? Colors.white : colors.ink,
                         ),
@@ -310,11 +288,11 @@ class _TeamGroupSelector extends StatelessWidget {
                     ),
                   ),
                 ),
-              );
-            },
-          ),
-        );
-      },
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }

@@ -400,7 +400,7 @@ class _MoreScreenState extends State<MoreScreen> {
   Widget _buildLoginBanner() {
     final colors = context.aublColors;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: Material(
         color: colors.surface,
         shape: RoundedRectangleBorder(
@@ -412,12 +412,12 @@ class _MoreScreenState extends State<MoreScreen> {
           borderRadius: BorderRadius.circular(4),
           onTap: _login,
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(10, 10, 12, 10),
             child: Row(
               children: [
                 Container(
-                  width: 48,
-                  height: 48,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
                     color: colors.surfaceMuted,
                     border: Border.all(color: colors.line),
@@ -431,7 +431,7 @@ class _MoreScreenState extends State<MoreScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '로그인하고 더 많은 기능을 이용하세요',
+                        '로그인 / 회원가입',
                         style: TextStyle(
                           color: colors.ink,
                           fontSize: 14,
@@ -440,31 +440,19 @@ class _MoreScreenState extends State<MoreScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '팀 관리, 승부예측 등 다양한 기능을 사용할 수 있습니다.',
+                        '계정과 소속 팀 기능을 이용하세요.',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(color: colors.muted, fontSize: 12),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(width: 8),
-                Container(
-                  constraints: const BoxConstraints(minHeight: 44),
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: colors.navy,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                  child: Text(
-                    '로그인',
-                    style: TextStyle(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? AppTheme.navy950
-                          : Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
+                Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 20,
+                  color: colors.cobalt,
                 ),
               ],
             ),
@@ -519,7 +507,7 @@ class _MoreScreenState extends State<MoreScreen> {
                 label: '계정',
                 onTap: () => _push(const AccountScreen()),
               ),
-              const Divider(height: 32),
+              const Divider(height: 18, indent: 16, endIndent: 16),
               const _SectionTitle('알림'),
               _MenuTile(
                 icon: Icons.notifications_active,
@@ -527,7 +515,7 @@ class _MoreScreenState extends State<MoreScreen> {
                 value: _loadingNotif ? '확인 중...' : _notificationSummary(),
                 onTap: _openNotificationSettings,
               ),
-              const Divider(height: 32),
+              const Divider(height: 18, indent: 16, endIndent: 16),
               const _SectionTitle('리그 정보'),
               _MenuTile(
                 icon: Icons.info_outline,
@@ -547,7 +535,7 @@ class _MoreScreenState extends State<MoreScreen> {
               //   onTap: () => _push(const PredictionScreen()),
               // ),
               if (!_checking && _loggedIn && (_isAdmin || _isScorer)) ...[
-                const Divider(height: 32),
+                const Divider(height: 18, indent: 16, endIndent: 16),
                 _SectionTitle(_isAdmin ? '관리자' : '기록원'),
                 _MenuTile(
                   icon: Icons.fact_check,
@@ -624,14 +612,14 @@ class _MoreScreenState extends State<MoreScreen> {
                 ],
               ],
 
-              const Divider(height: 32),
+              const Divider(height: 18, indent: 16, endIndent: 16),
               const _SectionTitle('도움말'),
               _MenuTile(
                 icon: Icons.help_outline,
                 label: '사용 설명서',
                 onTap: () => _push(const UserManualScreen()),
               ),
-              const Divider(height: 32),
+              const Divider(height: 18, indent: 16, endIndent: 16),
               const _SectionTitle('앱 정보'),
               _MenuTile(
                 icon: Icons.privacy_tip_outlined,
@@ -643,7 +631,7 @@ class _MoreScreenState extends State<MoreScreen> {
                 label: '이용약관',
                 onTap: () => _push(const TermsScreen()),
               ),
-              const Divider(height: 32),
+              const Divider(height: 18, indent: 16, endIndent: 16),
               if (_loggedIn)
                 _MenuTile(
                   icon: Icons.logout,
@@ -674,23 +662,13 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 7),
-      child: Container(
-        padding: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(color: context.aublColors.navy, width: 2),
-          ),
-        ),
-        child: Text(
-          title.toUpperCase(),
-          style: TextStyle(
-            color: context.aublColors.cobalt,
-            fontFamily: 'BarlowCondensed',
-            fontSize: 12,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 1.2,
-          ),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+      child: Text(
+        title,
+        style: TextStyle(
+          color: context.aublColors.muted,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -716,19 +694,17 @@ class _MenuTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.aublColors;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
-      child: Material(
-        color: colors.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(4),
-          side: BorderSide(color: colors.line),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: colors.line)),
         ),
-        clipBehavior: Clip.antiAlias,
         child: ListTile(
-          minTileHeight: 58,
+          minTileHeight: 54,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 4),
           leading: Container(
-            width: 38,
-            height: 38,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               color: colors.surfaceMuted,
               borderRadius: BorderRadius.circular(3),

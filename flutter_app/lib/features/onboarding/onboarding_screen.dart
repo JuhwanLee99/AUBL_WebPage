@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
-import '../../core/widgets/season_campaign_hero.dart';
 import '../auth/login_webview_screen.dart';
 
 class OnboardingScreen extends StatelessWidget {
@@ -18,64 +17,124 @@ class OnboardingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.aublColors;
     return Scaffold(
-      backgroundColor: context.aublColors.canvas,
+      backgroundColor: colors.canvas,
       body: SafeArea(
         child: LayoutBuilder(
-          builder: (context, constraints) => SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 28),
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 960),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Semantics(
-                      label: 'AUBL 전국대학아마추어야구연합회',
-                      image: true,
-                      child: Image.asset(
-                        'assets/images/aubl_clean.png',
-                        width: 46,
-                        height: 38,
-                        fit: BoxFit.contain,
-                      ),
+          builder: (context, constraints) {
+            final horizontalPadding = constraints.maxWidth < 420 ? 24.0 : 36.0;
+            return SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                28,
+                horizontalPadding,
+                28,
+              ),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: 520,
+                    minHeight: (constraints.maxHeight - 56).clamp(
+                      0,
+                      double.infinity,
                     ),
-                    const SizedBox(height: 12),
-                    SeasonCampaignHero(
-                      topline: '전국대학아마추어야구연합회 · SINCE 1981',
-                      lead: '우리의 청춘은 이번에도',
-                      emphasis: 'PLAY BALL',
-                      description:
-                          '경기 일정과 결과, 조별 현황, 선수 기록과 문자중계를 하나의 앱에서 확인하세요.',
-                      subcopy: '2026 연합회교 중앙대학교(서울)와 함께하는 제46회 AUBL 시즌입니다.',
-                      primaryActionLabel: '로그인 / 회원가입',
-                      onPrimaryAction: () => _handleLogin(context),
-                      secondaryActionLabel: '로그인 없이 둘러보기',
-                      onSecondaryAction: onComplete,
-                      facts: const [
-                        SeasonHeroFact(
-                          label: 'GAMES',
-                          value: '일정 · 결과 · 라이브',
-                          description: '공식 시즌 경기 흐름을 한눈에 확인',
+                  ),
+                  child: IntrinsicHeight(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Spacer(),
+                        Semantics(
+                          label: 'AUBL 전국대학아마추어야구연합회',
+                          image: true,
+                          child: Center(
+                            child: Image.asset(
+                              'assets/images/aubl_clean.png',
+                              width: 116,
+                              height: 72,
+                              fit: BoxFit.contain,
+                              color:
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? colors.ink
+                                  : null,
+                              colorBlendMode: BlendMode.srcIn,
+                            ),
+                          ),
                         ),
-                        SeasonHeroFact(
-                          label: 'RECORDS',
-                          value: '조별 · 타자 · 투수',
-                          description: '게시된 UniquePlay 기록을 기준으로 제공',
+                        const SizedBox(height: 12),
+                        Text(
+                          'AUBL',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: colors.navyStrong,
+                            fontFamily: 'BarlowCondensed',
+                            fontSize: 36,
+                            fontWeight: FontWeight.w900,
+                            height: 1,
+                            letterSpacing: 1.2,
+                          ),
                         ),
-                        SeasonHeroFact(
-                          label: 'COMMUNITY',
-                          value: '공지 · 팀 · 커뮤니티',
-                          description: '연합회와 소속 팀의 소식을 빠르게 전달',
+                        const SizedBox(height: 6),
+                        Text(
+                          '전국대학아마추어야구연합회',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: colors.muted,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          '경기 일정, 기록, 문자중계를\n한곳에서 확인하세요',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(color: colors.ink, height: 1.45),
+                        ),
+                        const Spacer(),
+                        const SizedBox(height: 24),
+                        FilledButton(
+                          onPressed: () => _handleLogin(context),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size.fromHeight(52),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 14,
+                            ),
+                          ),
+                          child: const Text('로그인 / 회원가입'),
+                        ),
+                        const SizedBox(height: 10),
+                        OutlinedButton(
+                          onPressed: onComplete,
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(52),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 14,
+                            ),
+                            foregroundColor: colors.navy,
+                            side: BorderSide(color: colors.lineStrong),
+                          ),
+                          child: const Text('로그인 없이 둘러보기'),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          '2026 시즌 · 우리의 청춘은 이번에도 PLAY BALL',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodySmall?.copyWith(color: colors.muted),
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );

@@ -5,9 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('onboarding keeps the campaign hero usable at 360px and 200%', (
+  testWidgets('onboarding keeps native actions visible at 360px and 200%', (
     tester,
   ) async {
+    var completed = false;
     await tester.binding.setSurfaceSize(const Size(360, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -20,14 +21,23 @@ void main() {
           ).copyWith(textScaler: const TextScaler.linear(2)),
           child: child!,
         ),
-        home: OnboardingScreen(onComplete: () {}),
+        home: OnboardingScreen(onComplete: () => completed = true),
       ),
     );
     await tester.pump();
 
-    expect(find.text('PLAY BALL'), findsOneWidget);
+    expect(find.textContaining('PLAY BALL'), findsOneWidget);
     expect(find.text('로그인 / 회원가입'), findsOneWidget);
     expect(find.text('로그인 없이 둘러보기'), findsOneWidget);
+    expect(
+      tester.getRect(find.text('로그인 / 회원가입')).bottom,
+      lessThanOrEqualTo(800),
+    );
+
+    await tester.tap(find.text('로그인 없이 둘러보기'));
+    await tester.pump();
+
+    expect(completed, isTrue);
     expect(tester.takeException(), isNull);
   });
 
