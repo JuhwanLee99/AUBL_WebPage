@@ -14,6 +14,8 @@ import {
   type GameRecordTeamReview,
 } from '../gameRecordReview';
 import './UniquePlaySync.css';
+import { normalizeOfficialGameDetail } from '@core/api/backendClient';
+import OfficialGameAuditTables from './OfficialGameAuditTables';
 
 interface Props {
   items: UniquePlaySyncDiffItem[];
@@ -246,6 +248,9 @@ function GameRecordTeamSummary({ team }: { team: GameRecordTeamReview }) {
 
 function GameRecordReviewPanel({ item }: { item: UniquePlaySyncDiffItem }) {
   const review = buildGameRecordReview(item.changes);
+  const candidateDetail = review.status === 'AVAILABLE' && review.comparisonAvailable && !review.structureUnavailable
+    ? normalizeOfficialGameDetail(Object.fromEntries(item.changes.filter(change => ['schemaVersion', 'sourceGameId', 'providerGameId', 'status', 'teams'].includes(change.field)).map(change => [change.field, change.sourceValue])))
+    : null;
   const [expanded, setExpanded] = useState(review.structureUnavailable || review.mismatchCount > 0);
   const noComparison = !review.comparisonAvailable;
   const notPublished = !noComparison && review.status === 'NOT_PUBLISHED' && !review.structureUnavailable;
@@ -316,8 +321,9 @@ function GameRecordReviewPanel({ item }: { item: UniquePlaySyncDiffItem }) {
           </div>
         )}
         <p className="game-record-review__footnote">
-          팀 R/H, 타자별 R/H 합계와 이닝별 R 합계만 표시합니다. 개인정보 및 허용되지 않은 원본 필드는 표시하지 않습니다.
+          위 요약은 R/H와 이닝 합계 비교입니다. 아래 타점·투수 기록도 함께 대조하세요. 전체 오류 판정은 ‘경기별 오류 검수·수정’과 서버 검증을 기준으로 합니다.
         </p>
+        {candidateDetail && <OfficialGameAuditTables detail={candidateDetail} />}
       </div>
     </details>
   );

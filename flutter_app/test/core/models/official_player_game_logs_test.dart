@@ -7,6 +7,104 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  test(
+    'record quality is independent of availability and preserves raw values',
+    () {
+      final game = OfficialPlayerGame.fromJson({
+        'quality': 'CORRECTION_PENDING',
+        'homeScore': 12,
+        'issues': [
+          {
+            'id': 'runs',
+            'code': 'DETAIL_BATTER_TOTAL',
+            'message': '팀 12점 / 선수 득점 합계 6점',
+            'teamName': '테스트 팀',
+            'email': 'not retained',
+          },
+        ],
+        'batters': [
+          {
+            'stats': {'runs': 6, 'rbi': null},
+          },
+        ],
+      });
+      expect(game.qualityLabel, '오류 수정 중');
+      expect(game.homeScore, 12);
+      expect(game.batters.single.stats['runs'], 6);
+      expect(game.batters.single.stats['rbi'], isNull);
+      expect(game.issues.single.message, '팀 12점 / 선수 득점 합계 6점');
+      expect(game.issues.single.teamName, '테스트 팀');
+    },
+  );
+
+  test(
+    'legacy and unknown quality cannot become a clean or resolved claim',
+    () {
+      final legacy = OfficialPlayerGame.fromJson({});
+      expect(legacy.quality, isNull);
+      expect(legacy.qualityLabel, isNull);
+      for (final quality in [
+        'FUTURE',
+        {'status': 'RESOLVED'},
+      ]) {
+        expect(
+          () => OfficialPlayerGame.fromJson({'quality': quality}),
+          throwsFormatException,
+        );
+      }
+      expect(
+        OfficialPlayerGame.fromJson({'quality': 'CLEAN'}).qualityLabel,
+        isNull,
+      );
+    },
+  );
+
+  test('resolution provenance and timestamp are parsed without defaulting', () {
+    for (final source in ['MANUAL', 'SOURCE']) {
+      final game = OfficialPlayerGame.fromJson({
+        'quality': 'RESOLVED',
+        'resolutionSource': source,
+        'resolvedAt': '2026-09-05T00:20:00Z',
+      });
+      expect(game.qualityLabel, '오류 해결');
+      expect(game.resolutionSource, source);
+      expect(game.resolvedAt, DateTime.utc(2026, 9, 5, 0, 20));
+    }
+    final unknown = OfficialPlayerGame.fromJson({
+      'quality': 'RESOLVED',
+      'resolutionSource': 'FUTURE',
+      'resolvedAt': 'invalid',
+    });
+    expect(unknown.resolutionSource, isNull);
+    expect(unknown.resolvedAt, isNull);
+  });
+
+  test(
+    'quality items cannot cross game identities and ignore invalid codes',
+    () {
+      expect(
+        () => OfficialPlayerGame.fromJson({
+          'sourceGameId': 'up-one',
+          'quality': 'CORRECTION_PENDING',
+          'issues': [
+            {'sourceGameId': 'up-other', 'code': 'DETAIL_BATTER_TOTAL'},
+          ],
+        }),
+        throwsFormatException,
+      );
+      final game = OfficialPlayerGame.fromJson({
+        'sourceGameId': 'up-one',
+        'quality': 'CORRECTION_PENDING',
+        'issues': [
+          {'code': 'invalid code'},
+          {'code': 'DETAIL_BATTER_TOTAL'},
+        ],
+      });
+      expect(game.issues.length, 1);
+      expect(game.issues.single.code, 'DETAIL_BATTER_TOTAL');
+    },
+  );
+
   test('only explicit absence of an active revision permits legacy data', () {
     for (final status in [
       'AVAILABLE',

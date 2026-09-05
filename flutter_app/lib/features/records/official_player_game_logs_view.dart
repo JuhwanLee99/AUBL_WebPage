@@ -74,8 +74,27 @@ class OfficialPlayerGameLogsView extends StatelessWidget {
                 '${game.awayScore ?? '—'} ${game.awayTeamName}',
                 style: Theme.of(context).textTheme.titleSmall,
               ),
-              subtitle: Text(_dateLabel(game.playedAt)),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_dateLabel(game.playedAt)),
+                  if (game.qualityLabel != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        game.qualityLabel!,
+                        style: TextStyle(
+                          color: game.quality == 'CORRECTION_PENDING'
+                              ? colors.warning
+                              : colors.success,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
               children: [
+                if (game.qualityLabel != null) _RecordQualityNotice(game: game),
                 for (final row in game.batters)
                   _PlayerRow(row: row, pitcher: false),
                 for (final row in game.pitchers)
@@ -102,6 +121,75 @@ class OfficialPlayerGameLogsView extends StatelessWidget {
     return date == null
         ? '경기 일시 확인 중'
         : DateFormat('yyyy.MM.dd HH:mm').format(date);
+  }
+}
+
+class _RecordQualityNotice extends StatelessWidget {
+  const _RecordQualityNotice({required this.game});
+  final OfficialPlayerGame game;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.aublColors;
+    final pending = game.quality == 'CORRECTION_PENDING';
+    final message = pending
+        ? '이 경기의 일부 상세 기록에 불일치나 확인이 필요한 항목이 발견되어 검토·수정 중입니다. '
+              '아래 기록은 현재 게시된 값이며, 확인되지 않은 수치를 임의로 보정하지 않습니다.'
+        : switch (game.resolutionSource) {
+            'MANUAL' => '관리자가 수정한 기록이 검증을 통과해 반영되었습니다.',
+            'SOURCE' => 'UniquePlay 재동기화에서 기존 오류가 해결된 기록을 확인해 반영했습니다.',
+            _ => '이전에 발견된 기록 오류가 해결된 게시본입니다.',
+          };
+    final resolvedAt = game.resolvedAt;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 8, bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colors.surfaceMuted,
+        border: Border(
+          left: BorderSide(
+            color: pending ? colors.warning : colors.success,
+            width: 3,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            message,
+            style: TextStyle(color: colors.ink, fontSize: 14, height: 1.6),
+          ),
+          if (!pending && resolvedAt != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              '해결 ${DateFormat('yyyy.MM.dd HH:mm').format(KstClock.normalizeApi(resolvedAt))} KST',
+              style: TextStyle(color: colors.muted, fontSize: 12),
+            ),
+          ],
+          if (game.issues.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              pending ? '확인 중인 항목' : '해결된 항목',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            for (final issue in game.issues)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  '${issue.teamName?.isNotEmpty == true ? '${issue.teamName} · ' : ''}${issue.message}',
+                  style: TextStyle(
+                    color: colors.ink,
+                    fontSize: 14,
+                    height: 1.6,
+                  ),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
   }
 }
 

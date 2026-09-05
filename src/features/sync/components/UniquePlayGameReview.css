@@ -1,0 +1,34 @@
+.sync-game-review { padding: 20px; border: 1px solid var(--season-line); border-radius: 4px; background: var(--season-surface); color: var(--season-ink); }
+.sync-game-review header { display: flex; align-items: start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.sync-game-review h3, .sync-game-review h4 { margin: 0 0 8px; color: var(--season-ink); }
+.sync-game-review p { color: var(--season-muted); font-size: 13px; line-height: 1.6; }
+.sync-game-review button, .sync-game-review a, .sync-game-review input, .sync-game-review select { min-height: 44px; }
+.sync-game-review a { display: inline-flex; align-items: center; color: var(--season-blue-700); font-weight: 750; }
+.sync-game-review :is(input,select,textarea) { box-sizing: border-box; width: 100%; border: 1px solid var(--season-line-strong); border-radius: 4px; background: var(--season-surface); color: var(--season-ink); padding: 9px; font: inherit; }
+.sync-game-review label { display: grid; gap: 6px; font-size: 13px; }
+.sync-game-review label small { color: var(--season-muted); }
+.sync-game-review :is(input,select,textarea,button,a):focus-visible, .sync-game-review__scroll:focus-visible { outline: 3px solid var(--season-blue-600); outline-offset: 2px; }
+.sync-game-review__filters { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin: 20px 0 12px; }
+.sync-game-review__filters label { flex: 1; min-width: 170px; }
+.sync-game-review__scroll { max-width: 100%; overflow: auto; border: 1px solid var(--season-line); }
+.sync-game-review table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.sync-game-review th, .sync-game-review td { border-bottom: 1px solid var(--season-line); padding: 10px 12px; text-align: left; vertical-align: top; }
+.sync-game-review thead { background: var(--season-surface-muted); color: var(--season-muted); }
+.sync-game-review tbody tr[aria-selected=true] { background: var(--season-surface-muted); }
+.sync-game-review__selected { margin-top: 20px; padding-top: 20px; border-top: 2px solid var(--season-line-strong); }
+.sync-game-review__issues { padding: 14px 14px 14px 30px; border: 1px solid var(--season-line-strong); color: var(--season-warning); line-height: 1.7; }
+.sync-game-review__issues code { display: block; font-size: 11px; overflow-wrap: anywhere; }
+.sync-game-review__notifications { border-left: 3px solid var(--season-blue-600); background: var(--season-surface-muted); padding: 12px; margin-top: 14px; }
+.sync-game-review__notifications li { margin-bottom: 8px; line-height: 1.6; }
+.sync-game-review__notifications button { margin-left: 10px; }
+.sync-game-audit-tables { display: grid; gap: 18px; margin: 18px 0; }
+.sync-game-audit-tables th { white-space: nowrap; }
+.sync-game-audit-tables td:last-child { min-width: 220px; }
+.sync-game-review__history ul { list-style: none; padding: 0; }
+.sync-game-review__history li { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--season-line); margin: 8px 0; font-size: 13px; overflow-wrap: anywhere; }
+.sync-game-review__history button { margin: 8px 8px 0 0; }
+.sync-game-correction { margin-top: 18px; border-top: 1px solid var(--season-line); padding-top: 18px; }
+.sync-game-correction fieldset { border: 0; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit,minmax(170px,1fr)); align-items: end; gap: 12px; }
+.sync-game-correction__note { grid-column: 1 / -1; }
+.sync-game-review__checksum { overflow-wrap: anywhere; font-family: monospace; }
+@media (max-width: 600px) { .sync-game-review { padding: 12px; } .sync-game-review table { min-width: 650px; } .sync-game-correction fieldset { grid-template-columns: 1fr; } }

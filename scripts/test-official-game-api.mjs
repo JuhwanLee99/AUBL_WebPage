@@ -62,6 +62,43 @@ try {
     assert.equal(result.detail.teams[0].pitchers[0].stats.inningsPitched, '1.2');
     assert.equal(result.detail.teams[0].batters[0].plateAppearances[0].result, '볼넷,도루,주루사');
   });
+  await test('public pending quality is independent of available data and preserves source values', async () => {
+    respond = async () => json({ ...game, quality: 'CORRECTION_PENDING', issues: [{
+      id: 'runs', sourceGameId: game.sourceGameId, code: 'DETAIL_BATTER_TOTAL',
+      teamName: '테스트 A', message: '개인 기록 합계 확인', observed: 0, expected: 1,
+    }] });
+    const result = await client.getOfficialGameDetails('up-game-1', 12);
+    assert.equal(result.status, 'AVAILABLE');
+    assert.equal(result.quality, 'CORRECTION_PENDING');
+    assert.equal(result.detail.teams[0].batters[0].stats.rbi, null);
+    assert.equal(result.detail.teams[0].batters[0].stats.runs, 1);
+    assert.equal(result.issues[0].observed, 0);
+    assert.equal(result.issues[0].expected, 1);
+  });
+  await test('legacy public quality stays null and unsupported or wrong-game metadata is rejected', async () => {
+    respond = async () => json(game);
+    assert.equal((await client.getOfficialGameDetails('up-game-1', 12)).quality, null);
+    for (const override of [
+      { quality: 'FUTURE' },
+      { quality: 'CORRECTION_PENDING', issues: [{ code: 'DETAIL_BATTER_TOTAL', sourceGameId: 'wrong-game' }] },
+    ]) {
+      respond = async () => json({ ...game, ...override });
+      await assert.rejects(client.getOfficialGameDetails('up-game-1', 12));
+    }
+  });
+  await test('public player rows retain pending and resolved quality without hiding or aggregating stats', async () => {
+    for (const quality of ['CORRECTION_PENDING', 'RESOLVED']) {
+      respond = async () => json({ ...player, games: [{ ...player.games[0], quality,
+        resolutionSource: quality === 'RESOLVED' ? 'SOURCE' : null, resolvedAt: quality === 'RESOLVED' ? '2026-09-05T11:00:00' : null,
+        issues: [{ code: 'DETAIL_TEAM_RBI_ZERO', sourceGameId: game.sourceGameId, message: '타점 기록 확인', observed: 0, expected: null }],
+      }] });
+      const result = await client.getOfficialPlayerGameLogs(42, 12);
+      assert.equal(result.status, 'AVAILABLE'); assert.equal(result.games.length, 1);
+      assert.equal(result.games[0].quality, quality); assert.equal(result.games[0].batters[0].stats.rbi, null);
+      assert.equal(result.games[0].issues[0].expected, null);
+      assert.equal(result.games[0].resolutionSource, quality === 'RESOLVED' ? 'SOURCE' : null);
+    }
+  });
   await test('game client rejects mismatched identity, season, provider and status', async () => {
     for (const override of [
       {sourceGameId:'up-other'}, {seasonId:99}, {provider:'OTHER'},

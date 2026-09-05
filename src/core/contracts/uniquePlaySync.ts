@@ -185,6 +185,8 @@ export interface ResolveUniquePlaySyncItemRequest {
 export interface PublishUniquePlaySyncRunRequest {
   checksum: string;
   expectedPublishedRevision: string;
+  reviewChecksum?: string;
+  acknowledgeDetailWarnings?: boolean;
 }
 
 export interface ActivateUniquePlayRevisionRequest {

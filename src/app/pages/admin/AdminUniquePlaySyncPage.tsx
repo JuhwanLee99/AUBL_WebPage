@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import {
   UniquePlaySyncApiError,
   activateUniquePlayRevision,
+  createUniquePlayCorrectionRun,
   finalizeSeasonQualification,
   getSeasonPublicOverview,
   getSeasons,
@@ -40,6 +41,8 @@ import {
   syncEntityLabel,
 } from '@features/sync';
 import '@features/sync/components/UniquePlaySync.css';
+import UniquePlayGameReviewPanel from '@features/sync/components/UniquePlayGameReviewPanel';
+import type { UniquePlayGameRecordsReview } from '@core/contracts/uniquePlayGameReview';
 
 const RUN_STORAGE_KEY = 'aubl.uniquePlaySync.currentRunId';
 const PAGE_SIZE = 25;
@@ -265,11 +268,15 @@ export default function AdminUniquePlaySyncPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(0);
   const [resolvingItemId, setResolvingItemId] = useState<string | null>(null);
-  const [busyAction, setBusyAction] = useState<'start' | 'validate' | 'publish' | 'activate' | 'qualification' | null>(null);
+  const [busyAction, setBusyAction] = useState<'start' | 'validate' | 'publish' | 'activate' | 'qualification' | 'correction' | 'correction-draft' | null>(null);
   const [publication, setPublication] = useState<UniquePlaySyncPublishResult | null>(null);
   const [activation, setActivation] = useState<UniquePlayRevisionActivationResult | null>(null);
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(null);
   const [publishConfirmed, setPublishConfirmed] = useState(false);
+  const [gameReview, setGameReview] = useState<UniquePlayGameRecordsReview | null>(null);
+  const [detailWarningsConfirmed, setDetailWarningsConfirmed] = useState(false);
+  const [correctionDraftNote, setCorrectionDraftNote] = useState('');
+  const [reviewVersion, setReviewVersion] = useState(0);
   const [activationConfirmed, setActivationConfirmed] = useState(false);
   const [qualificationSeasonId, setQualificationSeasonId] = useState<number | null>(null);
   const [qualificationOverview, setQualificationOverview] = useState<SeasonPublicOverview | null>(null);
@@ -345,6 +352,8 @@ export default function AdminUniquePlaySyncPage() {
         setActivation(null);
         setSelectedRevisionId(null);
         setPublishConfirmed(false);
+        setGameReview(null);
+        setDetailWarningsConfirmed(false);
         setActivationConfirmed(false);
         qualificationRequestSequenceRef.current += 1;
         setQualificationSeasonId(null);
@@ -386,9 +395,9 @@ export default function AdminUniquePlaySyncPage() {
   }, [refreshRun]);
 
   useEffect(() => {
-    if (!session?.activeRunId || run?.runId === session.activeRunId || runLoading) return;
+    if (!session?.activeRunId || run || runLoading) return;
     void refreshRun(session.activeRunId, 'restore');
-  }, [refreshRun, run?.runId, runLoading, session?.activeRunId]);
+  }, [refreshRun, run, runLoading, session?.activeRunId]);
 
   useEffect(() => {
     if (!run || !isUniquePlayRunPolling(run.status) || pollingSuspended || runLoading) return;
@@ -433,7 +442,27 @@ export default function AdminUniquePlaySyncPage() {
 
   useEffect(() => {
     setPublishConfirmed(false);
-  }, [run?.checksum, run?.expectedPublishedRevision]);
+    setDetailWarningsConfirmed(false);
+  }, [run?.checksum, run?.expectedPublishedRevision, gameReview?.reviewChecksum]);
+
+  const onGameReviewLoaded = useCallback((review: UniquePlayGameRecordsReview | null) => {
+    if (!review || review.runId === currentRunIdRef.current) setGameReview(review);
+  }, []);
+  const onGameReviewBusy = useCallback((busy: boolean) => {
+    setBusyAction(busy ? 'correction' : null);
+  }, []);
+  const onGameReviewChanged = useCallback(async () => {
+    setPublication(null); setActivation(null); setPublishConfirmed(false); setDetailWarningsConfirmed(false);
+    setActivationConfirmed(false);
+    if (diffRunId) await refreshRun(diffRunId, 'manual');
+    await loadDiff();
+    setReviewVersion(value => value + 1);
+  }, [diffRunId, loadDiff, refreshRun]);
+
+  const currentGameReview = gameReview?.runId === run?.runId && gameReview?.checksum === run?.checksum
+    ? gameReview : null;
+  const hasDetailWarnings = !!currentGameReview?.games.some(game => game.quality === 'CORRECTION_PENDING')
+    || !!run?.validation.issues.some(issue => issue.severity === 'WARNING' && issue.code?.startsWith('DETAIL_'));
 
   const handleStartRun = async (event: FormEvent) => {
     event.preventDefault();
@@ -546,6 +575,14 @@ export default function AdminUniquePlaySyncPage() {
       setError('변경 내용과 체크섬을 확인했다는 항목에 먼저 동의해 주세요.');
       return;
     }
+    if (!currentGameReview || currentGameReview.expectedRevision !== run.expectedPublishedRevision) {
+      setError('최신 경기 검수 체크섬을 확인할 수 없습니다. 검수 목록을 새로고침해 주세요.');
+      return;
+    }
+    if (hasDetailWarnings && !detailWarningsConfirmed) {
+      setError('남은 기록 경고와 공개 오류 표시를 확인해 주세요.');
+      return;
+    }
     setBusyAction('publish');
     setError(null);
     setNotice(null);
@@ -553,6 +590,8 @@ export default function AdminUniquePlaySyncPage() {
       const result = await publishUniquePlaySyncRun(run.runId, {
         checksum: run.checksum,
         expectedPublishedRevision: run.expectedPublishedRevision,
+        reviewChecksum: currentGameReview.reviewChecksum,
+        acknowledgeDetailWarnings: detailWarningsConfirmed,
       });
       setPublication(result);
       setSelectedRevisionId(result.revisionId);
@@ -583,6 +622,21 @@ export default function AdminUniquePlaySyncPage() {
     : publication?.expectedPublishedRevision
     ?? (runHasPublishedRevision ? run?.expectedPublishedRevision : null)
     ?? null;
+
+  const activeRevision = run?.revisions.find(revision => revision.revisionId === activeRevisionId);
+  const handleCreateCorrectionDraft = async () => {
+    if (!activeRevision?.checksum || !activeRevisionId || !correctionDraftNote.trim()) return;
+    setBusyAction('correction-draft'); setError(null); setNotice(null);
+    try {
+      const draft = await createUniquePlayCorrectionRun(activeRevisionId, {
+        expectedChecksum: activeRevision.checksum, expectedRevision: activeRevisionId, note: correctionDraftNote.trim(),
+      });
+      await refreshRun(draft.runId, 'manual');
+      setCorrectionDraftNote('');
+      setNotice('현재 게시본을 보존한 새 수정안을 만들었습니다. 수집은 실행하지 않았습니다. 경기 기록 수정 후 검증·게시·활성화해 주세요.');
+    } catch (requestError) { handleRequestError(requestError); }
+    finally { setBusyAction(null); }
+  };
 
   const handleActivate = async () => {
     if (!revisionIdForActivation) return;
@@ -805,7 +859,9 @@ export default function AdminUniquePlaySyncPage() {
     && validationPassed
     && summary.unresolved === 0
     && !!run.checksum
-    && run.expectedPublishedRevision !== null;
+    && run.expectedPublishedRevision !== null
+    && !!currentGameReview
+    && currentGameReview.expectedRevision === run.expectedPublishedRevision;
   const safeReauthUrl = safeSyncReauthUrl(session?.reauthUrl ?? null);
   const progressPercent = run?.progress.percent;
   const revisionIsActive = !!revisionIdForActivation
@@ -1081,6 +1137,17 @@ export default function AdminUniquePlaySyncPage() {
             </section>
           )}
 
+          {diffAvailable && <UniquePlayGameReviewPanel
+            key={run.runId}
+            runId={run.runId}
+            refreshKey={`${run.updatedAt ?? ''}:${run.checksum ?? ''}:${reviewVersion}`}
+            readOnly={!['REVIEW_REQUIRED', 'VALIDATION_FAILED', 'READY_TO_PUBLISH'].includes(run.status)}
+            busy={busyAction !== null || runLoading || resolvingItemId !== null}
+            onLoaded={onGameReviewLoaded}
+            onChanged={onGameReviewChanged}
+            onBusyChange={onGameReviewBusy}
+          />}
+
           <section style={cardStyle} aria-labelledby="unique-play-validation-heading">
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
               <div>
@@ -1118,16 +1185,21 @@ export default function AdminUniquePlaySyncPage() {
             </p>
             <div style={{ border: '1px solid var(--season-line)', borderRadius: '10px', background: 'var(--season-surface-muted)', padding: '11px 12px', display: 'grid', gap: '5px', color: 'var(--season-muted)', fontSize: '12px' }}>
               <span><strong>체크섬:</strong> {run.checksum ?? '서버 값 없음'}</span>
+              <span style={{ overflowWrap: 'anywhere' }}><strong>기록 검수 체크섬:</strong> {currentGameReview?.reviewChecksum ?? '검수 목록을 불러와 주세요'}</span>
               <span><strong>예상 게시 리비전:</strong> {run.expectedPublishedRevision ?? '서버 값 없음'}</span>
             </div>
             <label style={{ marginTop: '12px', display: 'flex', alignItems: 'flex-start', gap: '8px', color: 'var(--season-ink)', fontSize: '13px', lineHeight: 1.5 }}>
               <input type="checkbox" checked={publishConfirmed} onChange={(event) => setPublishConfirmed(event.target.checked)} disabled={!canPublish || busyAction !== null} style={{ marginTop: '3px' }} />
               변경 비교와 검증 결과를 확인했으며, 표시된 체크섬의 스냅샷으로 새 리비전을 생성합니다.
             </label>
-            <button type="button" onClick={() => { void handlePublish(); }} disabled={!canPublish || !publishConfirmed || busyAction !== null || !sessionReady} style={{ ...primaryButtonStyle, marginTop: '12px', cursor: !canPublish || !publishConfirmed || busyAction !== null || !sessionReady ? 'not-allowed' : 'pointer', opacity: !canPublish || !publishConfirmed || busyAction !== null || !sessionReady ? 0.55 : 1 }}>
+            {hasDetailWarnings && <label style={{ marginTop: '12px', display: 'flex', alignItems: 'flex-start', gap: '8px', color: 'var(--season-warning)', fontSize: '13px', lineHeight: 1.6 }}>
+              <input type="checkbox" checked={detailWarningsConfirmed} onChange={event => setDetailWarningsConfirmed(event.target.checked)} disabled={!canPublish || busyAction !== null} />
+              남은 기록 경고를 확인했습니다. 해당 경기·선수 상세에 ‘오류 수정 중’을 표시한 상태로 게시합니다. 실제 공개는 다음 활성화 단계에서 이루어집니다.
+            </label>}
+            <button type="button" onClick={() => { void handlePublish(); }} disabled={!canPublish || !publishConfirmed || (hasDetailWarnings && !detailWarningsConfirmed) || busyAction !== null || !sessionReady} style={{ ...primaryButtonStyle, marginTop: '12px', cursor: !canPublish || !publishConfirmed || (hasDetailWarnings && !detailWarningsConfirmed) || busyAction !== null || !sessionReady ? 'not-allowed' : 'pointer', opacity: !canPublish || !publishConfirmed || (hasDetailWarnings && !detailWarningsConfirmed) || busyAction !== null || !sessionReady ? 0.55 : 1 }}>
               {busyAction === 'publish' ? '리비전 생성 중…' : '검증된 리비전 생성'}
             </button>
-            {!canPublish && <p style={{ margin: '9px 0 0', color: 'var(--season-muted)', fontSize: '12px' }}>검증 통과, 미해결 0건, 서버 체크섬과 기준 리비전이 모두 필요합니다.</p>}
+            {!canPublish && <p style={{ margin: '9px 0 0', color: 'var(--season-muted)', fontSize: '12px' }}>검증 통과, 미해결 0건, 최신 기록 검수 체크섬과 기준 리비전이 모두 필요합니다.</p>}
           </section>
 
           <section style={{ ...cardStyle, borderColor: publication ? 'color-mix(in srgb, var(--season-success) 44%, var(--season-line))' : 'var(--season-line)' }} aria-labelledby="unique-play-activate-heading">
@@ -1201,6 +1273,16 @@ export default function AdminUniquePlaySyncPage() {
               </div>
             ) : null}
           </section>
+
+          {activeRevision?.checksum && <section style={cardStyle} aria-labelledby="unique-play-correction-draft-heading">
+            <h3 id="unique-play-correction-draft-heading" style={sectionTitleStyle}>게시본 수정안 만들기</h3>
+            <p style={{ color: 'var(--season-muted)', fontSize: '13px', lineHeight: 1.6 }}>현재 공개 리비전을 복사한 검수 실행을 만듭니다. 원천 재수집이나 공개 데이터 변경 없이 기록을 직접 수정하고 검증할 수 있습니다. 기존 게시본은 보존됩니다.</p>
+            <p style={{ color: 'var(--season-muted)', fontSize: '12px', overflowWrap: 'anywhere' }}>대상: {activeRevision.revisionId}</p>
+            <label style={{ display: 'grid', gap: '6px', fontSize: '13px' }}>수정안 생성 사유
+              <textarea value={correctionDraftNote} onChange={event => setCorrectionDraftNote(event.target.value)} maxLength={500} rows={2} style={inputStyle} disabled={busyAction !== null} placeholder="확인한 경기와 수정할 내용을 적어 주세요" />
+            </label>
+            <button type="button" onClick={() => { void handleCreateCorrectionDraft(); }} disabled={!correctionDraftNote.trim() || busyAction !== null || runLoading} style={{ ...secondaryButtonStyle, marginTop: '10px' }}>{busyAction === 'correction-draft' ? '수정안 생성 중…' : '현재 게시본으로 수정안 만들기'}</button>
+          </section>}
 
           {activeQualificationRevisionId ? (
             <section

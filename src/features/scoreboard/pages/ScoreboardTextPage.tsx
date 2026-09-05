@@ -9,6 +9,7 @@ import { GameTimerDisplay } from '@shared/components/GameTimerDisplay';
 import type { BatterStatLine, PitcherStatLine } from '@shared/types/scoreStats';
 import type { MatchSchedule } from '@shared/state/demoStore';
 import { useAdmin } from '@shared/auth/useAdmin';
+import { OfficialRecordQualityNotice } from '@shared/components/season/OfficialRecordQualityNotice';
 import {
   getOfficialGameDetails,
   type OfficialBatterGameRow,
@@ -1075,6 +1076,8 @@ function OfficialGameDetailView({
         <span>게시 리비전 {payload.syncRevision ?? '확인 중'}</span>
         <span>{payload.publishedAt ? `${officialDateTime(payload.publishedAt)} 게시` : '게시 시각 확인 중'}</span>
       </div>
+
+      <OfficialRecordQualityNotice quality={payload.quality} issues={payload.issues} resolutionSource={payload.resolutionSource} resolvedAt={payload.resolvedAt} />
 
       <section className="official-game-detail__section" aria-labelledby="official-line-score-title">
         <div className="official-game-detail__section-heading">

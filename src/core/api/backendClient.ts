@@ -1,5 +1,15 @@
 import { getAuth } from 'firebase/auth';
 import type {
+  CorrectGameRecordRequest,
+  CreateGameCorrectionRunRequest,
+  GameCorrectionValue,
+  GameRecordCorrection,
+  GameRecordReviewEntry,
+  GameReviewNotification,
+  ResolveGameCorrectionRequest,
+  UniquePlayGameRecordsReview,
+} from '../contracts/uniquePlayGameReview';
+import type {
   ActivateUniquePlayRevisionRequest,
   FinalizeSeasonQualificationRequest,
   FinalizeSeasonQualificationResult,
@@ -1671,6 +1681,24 @@ export async function getPlayerGameLogs(
 // ── UniquePlay official game details ──
 
 export type OfficialDetailStatus = 'AVAILABLE' | 'NOT_PUBLISHED' | 'NOT_COLLECTED' | 'REVIEW_REQUIRED';
+export type OfficialRecordQuality = 'CLEAN' | 'CORRECTION_PENDING' | 'RESOLVED';
+export interface OfficialRecordQualityIssue {
+  id: string;
+  code: string;
+  message: string;
+  sourceGameId: string;
+  teamName: string | null;
+  field: string | null;
+  rowKey: string | null;
+  observed: number | null;
+  expected: number | null;
+}
+export interface OfficialRecordQualityMetadata {
+  quality: OfficialRecordQuality | null;
+  issues: OfficialRecordQualityIssue[];
+  resolutionSource: 'MANUAL' | 'SOURCE' | null;
+  resolvedAt: string | null;
+}
 export type OfficialPlayerGameLogsStatus =
   | 'AVAILABLE'
   | 'NOT_COLLECTED'
@@ -1739,7 +1767,7 @@ export interface OfficialGameDetail {
   teams: OfficialGameDetailTeam[];
 }
 
-export interface OfficialGameDetailsResponse {
+export interface OfficialGameDetailsResponse extends OfficialRecordQualityMetadata {
   sourceGameId: string;
   backendGameId: number | null;
   seasonId: number;
@@ -1761,7 +1789,7 @@ export interface OfficialGameDetailsResponse {
   detail: OfficialGameDetail | null;
 }
 
-export interface OfficialPlayerGameLog {
+export interface OfficialPlayerGameLog extends OfficialRecordQualityMetadata {
   sourceGameId: string;
   backendGameId: number | null;
   playedAt: string | null;
@@ -1791,6 +1819,38 @@ function nullableString(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const normalized = value.trim();
   return normalized || null;
+}
+
+function normalizeOfficialQuality(row: Record<string, unknown>, sourceGameId: string): OfficialRecordQualityMetadata {
+  const quality = row.quality;
+  if (quality != null && quality !== 'CLEAN' && quality !== 'CORRECTION_PENDING' && quality !== 'RESOLVED') {
+    throw new Error('Official record quality returned an unsupported status.');
+  }
+  const issues = (Array.isArray(row.issues) ? row.issues : []).map((value, index) => {
+    if (!value || typeof value !== 'object') return null;
+    const issue = value as Record<string, unknown>;
+    const issueGameId = nullableString(issue.sourceGameId) ?? sourceGameId;
+    if (issueGameId !== sourceGameId) throw new Error('Official quality issue did not match the requested game.');
+    const code = nullableString(issue.code);
+    if (!code || !/^[A-Z][A-Z_]{0,63}$/.test(code)) return null;
+    return {
+      id: nullableString(issue.id) ?? `${sourceGameId}-${code}-${index}`,
+      code,
+      message: nullableString(issue.message) ?? '기록의 원천 값을 확인하고 있습니다.',
+      sourceGameId: issueGameId,
+      teamName: nullableString(issue.teamName),
+      field: nullableString(issue.field),
+      rowKey: nullableString(issue.rowKey),
+      observed: toFiniteNumber(issue.observed),
+      expected: toFiniteNumber(issue.expected),
+    } satisfies OfficialRecordQualityIssue;
+  }).filter((issue): issue is OfficialRecordQualityIssue => issue !== null);
+  return {
+    quality: quality ?? null,
+    issues,
+    resolutionSource: row.resolutionSource === 'MANUAL' || row.resolutionSource === 'SOURCE' ? row.resolutionSource : null,
+    resolvedAt: nullableString(row.resolvedAt),
+  };
 }
 
 function normalizeOfficialBatterRow(value: unknown, index: number): OfficialBatterGameRow | null {
@@ -1883,7 +1943,7 @@ function normalizeOfficialTeam(value: unknown): OfficialGameDetailTeam | null {
   };
 }
 
-function normalizeOfficialGameDetail(value: unknown): OfficialGameDetail | null {
+export function normalizeOfficialGameDetail(value: unknown): OfficialGameDetail | null {
   if (!value || typeof value !== 'object') return null;
   const row = value as Record<string, unknown>;
   const rawStatus = nullableString(row.status)?.toUpperCase();
@@ -1942,6 +2002,7 @@ export async function getOfficialGameDetails(
     }
     return {
       sourceGameId: responseSourceGameId,
+      ...normalizeOfficialQuality(row, responseSourceGameId),
       backendGameId: toFiniteNumber(row.backendGameId),
       seasonId: responseSeasonId,
       provider: 'UNIQUE_PLAY',
@@ -2011,6 +2072,7 @@ export async function getOfficialPlayerGameLogs(
       if (!sourceGameId) return null;
       return {
         sourceGameId,
+        ...normalizeOfficialQuality(game, sourceGameId),
         backendGameId: toFiniteNumber(game.backendGameId),
         playedAt: nullableString(game.playedAt),
         groupCode: nullableString(game.groupCode),
@@ -2511,6 +2573,135 @@ export async function startUniquePlaySyncRun(
 export async function getUniquePlaySyncRun(runId: string): Promise<UniquePlaySyncRun> {
   const raw = await fetchUniquePlaySyncApi(`${UNIQUE_PLAY_SYNC_BASE}/runs/${encodeURIComponent(runId)}`);
   return normalizeUniquePlaySyncRun(raw);
+}
+
+function correctionValue(value: unknown): GameCorrectionValue {
+  if (value === null || typeof value === 'boolean' || typeof value === 'string'
+      || (typeof value === 'number' && Number.isFinite(value))) return value;
+  throw new Error('수정 기록의 값 형식을 확인할 수 없습니다.');
+}
+
+function normalizeGameReviewNotifications(value: unknown): GameReviewNotification[] {
+  return (Array.isArray(value) ? value : []).map((entry) => {
+    const row = asSyncRecord(entry);
+    const code = row && normalizeSyncErrorCode(row.code);
+    if (!row || !code) return null;
+    return {
+      code,
+      message: readSyncString(row, 'message') ?? '경기 기록의 검수 상태가 변경되었습니다.',
+      sourceGameId: readSyncString(row, 'sourceGameId'),
+    };
+  }).filter((entry): entry is GameReviewNotification => entry !== null);
+}
+
+function normalizeGameRecordCorrection(value: unknown, sourceGameId: string): GameRecordCorrection {
+  const row = asSyncRecord(value);
+  const id = row && readSyncString(row, 'id');
+  const section = row?.section;
+  const status = row?.status;
+  if (!row || !id || row.sourceGameId !== sourceGameId
+      || !['innings', 'totals', 'batters', 'pitchers'].includes(String(section))
+      || !['APPLIED', 'SOURCE_RESOLVED', 'CONFLICT', 'RETIRED'].includes(String(status))) {
+    throw new Error('수정 이력의 경기 또는 상태가 올바르지 않습니다.');
+  }
+  const rowKey = readSyncString(row, 'rowKey');
+  const inning = readSyncNumber(row, 'inning');
+  return {
+    id, sourceGameId,
+    teamName: readSyncString(row, 'teamName') ?? '',
+    section: section as GameRecordCorrection['section'],
+    ...(rowKey ? { rowKey } : {}),
+    ...(inning == null ? {} : { inning }),
+    field: readSyncString(row, 'field') ?? '',
+    expectedValue: correctionValue(row.expectedValue),
+    value: correctionValue(row.value),
+    playerName: readSyncString(row, 'playerName'),
+    jerseyNumber: readSyncString(row, 'jerseyNumber'),
+    status: status as GameRecordCorrection['status'],
+    note: readSyncString(row, 'note') ?? '',
+    actor: readSyncString(row, 'actor'),
+    correctedAt: readSyncString(row, 'correctedAt'),
+  };
+}
+
+function normalizeGameRecordsReview(value: unknown, expectedRunId: string): UniquePlayGameRecordsReview {
+  const row = unwrapSyncRecord(value, 'review', 'result');
+  if (row.runId !== expectedRunId || !Array.isArray(row.games) || row.games.length > 2000) {
+    throw new Error('경기 검수 응답이 요청한 실행과 일치하지 않습니다.');
+  }
+  const checksum = readSyncString(row, 'checksum');
+  const reviewChecksum = readSyncString(row, 'reviewChecksum');
+  // Empty means no active revision; absence is not the same concurrency token.
+  const expectedRevision = typeof row.expectedRevision === 'string' ? row.expectedRevision : null;
+  if (!checksum || !reviewChecksum || expectedRevision === null) {
+    throw new Error('경기 검수 응답에 체크섬 또는 기준 리비전이 없습니다.');
+  }
+  const seen = new Set<string>();
+  const games = row.games.map((value): GameRecordReviewEntry => {
+    const entry = asSyncRecord(value);
+    const sourceGameId = entry && readSyncString(entry, 'sourceGameId');
+    if (!entry || !sourceGameId || seen.has(sourceGameId)) throw new Error('검수 경기 식별자가 없거나 중복되었습니다.');
+    seen.add(sourceGameId);
+    const game = asSyncRecord(entry.game) ?? {};
+    const detail = normalizeOfficialGameDetail(entry.detail);
+    const originalDetail = normalizeOfficialGameDetail(entry.originalDetail);
+    if ([detail, originalDetail].some(detail => detail && detail.sourceGameId !== sourceGameId)) {
+      throw new Error('원천·수정 상세의 경기 식별자가 일치하지 않습니다.');
+    }
+    return {
+      sourceGameId, detail, originalDetail,
+      ...normalizeOfficialQuality(entry, sourceGameId),
+      game: {
+        status: readSyncString(game, 'status'),
+        playedAt: readSyncString(game, 'playedAt'),
+        groupCode: readSyncString(game, 'groupCode'),
+        venue: readSyncString(game, 'venue'),
+        homeTeamName: readSyncString(game, 'homeTeamName') ?? '홈팀',
+        awayTeamName: readSyncString(game, 'awayTeamName') ?? '원정팀',
+        homeScore: readSyncNumber(game, 'homeScore'),
+        awayScore: readSyncNumber(game, 'awayScore'),
+      },
+      corrections: (Array.isArray(entry.corrections) ? entry.corrections : []).map(value => normalizeGameRecordCorrection(value, sourceGameId)),
+      notifications: normalizeGameReviewNotifications(entry.notifications),
+    };
+  });
+  return { runId: expectedRunId, checksum, reviewChecksum, expectedRevision, games,
+    notifications: normalizeGameReviewNotifications(row.notifications) };
+}
+
+export async function getUniquePlayGameRecordsReview(runId: string): Promise<UniquePlayGameRecordsReview> {
+  return normalizeGameRecordsReview(await fetchUniquePlaySyncApi(
+    `${UNIQUE_PLAY_SYNC_BASE}/runs/${encodeURIComponent(runId)}/game-records`,
+  ), runId);
+}
+
+export async function correctUniquePlayGameRecord(runId: string, sourceGameId: string, request: CorrectGameRecordRequest): Promise<UniquePlayGameRecordsReview> {
+  const review = normalizeGameRecordsReview(await fetchUniquePlaySyncApi(
+    `${UNIQUE_PLAY_SYNC_BASE}/runs/${encodeURIComponent(runId)}/game-records/${encodeURIComponent(sourceGameId)}/corrections`,
+    { method: 'PATCH', body: JSON.stringify(request) },
+  ), runId);
+  if (!review.games.some(game => game.sourceGameId === sourceGameId)) {
+    throw new Error('수정 요청한 경기가 검수 응답에 없습니다. 상태를 새로고침해 주세요.');
+  }
+  return review;
+}
+
+export async function resolveUniquePlayGameCorrection(runId: string, sourceGameId: string, correctionId: string, request: ResolveGameCorrectionRequest): Promise<UniquePlayGameRecordsReview> {
+  const review = normalizeGameRecordsReview(await fetchUniquePlaySyncApi(
+    `${UNIQUE_PLAY_SYNC_BASE}/runs/${encodeURIComponent(runId)}/game-records/${encodeURIComponent(sourceGameId)}/corrections/${encodeURIComponent(correctionId)}`,
+    { method: 'PATCH', body: JSON.stringify(request) },
+  ), runId);
+  if (!review.games.some(game => game.sourceGameId === sourceGameId)) {
+    throw new Error('충돌 처리한 경기가 검수 응답에 없습니다. 상태를 새로고침해 주세요.');
+  }
+  return review;
+}
+
+export async function createUniquePlayCorrectionRun(revisionId: string, request: CreateGameCorrectionRunRequest): Promise<UniquePlaySyncRun> {
+  return normalizeUniquePlaySyncRun(await fetchUniquePlaySyncApi(
+    `${UNIQUE_PLAY_SYNC_BASE}/revisions/${encodeURIComponent(revisionId)}/correction-runs`,
+    { method: 'POST', body: JSON.stringify(request) },
+  ));
 }
 
 export async function getUniquePlaySyncDiff(

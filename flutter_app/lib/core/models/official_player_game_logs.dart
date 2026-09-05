@@ -53,6 +53,10 @@ class OfficialPlayerGame {
     required this.pitchers,
     this.homeScore,
     this.awayScore,
+    this.quality,
+    this.issues = const [],
+    this.resolutionSource,
+    this.resolvedAt,
   });
 
   final String sourceGameId;
@@ -65,21 +69,85 @@ class OfficialPlayerGame {
   final num? awayScore;
   final List<OfficialPlayerRow> batters;
   final List<OfficialPlayerRow> pitchers;
+  // No quality metadata in an older revision means unknown, not confirmed clean.
+  final String? quality;
+  final List<OfficialRecordQualityIssue> issues;
+  final String? resolutionSource;
+  final DateTime? resolvedAt;
 
-  factory OfficialPlayerGame.fromJson(
-    Map<String, dynamic> json,
-  ) => OfficialPlayerGame(
-    sourceGameId: json['sourceGameId']?.toString() ?? '',
-    backendGameId: (json['backendGameId'] as num?)?.toInt(),
-    playedAt: json['playedAt']?.toString() ?? '',
-    homeTeamName: json['homeTeamName']?.toString() ?? '',
-    awayTeamName: json['awayTeamName']?.toString() ?? '',
-    teamName: json['teamName']?.toString() ?? '',
-    homeScore: _number(json['homeScore']),
-    awayScore: _number(json['awayScore']),
-    batters: _maps(json['batters']).map(OfficialPlayerRow.fromJson).toList(),
-    pitchers: _maps(json['pitchers']).map(OfficialPlayerRow.fromJson).toList(),
-  );
+  String? get qualityLabel => switch (quality) {
+    'CORRECTION_PENDING' => '오류 수정 중',
+    'RESOLVED' => '오류 해결',
+    _ => null,
+  };
+
+  factory OfficialPlayerGame.fromJson(Map<String, dynamic> json) {
+    final quality = json['quality'];
+    if (quality != null &&
+        !const {'CLEAN', 'CORRECTION_PENDING', 'RESOLVED'}.contains(quality)) {
+      throw const FormatException('공식 경기 기록의 확인 상태를 읽을 수 없습니다.');
+    }
+    final sourceGameId = json['sourceGameId']?.toString() ?? '';
+    final issues = <OfficialRecordQualityIssue>[];
+    for (final issue in _maps(json['issues'])) {
+      final issueGameId = issue['sourceGameId'];
+      if (issueGameId != null && issueGameId != sourceGameId) {
+        throw const FormatException('다른 경기의 기록 확인 항목이 포함되어 있습니다.');
+      }
+      final code = issue['code'];
+      if (code is! String || !RegExp(r'^[A-Z][A-Z_]{0,63}$').hasMatch(code)) {
+        continue;
+      }
+      issues.add(OfficialRecordQualityIssue.fromJson(issue));
+    }
+    return OfficialPlayerGame(
+      sourceGameId: sourceGameId,
+      backendGameId: (json['backendGameId'] as num?)?.toInt(),
+      playedAt: json['playedAt']?.toString() ?? '',
+      homeTeamName: json['homeTeamName']?.toString() ?? '',
+      awayTeamName: json['awayTeamName']?.toString() ?? '',
+      teamName: json['teamName']?.toString() ?? '',
+      homeScore: _number(json['homeScore']),
+      awayScore: _number(json['awayScore']),
+      batters: _maps(json['batters']).map(OfficialPlayerRow.fromJson).toList(),
+      pitchers: _maps(
+        json['pitchers'],
+      ).map(OfficialPlayerRow.fromJson).toList(),
+      quality: quality as String?,
+      issues: issues,
+      resolutionSource:
+          const {'MANUAL', 'SOURCE'}.contains(json['resolutionSource'])
+          ? json['resolutionSource'] as String
+          : null,
+      resolvedAt: DateTime.tryParse(json['resolvedAt']?.toString() ?? ''),
+    );
+  }
+}
+
+class OfficialRecordQualityIssue {
+  const OfficialRecordQualityIssue({
+    required this.id,
+    required this.code,
+    required this.message,
+    this.teamName,
+  });
+
+  final String id;
+  final String code;
+  final String message;
+  final String? teamName;
+
+  factory OfficialRecordQualityIssue.fromJson(Map<String, dynamic> json) =>
+      OfficialRecordQualityIssue(
+        id: json['id'] is String ? json['id'] as String : '',
+        code: json['code'] is String ? json['code'] as String : '',
+        message: json['message'] is String
+            ? json['message'] as String
+            : '기록 확인이 필요한 항목입니다.',
+        teamName: json['teamName'] is String
+            ? json['teamName'] as String
+            : null,
+      );
 }
 
 class OfficialPlayerRow {

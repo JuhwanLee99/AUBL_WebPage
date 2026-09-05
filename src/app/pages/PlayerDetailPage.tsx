@@ -20,6 +20,7 @@ import {
   type OfficialPlayerGameLog,
 } from '../../shared/api/backendClient';
 import './PlayerDetailPage.css';
+import { OfficialRecordQualityNotice } from '../../shared/components/season/OfficialRecordQualityNotice';
 
 function toValidPlayerId(value: string | null | undefined): number | null {
   if (!value) return null;
@@ -1062,6 +1063,8 @@ function OfficialPlayerGameCard({ game }: { game: OfficialPlayerGameLog }) {
         </div>
         <a href={`/scoreboard-text/${encodeURIComponent(game.sourceGameId)}`}>경기 상세</a>
       </header>
+
+      <OfficialRecordQualityNotice quality={game.quality} issues={game.issues} resolutionSource={game.resolutionSource} resolvedAt={game.resolvedAt} />
 
       {game.batters.length > 0 && (
         <div className="official-player-logs__table-scroll" tabIndex={0} aria-label="공식 타자 경기별 기록표, 가로로 스크롤할 수 있습니다">

@@ -1,0 +1,58 @@
+.official-record-quality {
+  --record-quality-accent: var(--season-warning);
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--season-line);
+  border-inline-start: 3px solid var(--record-quality-accent);
+  border-radius: 4px;
+  background: var(--season-surface-muted);
+  color: var(--season-ink);
+  overflow-wrap: anywhere;
+}
+
+.official-record-quality--resolved {
+  --record-quality-accent: var(--season-success);
+}
+
+.official-record-quality__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+}
+
+.official-record-quality__heading > strong {
+  color: var(--record-quality-accent);
+  font-size: 15px;
+}
+
+.official-record-quality__heading > span {
+  color: var(--season-muted);
+  font-size: 12px;
+}
+
+.official-record-quality > p,
+.official-record-quality__details li {
+  margin: 8px 0 0;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.official-record-quality__details > summary {
+  min-height: 44px;
+  align-content: center;
+  padding: 10px 0;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.official-record-quality__details > summary:focus-visible {
+  outline: 2px solid var(--season-focus);
+  outline-offset: 3px;
+}
+
+.official-record-quality__details > ul {
+  margin: 0;
+  padding-inline-start: 20px;
+}
