@@ -647,16 +647,18 @@ function MatchBoard({ matches, schedulePhase, nowTs }: Pick<Season2026HomeProps,
         return dateKey == null || todayKey == null || dateKey >= todayKey;
       })
       .sort(compareMatchTimeAsc);
-    const today = scheduled.filter((match) => getKstDateKey(match.startTime) === todayKey);
+    // Today's schedule remains visible after scores arrive. Status determines
+    // the card's badge/score, not whether a game belongs to the current day.
+    const today = official.filter((match) => todayKey !== null && getKstDateKey(match.startTime) === todayKey);
     const nextDateKey = scheduled.length ? getKstDateKey(scheduled[0].startTime) : null;
     const nearest = nextDateKey ? scheduled.filter((match) => getKstDateKey(match.startTime) === nextDateKey) : [];
-    const chosen = [...live, ...(today.length ? today : nearest)].filter(
+    const chosen = (today.length ? today : [...live, ...nearest]).filter(
       (match, index, rows) => rows.findIndex((candidate) => candidate.id === match.id) === index,
     );
-    const title = live.length
-      ? '지금 진행 중인 경기'
-      : today.length
-        ? '오늘의 경기'
+    const title = today.length
+      ? '오늘의 경기'
+      : live.length
+        ? '지금 진행 중인 경기'
         : nearest.length
           ? `${formatMatchDay(nearest[0].startTime)} 다음 경기`
           : '다음 경기';
@@ -664,7 +666,7 @@ function MatchBoard({ matches, schedulePhase, nowTs }: Pick<Season2026HomeProps,
       .filter((match) => match.status === 'completed')
       .sort(compareMatchTimeDesc)
       .slice(0, 4);
-    return { featured: chosen.slice(0, 4), featuredTitle: title, recent: completed };
+    return { featured: today.length ? chosen : chosen.slice(0, 4), featuredTitle: title, recent: completed };
   }, [official, nowTs]);
 
   return (
@@ -680,7 +682,7 @@ function MatchBoard({ matches, schedulePhase, nowTs }: Pick<Season2026HomeProps,
       <div className="s26-match-view-toolbar">
         <p aria-live="polite">
           {viewMode === 'list'
-            ? '당일 경기가 없으면 가장 가까운 예정 경기를 보여드립니다.'
+            ? '오늘 경기는 종료 후에도 표시됩니다. 당일 경기가 없으면 가장 가까운 예정 경기를 보여드립니다.'
             : '월별 경기 분포와 선택한 날짜의 상세 일정을 함께 보여드립니다.'}
         </p>
         <div className="s26-match-view-toggle" role="group" aria-label="경기 표시 방식">
