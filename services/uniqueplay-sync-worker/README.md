@@ -25,11 +25,13 @@ If Google blocks automated-browser login, use a dedicated normal Chrome profile 
 
 The adapter intentionally anchors on Korean navigation labels and table headers because UniquePlay currently renders React-Native-Web class names that are not stable identifiers. A header/schema change fails closed instead of silently publishing shifted columns.
 
-## Completed-game details (adapter `2026.09.05.6`)
+## Completed-game details (adapter `2026.09.05.7`)
 
 An administrator-requested run now collects the boxscore for every collected completed game in addition to the existing schedules, standings and season totals. There is no separate automatic task or timer. Schedule/result pages explicitly select the expected `2026년` season; the records tab separately checks `2026시즌`.
 
 - Existing `sourceGameId` hashes are unchanged. The public `/game/{id}/boxscore` route supplies a separate numeric-string `providerGameId`; query parameters and URLs are not stored.
+- Boxscore headers are identified by their fixed-column first row, two-column table structure and exact stat headers. Player positions/names equal to `투수` or `타자` do not count as table headers. Readiness waits up to a 15-second polling budget for two identical, fully parsed snapshots of the selected team; incomplete or persistently changed schemas still fail closed.
+- A detail failure reports only an allowlisted error code, coarse `GAME_DETAILS` stage, the bounded source hash and numeric provider game ID when known. Raw exceptions, account text, HTML, URL/query strings and player/team names are not echoed in diagnostics. Context survives return-to-list and outer collection error boundaries.
 - `candidate.gameDetails` is optional for old snapshots. If present, every completed game must have exactly one detail, with no duplicate provider game IDs. A failure to navigate, select the correct team, parse a header or match scores fails closed.
 - Version-1 details contain two named teams, inning runs, R/H/E/B totals, batter rows, pitcher rows and per-inning plate-appearance text. Rows are keyed by team, role, original row index, jersey and player name so substitutions and same-name rows remain separate.
 - Missing numbers stay `null`; a played zero stays `0`; an unplayed `X` inning is `{ runs: null, notPlayed: true }`. Pitcher innings retain baseball notation (`1.2`) and a separate integer `outs` (`5`). The combined source `4사구` remains `walksAndHitByPitch` rather than an invented walks/hit-by-pitch split.

@@ -6,8 +6,36 @@ const BATTER_STATS = ['atBats', 'hits', 'rbi', 'stolenBases', 'runs', 'battingAv
 const PITCHER_STATS = ['outs', 'inningsPitched', 'hitsAllowed', 'runsAllowed', 'earnedRuns', 'walksAndHitByPitch', 'strikeouts', 'era'];
 const POSITIONS = new Set(['미정', '투수', '포수', '1루', '2루', '3루', '유격', '좌익', '중견', '우익', '지명', '지타', '대타', '대주', '1루수', '2루수', '3루수', '유격수', '좌익수', '중견수', '우익수', '지명타자', 'P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'PH', 'PR']);
 
-export function detailError(code = 'GAME_DETAIL_SCHEMA') {
-  return Object.assign(new Error('UniquePlay game detail did not match the expected public schema'), { code });
+const DETAIL_ERROR_CODES = new Set(['GAME_DETAIL_SCHEMA', 'GAME_DETAIL_PRIVATE_VALUE', 'GAME_DETAIL_ID',
+  'GAME_DETAIL_TEAM_MAPPING', 'GAME_DETAIL_SCORE', 'GAME_DETAIL_PARENT', 'GAME_DETAIL_NAVIGATION',
+  'GAME_DETAIL_COLLECTION', 'GAME_DETAIL_AMBIGUOUS_CARD', 'GAME_DETAIL_CARD_MISSING', 'GAME_DETAIL_LINK_MISSING',
+  'REAUTH_REQUIRED', 'SEASON_MISMATCH']);
+const DETAIL_STAGES = new Set(['COLLECTION', 'FIND_CARD', 'OPEN_BOXSCORE', 'READ_INITIAL', 'CHECK_GAME',
+  'SELECT_TEAM', 'READ_TEAM', 'CHECK_TEAMS', 'REPORT_PROGRESS', 'RETURN_RESULTS']);
+
+function safeDetailContext(context = {}) {
+  // Diagnostics contain only bounded public identifiers, never arbitrary labels,
+  // URLs, exception messages or browser/account state. Source IDs are hashes.
+  return {
+    phase: 'GAME_DETAILS',
+    ...(DETAIL_STAGES.has(context?.stage) ? { stage: context.stage } : {}),
+    ...(typeof context?.sourceGameId === 'string' && /^up-[a-f0-9]{24}$/u.test(context.sourceGameId) ? { sourceGameId: context.sourceGameId } : {}),
+    ...(typeof context?.providerGameId === 'string' && /^\d{1,24}$/u.test(context.providerGameId) ? { providerGameId: context.providerGameId } : {}),
+  };
+}
+
+export function detailError(code = 'GAME_DETAIL_SCHEMA', context = {}) {
+  const safeCode = DETAIL_ERROR_CODES.has(code) ? code : 'GAME_DETAIL_COLLECTION';
+  const detailContext = safeDetailContext(context);
+  const fields = Object.entries({ code: safeCode, ...detailContext }).map(([key, value]) => `${key}=${value}`).join('; ');
+  return Object.assign(new Error(`UniquePlay game detail failed [${fields}]`), { code: safeCode, detailContext });
+}
+
+export function contextualizeDetailError(error, context = {}) {
+  // Preserve the innermost safe stage while allowing outer boundaries to supply
+  // missing IDs. Never forward the original exception/cause/stack to callbacks.
+  const code = DETAIL_ERROR_CODES.has(error?.code) ? error.code : 'GAME_DETAIL_COLLECTION';
+  return detailError(code, { ...safeDetailContext(context), ...safeDetailContext(error?.detailContext) });
 }
 
 function text(value, max = 100) {

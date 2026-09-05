@@ -163,7 +163,9 @@ function progressMessage(run: UniquePlaySyncRun): string {
   const message = run.progress.message?.trim() ?? '';
   const detailPhase = `${phase} ${message}`.toUpperCase();
   if (detailPhase.includes('GAME_DETAILS') || detailPhase.includes('GAME_RECORD') || detailPhase.includes('BOX_SCORE') || detailPhase.includes('GAME LOG')) {
-    return '경기별 상세 기록(이닝·타자·투수·타석) 수집 중';
+    const count = run.progress.current;
+    const collected = count != null && Number.isInteger(count) && count >= 0 ? ` · ${count}경기 확인` : '';
+    return `경기별 상세 기록(이닝·타자·투수·타석) 수집 중${collected}`;
   }
   return message || run.progress.phase || '처리 중';
 }

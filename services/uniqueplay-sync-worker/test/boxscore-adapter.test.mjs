@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import { inspectBoxscoreDom, readOpenGameBoxscore, resultListIsReady } from '../src/boxscore-adapter.mjs';
+import { inspectBoxscoreDom, readOpenGameBoxscore, resultListIsReady, stablePublicSnapshot } from '../src/boxscore-adapter.mjs';
+import { collectGameDetails } from '../src/adapter.mjs';
+import { contextualizeDetailError } from '../src/game-details.mjs';
 import { boxscoreSnapshots, forfeitSnapshots } from './fixtures/game-detail-fixture.mjs';
 
 // A tiny synthetic DOM models the public column-oriented structure observed in
@@ -23,7 +25,9 @@ function element(value = '', children = []) {
 function textCell(value) { return element('', [element(value)]); }
 
 function tableDom(label, table) {
-  const fixed = element('', [element(label), ...table.labels.map(textCell)]);
+  // The live source renders order, position, name and jersey as separate leaves.
+  // A single combined textCell would hide the “투수” position/header collision.
+  const fixed = element('', [element(label), ...table.labels.map((row) => element('', row.split(' ').map((token) => element(token))))]);
   const columns = table.columns.map((column) => element('', [textCell(column.header), ...column.values.map(textCell)]));
   return element('', [fixed, element('', [element('', columns)])]);
 }
@@ -75,6 +79,19 @@ test('structural DOM changes and login routes are not mistaken for unpublished r
   assert.equal(inspect(document, {}, '/login').error, 'REAUTH_REQUIRED');
 });
 
+test('table headers stay unambiguous when separate player position/name leaves also say pitcher or batter', () => {
+  const fixture = boxscoreSnapshots()[1];
+  fixture.batter.labels[0] = '1 포수 타자 (1)';
+  fixture.batter.labels[1] = '4 투수 투수 (2)';
+  fixture.pitcher.labels[0] = '투수 (9) 패';
+  const document = fixtureDocument(fixture, 1);
+  const pitcherLeaves = document.querySelectorAll('*').filter((node) => node.children.length === 0 && node.textContent === '투수');
+  assert.equal(pitcherLeaves.length, 4, 'header, batting position, batter name and pitcher name are distinct leaves');
+  assert.deepEqual(JSON.parse(JSON.stringify(inspect(document, {}))), fixture);
+  fixture.pitcher.columns[1].header = '알 수 없는 헤더';
+  assert.equal(inspect(fixtureDocument(fixture, 1), {}).error, 'GAME_DETAIL_SCHEMA');
+});
+
 test('back navigation recognizes dated result cards even without a game-results label', () => {
   const body = element('', ['일정결과', '2026년', '조별일정확인', '팀별일정확인', '08/24 월 15:00'].map(textCell));
   const context = { document: { querySelectorAll: () => body.querySelectorAll('*') }, location: { pathname: '/league/57' }, args: { leagueId: '57' } };
@@ -121,6 +138,67 @@ test('missing tables and expired sessions fail closed without a fabricated NOT_P
     };
     await assert.rejects(readOpenGameBoxscore(page, 'up-fixture'), { code });
   }
+});
+
+test('readiness tolerates delayed rendering but requires two identical completely parsed snapshots', async () => {
+  const complete = boxscoreSnapshots()[0];
+  const incomplete = structuredClone(complete);
+  incomplete.batter.columns[0].values.pop();
+  let waitedMs = 0;
+  let reads = 0;
+  const page = {
+    waitForTimeout: async (delay) => { waitedMs += delay; },
+    evaluate: async () => {
+      reads += 1;
+      if (waitedMs < 3_000) return { error: 'GAME_DETAIL_SCHEMA' };
+      if (waitedMs < 5_500) return incomplete;
+      return complete;
+    },
+  };
+  assert.deepEqual(await stablePublicSnapshot(page), complete);
+  assert.equal(waitedMs, 5_750, 'partial table does not count as a stable complete read');
+  assert.equal(reads, 24);
+});
+
+test('readiness has a bounded injectable wait budget and persistent malformed DOM still fails', async () => {
+  let waitedMs = 0;
+  let reads = 0;
+  const page = {
+    waitForTimeout: async (delay) => { waitedMs += delay; },
+    evaluate: async () => { reads += 1; return { error: 'GAME_DETAIL_SCHEMA' }; },
+  };
+  await assert.rejects(stablePublicSnapshot(page, { timeoutMs: 1_000, pollIntervalMs: 200 }), { code: 'GAME_DETAIL_SCHEMA' });
+  assert.equal(waitedMs, 1_000);
+  assert.equal(reads, 6);
+  reads = 0;
+  page.evaluate = async () => { reads += 1; return { error: 'REAUTH_REQUIRED' }; };
+  await assert.rejects(stablePublicSnapshot(page), { code: 'REAUTH_REQUIRED' });
+  assert.equal(reads, 1);
+  assert.equal(waitedMs, 1_000, 'expired session does not consume another wait budget');
+});
+
+test('per-game errors keep only safe IDs and the innermost stage through collection wrappers', async () => {
+  const sourceGameId = `up-${'a'.repeat(24)}`;
+  const privateText = 'operator@example.invalid https://auth.invalid/?token=private-token';
+  const page = {
+    url: () => 'https://unique-play.com/game/56556/boxscore?token=private-token',
+    waitForTimeout: async () => {},
+    evaluate: async () => { throw new Error(privateText); },
+  };
+  await assert.rejects(readOpenGameBoxscore(page, sourceGameId), (error) => {
+    const wrapped = contextualizeDetailError(contextualizeDetailError(error, { stage: 'OPEN_BOXSCORE', sourceGameId }), { stage: 'COLLECTION' });
+    assert.equal(wrapped.code, 'GAME_DETAIL_COLLECTION');
+    assert.deepEqual(wrapped.detailContext, { phase: 'GAME_DETAILS', stage: 'READ_INITIAL', sourceGameId, providerGameId: '56556' });
+    assert.match(wrapped.message, /providerGameId=56556/u);
+    assert.equal(/private|operator|auth\.invalid|token|https:/u.test(wrapped.message), false);
+    return true;
+  });
+  await assert.rejects(collectGameDetails(page, [{ status: 'COMPLETED', sourceGameId }], { leagueId: '57', seasonYear: 2026 }), (error) => {
+    assert.equal(error.code, 'GAME_DETAIL_COLLECTION');
+    assert.deepEqual(error.detailContext, { phase: 'GAME_DETAILS', stage: 'FIND_CARD', sourceGameId });
+    assert.equal(error.message.includes(privateText), false);
+    return true;
+  });
 });
 
 test('only explicit forfeits with both selected teams aggregate-only produce NOT_PUBLISHED', async () => {

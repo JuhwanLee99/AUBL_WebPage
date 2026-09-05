@@ -1,8 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { checksum, sanitizeCandidate } from '../src/normalization.mjs';
-import { parseInningsPitched, parseInningRuns, parseLineScore, parseTeamTables, providerGameIdFromUrl, sanitizeGameDetail, validateGameDetails } from '../src/game-details.mjs';
+import { contextualizeDetailError, detailError, parseInningsPitched, parseInningRuns, parseLineScore, parseTeamTables, providerGameIdFromUrl, sanitizeGameDetail, validateGameDetails } from '../src/game-details.mjs';
 import { boxscoreSnapshots, candidateFixture, detailFixture } from './fixtures/game-detail-fixture.mjs';
+
+test('detail diagnostics allow only fixed codes/stages and bounded public IDs, never raw private context', () => {
+  const privateText = 'private@example.invalid <html> https://auth.invalid/?password=secret';
+  const error = detailError(privateText, { stage: privateText, sourceGameId: privateText, providerGameId: privateText, message: privateText });
+  assert.equal(error.code, 'GAME_DETAIL_COLLECTION');
+  assert.deepEqual(error.detailContext, { phase: 'GAME_DETAILS' });
+  assert.equal(error.message.includes(privateText), false);
+  const unsafe = Object.assign(new Error(privateText), { code: 'GAME_DETAIL_SCHEMA', detailContext: {
+    phase: privateText, stage: privateText, sourceGameId: `up-${'a'.repeat(25)}`, providerGameId: '1'.repeat(25), raw: privateText,
+  } });
+  const safe = contextualizeDetailError(unsafe, { stage: 'READ_TEAM', sourceGameId: `up-${'b'.repeat(24)}`, providerGameId: '56556' });
+  assert.equal(safe.code, 'GAME_DETAIL_SCHEMA');
+  assert.deepEqual(safe.detailContext, { phase: 'GAME_DETAILS', stage: 'READ_TEAM', sourceGameId: `up-${'b'.repeat(24)}`, providerGameId: '56556' });
+  assert.equal(/private|html|auth|secret/u.test(JSON.stringify(safe)), false);
+  assert.equal(safe.cause, undefined);
+  assert.ok(safe.message.length < 300);
+});
 
 test('parses provider identity only from the approved public game route, not its query', () => {
   assert.equal(providerGameIdFromUrl('https://unique-play.com/game/12345/boxscore?data=[object%20Object]'), '12345');

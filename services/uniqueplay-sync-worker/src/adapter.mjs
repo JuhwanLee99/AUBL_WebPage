@@ -1,9 +1,9 @@
 import { deterministicGameId, normalizeText, sanitizeCandidate } from './normalization.mjs';
 import { validateCandidate } from './validation.mjs';
 import { readOpenGameBoxscore, resultListIsReady } from './boxscore-adapter.mjs';
-import { detailError } from './game-details.mjs';
+import { contextualizeDetailError, detailError } from './game-details.mjs';
 
-export const ADAPTER_VERSION = '2026.09.05.6';
+export const ADAPTER_VERSION = '2026.09.05.7';
 const GROUP_CODES = [...'ABCDEFGH'];
 const BATTER_HEADERS = ['타율', '팀게임', '선수게임', '타석', '타수', '총안타', '1루타', '2루타', '3루타', '홈런', '타점', '득점', '도루', '볼넷', '삼진', '출루율', '장타율', 'OPS'];
 const PITCHER_HEADERS = ['ERA', '팀게임', '선수게임', '이닝', '승', '패', '세이브', '홀드', '삼진', '피안타', '피홈런', '실점', '볼넷', '사구', '승률', 'WHIP'];
@@ -298,38 +298,49 @@ async function clickVisibleBoxscore(page, target) {
   }
 }
 
-async function collectGameDetails(page, games, { leagueId, seasonYear, progress }) {
+export async function collectGameDetails(page, games, { leagueId, seasonYear, progress }) {
   const targets = games.filter((game) => game.status === 'COMPLETED');
   const details = [];
   for (const target of targets) {
-    let found = false;
-    let settledAtEnd = 0;
-    for (let pass = 0; pass < 120 && settledAtEnd < 3; pass += 1) {
-      const visible = await readVisibleGames(page, seasonYear);
-      const matches = visible.filter((game) => sameGameCard(game, target));
-      if (matches.length > 1) throw detailError('GAME_DETAIL_AMBIGUOUS_CARD');
-      if (matches.length === 1) { found = true; break; }
-      const advanced = await scrollPageList(page);
-      settledAtEnd = advanced ? 0 : settledAtEnd + 1;
-      await page.waitForTimeout(120);
-    }
-    if (!found) throw detailError('GAME_DETAIL_CARD_MISSING');
-    await clickVisibleBoxscore(page, target);
     const sourceGameId = target.sourceGameId || deterministicGameId({ ...target, leagueId, seasonYear });
-    details.push(await readOpenGameBoxscore(page, sourceGameId, { sourceStatus: target.sourceStatus, expectedGame: target }));
-    await progress?.({ stage: 'GAME_DETAILS', count: details.length });
-    await page.goBack({ waitUntil: 'domcontentloaded', timeout: 30_000 });
-    // The results list no longer renders a “게임결과” label after returning.
-    // Confirm its actual league route, public controls and dated result cards.
-    await page.waitForFunction(resultListIsReady, { leagueId: String(leagueId) }, { timeout: 15_000 });
-    await ensureGameSeason(page, seasonYear);
-    // Back restores the results tab, but lazy lists can restore a later scroll
-    // position. Restart from the top so every expected card remains discoverable.
-    await page.evaluate(() => {
-      window.scrollTo(0, 0);
-      for (const node of document.querySelectorAll('*')) if (node.scrollTop) node.scrollTop = 0;
-    });
-    await page.waitForTimeout(150);
+    let providerGameId;
+    let stage = 'FIND_CARD';
+    try {
+      let found = false;
+      let settledAtEnd = 0;
+      for (let pass = 0; pass < 120 && settledAtEnd < 3; pass += 1) {
+        const visible = await readVisibleGames(page, seasonYear);
+        const matches = visible.filter((game) => sameGameCard(game, target));
+        if (matches.length > 1) throw detailError('GAME_DETAIL_AMBIGUOUS_CARD');
+        if (matches.length === 1) { found = true; break; }
+        const advanced = await scrollPageList(page);
+        settledAtEnd = advanced ? 0 : settledAtEnd + 1;
+        await page.waitForTimeout(120);
+      }
+      if (!found) throw detailError('GAME_DETAIL_CARD_MISSING');
+      stage = 'OPEN_BOXSCORE';
+      await clickVisibleBoxscore(page, target);
+      const detail = await readOpenGameBoxscore(page, sourceGameId, { sourceStatus: target.sourceStatus, expectedGame: target });
+      providerGameId = detail.providerGameId;
+      details.push(detail);
+      stage = 'REPORT_PROGRESS';
+      await progress?.({ stage: 'GAME_DETAILS', count: details.length });
+      stage = 'RETURN_RESULTS';
+      await page.goBack({ waitUntil: 'domcontentloaded', timeout: 30_000 });
+      // The results list no longer renders a “게임결과” label after returning.
+      // Confirm its actual league route, public controls and dated result cards.
+      await page.waitForFunction(resultListIsReady, { leagueId: String(leagueId) }, { timeout: 15_000 });
+      await ensureGameSeason(page, seasonYear);
+      // Back restores the results tab, but lazy lists can restore a later scroll
+      // position. Restart from the top so every expected card remains discoverable.
+      await page.evaluate(() => {
+        window.scrollTo(0, 0);
+        for (const node of document.querySelectorAll('*')) if (node.scrollTop) node.scrollTop = 0;
+      });
+      await page.waitForTimeout(150);
+    } catch (error) {
+      throw contextualizeDetailError(error, { stage, sourceGameId, providerGameId });
+    }
   }
   return details;
 }
@@ -372,8 +383,7 @@ export async function collectUniquePlay({ browser, storageState, leagueId, seaso
       for (const node of document.querySelectorAll('*')) if (node.scrollTop) node.scrollTop = 0;
     });
     const gameDetails = await collectGameDetails(page, games, { leagueId, seasonYear, progress }).catch((error) => {
-      const safeCode = /^(?:GAME_DETAIL_[A-Z_]+|SEASON_MISMATCH|REAUTH_REQUIRED)$/u.test(error?.code || '') ? error.code : 'GAME_DETAIL_COLLECTION';
-      throw detailError(safeCode);
+      throw contextualizeDetailError(error, { stage: 'COLLECTION' });
     });
 
     const candidate = sanitizeCandidate({ groups, games, gameDetails }, { leagueId, seasonYear, adapterVersion: ADAPTER_VERSION });
