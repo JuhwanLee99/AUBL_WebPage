@@ -67,6 +67,37 @@ test('a horizontal-only wrapper does not hide the outer vertical scroller; fitte
   assert.equal(fitted.inspect({}).atEnd, true);
 });
 
+test('body overflow cannot replace a fitted table scroll surface or the actual document scroller', () => {
+  const dom = fixture({ table: true });
+  dom.list.scrollHeight = dom.list.clientHeight;
+  dom.body.overflow = 'auto';
+  dom.body.scrollHeight = 1396;
+  dom.root.scrollHeight = 1396;
+  const result = dom.inspect({ kind: 'table', anchor: '게임수', expectedHeaders: ['게임수', '승률'] });
+  assert.equal(result.atEnd, true);
+  assert.equal(result.advanced, false);
+  assert.equal(dom.body.scrollTop, 0);
+  assert.equal(dom.root.scrollTop, 0);
+  const documentOnly = fixture({ documentScroll: true });
+  documentOnly.body.overflow = 'auto';
+  documentOnly.body.scrollHeight = 1683;
+  assert.equal(documentOnly.inspect({}).advanced, true);
+  assert.equal(documentOnly.body.scrollTop, 0);
+  assert.equal(documentOnly.root.scrollTop, 563);
+});
+
+test('quirks-mode body remains usable when it actually is document.scrollingElement', () => {
+  const body = node({ height: 720, total: 796, overflow: 'auto', children: [node({ text: '09/05 토 09:00' })] });
+  body.isDocument = true;
+  const document = { body, scrollingElement: body, querySelectorAll: () => [body, ...body.querySelectorAll('*')] };
+  const result = vm.runInNewContext(`(${scrollCollectionDom.toString()})({})`, {
+    document, getComputedStyle: (element) => ({ overflowY: element.overflow }),
+  });
+  assert.equal(result.advanced, true);
+  assert.equal(result.atEnd, true);
+  assert.equal(body.scrollTop, 76);
+});
+
 test('supports the document scrolling element and rejects hidden/clip as list surfaces', () => {
   const dom = fixture({ documentScroll: true });
   assert.equal(dom.inspect({}).advanced, true);
@@ -86,6 +117,19 @@ test('three stalled attempts away from the end never count as completion', async
   const advance = async () => dom.inspect({});
   await assert.rejects(collectLazyList({ read: async () => ['A'], identify: (row) => row, advance, maxPasses: 5 }), { code: 'COLLECTION_INCOMPLETE' });
   await assert.rejects(collectUntilStable({ read: async () => ({ rows: [{ fixed: ['1', 'A'], values: ['1'] }] }), advance, maxPasses: 5 }), { code: 'COLLECTION_INCOMPLETE' });
+});
+
+test('incomplete table diagnostics include only safe stage and geometry, never arbitrary source values', async () => {
+  await assert.rejects(collectUntilStable({
+    read: async () => ({ rows: [{ fixed: ['1', 'private@example.invalid'], values: ['1'] }] }),
+    advance: async () => ({ advanced: false, atEnd: false, top: 0, height: 720, total: 796, reason: 'PRIVATE SECRET' }),
+    context: { groupCode: 'A', table: 'STANDINGS', email: 'private@example.invalid' }, maxPasses: 4,
+  }), (error) => {
+    assert.equal(error.code, 'COLLECTION_INCOMPLETE');
+    assert.match(error.message, /group=A; table=STANDINGS; rows=1; atEnd=false; top=0; height=720; total=796/u);
+    assert.doesNotMatch(error.message, /private|PRIVATE|SECRET|email/u);
+    return true;
+  });
 });
 
 test('collects later lazy batches after temporary bottom, including batches excluded from A-H', async () => {

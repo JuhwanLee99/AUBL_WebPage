@@ -4,7 +4,7 @@ import { readOpenGameBoxscore, resultListIsReady } from './boxscore-adapter.mjs'
 import { contextualizeDetailError, detailError } from './game-details.mjs';
 import { reachedCollectionEnd, scrollCollectionDom } from './collection-scroll.mjs';
 
-export const ADAPTER_VERSION = '2026.09.05.11';
+export const ADAPTER_VERSION = '2026.09.05.12';
 const GROUP_CODES = [...'ABCDEFGH'];
 const BATTER_HEADERS = ['타율', '팀게임', '선수게임', '타석', '타수', '총안타', '1루타', '2루타', '3루타', '홈런', '타점', '득점', '도루', '볼넷', '삼진', '출루율', '장타율', 'OPS'];
 const PITCHER_HEADERS = ['ERA', '팀게임', '선수게임', '이닝', '승', '패', '세이브', '홀드', '삼진', '피안타', '피홈런', '실점', '볼넷', '사구', '승률', 'WHIP'];
@@ -99,17 +99,19 @@ async function scrollTable(page, anchor, expectedHeaders) {
   return page.evaluate(scrollCollectionDom, { kind: 'table', anchor, expectedHeaders });
 }
 
-async function collectVirtualTable(page, anchor, headers) {
+async function collectVirtualTable(page, anchor, headers, context) {
   return collectUntilStable({
+    context,
     read: () => readVisibleTable(page, anchor, headers),
     advance: () => scrollTable(page, anchor, headers),
     wait: () => page.waitForTimeout(500),
   });
 }
 
-export async function collectUntilStable({ read, advance, wait = async () => {}, maxPasses = 100 }) {
+export async function collectUntilStable({ read, advance, wait = async () => {}, maxPasses = 100, context = {} }) {
   const seen = new Map();
   let settledAtEnd = 0;
+  let lastScroll;
   for (let pass = 0; pass < maxPasses && settledAtEnd < 3; pass += 1) {
     if (pass > 0) await wait();
     const snapshot = await read();
@@ -120,11 +122,12 @@ export async function collectUntilStable({ read, advance, wait = async () => {},
       if (key) seen.set(key, row);
     }
     const advanced = await advance();
+    lastScroll = advanced;
     // Repeated rows inside a virtualized viewport are not completion evidence.
     // Count stability only after the same scroll surface reports its actual end.
     settledAtEnd = seen.size === before && reachedCollectionEnd(advanced) ? settledAtEnd + 1 : 0;
   }
-  if (settledAtEnd < 3) throw incompleteCollectionError('table');
+  if (settledAtEnd < 3) throw incompleteCollectionError('table', { context, rows: seen.size, scroll: lastScroll });
   return [...seen.values()];
 }
 
@@ -146,9 +149,21 @@ export async function collectLazyList({ read, advance, identify, wait = async ()
   return [...seen.values()];
 }
 
-function incompleteCollectionError(kind) {
+function incompleteCollectionError(kind, { context = {}, rows, scroll } = {}) {
+  // Do not forward raw DOM, browser exceptions or arbitrary context values.
+  const fields = [];
+  if (GROUP_CODES.includes(context.groupCode)) fields.push(`group=${context.groupCode}`);
+  if (['STANDINGS', 'BATTER_IN', 'BATTER_OUT', 'PITCHER_IN', 'PITCHER_OUT'].includes(context.table)) fields.push(`table=${context.table}`);
+  if (Number.isSafeInteger(rows) && rows >= 0) fields.push(`rows=${rows}`);
+  if (scroll && typeof scroll === 'object') {
+    if (typeof scroll.atEnd === 'boolean') fields.push(`atEnd=${scroll.atEnd}`);
+    for (const field of ['top', 'height', 'total']) {
+      if (typeof scroll[field] === 'number' && Number.isFinite(scroll[field]) && scroll[field] >= 0 && scroll[field] <= 1e9) fields.push(`${field}=${Math.round(scroll[field])}`);
+    }
+    if (['TABLE_SCROLL_ANCHOR_MISSING', 'SCROLL_SURFACE_MISSING'].includes(scroll.reason)) fields.push(`reason=${scroll.reason}`);
+  }
   return Object.assign(
-    new Error(`UniquePlay ${kind} collection did not reach a stable end`),
+    new Error(`UniquePlay ${kind} collection did not reach a stable end${fields.length ? ` [${fields.join('; ')}]` : ''}`),
     { code: 'COLLECTION_INCOMPLETE' },
   );
 }
@@ -181,7 +196,7 @@ function playerFromRow(row, headers, statKeys = headers) {
 
 async function collectGroup(page, groupCode, progress) {
   await clickText(page, '팀순위');
-  const standings = (await collectVirtualTable(page, '게임수', STANDING_HEADERS)).map(standingFromRow);
+  const standings = (await collectVirtualTable(page, '게임수', STANDING_HEADERS, { groupCode, table: 'STANDINGS' })).map(standingFromRow);
   await progress?.({ stage: 'STANDINGS', groupCode, count: standings.length });
 
   await clickText(page, '개인순위');
@@ -189,11 +204,11 @@ async function collectGroup(page, groupCode, progress) {
   for (const regulation of ['IN', 'OUT']) {
     await clickText(page, `규정 ${regulation}`);
     await clickText(page, '타자순위');
-    result.batters[regulation] = (await collectVirtualTable(page, '타율', BATTER_HEADERS)).map((row) => playerFromRow(row, BATTER_HEADERS));
+    result.batters[regulation] = (await collectVirtualTable(page, '타율', BATTER_HEADERS, { groupCode, table: `BATTER_${regulation}` })).map((row) => playerFromRow(row, BATTER_HEADERS));
     await progress?.({ stage: `BATTER_${regulation}`, groupCode, count: result.batters[regulation].length });
 
     await clickText(page, '투수순위');
-    result.pitchers[regulation] = (await collectVirtualTable(page, 'ERA', PITCHER_HEADERS)).map((row) => playerFromRow(row, PITCHER_HEADERS, PITCHER_STAT_KEYS));
+    result.pitchers[regulation] = (await collectVirtualTable(page, 'ERA', PITCHER_HEADERS, { groupCode, table: `PITCHER_${regulation}` })).map((row) => playerFromRow(row, PITCHER_HEADERS, PITCHER_STAT_KEYS));
     await progress?.({ stage: `PITCHER_${regulation}`, groupCode, count: result.pitchers[regulation].length });
   }
   return result;

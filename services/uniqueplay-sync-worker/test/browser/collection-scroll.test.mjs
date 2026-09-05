@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { scrollCollectionDom } from '../../src/collection-scroll.mjs';
-import { collectLazyList, scrollPageList } from '../../src/adapter.mjs';
+import { collectLazyList, collectUntilStable, scrollPageList } from '../../src/adapter.mjs';
 
 test('Chromium CSS layout: overflowing cards, lazy batches, table and document scroll', async () => {
   const browser = await chromium.launch({ headless: true });
@@ -66,6 +66,48 @@ test('Chromium CSS layout: overflowing cards, lazy batches, table and document s
     assert.equal(documentResult.advanced, true);
     assert.equal(documentResult.atEnd, false);
     assert.ok(await page.evaluate(() => document.scrollingElement.scrollTop > 0));
+  } finally {
+    await browser.close();
+  }
+});
+
+test('standards-mode body overflow: fitted standings complete and viewport-only lists use HTML', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    for (const viewport of [{ width: 1280, height: 720 }, { width: 2236, height: 1320 }]) {
+      const page = await browser.newPage({ viewport });
+      await page.route('**/*', (route) => route.abort());
+      await page.setContent(`<!doctype html><style>
+        html,body{margin:0;height:100%} body{overflow:auto;display:flex}
+        #root{height:${viewport.height + 76}px;width:100%}
+        #list{overflow-y:auto;height:${viewport.height - 120}px} #values{height:250px}
+      </style><div id="root"><div id="list"><div><div id="values"><div><span>게임수</span><span>승률</span></div></div></div></div></div>`);
+      // This is the v11 regression: BODY reports height overflow but cannot
+      // scroll. Verify the browser's behavior, not a mock that assumes it can.
+      const bodyAttempt = await page.evaluate(() => {
+        document.body.scrollTo({ top: 76, behavior: 'instant' });
+        return { top: document.body.scrollTop, extra: document.body.scrollHeight - document.body.clientHeight, root: document.scrollingElement.tagName };
+      });
+      assert.deepEqual(bodyAttempt, { top: 0, extra: 76, root: 'HTML' });
+      let passes = 0;
+      const rows = await collectUntilStable({
+        read: async () => ({ rows: Array.from({ length: 5 }, (_, i) => ({ fixed: [String(i + 1), `팀${i + 1}`], values: ['6'] })) }),
+        advance: async () => { passes += 1; return page.evaluate(scrollCollectionDom, { kind: 'table', anchor: '게임수', expectedHeaders: ['게임수', '승률'] }); },
+        maxPasses: 6,
+      });
+      assert.equal(rows.length, 5);
+      assert.equal(passes, 4);
+      assert.equal(await page.evaluate(() => document.scrollingElement.scrollTop), 0);
+
+      // Without an explicit nested scroll surface, use the actual viewport.
+      await page.setContent(`<!doctype html><style>html,body{margin:0;height:100%}body{overflow:auto;display:flex}#root{height:${viewport.height + 76}px}</style><div id="root"><span>09/05 토 09:00</span></div>`);
+      const documentResult = await page.evaluate(scrollCollectionDom, {});
+      assert.equal(documentResult.advanced, true);
+      assert.equal(documentResult.atEnd, true);
+      assert.equal(await page.evaluate(() => document.body.scrollTop), 0);
+      assert.equal(await page.evaluate(() => document.scrollingElement.scrollTop), 76);
+      await page.close();
+    }
   } finally {
     await browser.close();
   }

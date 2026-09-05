@@ -8,6 +8,10 @@ export function scrollCollectionDom({ kind = 'games', anchor, expectedHeaders = 
     let fittedSurface = null;
     for (let node = start; node; node = node.parentElement) {
       if (node === documentScroller) break;
+      // In standards mode body overflow is propagated to the viewport. It can
+      // report excess height without owning scrollTop. Only scrollingElement
+      // represents that viewport (including body in quirks mode).
+      if (node === document.body) continue;
       // Visible text overflow is NOT a scroll surface (e.g. a 192px game card
       // with 214px of content). Keep climbing to the real auto/scroll list.
       if (node.clientHeight > 0 && /^(auto|scroll|overlay)$/u.test(getComputedStyle(node).overflowY)) {
@@ -17,6 +21,9 @@ export function scrollCollectionDom({ kind = 'games', anchor, expectedHeaders = 
         fittedSurface ||= node;
       }
     }
+    // A fitted explicit list is already complete; unrelated page/footer
+    // overflow outside that list must not force it to scroll indefinitely.
+    if (fittedSurface) return fittedSurface;
     if (documentScroller?.clientHeight > 0
       && !/^(hidden|clip)$/u.test(getComputedStyle(documentScroller).overflowY)
       && !/^(hidden|clip)$/u.test(getComputedStyle(document.body).overflowY)) {
