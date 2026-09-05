@@ -49,11 +49,89 @@ extension _RecordsScreenSections on RecordsScreenState {
           final horizontal = compact ? 12.0 : 20.0;
           if (compact) {
             return Padding(
-              padding: EdgeInsets.fromLTRB(horizontal, 10, horizontal, 10),
-              child: _CompactFilterSummary(
-                summary: _filterSummary(),
-                onPressed: _showFilterSheet,
-              ),
+              padding: EdgeInsets.fromLTRB(horizontal, 8, horizontal, 8),
+              child:
+                  MediaQuery.textScalerOf(context).scale(1) > 1.4 ||
+                      MediaQuery.sizeOf(context).height < 600
+                  ? _CompactFilterSummary(
+                      summary: _filterSummary(),
+                      onPressed: _showFilterSheet,
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: _FilterDropdown<int>(
+                                label: '시즌',
+                                value: _seasonId,
+                                items: _seasons
+                                    .map(
+                                      (season) => DropdownMenuItem(
+                                        value: season.id,
+                                        child: Text('${season.year} 시즌'),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    _changeSeason(value, _seasons.first);
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 2,
+                              child: _FilterDropdown<RecordGroup>(
+                                label: '조',
+                                value: _filters.group,
+                                items: _groupOptions
+                                    .map(
+                                      (group) => DropdownMenuItem(
+                                        value: group,
+                                        child: Text(_groupText(group)),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (value) {
+                                  if (value == null ||
+                                      value == _filters.group) {
+                                    return;
+                                  }
+                                  _setState(
+                                    () => _filters = _filters.copyWith(
+                                      group: value,
+                                    ),
+                                  );
+                                  _reloadRecords();
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            OutlinedButton(
+                              onPressed: _showFilterSheet,
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(0, 48),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                ),
+                              ),
+                              child: const Text('검색·필터'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          _filterSummary(),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 12, color: colors.muted),
+                        ),
+                      ],
+                    ),
             );
           }
 
@@ -386,11 +464,7 @@ extension _RecordsScreenSections on RecordsScreenState {
   }
 
   Widget _buildOverviewTab() {
-    final selectedSeason = _seasons.where((e) => e.id == _seasonId).firstOrNull;
     return _RecordsOverviewSection(
-      seasonLabel: selectedSeason == null
-          ? '시즌 기록 허브'
-          : '${selectedSeason.year} 시즌 기록 허브',
       overview: _overview,
       teamStandings: _teamStandings,
       batters: _batters,
@@ -556,7 +630,6 @@ extension _RecordsScreenSections on RecordsScreenState {
 
 class _RecordsOverviewSection extends StatelessWidget {
   const _RecordsOverviewSection({
-    required this.seasonLabel,
     required this.overview,
     required this.teamStandings,
     required this.batters,
@@ -574,7 +647,6 @@ class _RecordsOverviewSection extends StatelessWidget {
     required this.formatTopPitcherValue,
   });
 
-  final String seasonLabel;
   final RecordsOverview? overview;
   final List<TeamRecordStanding> teamStandings;
   final List<BatterRanking> batters;
@@ -603,27 +675,15 @@ class _RecordsOverviewSection extends StatelessWidget {
     return _RecordsRefreshList(
       onRefresh: onRefresh,
       children: [
-        SeasonPageHero(
-          eyebrow: '시즌 기록',
-          title: Text(seasonLabel),
-          description: '팀 순위와 타자·투수 기록을 한곳에서 확인하고, 선수별 상세 기록으로 이어서 살펴볼 수 있습니다.',
-          footer: const Align(
-            alignment: Alignment.centerLeft,
-            child: SeasonStatusBadge(
-              label: '공식 기록',
-              tone: SeasonBadgeTone.blue,
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
         LayoutBuilder(
           builder: (context, constraints) {
-            final width = constraints.maxWidth < 520
-                ? (constraints.maxWidth - 10) / 2
-                : (constraints.maxWidth - 30) / 4;
+            final columns = MediaQuery.textScalerOf(context).scale(1) > 1.4
+                ? 2
+                : 4;
+            final width = (constraints.maxWidth - (columns - 1) * 6) / columns;
             return Wrap(
-              spacing: 10,
-              runSpacing: 10,
+              spacing: 6,
+              runSpacing: 6,
               children: [
                 SizedBox(
                   width: width,
@@ -649,7 +709,7 @@ class _RecordsOverviewSection extends StatelessWidget {
                 SizedBox(
                   width: width,
                   child: _MetricCard(
-                    label: '타자/투수',
+                    label: '타자·투수',
                     value: '${batters.length}/${pitchers.length}',
                   ),
                 ),
@@ -868,6 +928,7 @@ class _RecordsBattersSectionState extends State<_RecordsBattersSection> {
       onRefresh: widget.onRefresh,
       children: [
         _TopFivePanel<BatterRanking>(
+          collapsible: true,
           title: '타자 TOP 5 · 규정 충족',
           rows: widget.topInBatters,
           emptyText: '타자 데이터가 없습니다.',
@@ -887,7 +948,7 @@ class _RecordsBattersSectionState extends State<_RecordsBattersSection> {
         const SizedBox(height: 10),
         _Card(
           title: '타자 기록',
-          hint: _sortHint,
+          hint: '${batters.length}명',
           child: batters.isEmpty
               ? const _EmptyState(text: '표시할 타자 기록이 없습니다.')
               : LayoutBuilder(
@@ -1219,6 +1280,7 @@ class _RecordsPitchersSectionState extends State<_RecordsPitchersSection> {
       onRefresh: widget.onRefresh,
       children: [
         _TopFivePanel<PitcherRanking>(
+          collapsible: true,
           title: '투수 TOP 5 · 규정 충족',
           rows: widget.topInPitchers,
           emptyText: '투수 데이터가 없습니다.',
@@ -1238,7 +1300,7 @@ class _RecordsPitchersSectionState extends State<_RecordsPitchersSection> {
         const SizedBox(height: 10),
         _Card(
           title: '투수 기록',
-          hint: _sortHint,
+          hint: '${pitchers.length}명',
           child: pitchers.isEmpty
               ? const _EmptyState(text: '표시할 투수 기록이 없습니다.')
               : LayoutBuilder(

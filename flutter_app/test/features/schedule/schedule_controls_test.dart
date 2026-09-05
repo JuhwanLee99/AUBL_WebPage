@@ -1,10 +1,14 @@
+import 'package:aubl_flutter_app/core/models/public_season_models.dart';
 import 'package:aubl_flutter_app/core/theme/app_theme.dart';
 import 'package:aubl_flutter_app/features/schedule/widgets/schedule_controls.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 void main() {
+  setUpAll(() => initializeDateFormatting('ko'));
+
   group('ScheduleGroupSelector', () {
     testWidgets(
       'keeps all groups visible at 360px and supports tier selection',
@@ -122,6 +126,32 @@ void main() {
   });
 
   group('ScheduleMonthNavigator', () {
+    testWidgets('keeps month controls in one compact row at 360px', (
+      tester,
+    ) async {
+      await _pumpSized(
+        tester,
+        width: 360,
+        height: 220,
+        child: ScheduleMonthNavigator(
+          month: DateTime(2026, 9),
+          onPrevious: () {},
+          onToday: () {},
+          onNext: () {},
+        ),
+      );
+
+      expect(find.text('오늘'), findsOneWidget);
+      expect(find.text('오늘로 이동'), findsNothing);
+      expect(
+        (tester.getCenter(find.text('오늘')).dy -
+                tester.getCenter(find.text('2026년 9월')).dy)
+            .abs(),
+        lessThan(24),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('stacks today control without overflow at 200% text', (
       tester,
     ) async {
@@ -249,6 +279,76 @@ void main() {
       expect(tester.takeException(), isNull);
       semantics.dispose();
     });
+  });
+
+  group('ScheduleCompactGameCard', () {
+    testWidgets('keeps the primary matchup readable at 360px', (tester) async {
+      var tapped = false;
+      await _pumpSized(
+        tester,
+        width: 360,
+        height: 360,
+        child: ScheduleCompactGameCard(
+          game: _game(
+            awayTeamName: '아주 긴 원정대학교 야구팀',
+            homeTeamName: '아주 긴 홈대학교 야구팀',
+          ),
+          onTap: () => tapped = true,
+        ),
+      );
+
+      expect(find.text('아주 긴 원정대학교 야구팀'), findsOneWidget);
+      expect(find.text('아주 긴 홈대학교 야구팀'), findsOneWidget);
+      expect(find.text('중앙대학교 야구장'), findsOneWidget);
+      await tester.tap(find.byType(ScheduleCompactGameCard));
+      expect(tapped, isTrue);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('stacks teams without overflow at 200% text', (tester) async {
+      final semantics = tester.ensureSemantics();
+      await _pumpSized(
+        tester,
+        width: 360,
+        height: 620,
+        textScale: 2,
+        child: ScheduleCompactGameCard(game: _game(), onTap: () {}),
+      );
+
+      expect(find.text('원정대학교 야구팀'), findsOneWidget);
+      expect(find.text('홈대학교 야구팀'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(
+          RegExp(r'종료, 9\.5\(토\) 14:00, 원정대학교 야구팀 7대 홈대학교 야구팀 5'),
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      semantics.dispose();
+    });
+  });
+}
+
+PublicGame _game({
+  String awayTeamName = '원정대학교 야구팀',
+  String homeTeamName = '홈대학교 야구팀',
+}) {
+  return PublicGame.fromJson({
+    'id': 1,
+    'seasonId': 2026,
+    'seasonYear': 2026,
+    'startTime': '2026-09-05T14:00:00',
+    'venue': '중앙대학교 야구장',
+    'groupCode': 'A',
+    'status': 'COMPLETED',
+    'homeTeamId': 1,
+    'homeTeamName': homeTeamName,
+    'homeScore': 5,
+    'awayTeamId': 2,
+    'awayTeamName': awayTeamName,
+    'awayScore': 7,
+    'sourceProvider': 'UNIQUE_PLAY',
+    'sourceGameId': 'game-1',
   });
 }
 

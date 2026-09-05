@@ -389,6 +389,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   }
 
   void _navigateToPlayer(int playerId) {
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _error = null;
       _searchInput = _searchCandidates
@@ -518,7 +519,19 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _buildSearchCard(),
+                    if (_currentPlayerId == null)
+                      _buildSearchCard()
+                    else
+                      ExpansionTile(
+                        key: ValueKey<String>(
+                          'player-search-$_currentPlayerId',
+                        ),
+                        title: const Text('다른 선수 검색'),
+                        tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+                        shape: const Border(),
+                        collapsedShape: const Border(),
+                        children: [_buildSearchCard()],
+                      ),
                     const SizedBox(height: 12),
                     _buildPlayerSummaryCard(),
                     const SizedBox(height: 12),

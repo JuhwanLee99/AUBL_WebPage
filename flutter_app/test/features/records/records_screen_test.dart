@@ -96,17 +96,29 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
-      expect(find.text('현재 조회 조건'), findsOneWidget);
+      expect(find.text('시즌'), findsOneWidget);
+      expect(find.text('조'), findsOneWidget);
       expect(find.text('검색·필터'), findsOneWidget);
       expect(find.text('목록 정렬'), findsOneWidget);
       expect(find.text('공식 순위'), findsWidgets);
       expect(find.text('테스트 타자'), findsWidgets);
       expect(find.byType(DataTable), findsNothing);
+      final recordRow = find
+          .ancestor(of: find.text('테스트 타자'), matching: find.byType(InkWell))
+          .first;
+      expect(tester.getTopLeft(recordRow).dy, lessThan(450));
+      expect(tester.getSize(recordRow).height, lessThan(100));
+      expect(find.text('타자 TOP 5 · 규정 충족'), findsOneWidget);
+      await tester.tap(find.text('타자 TOP 5 · 규정 충족'));
+      await tester.pumpAndSettle();
+      expect(find.text('테스트 타자'), findsWidgets);
+      await tester.tap(find.text('타자 TOP 5 · 규정 충족'));
+      await tester.pumpAndSettle();
 
       await tester.tap(find.text('검색·필터'));
       await tester.pumpAndSettle();
       expect(find.text('기록 검색과 필터'), findsOneWidget);
-      expect(find.text('시즌'), findsOneWidget);
+      expect(find.text('시즌'), findsWidgets);
       expect(find.text('대회 범위'), findsOneWidget);
       expect(find.text('팀·선수 검색'), findsOneWidget);
       expect(find.text('규정 충족'), findsWidgets);
@@ -300,6 +312,28 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('테스트 타자'), findsNothing);
       expect(find.text('선수 목록 없음'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('selected player opens with the record summary before search', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(360, 780));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: PlayerDetailScreen(initialPlayerId: 11, apiService: fakeApi),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('다른 선수 검색'), findsOneWidget);
+      expect(find.text('선수 이름 검색'), findsNothing);
+      expect(find.text('테스트 타자 #11'), findsOneWidget);
+      expect(tester.getTopLeft(find.text('테스트 타자 #11')).dy, lessThan(240));
+      await tester.tap(find.text('다른 선수 검색'));
+      await tester.pumpAndSettle();
+      expect(find.text('선수 이름 검색'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });
