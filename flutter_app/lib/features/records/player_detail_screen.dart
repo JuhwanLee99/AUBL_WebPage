@@ -2,8 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../app/shell_controller.dart';
+import '../../core/contracts/web_contracts.dart';
+import '../../core/models/official_player_game_logs.dart';
 import '../../core/services/backend_api_service.dart';
 import '../../core/theme/app_theme.dart';
+import 'official_player_game_logs_view.dart';
 
 class PlayerDetailScreen extends StatefulWidget {
   const PlayerDetailScreen({
@@ -49,6 +53,9 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
   List<BatterGameLog> _batterGameLogs = [];
   List<PitcherGameLog> _pitcherGameLogs = [];
+  OfficialPlayerGameLogs? _officialGameLogs;
+  int _gameLogsRequestSeq = 0;
+  int _playerRequestSeq = 0;
   bool _gameLogsLoading = false;
   String? _gameLogsError;
   String _gameIdInput = '';
@@ -64,6 +71,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     super.initState();
     _api = widget.apiService ?? BackendApiService();
     _ownsApi = widget.apiService == null;
+    _viewSeasonId = widget.initialSeasonId;
     _currentPlayerId = widget.initialPlayerId;
     _selectedPlayerInput = widget.initialPlayerId != null
         ? '${widget.initialPlayerId}'
@@ -215,11 +223,17 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   }
 
   Future<void> _loadPlayer(int playerId) async {
+    final requestSeq = ++_playerRequestSeq;
+    ++_gameLogsRequestSeq;
     setState(() {
       _loading = true;
       _error = null;
       _currentPlayerId = playerId;
       _selectedPlayerInput = '$playerId';
+      _officialGameLogs = null;
+      _batterGameLogs = [];
+      _pitcherGameLogs = [];
+      _gameLogsError = null;
     });
 
     try {
@@ -250,7 +264,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
           // Ignore profile fallback error and keep stats response.
         }
       }
-      if (!mounted) return;
+      if (!mounted || requestSeq != _playerRequestSeq) return;
 
       final batterSeasonIds =
           stats.batterStats.map((e) => e.seasonId).toSet().toList()
@@ -277,7 +291,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       _addVisitedPlayer(stats);
       await _loadGameLogs();
     } catch (err) {
-      if (!mounted) return;
+      if (!mounted || requestSeq != _playerRequestSeq) return;
       setState(() {
         _stats = null;
         _loading = false;
@@ -289,18 +303,35 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   Future<void> _loadGameLogs() async {
     final playerId = _currentPlayerId;
     if (playerId == null) return;
+    final requestSeq = ++_gameLogsRequestSeq;
+    final seasonId = _viewSeasonId;
 
     setState(() {
       _gameLogsLoading = true;
       _gameLogsError = null;
+      _officialGameLogs = null;
+      _batterGameLogs = [];
+      _pitcherGameLogs = [];
     });
 
     try {
+      final official = await _api.getOfficialPlayerGameLogs(
+        playerId,
+        seasonId: seasonId,
+      );
+      if (!mounted || requestSeq != _gameLogsRequestSeq) return;
+      if (!official.allowsLegacyFallback) {
+        setState(() {
+          _officialGameLogs = official;
+          _gameLogsLoading = false;
+        });
+        return;
+      }
       final payload = await _api.getPlayerGameLogs(
         playerId,
         gameId: _selectedGameId,
       );
-      if (!mounted) return;
+      if (!mounted || requestSeq != _gameLogsRequestSeq) return;
       final batter = [...payload.batterLogs]
         ..sort((a, b) => b.gameId.compareTo(a.gameId));
       final pitcher = [...payload.pitcherLogs]
@@ -312,7 +343,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         _gameLogsLoading = false;
       });
     } catch (err) {
-      if (!mounted) return;
+      if (!mounted || requestSeq != _gameLogsRequestSeq) return;
       setState(() {
         _batterGameLogs = [];
         _pitcherGameLogs = [];
@@ -1098,22 +1129,35 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
               ),
             ),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _smallMetric(
-                '경기 수',
-                '${(_batterGameLogs.map((e) => e.gameId).toSet()..addAll(_pitcherGameLogs.map((e) => e.gameId).toSet())).length}',
-              ),
-              _smallMetric('타자 로그', '${_batterGameLogs.length}'),
-              _smallMetric('투수 로그', '${_pitcherGameLogs.length}'),
-            ],
-          ),
-          const SizedBox(height: 10),
-          _buildBatterLogsTable(),
-          const SizedBox(height: 10),
-          _buildPitcherLogsTable(),
+          if (_officialGameLogs != null)
+            OfficialPlayerGameLogsView(
+              data: _officialGameLogs!,
+              gameId: _selectedGameId,
+              onOpenGame: (sourceGameId) {
+                ShellController.of(context)?.openEmbeddedWebView(
+                  WebRouteContracts.scoreboardText(sourceGameId),
+                  '경기 상세',
+                );
+              },
+            )
+          else if (!_gameLogsLoading && _gameLogsError == null) ...[
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _smallMetric(
+                  '경기 수',
+                  '${(_batterGameLogs.map((e) => e.gameId).toSet()..addAll(_pitcherGameLogs.map((e) => e.gameId).toSet())).length}',
+                ),
+                _smallMetric('타자 로그', '${_batterGameLogs.length}'),
+                _smallMetric('투수 로그', '${_pitcherGameLogs.length}'),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _buildBatterLogsTable(),
+            const SizedBox(height: 10),
+            _buildPitcherLogsTable(),
+          ],
         ],
       ),
     );

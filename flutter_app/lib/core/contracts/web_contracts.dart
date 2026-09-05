@@ -13,7 +13,7 @@ class WebRouteContracts {
   static const String liveOverlayPrefix = '/live-overlay/';
 
   static String scoreboardText(String matchId) =>
-      '$scoreboardTextPrefix$matchId';
+      '$scoreboardTextPrefix${Uri.encodeComponent(matchId)}';
   static String liveOverlay(String matchId) => '$liveOverlayPrefix$matchId';
 }
 
@@ -34,9 +34,7 @@ class WebQueryContracts {
     bool includeForceLogout = false,
     String? themeName,
   }) {
-    final query = <String, String>{
-      embedded: embeddedFlutter,
-    };
+    final query = <String, String>{embedded: embeddedFlutter};
     if (includeNativeGoogle) {
       query[nativeGoogle] = enabled;
     }

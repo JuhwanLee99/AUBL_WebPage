@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
 import '../models/public_season_models.dart';
+import '../models/official_player_game_logs.dart';
 
 /// Service for communicating with the Spring Boot backend API.
 class BackendApiService {
@@ -922,6 +923,26 @@ class BackendApiService {
           .whereType<PitcherStatSummary>()
           .toList(),
     );
+  }
+
+  Future<OfficialPlayerGameLogs> getOfficialPlayerGameLogs(int playerId,
+      {int? seasonId}) async {
+    _validatePositiveInt(playerId, 'playerId');
+    if (seasonId != null) _validatePositiveInt(seasonId, 'seasonId');
+    final raw = await _get('/api/players/$playerId/official-game-logs',
+        query: seasonId == null ? null : {'seasonId': '$seasonId'});
+    if (raw is! Map<String, dynamic>) {
+      throw const FormatException('공식 경기 기록 응답을 확인할 수 없습니다.');
+    }
+    final responseSeasonId = raw['seasonId'];
+    if (raw['provider'] != 'UNIQUE_PLAY' || raw['playerId'] != playerId ||
+        responseSeasonId is! int || responseSeasonId <= 0 ||
+        (seasonId != null && responseSeasonId != seasonId) ||
+        (raw['status'] != 'NO_ACTIVE_REVISION' &&
+            (raw['syncRevision'] is! String || (raw['syncRevision'] as String).trim().isEmpty))) {
+      throw const FormatException('요청한 선수·시즌의 공식 게시본과 일치하지 않습니다.');
+    }
+    return OfficialPlayerGameLogs.fromJson(raw);
   }
 
   Future<PlayerGameLogsResponse> getPlayerGameLogs(int playerId,
