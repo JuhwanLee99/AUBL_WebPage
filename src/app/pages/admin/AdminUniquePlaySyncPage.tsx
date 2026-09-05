@@ -158,6 +158,16 @@ function actionCount(summary: UniquePlaySyncSummary, action: UniquePlaySyncDiffA
   return 0;
 }
 
+function progressMessage(run: UniquePlaySyncRun): string {
+  const phase = run.progress.phase?.trim().toUpperCase() ?? '';
+  const message = run.progress.message?.trim() ?? '';
+  const detailPhase = `${phase} ${message}`.toUpperCase();
+  if (detailPhase.includes('GAME_DETAILS') || detailPhase.includes('GAME_RECORD') || detailPhase.includes('BOX_SCORE') || detailPhase.includes('GAME LOG')) {
+    return '경기별 상세 기록(이닝·타자·투수·타석) 수집 중';
+  }
+  return message || run.progress.phase || '처리 중';
+}
+
 function summaryHasValues(summary: UniquePlaySyncSummary | null | undefined): summary is UniquePlaySyncSummary {
   if (!summary) return false;
   return summary.total > 0
@@ -891,7 +901,7 @@ export default function AdminUniquePlaySyncPage() {
       <section style={cardStyle} aria-labelledby="unique-play-start-heading">
         <h3 id="unique-play-start-heading" style={sectionTitleStyle}>2. 수집 실행</h3>
         <p style={{ margin: '5px 0 15px', color: 'var(--season-muted)', fontSize: '13px', lineHeight: 1.6 }}>
-          시작 버튼은 데이터 수집과 비교 스냅샷 생성만 요청합니다. 게시나 활성화는 자동으로 수행하지 않습니다.
+          시작 버튼은 경기·순위·선수 누적 기록과 경기별 상세 기록을 수집해 비교 스냅샷을 만듭니다. 게시나 활성화는 자동으로 수행하지 않습니다.
         </p>
         <form onSubmit={(event) => { void handleStartRun(event); }} style={{ display: 'flex', alignItems: 'end', gap: '10px', flexWrap: 'wrap' }}>
           <label style={{ display: 'grid', gap: '5px', width: '180px', color: 'var(--season-ink)', fontSize: '12px', fontWeight: 800 }}>
@@ -953,7 +963,7 @@ export default function AdminUniquePlaySyncPage() {
                   style={{ width: '100%', height: '10px', accentColor: 'var(--season-blue-700)' }}
                 />
                 <div style={{ marginTop: '5px', display: 'flex', justifyContent: 'space-between', gap: '12px', color: 'var(--season-muted)', fontSize: '12px' }}>
-                  <span>{run.progress.message ?? run.progress.phase ?? '처리 중'}</span>
+                  <span>{progressMessage(run)}</span>
                   <span>{progressPercent == null ? '진행률 계산 중' : `${Math.round(progressPercent)}%`}</span>
                 </div>
               </div>
@@ -984,7 +994,7 @@ export default function AdminUniquePlaySyncPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <div>
                   <h3 id="unique-play-diff-heading" style={sectionTitleStyle}>4. 변경 비교와 충돌 처리</h3>
-                  <p style={{ margin: '5px 0 0', color: 'var(--season-muted)', fontSize: '13px' }}>삭제 후보와 충돌을 먼저 검토하세요. 화살표 왼쪽은 AUBL 현재값, 오른쪽은 UniquePlay 값입니다.</p>
+                  <p style={{ margin: '5px 0 0', color: 'var(--season-muted)', fontSize: '13px' }}>삭제 후보와 충돌을 먼저 검토하세요. 화살표 왼쪽은 현재 게시값, 오른쪽은 UniquePlay 값입니다. ‘경기 기록’은 이닝·타자·투수·타석 상세를 의미합니다.</p>
                 </div>
                 <button type="button" onClick={() => { void loadDiff(); }} disabled={diffLoading} style={{ ...secondaryButtonStyle, cursor: diffLoading ? 'wait' : 'pointer', opacity: diffLoading ? 0.6 : 1 }}>
                   {diffLoading ? '목록 갱신 중…' : '변경 목록 새로고침'}

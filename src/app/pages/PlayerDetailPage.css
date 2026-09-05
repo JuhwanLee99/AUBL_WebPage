@@ -1,0 +1,174 @@
+.official-player-logs {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--season-line, rgba(148, 163, 184, 0.25));
+  border-top: 4px solid var(--season-blue-700, #1d4ed8);
+  border-radius: 4px;
+  background: var(--season-surface, rgba(255, 255, 255, 0.02));
+  color: var(--season-ink, #e2e8f0);
+}
+
+.official-player-logs__heading,
+.official-player-log-game > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.official-player-logs__heading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.official-player-logs__heading span {
+  color: var(--season-blue-700, #60a5fa);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.official-player-logs__heading h2 {
+  margin: 0;
+  color: var(--season-navy-950, #f8fafc);
+  font-size: 20px;
+  font-weight: 950;
+  letter-spacing: -0.03em;
+}
+
+.official-player-logs__heading small {
+  color: var(--season-muted, #94a3b8);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.official-player-logs__message {
+  margin: 0;
+  padding: 14px;
+  border-left: 3px solid var(--season-line-strong, #64748b);
+  background: var(--season-surface-muted, rgba(148, 163, 184, 0.08));
+  color: var(--season-muted, #94a3b8);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.65;
+}
+
+.official-player-logs__message--error {
+  border-left-color: var(--season-danger, #ef4444);
+  color: var(--season-danger, #fca5a5);
+}
+
+.official-player-log-game {
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--season-line, rgba(148, 163, 184, 0.25));
+}
+
+.official-player-log-game > header > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.official-player-log-game > header span,
+.official-player-log-game > header small {
+  color: var(--season-muted, #94a3b8);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.official-player-log-game > header h3 {
+  margin: 0;
+  color: var(--season-navy-950, #f8fafc);
+  font-size: 17px;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.official-player-log-game > header h3 b {
+  color: var(--season-blue-700, #60a5fa);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 21px;
+}
+
+.official-player-log-game > header a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 8px 13px;
+  border: 1px solid var(--season-navy-900, #2563eb);
+  border-radius: 4px;
+  background: var(--season-navy-900, #1e3a8a);
+  color: var(--season-white, #fff);
+  font-size: 12px;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.official-player-logs__table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--season-line, rgba(148, 163, 184, 0.25));
+  outline-offset: 3px;
+}
+
+.official-player-logs__table-scroll table {
+  width: 100%;
+  min-width: 660px;
+  border-collapse: collapse;
+  color: var(--season-ink, #e2e8f0);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.official-player-logs__table-scroll caption {
+  padding: 9px 10px;
+  background: var(--season-surface-muted, rgba(148, 163, 184, 0.08));
+  color: var(--season-navy-950, #f8fafc);
+  font-size: 12px;
+  font-weight: 900;
+  text-align: left;
+}
+
+.official-player-logs__table-scroll th,
+.official-player-logs__table-scroll td {
+  padding: 10px 9px;
+  border-bottom: 1px solid var(--season-line, rgba(148, 163, 184, 0.2));
+  text-align: center;
+  white-space: nowrap;
+}
+
+.official-player-logs__table-scroll thead th {
+  background: var(--season-navy-900, #1e3a8a);
+  color: var(--season-white, #fff);
+  font-family: 'Barlow Condensed', 'Pretendard Variable', sans-serif;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+}
+
+.official-player-logs__appearances {
+  min-width: 190px;
+  white-space: normal !important;
+  text-align: left !important;
+}
+
+.official-player-logs__appearances span {
+  display: inline-block;
+  margin: 2px 3px 2px 0;
+  padding: 2px 5px;
+  border: 1px solid var(--season-line, rgba(148, 163, 184, 0.25));
+  border-radius: 2px;
+  background: var(--season-surface-muted, rgba(148, 163, 184, 0.08));
+}
+
+@media (max-width: 560px) {
+  .official-player-log-game > header a {
+    width: 100%;
+  }
+}

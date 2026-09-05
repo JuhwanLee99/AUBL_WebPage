@@ -1668,6 +1668,379 @@ export async function getPlayerGameLogs(
   return { batterLogs, pitcherLogs };
 }
 
+// ── UniquePlay official game details ──
+
+export type OfficialDetailStatus = 'AVAILABLE' | 'NOT_PUBLISHED' | 'NOT_COLLECTED' | 'REVIEW_REQUIRED';
+export type OfficialPlayerGameLogsStatus =
+  | 'AVAILABLE'
+  | 'NOT_COLLECTED'
+  | 'IDENTITY_UNRESOLVED'
+  | 'REVIEW_REQUIRED'
+  | 'NO_ACTIVE_REVISION';
+
+export interface OfficialPlateAppearance {
+  inning: number | null;
+  result: string | null;
+}
+
+export interface OfficialBatterGameRow {
+  rowKey: string;
+  playerName: string;
+  jerseyNumber: string | null;
+  battingOrder: number | null;
+  position: string | null;
+  stats: {
+    atBats: number | null;
+    hits: number | null;
+    rbi: number | null;
+    stolenBases: number | null;
+    runs: number | null;
+    battingAverage: number | null;
+    seasonBattingAverage: number | null;
+  };
+  plateAppearances: OfficialPlateAppearance[];
+}
+
+export interface OfficialPitcherGameRow {
+  rowKey: string;
+  playerName: string;
+  jerseyNumber: string | null;
+  decision: string | null;
+  stats: {
+    outs: number | null;
+    inningsPitched: string | null;
+    hitsAllowed: number | null;
+    runsAllowed: number | null;
+    earnedRuns: number | null;
+    walksAndHitByPitch: number | null;
+    strikeouts: number | null;
+    era: number | null;
+  };
+}
+
+export interface OfficialGameDetailTeam {
+  teamName: string;
+  innings: Array<{ inning: number; runs: number | null; notPlayed: boolean }>;
+  totals: {
+    runs: number | null;
+    hits: number | null;
+    errors: number | null;
+    walks: number | null;
+  };
+  batters: OfficialBatterGameRow[];
+  pitchers: OfficialPitcherGameRow[];
+}
+
+export interface OfficialGameDetail {
+  schemaVersion: number;
+  sourceGameId: string;
+  providerGameId: string;
+  status: 'AVAILABLE' | 'NOT_PUBLISHED';
+  teams: OfficialGameDetailTeam[];
+}
+
+export interface OfficialGameDetailsResponse {
+  sourceGameId: string;
+  backendGameId: number | null;
+  seasonId: number;
+  provider: 'UNIQUE_PLAY';
+  syncRevision: string | null;
+  capturedAt: string | null;
+  publishedAt: string | null;
+  status: OfficialDetailStatus;
+  game: {
+    status: string | null;
+    playedAt: string | null;
+    groupCode: string | null;
+    venue: string | null;
+    homeTeamName: string;
+    awayTeamName: string;
+    homeScore: number | null;
+    awayScore: number | null;
+  };
+  detail: OfficialGameDetail | null;
+}
+
+export interface OfficialPlayerGameLog {
+  sourceGameId: string;
+  backendGameId: number | null;
+  playedAt: string | null;
+  groupCode: string | null;
+  venue: string | null;
+  homeTeamName: string;
+  awayTeamName: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  teamName: string;
+  batters: OfficialBatterGameRow[];
+  pitchers: OfficialPitcherGameRow[];
+}
+
+export interface OfficialPlayerGameLogsResponse {
+  playerId: number;
+  seasonId: number;
+  provider: 'UNIQUE_PLAY';
+  syncRevision: string | null;
+  capturedAt: string | null;
+  publishedAt: string | null;
+  status: OfficialPlayerGameLogsStatus;
+  games: OfficialPlayerGameLog[];
+}
+
+function nullableString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  return normalized || null;
+}
+
+function normalizeOfficialBatterRow(value: unknown, index: number): OfficialBatterGameRow | null {
+  if (!value || typeof value !== 'object') return null;
+  const row = value as Record<string, unknown>;
+  const stats = row.stats && typeof row.stats === 'object' ? row.stats as Record<string, unknown> : {};
+  const playerName = nullableString(row.playerName) ?? '';
+  return {
+    rowKey: nullableString(row.rowKey) ?? `${playerName || 'batter'}-${index}`,
+    playerName,
+    jerseyNumber: nullableString(row.jerseyNumber),
+    battingOrder: toFiniteNumber(row.battingOrder),
+    position: nullableString(row.position),
+    stats: {
+      atBats: toFiniteNumber(stats.atBats),
+      hits: toFiniteNumber(stats.hits),
+      rbi: toFiniteNumber(stats.rbi),
+      stolenBases: toFiniteNumber(stats.stolenBases),
+      runs: toFiniteNumber(stats.runs),
+      battingAverage: toFiniteNumber(stats.battingAverage),
+      seasonBattingAverage: toFiniteNumber(stats.seasonBattingAverage),
+    },
+    plateAppearances: (Array.isArray(row.plateAppearances) ? row.plateAppearances : [])
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return null;
+        const appearance = entry as Record<string, unknown>;
+        return {
+          inning: toFiniteNumber(appearance.inning),
+          result: nullableString(appearance.result),
+        } satisfies OfficialPlateAppearance;
+      })
+      .filter((entry): entry is OfficialPlateAppearance => entry !== null),
+  };
+}
+
+function normalizeOfficialPitcherRow(value: unknown, index: number): OfficialPitcherGameRow | null {
+  if (!value || typeof value !== 'object') return null;
+  const row = value as Record<string, unknown>;
+  const stats = row.stats && typeof row.stats === 'object' ? row.stats as Record<string, unknown> : {};
+  const playerName = nullableString(row.playerName) ?? '';
+  return {
+    rowKey: nullableString(row.rowKey) ?? `${playerName || 'pitcher'}-${index}`,
+    playerName,
+    jerseyNumber: nullableString(row.jerseyNumber),
+    decision: nullableString(row.decision),
+    stats: {
+      outs: toFiniteNumber(stats.outs),
+      inningsPitched: nullableString(stats.inningsPitched),
+      hitsAllowed: toFiniteNumber(stats.hitsAllowed),
+      runsAllowed: toFiniteNumber(stats.runsAllowed),
+      earnedRuns: toFiniteNumber(stats.earnedRuns),
+      walksAndHitByPitch: toFiniteNumber(stats.walksAndHitByPitch),
+      strikeouts: toFiniteNumber(stats.strikeouts),
+      era: toFiniteNumber(stats.era),
+    },
+  };
+}
+
+function normalizeOfficialTeam(value: unknown): OfficialGameDetailTeam | null {
+  if (!value || typeof value !== 'object') return null;
+  const row = value as Record<string, unknown>;
+  const totals = row.totals && typeof row.totals === 'object' ? row.totals as Record<string, unknown> : {};
+  return {
+    teamName: nullableString(row.teamName) ?? '팀명 확인 중',
+    innings: (Array.isArray(row.innings) ? row.innings : [])
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return null;
+        const inning = entry as Record<string, unknown>;
+        const inningNumber = toFiniteNumber(inning.inning);
+        if (inningNumber == null) return null;
+        return {
+          inning: inningNumber,
+          runs: toFiniteNumber(inning.runs),
+          notPlayed: inning.notPlayed === true,
+        };
+      })
+      .filter((entry): entry is OfficialGameDetailTeam['innings'][number] => entry !== null),
+    totals: {
+      runs: toFiniteNumber(totals.runs),
+      hits: toFiniteNumber(totals.hits),
+      errors: toFiniteNumber(totals.errors),
+      walks: toFiniteNumber(totals.walks),
+    },
+    batters: (Array.isArray(row.batters) ? row.batters : [])
+      .map(normalizeOfficialBatterRow)
+      .filter((entry): entry is OfficialBatterGameRow => entry !== null),
+    pitchers: (Array.isArray(row.pitchers) ? row.pitchers : [])
+      .map(normalizeOfficialPitcherRow)
+      .filter((entry): entry is OfficialPitcherGameRow => entry !== null),
+  };
+}
+
+function normalizeOfficialGameDetail(value: unknown): OfficialGameDetail | null {
+  if (!value || typeof value !== 'object') return null;
+  const row = value as Record<string, unknown>;
+  const rawStatus = nullableString(row.status)?.toUpperCase();
+  if (rawStatus !== 'AVAILABLE' && rawStatus !== 'NOT_PUBLISHED') {
+    throw new Error('Official game detail returned an unsupported status.');
+  }
+  return {
+    schemaVersion: toFiniteNumber(row.schemaVersion) ?? 1,
+    sourceGameId: nullableString(row.sourceGameId) ?? '',
+    providerGameId: nullableString(row.providerGameId) ?? '',
+    status: rawStatus,
+    teams: (Array.isArray(row.teams) ? row.teams : [])
+      .map(normalizeOfficialTeam)
+      .filter((entry): entry is OfficialGameDetailTeam => entry !== null),
+  };
+}
+
+export async function getOfficialGameDetails(
+  sourceGameId: string,
+  seasonId?: number,
+): Promise<OfficialGameDetailsResponse | null> {
+  const normalizedSourceGameId = sourceGameId.trim();
+  if (!normalizedSourceGameId) throw new Error('sourceGameId is required.');
+  const params = new URLSearchParams();
+  if (seasonId != null) params.set('seasonId', String(seasonId));
+  try {
+    const queryString = params.toString();
+    const query = queryString ? `?${queryString}` : '';
+    const raw = await fetchApi<unknown>(
+      `/api/games/source/${encodeURIComponent(normalizedSourceGameId)}/details${query}`,
+    );
+    if (!raw || typeof raw !== 'object') return null;
+    const row = raw as Record<string, unknown>;
+    const game = row.game && typeof row.game === 'object' ? row.game as Record<string, unknown> : {};
+    const rawStatus = nullableString(row.status)?.toUpperCase();
+    if (
+      rawStatus !== 'AVAILABLE'
+      && rawStatus !== 'NOT_PUBLISHED'
+      && rawStatus !== 'NOT_COLLECTED'
+      && rawStatus !== 'REVIEW_REQUIRED'
+    ) {
+      throw new Error('Official game details returned an unsupported status.');
+    }
+    const provider = nullableString(row.provider)?.toUpperCase();
+    const responseSourceGameId = nullableString(row.sourceGameId);
+    const responseSeasonId = toFiniteNumber(row.seasonId);
+    const syncRevision = nullableString(row.syncRevision);
+    if (provider !== 'UNIQUE_PLAY') throw new Error('Official game details returned an unexpected provider.');
+    if (responseSourceGameId !== normalizedSourceGameId) throw new Error('Official game details did not match the requested game.');
+    if (responseSeasonId == null || responseSeasonId <= 0) throw new Error('Official game details did not include a valid season.');
+    if (seasonId != null && responseSeasonId !== seasonId) throw new Error('Official game details did not match the requested season.');
+    if (!syncRevision) throw new Error('Official game details did not include a published revision.');
+    const detail = rawStatus === 'AVAILABLE' ? normalizeOfficialGameDetail(row.detail) : null;
+    if (detail && detail.sourceGameId && detail.sourceGameId !== responseSourceGameId) {
+      throw new Error('Official box score did not match the requested game.');
+    }
+    return {
+      sourceGameId: responseSourceGameId,
+      backendGameId: toFiniteNumber(row.backendGameId),
+      seasonId: responseSeasonId,
+      provider: 'UNIQUE_PLAY',
+      syncRevision,
+      capturedAt: nullableString(row.capturedAt),
+      publishedAt: nullableString(row.publishedAt),
+      status: rawStatus as OfficialDetailStatus,
+      game: {
+        status: nullableString(game.status)?.toUpperCase() ?? null,
+        playedAt: nullableString(game.playedAt),
+        groupCode: nullableString(game.groupCode),
+        venue: nullableString(game.venue),
+        homeTeamName: nullableString(game.homeTeamName) ?? '홈팀',
+        awayTeamName: nullableString(game.awayTeamName) ?? '원정팀',
+        homeScore: toFiniteNumber(game.homeScore),
+        awayScore: toFiniteNumber(game.awayScore),
+      },
+      detail,
+    };
+  } catch (err) {
+    if (isNotFoundError(err)) return null;
+    throw err;
+  }
+}
+
+export async function getOfficialPlayerGameLogs(
+  playerId: number,
+  seasonId?: number,
+): Promise<OfficialPlayerGameLogsResponse> {
+  if (!Number.isInteger(playerId) || playerId <= 0) {
+    throw new Error('playerId is required and must be a positive integer.');
+  }
+  const params = new URLSearchParams();
+  if (seasonId != null) params.set('seasonId', String(seasonId));
+  const queryString = params.toString();
+  const query = queryString ? `?${queryString}` : '';
+  const raw = await fetchApi<unknown>(
+    `/api/players/${playerId}/official-game-logs${query}`,
+  );
+  const row = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  const rawStatus = nullableString(row.status)?.toUpperCase();
+  if (
+    rawStatus !== 'AVAILABLE'
+    && rawStatus !== 'NOT_COLLECTED'
+    && rawStatus !== 'IDENTITY_UNRESOLVED'
+    && rawStatus !== 'REVIEW_REQUIRED'
+    && rawStatus !== 'NO_ACTIVE_REVISION'
+  ) {
+    throw new Error('Official player game logs returned an unsupported status.');
+  }
+  const provider = nullableString(row.provider)?.toUpperCase();
+  const responsePlayerId = toFiniteNumber(row.playerId);
+  const responseSeasonId = toFiniteNumber(row.seasonId);
+  const syncRevision = nullableString(row.syncRevision);
+  if (provider !== 'UNIQUE_PLAY') throw new Error('Official player game logs returned an unexpected provider.');
+  if (responsePlayerId !== playerId) throw new Error('Official player game logs did not match the requested player.');
+  if (responseSeasonId == null || responseSeasonId <= 0) throw new Error('Official player game logs did not include a valid season.');
+  if (seasonId != null && responseSeasonId !== seasonId) throw new Error('Official player game logs did not match the requested season.');
+  if (rawStatus !== 'NO_ACTIVE_REVISION' && !syncRevision) {
+    throw new Error('Official player game logs did not include a published revision.');
+  }
+  const games = (rawStatus === 'AVAILABLE' && Array.isArray(row.games) ? row.games : [])
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const game = entry as Record<string, unknown>;
+      const sourceGameId = nullableString(game.sourceGameId);
+      if (!sourceGameId) return null;
+      return {
+        sourceGameId,
+        backendGameId: toFiniteNumber(game.backendGameId),
+        playedAt: nullableString(game.playedAt),
+        groupCode: nullableString(game.groupCode),
+        venue: nullableString(game.venue),
+        homeTeamName: nullableString(game.homeTeamName) ?? '홈팀',
+        awayTeamName: nullableString(game.awayTeamName) ?? '원정팀',
+        homeScore: toFiniteNumber(game.homeScore),
+        awayScore: toFiniteNumber(game.awayScore),
+        teamName: nullableString(game.teamName) ?? '',
+        batters: (Array.isArray(game.batters) ? game.batters : [])
+          .map(normalizeOfficialBatterRow)
+          .filter((item): item is OfficialBatterGameRow => item !== null),
+        pitchers: (Array.isArray(game.pitchers) ? game.pitchers : [])
+          .map(normalizeOfficialPitcherRow)
+          .filter((item): item is OfficialPitcherGameRow => item !== null),
+      } satisfies OfficialPlayerGameLog;
+    })
+    .filter((entry): entry is OfficialPlayerGameLog => entry !== null);
+  return {
+    playerId: responsePlayerId,
+    seasonId: responseSeasonId,
+    provider: 'UNIQUE_PLAY',
+    syncRevision,
+    capturedAt: nullableString(row.capturedAt),
+    publishedAt: nullableString(row.publishedAt),
+    status: rawStatus,
+    games,
+  };
+}
+
 // ── Firestore Import (admin) ──
 
 export async function triggerMatchImport(matchId: string): Promise<FirestoreImportResult | null> {

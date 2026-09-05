@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   getPlayerProfile,
   getPlayerGameLogs,
+  getOfficialPlayerGameLogs,
   getSeasonTeams,
   searchPlayers,
   getPlayerStats,
@@ -15,7 +16,10 @@ import {
   type SeasonTeam,
   type PlayerStatsSummary,
   type SeasonSummary,
+  type OfficialPlayerGameLogsResponse,
+  type OfficialPlayerGameLog,
 } from '../../shared/api/backendClient';
+import './PlayerDetailPage.css';
 
 function toValidPlayerId(value: string | null | undefined): number | null {
   if (!value) return null;
@@ -67,6 +71,20 @@ export default function PlayerDetailPage() {
   const [pitcherGameLogs, setPitcherGameLogs] = useState<PitcherGameLog[]>([]);
   const [gameLogsLoading, setGameLogsLoading] = useState<boolean>(false);
   const [gameLogsError, setGameLogsError] = useState<string | null>(null);
+  const officialGameLogsRequestKey = currentPlayerId != null
+    ? `${currentPlayerId}\u0000${viewSeasonId ?? ''}`
+    : '';
+  const [officialGameLogsResource, setOfficialGameLogsResource] = useState<{
+    requestKey: string;
+    payload: OfficialPlayerGameLogsResponse | null;
+    error: string | null;
+  } | null>(null);
+  const currentOfficialGameLogsResource = officialGameLogsResource?.requestKey === officialGameLogsRequestKey
+    ? officialGameLogsResource
+    : null;
+  const officialGameLogs = currentOfficialGameLogsResource?.payload ?? null;
+  const officialGameLogsLoading = Boolean(currentPlayerId != null && !currentOfficialGameLogsResource);
+  const officialGameLogsError = currentOfficialGameLogsResource?.error ?? null;
   const [gameIdInput, setGameIdInput] = useState<string>('');
   const [selectedGameId, setSelectedGameId] = useState<number | null>(null);
   const [visitedPlayers, setVisitedPlayers] = useState<
@@ -231,9 +249,40 @@ export default function PlayerDetailPage() {
   }, [currentPlayerId, viewSeasonId]);
 
   useEffect(() => {
+    if (currentPlayerId == null || !officialGameLogsRequestKey) return;
     let isMounted = true;
-    const load = async () => {
-      if (currentPlayerId == null) return;
+    getOfficialPlayerGameLogs(currentPlayerId, viewSeasonId ?? undefined)
+      .then((payload) => {
+        if (!isMounted) return;
+        setOfficialGameLogsResource({
+          requestKey: officialGameLogsRequestKey,
+          payload,
+          error: null,
+        });
+      })
+      .catch((err: unknown) => {
+        if (!isMounted) return;
+        setOfficialGameLogsResource({
+          requestKey: officialGameLogsRequestKey,
+          payload: null,
+          error: err instanceof Error ? err.message : '공식 경기별 기록을 불러오지 못했습니다.',
+        });
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [currentPlayerId, officialGameLogsRequestKey, viewSeasonId]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadLegacyFallback = async () => {
+      if (currentPlayerId == null || officialGameLogs?.status !== 'NO_ACTIVE_REVISION') {
+        setBatterGameLogs([]);
+        setPitcherGameLogs([]);
+        setGameLogsError(null);
+        setGameLogsLoading(false);
+        return;
+      }
       setGameLogsLoading(true);
       setGameLogsError(null);
       try {
@@ -246,20 +295,16 @@ export default function PlayerDetailPage() {
         if (!isMounted) return;
         setBatterGameLogs([]);
         setPitcherGameLogs([]);
-        setGameLogsError(err instanceof Error ? err.message : '경기별 기록을 불러오지 못했습니다.');
+        setGameLogsError(err instanceof Error ? err.message : '기존 경기별 기록을 불러오지 못했습니다.');
       } finally {
-        if (isMounted) {
-          setGameLogsLoading(false);
-        }
+        if (isMounted) setGameLogsLoading(false);
       }
     };
-
-    load();
-
+    void loadLegacyFallback();
     return () => {
       isMounted = false;
     };
-  }, [currentPlayerId, selectedGameId]);
+  }, [currentPlayerId, officialGameLogs?.status, selectedGameId]);
 
   const seasonYearById = useMemo(() => new Map(seasons.map((season) => [season.id, season.year])), [seasons]);
 
@@ -760,10 +805,26 @@ export default function PlayerDetailPage() {
             </section>
           )}
 
+          <OfficialPlayerGameLogsPanel
+            payload={officialGameLogs}
+            loading={officialGameLogsLoading}
+            error={officialGameLogsError}
+            seasonLabel={officialGameLogs
+              ? formatSeasonLabel(officialGameLogs.seasonId)
+              : viewSeasonId != null
+                ? formatSeasonLabel(viewSeasonId)
+                : '최신 게시 시즌'}
+          />
+
+          {officialGameLogs?.status === 'NO_ACTIVE_REVISION' && (
           <section style={recordCardStyle}>
             <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#cbd5e1' }}>
-              경기별 기록 (Player Logs)
+              기존 AUBL 경기별 기록
             </h2>
+
+            <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px', lineHeight: 1.6 }}>
+              선택한 시즌에 활성화된 UniquePlay 게시 리비전이 없어, 보관 중인 기존 AUBL 기록을 대신 표시합니다.
+            </p>
 
             <div style={{ display: 'flex', alignItems: 'end', gap: '10px', flexWrap: 'wrap' }}>
               <label style={{ display: 'grid', gap: '6px', color: '#94a3b8', fontWeight: 800, fontSize: '12px', minWidth: '160px' }}>
@@ -904,6 +965,7 @@ export default function PlayerDetailPage() {
               </>
             )}
           </section>
+          )}
 
           {!selectedBatterStat && !selectedPitcherStat && (
             <div style={{ padding: '30px', textAlign: 'center', color: '#94a3b8' }}>
@@ -913,6 +975,143 @@ export default function PlayerDetailPage() {
         </>
       )}
     </div>
+  );
+}
+
+function officialLogValue(value: number | string | null | undefined, digits?: number): string {
+  if (value == null || value === '') return '—';
+  if (typeof value === 'number' && digits != null) return value.toFixed(digits);
+  return String(value);
+}
+
+function formatOfficialLogDate(value: string | null): string {
+  if (!value) return '경기 일시 확인 중';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short',
+  }).format(parsed);
+}
+
+function OfficialPlayerGameLogsPanel({
+  payload,
+  loading,
+  error,
+  seasonLabel,
+}: {
+  payload: OfficialPlayerGameLogsResponse | null;
+  loading: boolean;
+  error: string | null;
+  seasonLabel: string;
+}) {
+  let stateMessage: string | null = null;
+  if (payload?.status === 'NOT_COLLECTED') {
+    stateMessage = 'UniquePlay에서 이 선수의 경기별 공식 기록이 아직 수집되지 않았습니다.';
+  } else if (payload?.status === 'IDENTITY_UNRESOLVED') {
+    stateMessage = '동명이인 또는 팀 매핑을 확인 중입니다. 관리자가 선수 식별을 확정하기 전에는 기존 수기 기록으로 대체하지 않습니다.';
+  } else if (payload?.status === 'REVIEW_REQUIRED') {
+    stateMessage = '경기 결과와 UniquePlay 공식 상세 기록이 달라 관리자가 대조하고 있습니다. 확정 전에는 기존 수기 기록으로 대체하지 않습니다.';
+  } else if (payload?.status === 'NO_ACTIVE_REVISION') {
+    stateMessage = '선택한 시즌에 활성화된 UniquePlay 게시 리비전이 없습니다.';
+  }
+
+  const games = payload?.status === 'AVAILABLE'
+    ? [...payload.games].sort((a, b) => (b.playedAt ?? '').localeCompare(a.playedAt ?? ''))
+    : [];
+
+  return (
+    <section className="official-player-logs" aria-labelledby="official-player-logs-title" aria-busy={loading}>
+      <div className="official-player-logs__heading">
+        <div>
+          <span>UNIQUEPLAY OFFICIAL RECORD</span>
+          <h2 id="official-player-logs-title">공식 경기별 기록</h2>
+        </div>
+        <small>
+          {seasonLabel}{payload?.syncRevision ? ` · 게시 리비전 ${payload.syncRevision}` : ''}
+        </small>
+      </div>
+
+      {loading && <p role="status" className="official-player-logs__message">경기별 공식 기록을 불러오고 있습니다.</p>}
+      {!loading && error && (
+        <p role="alert" className="official-player-logs__message official-player-logs__message--error">
+          공식 기록을 불러오지 못했습니다. {error}
+        </p>
+      )}
+      {!loading && !error && stateMessage && <p className="official-player-logs__message">{stateMessage}</p>}
+      {!loading && !error && payload?.status === 'AVAILABLE' && games.length === 0 && (
+        <p className="official-player-logs__message">이 시즌에 게시된 선수 경기별 기록이 없습니다.</p>
+      )}
+
+      {games.map((game) => <OfficialPlayerGameCard key={game.sourceGameId} game={game} />)}
+    </section>
+  );
+}
+
+function OfficialPlayerGameCard({ game }: { game: OfficialPlayerGameLog }) {
+  return (
+    <article className="official-player-log-game">
+      <header>
+        <div>
+          <span>{formatOfficialLogDate(game.playedAt)}{game.groupCode ? ` · ${game.groupCode}조` : ''}</span>
+          <h3>{game.awayTeamName} <b>{officialLogValue(game.awayScore)}</b> — <b>{officialLogValue(game.homeScore)}</b> {game.homeTeamName}</h3>
+          {game.venue && <small>{game.venue}</small>}
+        </div>
+        <a href={`/scoreboard-text/${encodeURIComponent(game.sourceGameId)}`}>경기 상세</a>
+      </header>
+
+      {game.batters.length > 0 && (
+        <div className="official-player-logs__table-scroll" tabIndex={0} aria-label="공식 타자 경기별 기록표, 가로로 스크롤할 수 있습니다">
+          <table>
+            <caption>타자 기록</caption>
+            <thead><tr><th scope="col">수비</th><th scope="col">AB</th><th scope="col">H</th><th scope="col">R</th><th scope="col">RBI</th><th scope="col">SB</th><th scope="col">AVG</th><th scope="col">타석 결과</th></tr></thead>
+            <tbody>
+              {game.batters.map((row) => (
+                <tr key={row.rowKey}>
+                  <td>{row.position ?? '—'}</td><td>{officialLogValue(row.stats.atBats)}</td><td>{officialLogValue(row.stats.hits)}</td>
+                  <td>{officialLogValue(row.stats.runs)}</td><td>{officialLogValue(row.stats.rbi)}</td><td>{officialLogValue(row.stats.stolenBases)}</td>
+                  <td>{officialLogValue(row.stats.battingAverage, 3)}</td>
+                  <td className="official-player-logs__appearances">
+                    {row.plateAppearances.length > 0
+                      ? row.plateAppearances.map((appearance, index) => (
+                        <span key={`${appearance.inning ?? 'inning'}-${index}`}>
+                          {appearance.inning != null ? `${appearance.inning}회 ` : ''}{appearance.result ?? '—'}
+                        </span>
+                      ))
+                      : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {game.pitchers.length > 0 && (
+        <div className="official-player-logs__table-scroll" tabIndex={0} aria-label="공식 투수 경기별 기록표, 가로로 스크롤할 수 있습니다">
+          <table>
+            <caption>투수 기록</caption>
+            <thead><tr><th scope="col">결과</th><th scope="col">IP</th><th scope="col">H</th><th scope="col">R</th><th scope="col">ER</th><th scope="col">BB+HBP</th><th scope="col">SO</th><th scope="col">ERA</th></tr></thead>
+            <tbody>
+              {game.pitchers.map((row) => (
+                <tr key={row.rowKey}>
+                  <td>{row.decision ?? '—'}</td><td>{row.stats.inningsPitched ?? '—'}</td><td>{officialLogValue(row.stats.hitsAllowed)}</td>
+                  <td>{officialLogValue(row.stats.runsAllowed)}</td><td>{officialLogValue(row.stats.earnedRuns)}</td>
+                  <td>{officialLogValue(row.stats.walksAndHitByPitch)}</td><td>{officialLogValue(row.stats.strikeouts)}</td><td>{officialLogValue(row.stats.era, 2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {game.batters.length === 0 && game.pitchers.length === 0 && (
+        <p className="official-player-logs__message">이 경기에서 해당 선수의 게시된 기록이 없습니다.</p>
+      )}
+    </article>
   );
 }
 

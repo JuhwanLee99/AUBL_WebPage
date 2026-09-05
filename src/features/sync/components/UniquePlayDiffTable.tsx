@@ -66,12 +66,14 @@ function ResolutionEditor({
           >
             <option value="">선택하세요</option>
             <option value="USE_SOURCE">UniquePlay 값 사용</option>
-            <option value="KEEP_AUBL">AUBL 값 유지</option>
-            <option value="MAP_ENTITY">AUBL 항목에 연결</option>
+            <option value="KEEP_AUBL" disabled={item.entityType === 'GAME_RECORD' && (item.action === 'CREATE' || item.action === 'DELETE')}>
+              {item.entityType === 'GAME_RECORD' ? '이전 공식 상세 유지' : 'AUBL 값 유지'}
+            </option>
+            {item.entityType !== 'GAME_RECORD' && <option value="MAP_ENTITY">AUBL 항목에 연결</option>}
           </select>
         </label>
 
-        <label>
+        {item.entityType !== 'GAME_RECORD' && <label>
           AUBL 항목 ID
           <input
             value={localEntityId}
@@ -88,7 +90,7 @@ function ResolutionEditor({
               </option>
             ))}
           </datalist>
-        </label>
+        </label>}
 
         <label>
           처리 메모
@@ -128,6 +130,11 @@ function ResolutionEditor({
           서버가 제안한 후보 {item.mappingCandidates.length}개가 입력 목록에 포함되어 있습니다. 이름만으로 확정하지 말고 팀·등번호를 함께 확인하세요.
         </p>
       )}
+      {item.entityType === 'GAME_RECORD' && (
+        <p className="sync-message">
+          ‘이전 공식 상세 유지’는 직전에 게시된 UniquePlay 공식 스냅샷을 유지합니다. AUBL 수기 기록을 선택하는 동작이 아닙니다.
+        </p>
+      )}
       {!item.itemId && (
         <p role="alert" className="sync-message is-danger">
           서버 응답에 itemId가 없어 이 항목은 처리할 수 없습니다.
@@ -146,7 +153,7 @@ function ChangeList({ item }: { item: UniquePlaySyncDiffItem }) {
       {item.changes.map((change, index) => (
         <div key={`${change.field}-${index}`} className="sync-change-list__row">
           <strong>{change.label ?? change.field}</strong>
-          <span title="현재 AUBL 값">
+          <span title={item.entityType === 'GAME_RECORD' ? '이전에 게시된 공식 상세' : '현재 AUBL 값'}>
             {formatSyncDiffValue(change.aublValue, change.field)}
           </span>
           <span aria-hidden="true" className="sync-change-list__arrow">→</span>
@@ -177,7 +184,7 @@ export default function UniquePlayDiffTable({ items, resolvingItemId, onResolve 
             <th scope="col">구분</th>
             <th scope="col">대상</th>
             <th scope="col">식별 정보</th>
-            <th scope="col" className="unique-play-diff__changes-heading">AUBL 현재값 → UniquePlay 값</th>
+            <th scope="col" className="unique-play-diff__changes-heading">현재 게시값 → UniquePlay 값</th>
           </tr>
         </thead>
         <tbody>
