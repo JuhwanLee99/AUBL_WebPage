@@ -33,5 +33,17 @@
 ## 범위 및 배포 상태
 
 - 공개 웹과 공통 일정 조회의 결과 전달만 변경한다. 기록원 입력·저장 동작, NAS 백엔드, DB, UniquePlay 수집·검증·게시, Flutter는 변경하지 않는다.
-- 이 변경은 로컬 구현·검증 및 커밋까지 완료한 상태이며 운영 배포는 아직 수행하지 않았다.
+- 구현 커밋 `cce4cf2`에서는 로컬 구현·검증을 완료했고, 이후 사용자 승인에 따라 아래 운영 배포를 수행했다.
 - 기존 사용자 보고서 `.docx` 변경은 이번 커밋에서 제외한다.
+
+## 운영 배포 결과
+
+- 사용자 승인: `운영배포`.
+- 배포 시각: 2026-09-05 18:48:43 KST (운영 HTML의 Last-Modified 기준).
+- 배포 직전 타입 검사와 프로덕션 빌드를 다시 실행해 통과했다.
+- `firebase deploy --only hosting --project aubl-backup --non-interactive`로 Firebase Hosting만 배포했다. 46개 파일을 포함한 릴리스가 정상 완료됐다.
+- `https://aubl.club/` HTTP 200, 새 JS `index-DRiUz5AA.js`와 CSS `index-JAUQj2N8.css`를 확인했다. 이전 JS는 `index-C17UOkLB.js`였다.
+- 운영 JS와 로컬 빌드의 SHA-256이 일치했다: `eeebdd0ccb66263004905f747eb7476aab952dbcfc551f625fec1f03359a8236`.
+- 공개 `GET /api/seasons/12/overview` 응답에서 `publishedAt=2026-09-05T18:26:30.765852`, `publishedRevision=0b577671-1938-46b3-97d0-2d158f928c7b`, `status=CURRENT`, `syncMode=MANUAL`을 확인했다. 새 UI의 두 항목은 이 서버 게시 시각을 KST 분 단위로 표시한다.
+- 운영 UI 확인은 기존 Chrome 탭을 재사용했다. 확인 중 탭이 로그인 화면으로 이동한 것을 관찰해 추가 조작·강제 복귀를 중단했다. 따라서 운영 화면의 두 문구를 직접 확인했다고 기록하지 않으며, 운영 번들 체크섬·공개 API 응답과 앞서 통과한 35개 fixture 테스트로 배포를 검증했다.
+- NAS 백엔드·DB·수집 워커·Firebase 규칙·Functions는 배포하지 않았다. 수집·검증·게시·리비전 활성화를 실행하지 않았다.
