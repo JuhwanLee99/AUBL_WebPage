@@ -1,4 +1,5 @@
 import { findPrivatePaths, normalizeText } from './normalization.mjs';
+import { validateGameDetails } from './game-details.mjs';
 
 export const EXPECTED_GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 
@@ -133,6 +134,8 @@ export function validateCandidate(candidate) {
     }
   }
 
+  blockingErrors.push(...validateGameDetails(candidate));
+
   return {
     valid: blockingErrors.length === 0,
     blockingErrors,
@@ -143,6 +146,10 @@ export function validateCandidate(candidate) {
       games: candidate.games?.length || 0,
       batters: EXPECTED_GROUPS.reduce((sum, code) => sum + (candidate.groups?.[code]?.batters?.IN?.length || 0) + (candidate.groups?.[code]?.batters?.OUT?.length || 0), 0),
       pitchers: EXPECTED_GROUPS.reduce((sum, code) => sum + (candidate.groups?.[code]?.pitchers?.IN?.length || 0) + (candidate.groups?.[code]?.pitchers?.OUT?.length || 0), 0),
+      ...(candidate.gameDetails === undefined ? {} : {
+        gameDetails: candidate.gameDetails?.length || 0,
+        availableGameDetails: Array.isArray(candidate.gameDetails) ? candidate.gameDetails.filter((detail) => detail.status === 'AVAILABLE').length : 0,
+      }),
     },
   };
 }

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validateCandidate } from '../src/validation.mjs';
+import { detailFixture } from './fixtures/game-detail-fixture.mjs';
 
 function completeCandidate() {
   const groups = {};
@@ -97,4 +98,27 @@ test('blocks an incomplete completed-game collection', () => {
   const result = validateCandidate(candidate);
   assert.equal(result.valid, false);
   assert.ok(result.blockingErrors.some((entry) => entry.code === 'GAME_COUNT_MISMATCH' && entry.details.actual === 1));
+});
+
+test('candidate validation includes game-detail coverage, privacy and source-score integrity', () => {
+  const candidate = completeCandidate();
+  for (const group of Object.values(candidate.groups)) {
+    group.standings = group.standings.map((row) => ({ ...row, games: 0, wins: 0, losses: 0, draws: 0 }));
+  }
+  Object.assign(candidate.groups.A.standings[0], { games: 1, wins: 1 });
+  Object.assign(candidate.groups.A.standings[1], { games: 1, losses: 1 });
+  const detail = detailFixture();
+  detail.teams[0].teamName = 'A-1';
+  detail.teams[1].teamName = 'A-2';
+  candidate.games = [{ sourceGameId: detail.sourceGameId, groupCode: 'A', homeTeamName: 'A-1', awayTeamName: 'A-2', homeScore: 3, awayScore: 1, status: 'COMPLETED' }];
+  candidate.gameDetails = [detail];
+  assert.equal(validateCandidate(candidate).valid, true);
+  assert.equal(validateCandidate(candidate).counts.availableGameDetails, 1);
+  detail.teams[0].totals.runs = 8;
+  detail.teams[0].email = 'private@example.invalid';
+  const invalid = validateCandidate(candidate);
+  assert.ok(invalid.blockingErrors.some((entry) => entry.code === 'GAME_DETAIL_SCORE'));
+  assert.ok(invalid.blockingErrors.some((entry) => entry.code === 'PRIVATE_FIELD'));
+  candidate.gameDetails = [];
+  assert.ok(validateCandidate(candidate).blockingErrors.some((entry) => entry.code === 'GAME_DETAIL_MISSING'));
 });

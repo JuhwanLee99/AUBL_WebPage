@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { sanitizeGameDetail } from './game-details.mjs';
 
 const PRIVATE_KEY_PATTERN = /(^|_)(email|phone|phoneNumber|password|passwd|token|refreshToken|accessToken|uid|userId|birthDate|address)($|_)/i;
 
@@ -131,6 +132,7 @@ export function sanitizeCandidate(raw, context) {
     adapterVersion: context.adapterVersion,
     games: (raw.games || []).map((game) => sanitizeGame(game, context)),
     groups,
+    ...(raw.gameDetails === undefined ? {} : { gameDetails: raw.gameDetails.map(sanitizeGameDetail) }),
   };
   return { ...candidate, checksum: checksum(candidate) };
 }

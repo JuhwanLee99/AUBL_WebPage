@@ -66,7 +66,10 @@ export default [
     },
   },
   {
-    files: ['services/uniqueplay-sync-worker/src/adapter.mjs'],
+    files: [
+      'services/uniqueplay-sync-worker/src/adapter.mjs',
+      'services/uniqueplay-sync-worker/src/boxscore-adapter.mjs',
+    ],
     languageOptions: {
       globals: globals.browser,
     },

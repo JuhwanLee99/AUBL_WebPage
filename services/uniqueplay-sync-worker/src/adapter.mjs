@@ -1,7 +1,9 @@
-import { sanitizeCandidate } from './normalization.mjs';
+import { deterministicGameId, normalizeText, sanitizeCandidate } from './normalization.mjs';
 import { validateCandidate } from './validation.mjs';
+import { readOpenGameBoxscore, resultListIsReady } from './boxscore-adapter.mjs';
+import { detailError } from './game-details.mjs';
 
-export const ADAPTER_VERSION = '2026.09.04.5';
+export const ADAPTER_VERSION = '2026.09.05.6';
 const GROUP_CODES = [...'ABCDEFGH'];
 const BATTER_HEADERS = ['타율', '팀게임', '선수게임', '타석', '타수', '총안타', '1루타', '2루타', '3루타', '홈런', '타점', '득점', '도루', '볼넷', '삼진', '출루율', '장타율', 'OPS'];
 const PITCHER_HEADERS = ['ERA', '팀게임', '선수게임', '이닝', '승', '패', '세이브', '홀드', '삼진', '피안타', '피홈런', '실점', '볼넷', '사구', '승률', 'WHIP'];
@@ -38,6 +40,18 @@ async function ensureSeason(page, seasonYear) {
   const season = page.getByText(expected, { exact: true }).first();
   if (!(await season.isVisible().catch(() => false))) {
     throw Object.assign(new Error(`Expected season label not found: ${expected}`), { code: 'SEASON_MISMATCH' });
+  }
+}
+
+async function ensureGameSeason(page, seasonYear) {
+  // Schedule/result controls use “2026년”, unlike the records tab's “2026시즌”.
+  const expected = `${seasonYear}년`;
+  if (await page.getByText('전체 시즌', { exact: true }).first().isVisible().catch(() => false)) {
+    await clickText(page, '전체 시즌');
+    await clickText(page, expected);
+  }
+  if (!(await page.getByText(expected, { exact: true }).first().isVisible().catch(() => false))) {
+    throw Object.assign(new Error('Expected game-list season selector was not found'), { code: 'SEASON_MISMATCH' });
   }
 }
 
@@ -234,6 +248,7 @@ async function collectGameTab(page, label, seasonYear) {
   });
   await page.waitForTimeout(200);
   await clickText(page, label);
+  await ensureGameSeason(page, seasonYear);
   return collectLazyList({
     read: async () => (await readVisibleGames(page, seasonYear))
       .filter((game) => /^[A-H]조$/u.test(game.groupCode))
@@ -241,12 +256,82 @@ async function collectGameTab(page, label, seasonYear) {
         ...game,
         playedAt: toKstIso(seasonYear, game.dateTimeText),
         groupCode: game.groupCode.replace(/조$/u, ''),
+        sourceStatus: game.status, // Internal evidence for explicit no-record forfeits; sanitizer never publishes this field.
         status: statusFromKorean(game.status),
       })),
     advance: () => scrollPageList(page),
     identify: (game) => [game.playedAt, game.groupCode, game.homeTeamName, game.awayTeamName].join('|'),
     wait: () => page.waitForTimeout(120),
   });
+}
+
+function sameGameCard(left, right) {
+  return ['dateTimeText', 'venue', 'homeTeamName', 'awayTeamName'].every((key) => normalizeText(left[key]) === normalizeText(right[key]))
+    && normalizeText(left.groupCode).replace(/조$/u, '') === normalizeText(right.groupCode).replace(/조$/u, '');
+}
+
+async function clickVisibleBoxscore(page, target) {
+  const outcome = await page.evaluate((target) => {
+    const normalize = (value) => String(value ?? '').normalize('NFKC').replace(/\s+/gu, ' ').trim();
+    const datePattern = /^\d{2}\/\d{2}\s+\S+\s+\d{2}:\d{2}$/u;
+    const leaves = [...document.querySelectorAll('*')].filter((node) => node.children.length === 0 && datePattern.test(normalize(node.textContent)));
+    const matches = leaves.map((leaf) => leaf.parentElement?.parentElement?.parentElement).filter((card) => {
+      if (!card) return false;
+      const texts = [...card.querySelectorAll('*')].filter((node) => node.children.length === 0 && normalize(node.textContent)).map((node) => normalize(node.textContent));
+      return texts[0] === normalize(target.dateTimeText) && texts[1]?.replace(/조$/u, '') === normalize(target.groupCode).replace(/조$/u, '')
+        && texts[3] === normalize(target.venue) && texts[7] === normalize(target.homeTeamName) && texts[9] === normalize(target.awayTeamName);
+    });
+    if (matches.length !== 1) return { error: matches.length ? 'GAME_DETAIL_AMBIGUOUS_CARD' : 'GAME_DETAIL_CARD_MISSING' };
+    const buttons = [...matches[0].querySelectorAll('*')].filter((node) => node.children.length === 0 && normalize(node.textContent) === '박스스코어');
+    if (buttons.length !== 1) return { error: 'GAME_DETAIL_LINK_MISSING' };
+    // React-Native-Web uses a DIV click handler, not an <a> or stable CSS class.
+    const interactive = buttons[0].closest('[role="button"], [tabindex="0"]');
+    (interactive && matches[0].contains(interactive) ? interactive : buttons[0].parentElement || buttons[0]).click();
+    return { clicked: true };
+  }, target);
+  if (outcome.error) throw detailError(outcome.error);
+  try {
+    await page.waitForURL((url) => /^\/game\/\d+\/boxscore\/?$/u.test(url.pathname), { timeout: 15_000 });
+  } catch {
+    if (/\/(?:login|sign-in)(?:\/|$)/u.test(new URL(page.url()).pathname)) throw detailError('REAUTH_REQUIRED');
+    throw detailError('GAME_DETAIL_NAVIGATION');
+  }
+}
+
+async function collectGameDetails(page, games, { leagueId, seasonYear, progress }) {
+  const targets = games.filter((game) => game.status === 'COMPLETED');
+  const details = [];
+  for (const target of targets) {
+    let found = false;
+    let settledAtEnd = 0;
+    for (let pass = 0; pass < 120 && settledAtEnd < 3; pass += 1) {
+      const visible = await readVisibleGames(page, seasonYear);
+      const matches = visible.filter((game) => sameGameCard(game, target));
+      if (matches.length > 1) throw detailError('GAME_DETAIL_AMBIGUOUS_CARD');
+      if (matches.length === 1) { found = true; break; }
+      const advanced = await scrollPageList(page);
+      settledAtEnd = advanced ? 0 : settledAtEnd + 1;
+      await page.waitForTimeout(120);
+    }
+    if (!found) throw detailError('GAME_DETAIL_CARD_MISSING');
+    await clickVisibleBoxscore(page, target);
+    const sourceGameId = target.sourceGameId || deterministicGameId({ ...target, leagueId, seasonYear });
+    details.push(await readOpenGameBoxscore(page, sourceGameId, { sourceStatus: target.sourceStatus, expectedGame: target }));
+    await progress?.({ stage: 'GAME_DETAILS', count: details.length });
+    await page.goBack({ waitUntil: 'domcontentloaded', timeout: 30_000 });
+    // The results list no longer renders a “게임결과” label after returning.
+    // Confirm its actual league route, public controls and dated result cards.
+    await page.waitForFunction(resultListIsReady, { leagueId: String(leagueId) }, { timeout: 15_000 });
+    await ensureGameSeason(page, seasonYear);
+    // Back restores the results tab, but lazy lists can restore a later scroll
+    // position. Restart from the top so every expected card remains discoverable.
+    await page.evaluate(() => {
+      window.scrollTo(0, 0);
+      for (const node of document.querySelectorAll('*')) if (node.scrollTop) node.scrollTop = 0;
+    });
+    await page.waitForTimeout(150);
+  }
+  return details;
 }
 
 export async function collectUniquePlay({ browser, storageState, leagueId, seasonYear, progress }) {
@@ -282,8 +367,16 @@ export async function collectUniquePlay({ browser, storageState, leagueId, seaso
     const completed = await collectGameTab(page, '게임결과', seasonYear);
     await progress?.({ stage: 'GAMES_COMPLETED', count: completed.length });
     const games = [...new Map([...scheduled, ...completed].map((game) => [[game.playedAt, game.groupCode, game.homeTeamName, game.awayTeamName].join('|'), game])).values()];
+    await page.evaluate(() => {
+      window.scrollTo(0, 0);
+      for (const node of document.querySelectorAll('*')) if (node.scrollTop) node.scrollTop = 0;
+    });
+    const gameDetails = await collectGameDetails(page, games, { leagueId, seasonYear, progress }).catch((error) => {
+      const safeCode = /^(?:GAME_DETAIL_[A-Z_]+|SEASON_MISMATCH|REAUTH_REQUIRED)$/u.test(error?.code || '') ? error.code : 'GAME_DETAIL_COLLECTION';
+      throw detailError(safeCode);
+    });
 
-    const candidate = sanitizeCandidate({ groups, games }, { leagueId, seasonYear, adapterVersion: ADAPTER_VERSION });
+    const candidate = sanitizeCandidate({ groups, games, gameDetails }, { leagueId, seasonYear, adapterVersion: ADAPTER_VERSION });
     const validation = validateCandidate(candidate);
     return { candidate, validation };
   } finally {
