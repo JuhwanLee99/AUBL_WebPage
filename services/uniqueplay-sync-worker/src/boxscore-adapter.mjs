@@ -13,8 +13,10 @@ export function resultListIsReady({ leagueId }) {
 export function inspectBoxscoreDom({ action = 'read', teamName = null } = {}) {
   const normalize = (value) => String(value ?? '').normalize('NFKC').replace(/\s+/gu, ' ').trim();
   const visible = (node) => node.getClientRects().length > 0 && getComputedStyle(node).visibility !== 'hidden';
-  const leafText = (node) => !node ? '' : node.children.length === 0 ? normalize(node.textContent)
-    : [...node.querySelectorAll('*')].filter((child) => child.children.length === 0).map((child) => normalize(child.textContent)).filter(Boolean).join(' ');
+  // Read only the identified public cell. React-Native-Web mixes direct Text
+  // nodes (order/name) with child spans (position/jersey); descendant leaves
+  // alone silently drop the direct text. textContent preserves both in order.
+  const cellText = (node) => normalize(node?.textContent);
   const all = [...document.querySelectorAll('*')];
   const header = (label, expectedStats, withInnings) => all.filter((node) => {
     if (node.children.length !== 0 || !visible(node) || normalize(node.textContent) !== label) return false;
@@ -25,7 +27,7 @@ export function inspectBoxscoreDom({ action = 'read', teamName = null } = {}) {
     if (fixed?.children?.[0] !== node || root?.children?.length !== 2 || root.children[0] !== fixed) return false;
     const columns = root.children[1]?.children?.[0];
     if (!columns) return false;
-    const labels = [...columns.children].map((column) => leafText(column.children[0]).replace(/\s+/gu, ''));
+    const labels = [...columns.children].map((column) => cellText(column.children[0]).replace(/\s+/gu, ''));
     const offset = withInnings ? labels.indexOf(expectedStats[0]) : 0;
     return offset >= 0 && labels.length - offset === expectedStats.length
       && expectedStats.every((expected, index) => labels[offset + index] === expected)
@@ -41,39 +43,39 @@ export function inspectBoxscoreDom({ action = 'read', teamName = null } = {}) {
   const lineRoot = content?.children?.[1]?.children?.[0];
   const tabs = content?.children?.[6];
   if (!lineRoot || !tabs || lineRoot.children.length !== 6 || pitcherRoot.parentElement !== content) return { error: 'GAME_DETAIL_SCHEMA' };
-  const teamNames = [...lineRoot.children[0].children].slice(1).map(leafText);
+  const teamNames = [...lineRoot.children[0].children].slice(1).map(cellText);
   if (teamNames.length !== 2 || teamNames.some((name) => !name)) return { error: 'GAME_DETAIL_SCHEMA' };
   const tabNodes = [...tabs.children];
-  if (tabNodes.length !== 2 || !teamNames.every((name, index) => normalize(leafText(tabNodes[index])) === name)) return { error: 'GAME_DETAIL_SCHEMA' };
+  if (tabNodes.length !== 2 || !teamNames.every((name, index) => cellText(tabNodes[index]) === name)) return { error: 'GAME_DETAIL_SCHEMA' };
   const activeTabs = tabNodes.filter((node) => {
     const color = getComputedStyle(node).backgroundColor.replace(/\s+/gu, '');
     return color !== 'transparent' && !/^rgba\([^,]+,[^,]+,[^,]+,0(?:\.0+)?\)$/u.test(color);
   });
   if (action === 'select-team') {
-    const selected = tabNodes.filter((node) => normalize(leafText(node)) === normalize(teamName));
+    const selected = tabNodes.filter((node) => cellText(node) === normalize(teamName));
     if (selected.length !== 1) return { error: 'GAME_DETAIL_TEAM_MAPPING' };
     const interactive = selected[0].closest('[role="button"], [tabindex="0"]');
     (interactive && tabs.contains(interactive) ? interactive : selected[0]).click();
     return { selected: normalize(teamName) };
   }
   const table = (root, expected) => {
-    if (!root || normalize(leafText(root.children?.[0]?.children?.[0])) !== expected) return null;
+    if (!root || cellText(root.children?.[0]?.children?.[0]) !== expected) return null;
     const fixedRows = [...root.children[0].children].slice(1);
     const columns = root.children?.[1]?.children?.[0];
     if (!columns) return null;
     return {
-      labels: fixedRows.map(leafText),
+      labels: fixedRows.map(cellText),
       columns: [...columns.children].map((column) => ({
-        header: normalize(leafText(column.children[0])).replace(/\s+/gu, ''),
-        values: [...column.children].slice(1).map(leafText),
+        header: cellText(column.children[0]).replace(/\s+/gu, ''),
+        values: [...column.children].slice(1).map(cellText),
       })),
     };
   };
   const inningRoot = lineRoot.children[1]?.children?.[0];
   if (!inningRoot) return { error: 'GAME_DETAIL_SCHEMA' };
-  const column = (node) => ({ header: leafText(node.children[0]), values: [...node.children].slice(1).map(leafText) });
+  const column = (node) => ({ header: cellText(node.children[0]), values: [...node.children].slice(1).map(cellText) });
   return {
-    selectedTeam: activeTabs.length === 1 ? normalize(leafText(activeTabs[0])) : null,
+    selectedTeam: activeTabs.length === 1 ? cellText(activeTabs[0]) : null,
     batter: table(batterRoot, '타자'), pitcher: table(pitcherRoot, '투수'),
     lineScore: { teamNames, innings: [...inningRoot.children].map(column), totals: [...lineRoot.children].slice(2).map(column) },
   };

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { inspectBoxscoreDom, readOpenGameBoxscore, resultListIsReady, stablePublicSnapshot } from '../src/boxscore-adapter.mjs';
 import { collectGameDetails } from '../src/adapter.mjs';
-import { contextualizeDetailError } from '../src/game-details.mjs';
+import { contextualizeDetailError, parseTeamTables } from '../src/game-details.mjs';
 import { boxscoreSnapshots, forfeitSnapshots } from './fixtures/game-detail-fixture.mjs';
 
 // A tiny synthetic DOM models the public column-oriented structure observed in
@@ -24,15 +24,25 @@ function element(value = '', children = []) {
 
 function textCell(value) { return element('', [element(value)]); }
 
-function tableDom(label, table) {
-  // The live source renders order, position, name and jersey as separate leaves.
-  // A single combined textCell would hide the “투수” position/header collision.
-  const fixed = element('', [element(label), ...table.labels.map((row) => element('', row.split(' ').map((token) => element(token))))]);
+function mixedCell(parts) {
+  const node = element('', parts.filter((part) => typeof part !== 'string'));
+  Object.defineProperty(node, 'textContent', { get: () => parts.map((part) => typeof part === 'string' ? part : part.textContent).join('') });
+  return node;
+}
+
+function splitRowCell(row) {
+  return mixedCell(row.split(' ').flatMap((token, index) => index ? [' ', element(token)] : [element(token)]));
+}
+
+function tableDom(label, table, renderRow) {
+  // Keep separate child leaves to reproduce position/name/header collisions,
+  // and allow mixed direct Text nodes like the actual provider's player rows.
+  const fixed = element('', [element(label), ...table.labels.map((row) => renderRow(row, label))]);
   const columns = table.columns.map((column) => element('', [textCell(column.header), ...column.values.map(textCell)]));
   return element('', [fixed, element('', [element('', columns)])]);
 }
 
-function fixtureDocument(snapshot, selected = 0, select = () => {}) {
+function fixtureDocument(snapshot, selected = 0, select = () => {}, renderRow = splitRowCell) {
   const score = snapshot.lineScore;
   const column = (entry) => element('', [textCell(entry.header), ...entry.values.map(textCell)]);
   const line = element('', [
@@ -47,7 +57,7 @@ function fixtureDocument(snapshot, selected = 0, select = () => {}) {
     return tab;
   });
   const content = element('', [element(), element('', [line]), element(), element(),
-    tableDom('타자', snapshot.batter), tableDom('투수', snapshot.pitcher), element('', tabs)]);
+    tableDom('타자', snapshot.batter, renderRow), tableDom('투수', snapshot.pitcher, renderRow), element('', tabs)]);
   const body = element('', [element('private@example.invalid'), content]);
   return { querySelectorAll: () => body.querySelectorAll('*'), body };
 }
@@ -90,6 +100,36 @@ test('table headers stay unambiguous when separate player position/name leaves a
   assert.deepEqual(JSON.parse(JSON.stringify(inspect(document, {}))), fixture);
   fixture.pitcher.columns[1].header = '알 수 없는 헤더';
   assert.equal(inspect(fixtureDocument(fixture, 1), {}).error, 'GAME_DETAIL_SCHEMA');
+});
+
+test('mixed direct Text nodes and child spans retain batting order, player names and pitcher decisions', async () => {
+  const fixture = boxscoreSnapshots()[0];
+  const renderRow = (row, role) => {
+    if (row === '합계') return textCell(row);
+    if (role === '타자') {
+      const [, order, position, name, jersey] = row.match(/^(\d+)\s+(\S+)\s+(.+)\s+(\([^)]*\))$/u);
+      return mixedCell([`${order}\u00a0`, element(position), `\u00a0${name}\u00a0`, element(jersey)]);
+    }
+    const [, name, jersey, decision] = row.match(/^(.+?)\s*(\([^)]*\))(?:\s+(.*))?$/u);
+    return mixedCell([name, element(jersey), ...(decision ? ['\u00a0', element(decision)] : [])]);
+  };
+  const document = fixtureDocument(fixture, 0, () => {}, renderRow);
+  const actual = JSON.parse(JSON.stringify(inspect(document, {})));
+  assert.equal(actual.batter.labels[0], '1 중견 타자갑 (3)');
+  assert.equal(actual.pitcher.labels[0], '투수갑(99) 승');
+  const oldLeafOnly = document.querySelectorAll('*').filter((node) => node.children.length === 0).map((node) => node.textContent);
+  assert.equal(oldLeafOnly.includes('타자갑'), false, 'name exists only as a direct Text node, not a child element');
+  assert.equal(oldLeafOnly.includes('투수갑'), false);
+  const rows = parseTeamTables(actual, actual.selectedTeam);
+  assert.equal(rows.batters[0].battingOrder, 1);
+  assert.equal(rows.batters[0].playerName, '타자갑');
+  assert.equal(rows.batters[0].jerseyNumber, '3');
+  assert.equal(rows.pitchers[0].playerName, '투수갑');
+  assert.equal(rows.pitchers[0].decision, '승');
+  assert.equal(rows.pitchers[0].stats.outs, 5);
+  const page = { evaluate: async () => inspect(document, {}), waitForTimeout: async () => {} };
+  assert.deepEqual(JSON.parse(JSON.stringify(await stablePublicSnapshot(page))), actual);
+  assert.equal(JSON.stringify(actual).includes('private@example'), false);
 });
 
 test('back navigation recognizes dated result cards even without a game-results label', () => {

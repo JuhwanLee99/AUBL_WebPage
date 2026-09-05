@@ -3,7 +3,7 @@ import { validateCandidate } from './validation.mjs';
 import { readOpenGameBoxscore, resultListIsReady } from './boxscore-adapter.mjs';
 import { contextualizeDetailError, detailError } from './game-details.mjs';
 
-export const ADAPTER_VERSION = '2026.09.05.7';
+export const ADAPTER_VERSION = '2026.09.05.8';
 const GROUP_CODES = [...'ABCDEFGH'];
 const BATTER_HEADERS = ['타율', '팀게임', '선수게임', '타석', '타수', '총안타', '1루타', '2루타', '3루타', '홈런', '타점', '득점', '도루', '볼넷', '삼진', '출루율', '장타율', 'OPS'];
 const PITCHER_HEADERS = ['ERA', '팀게임', '선수게임', '이닝', '승', '패', '세이브', '홀드', '삼진', '피안타', '피홈런', '실점', '볼넷', '사구', '승률', 'WHIP'];
