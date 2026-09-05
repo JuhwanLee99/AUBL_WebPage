@@ -57,7 +57,7 @@ import { useGameActions } from './demoStore.gameActions';
 import { changeHalf as changeHalfState, nextBatter } from './demoStore.gameFlow';
 import { buildGameRecord } from './demoStore.record';
 import { createNewGame, resetGameForMatch, updateMatchSchedule } from './demoStore.reducerHelpers';
-import { useScheduleActions } from './demoStore.scheduleActions';
+import { useScheduleActions, type ScheduleLoadResult } from './demoStore.scheduleActions';
 import { normalizeState, shouldTrackHistory, snapshotState } from './demoStore.state';
 
 export { canPitcherBat };
@@ -3168,7 +3168,7 @@ interface DemoStoreValue {
       benches: { home: PlayerSlot[]; away: PlayerSlot[] },
     ) => void;
     selectMatch: (matchId: string | null) => void;
-    loadFullSchedule: () => Promise<void>;
+    loadFullSchedule: () => Promise<ScheduleLoadResult>;
     releaseLock: () => void;
     resumeLock: () => void;
     setScorerMode: (enabled: boolean) => void;

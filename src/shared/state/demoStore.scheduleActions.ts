@@ -53,6 +53,10 @@ type ScheduleAction =
 
 type Dispatch = (action: ScheduleAction) => void;
 
+// Resolve with an explicit outcome so fire-and-forget callers remain safe while
+// the home page can distinguish a server read, offline cache and failed read.
+export type ScheduleLoadResult = { status: 'ready' | 'cached' | 'error' };
+
 export function useScheduleActions(params: {
   dispatch: Dispatch;
   getState: () => DemoState;
@@ -281,7 +285,7 @@ export function useScheduleActions(params: {
         }
       })();
     },
-    loadFullSchedule: async () => {
+    loadFullSchedule: async (): Promise<ScheduleLoadResult> => {
       try {
         const snap = await getDocs(
           query(
@@ -302,8 +306,10 @@ export function useScheduleActions(params: {
           type: 'setMatches',
           matches: mergeMatches(current.matches, projected),
         });
+        return { status: snap.metadata.fromCache ? 'cached' : 'ready' };
       } catch {
-        // ignore fetch errors for spectators; manual retry via action
+        // Preserve existing matches, but do not report a failed read as ready.
+        return { status: 'error' };
       }
     },
     releaseLock: () => {

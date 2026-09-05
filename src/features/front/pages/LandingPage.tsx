@@ -7,6 +7,7 @@ import {
 } from '../components/season2026/homeData';
 import type {
   HomeDataPhase,
+  HomeSchedulePhase,
   Season2026RecordPayload,
 } from '../components/season2026/types';
 import '../styles/season2026-home.css';
@@ -43,8 +44,7 @@ export default function LandingPage() {
   const { user } = useAuth();
   const { isCoach, coachTeamId } = useTeamRole();
 
-  const [schedulePhase, setSchedulePhase] = useState<FeedPhase>('loading');
-  const [scheduleCheckedAt, setScheduleCheckedAt] = useState<number | null>(null);
+  const [schedulePhase, setSchedulePhase] = useState<HomeSchedulePhase>('loading');
   const [recordPhase, setRecordPhase] = useState<HomeDataPhase>('loading');
   const [recordPayload, setRecordPayload] = useState<Season2026RecordPayload | null>(null);
   const [notices, setNotices] = useState<Notice[]>([]);
@@ -60,14 +60,12 @@ export default function LandingPage() {
   useEffect(() => {
     let active = true;
     void actions.loadFullSchedule().then(
-      () => {
+      (result) => {
         if (!active) return;
-        setScheduleCheckedAt(Date.now());
-        setSchedulePhase('ready');
+        setSchedulePhase(result.status);
       },
       () => {
         if (!active) return;
-        setScheduleCheckedAt(Date.now());
         setSchedulePhase('error');
       },
     );
@@ -199,7 +197,6 @@ export default function LandingPage() {
       announcement={content.announcement}
       matches={state.matches}
       schedulePhase={schedulePhase}
-      scheduleCheckedAt={scheduleCheckedAt}
       recordPhase={recordPhase}
       recordPayload={recordPayload}
       groups={groups}

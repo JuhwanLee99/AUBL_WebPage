@@ -12,7 +12,7 @@ const fixture = {
     snapshotCards: ['연합회교', 'FORMAT', 'VISION'].map(label => ({ label, value: '이전 카드', desc: '제거 대상' })),
   },
   announcement: { enabled: false }, matches: [], groups: [], notices: [], teamNotices: [],
-  schedulePhase: 'ready', scheduleCheckedAt: Date.parse('2026-09-05T15:30:00+09:00'),
+  schedulePhase: 'ready',
   recordPhase: 'ready', noticePhase: 'ready', teamNoticePhase: 'idle',
   userSignedIn: false, myTeamId: null, myTeamName: null, allstarEnabled: false,
   nowTs: Date.parse('2026-09-05T15:30:00+09:00'),

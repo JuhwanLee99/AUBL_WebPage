@@ -9,7 +9,7 @@ const nowTs = Date.parse('2026-09-05T18:00:00+09:00');
 const fixture = {
   landing: { heroBadgeText: '2026 AUBL', heroDescription: '시즌 안내', heroSubDescription: '', snapshotCards: [] },
   announcement: { enabled: false }, matches: [], groups: [], notices: [], teamNotices: [],
-  schedulePhase: 'ready', scheduleCheckedAt: nowTs, recordPhase: 'ready',
+  schedulePhase: 'ready', recordPhase: 'ready',
   noticePhase: 'ready', teamNoticePhase: 'idle', userSignedIn: false,
   myTeamId: null, myTeamName: null, allstarEnabled: false, nowTs,
   recordPayload: { batters: [], pitchers: [], warnings: [], sourceFreshness: null },

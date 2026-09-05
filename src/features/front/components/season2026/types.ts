@@ -4,6 +4,7 @@ import type {
   SeasonOverviewFreshness,
   TeamRecordStanding,
 } from '@core/api/backendClient';
+import type { ScheduleLoadResult } from '@shared/state/demoStore.scheduleActions';
 
 export const SEASON_2026_GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const;
 
@@ -20,6 +21,7 @@ export type QualificationState =
   | 'unranked';
 
 export type HomeDataPhase = 'loading' | 'ready' | 'partial' | 'unavailable';
+export type HomeSchedulePhase = 'loading' | ScheduleLoadResult['status'];
 
 export interface Season2026RecordPayload {
   phase: Exclude<HomeDataPhase, 'loading'>;

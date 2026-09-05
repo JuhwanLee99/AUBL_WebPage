@@ -514,6 +514,7 @@
 }
 
 .s26-status-square.is-loading,
+.s26-status-square.is-cached,
 .s26-status-square.is-partial,
 .s26-status-square.is-unavailable,
 .s26-status-square.is-error {

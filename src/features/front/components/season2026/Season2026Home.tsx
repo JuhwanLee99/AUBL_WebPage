@@ -7,6 +7,7 @@ import type { Notice, TeamNotice } from '@shared/types';
 import type {
   HomeDataPhase,
   HomeGroupView,
+  HomeSchedulePhase,
   QualificationState,
   Season2026Group,
   Season2026RecordPayload,
@@ -47,8 +48,7 @@ interface Season2026HomeProps {
   landing: LandingContent;
   announcement: SiteAnnouncement;
   matches: MatchSchedule[];
-  schedulePhase: FeedPhase;
-  scheduleCheckedAt: number | null;
+  schedulePhase: HomeSchedulePhase;
   recordPhase: HomeDataPhase;
   recordPayload: Season2026RecordPayload | null;
   groups: HomeGroupView[];
@@ -250,23 +250,11 @@ const formatMatchTime = (value: string) => {
   }).format(date);
 };
 
-const formatCheckedAt = (value: number | null | undefined) => {
-  if (!value) return '확인 전';
-  return new Intl.DateTimeFormat('ko-KR', {
-    timeZone: 'Asia/Seoul',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(new Date(value));
-};
-
 const formatSourceDateTime = (value: string | null | undefined) => {
-  if (!value) return '게시 전';
+  if (!value) return null;
   const hasOffset = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value);
   const date = new Date(hasOffset ? value : `${value}+09:00`);
-  if (Number.isNaN(date.getTime())) return '시각 확인 필요';
+  if (Number.isNaN(date.getTime())) return null;
   return new Intl.DateTimeFormat('ko-KR', {
     timeZone: 'Asia/Seoul',
     month: '2-digit',
@@ -372,30 +360,45 @@ function CampaignHero({ landing, children }: { landing: LandingContent; children
 
 function FreshnessBar({
   schedulePhase,
-  scheduleCheckedAt,
   recordPhase,
   recordPayload,
 }: Pick<
   Season2026HomeProps,
-  'schedulePhase' | 'scheduleCheckedAt' | 'recordPhase' | 'recordPayload'
+  'schedulePhase' | 'recordPhase' | 'recordPayload'
 >) {
+  const freshness = recordPayload?.sourceFreshness;
+  const pending = freshness?.status === 'PENDING_MATERIALIZATION';
   const recordStateLabel =
     recordPhase === 'loading'
       ? '확인 중'
       : recordPhase === 'ready'
-        ? '조회 완료'
+        ? pending ? '반영 확인 필요' : '조회 완료'
         : recordPhase === 'partial'
           ? '일부 확인 필요'
           : '연결 확인 필요';
   const scheduleStateLabel =
-    schedulePhase === 'loading' ? '확인 중' : schedulePhase === 'ready' ? '조회 완료' : '연결 확인 필요';
-  const freshness = recordPayload?.sourceFreshness;
+    schedulePhase === 'loading' ? '확인 중'
+      : schedulePhase === 'cached' ? '저장된 일정 · 최신 여부 확인 필요'
+        : schedulePhase === 'ready' ? pending ? '반영 확인 필요' : '조회 완료'
+          : '연결 확인 필요';
   const revision = freshness?.publishedRevision;
+  const publishedAt = formatSourceDateTime(freshness?.publishedAt);
+  // A visit/read timestamp is not a data baseline. Both sections describe the
+  // active server publication; unavailable metadata must never use Date.now().
+  const publicationLabel = publishedAt
+    ? `게시 기준 ${publishedAt}`
+    : recordPhase === 'loading'
+      ? '게시 기준 확인 중'
+      : freshness?.status === 'UNAVAILABLE' && !revision
+        ? '게시 전'
+        : '게시 기준 확인 필요';
   const sourceStatus = freshness?.status === 'CURRENT'
     ? '게시 완료'
     : freshness?.status === 'PENDING_MATERIALIZATION'
       ? '반영 확인 필요'
-      : '게시 전';
+      : freshness?.status === 'UNAVAILABLE' && !revision
+        ? '게시 전'
+        : recordPhase === 'loading' ? '확인 중' : '게시 확인 필요';
 
   return (
     <section className="s26-freshness" aria-labelledby="freshness-title">
@@ -405,13 +408,13 @@ function FreshnessBar({
       </div>
       <dl className="s26-freshness__items">
         <div>
-          <dt><span className={`s26-status-square is-${schedulePhase}`} />일정 · 결과</dt>
-          <dd>{scheduleStateLabel} · {formatCheckedAt(scheduleCheckedAt)}</dd>
+          <dt><span className={`s26-status-square is-${pending && schedulePhase === 'ready' ? 'partial' : schedulePhase}`} />일정 · 결과</dt>
+          <dd>{scheduleStateLabel} · {publicationLabel}</dd>
         </div>
         <div>
-          <dt><span className={`s26-status-square is-${recordPhase}`} />조별 · 개인 기록</dt>
+          <dt><span className={`s26-status-square is-${pending && recordPhase === 'ready' ? 'partial' : recordPhase}`} />조별 · 개인 기록</dt>
           <dd>
-            {recordStateLabel} · {freshness?.publishedAt ? `게시 ${formatSourceDateTime(freshness.publishedAt)}` : '게시 전'}
+            {recordStateLabel} · {publicationLabel}
           </dd>
         </div>
         <div>
@@ -700,9 +703,17 @@ function MatchBoard({ matches, schedulePhase, nowTs }: Pick<Season2026HomeProps,
         </div>
       </div>
 
+      {schedulePhase === 'error' || schedulePhase === 'cached' ? (
+        <p className="s26-empty" role="status">
+          {schedulePhase === 'error'
+            ? '일정 조회에 실패했습니다. 기존에 불러온 경기가 있다면 그대로 표시합니다. 연결을 확인한 뒤 새로고침해 주세요.'
+            : '저장된 일정을 표시하고 있습니다. 최신 데이터인지 확인하려면 연결 후 새로고침해 주세요.'}
+        </p>
+      ) : null}
       {schedulePhase === 'loading' ? (
         <div className="s26-empty s26-match-board__loading" role="status">일정과 결과를 불러오는 중입니다.</div>
-      ) : viewMode === 'calendar' ? (
+      ) : (schedulePhase === 'error' || schedulePhase === 'cached') && official.length === 0 ? null
+        : viewMode === 'calendar' ? (
         <HomeMatchCalendar matches={official} nowTs={nowTs} />
       ) : (
         <div className="s26-match-board__columns">
@@ -1035,7 +1046,6 @@ export default function Season2026Home(props: Season2026HomeProps) {
       <CampaignHero landing={props.landing}>
         <FreshnessBar
           schedulePhase={props.schedulePhase}
-          scheduleCheckedAt={props.scheduleCheckedAt}
           recordPhase={props.recordPhase}
           recordPayload={props.recordPayload}
         />
