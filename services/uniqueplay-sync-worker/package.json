@@ -10,7 +10,8 @@
     "start": "node src/server.mjs",
     "session:bootstrap": "node scripts/bootstrap-session.mjs",
     "session:capture-cdp": "node scripts/capture-session-from-cdp.mjs",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "test:scroll-browser": "node --test test/browser/collection-scroll.test.mjs"
   },
   "dependencies": {
     "playwright": "1.62.0"

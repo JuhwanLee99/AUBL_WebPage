@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:http';
 import { chromium } from 'playwright';
-import { collectUniquePlay } from './adapter.mjs';
+import { ADAPTER_VERSION, collectUniquePlay } from './adapter.mjs';
 import { loadStorageState } from './session.mjs';
 
 const port = Number(process.env.PORT || 8080);
@@ -71,7 +71,7 @@ async function executeRun(payload) {
 const server = createServer(async (request, response) => {
   try {
     const url = new URL(request.url || '/', 'http://localhost');
-    if (request.method === 'GET' && url.pathname === '/health') return sendJson(response, 200, { ok: true, activeRuns: activeRuns.size });
+    if (request.method === 'GET' && url.pathname === '/health') return sendJson(response, 200, { ok: true, activeRuns: activeRuns.size, adapterVersion: ADAPTER_VERSION });
     if (!isAuthorized(request)) return sendJson(response, 401, { error: 'unauthorized' });
     if (request.method === 'GET' && url.pathname === '/session') {
       try {
@@ -95,5 +95,5 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(port, '0.0.0.0', () => {
-  process.stdout.write(`UniquePlay sync worker listening on ${port}\n`);
+  process.stdout.write(`UniquePlay sync worker listening on ${port} (adapter ${ADAPTER_VERSION})\n`);
 });

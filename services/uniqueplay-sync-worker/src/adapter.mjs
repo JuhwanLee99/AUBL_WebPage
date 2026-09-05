@@ -2,8 +2,9 @@ import { deterministicGameId, normalizeText, sanitizeCandidate } from './normali
 import { validateCandidate } from './validation.mjs';
 import { readOpenGameBoxscore, resultListIsReady } from './boxscore-adapter.mjs';
 import { contextualizeDetailError, detailError } from './game-details.mjs';
+import { reachedCollectionEnd, scrollCollectionDom } from './collection-scroll.mjs';
 
-export const ADAPTER_VERSION = '2026.09.05.10';
+export const ADAPTER_VERSION = '2026.09.05.11';
 const GROUP_CODES = [...'ABCDEFGH'];
 const BATTER_HEADERS = ['타율', '팀게임', '선수게임', '타석', '타수', '총안타', '1루타', '2루타', '3루타', '홈런', '타점', '득점', '도루', '볼넷', '삼진', '출루율', '장타율', 'OPS'];
 const PITCHER_HEADERS = ['ERA', '팀게임', '선수게임', '이닝', '승', '패', '세이브', '홀드', '삼진', '피안타', '피홈런', '실점', '볼넷', '사구', '승률', 'WHIP'];
@@ -90,45 +91,19 @@ async function readVisibleTable(page, anchor, expectedHeaders) {
     const valueRows = [...valuesRoot.children].slice(1).map((node) => [...node.children].map((cell) => normalize(cell.textContent)));
     const rows = fixedRows.slice(0, valueRows.length).map((fixed, index) => ({ fixed, values: valueRows[index] }));
 
-    let scroll = valuesRoot.parentElement;
-    while (scroll && scroll !== document.body && scroll.scrollHeight <= scroll.clientHeight + 2) scroll = scroll.parentElement;
-    return {
-      rows,
-      scroll: scroll && scroll !== document.body ? { top: scroll.scrollTop, height: scroll.clientHeight, total: scroll.scrollHeight } : null,
-      reason: null,
-    };
+    return { rows, reason: null };
   }, { anchor, expectedHeaders });
 }
 
 async function scrollTable(page, anchor, expectedHeaders) {
-  return page.evaluate(({ anchor, expectedHeaders }) => {
-    const normalize = (value) => String(value || '').normalize('NFKC').replace(/\s+/g, ' ').replace(/[▲▼]/g, '').trim();
-    const headerCandidates = [...document.querySelectorAll('*')]
-      .filter((node) => normalize(node.textContent) === anchor && node.children.length <= 1);
-    let headerRow = null;
-    for (const candidate of headerCandidates) {
-      const candidateRow = candidate.parentElement;
-      const candidateHeaders = candidateRow ? [...candidateRow.children].map((node) => normalize(node.textContent)) : [];
-      if (expectedHeaders.every((header, index) => candidateHeaders[index] === header)) {
-        headerRow = candidateRow;
-        break;
-      }
-    }
-    const valuesRoot = headerRow?.parentElement;
-    let scroll = valuesRoot?.parentElement;
-    while (scroll && scroll !== document.body && scroll.scrollHeight <= scroll.clientHeight + 2) scroll = scroll.parentElement;
-    if (!scroll || scroll === document.body) return false;
-    const before = scroll.scrollTop;
-    scroll.scrollTop = Math.min(scroll.scrollHeight, before + Math.max(180, Math.floor(scroll.clientHeight * 0.8)));
-    return scroll.scrollTop > before;
-  }, { anchor, expectedHeaders });
+  return page.evaluate(scrollCollectionDom, { kind: 'table', anchor, expectedHeaders });
 }
 
 async function collectVirtualTable(page, anchor, headers) {
   return collectUntilStable({
     read: () => readVisibleTable(page, anchor, headers),
     advance: () => scrollTable(page, anchor, headers),
-    wait: () => page.waitForTimeout(120),
+    wait: () => page.waitForTimeout(500),
   });
 }
 
@@ -136,6 +111,7 @@ export async function collectUntilStable({ read, advance, wait = async () => {},
   const seen = new Map();
   let settledAtEnd = 0;
   for (let pass = 0; pass < maxPasses && settledAtEnd < 3; pass += 1) {
+    if (pass > 0) await wait();
     const snapshot = await read();
     if (snapshot.reason) throw new Error(`UniquePlay table changed (${snapshot.reason})`);
     const before = seen.size;
@@ -146,8 +122,7 @@ export async function collectUntilStable({ read, advance, wait = async () => {},
     const advanced = await advance();
     // Repeated rows inside a virtualized viewport are not completion evidence.
     // Count stability only after the same scroll surface reports its actual end.
-    settledAtEnd = seen.size === before && !advanced ? settledAtEnd + 1 : 0;
-    await wait();
+    settledAtEnd = seen.size === before && reachedCollectionEnd(advanced) ? settledAtEnd + 1 : 0;
   }
   if (settledAtEnd < 3) throw incompleteCollectionError('table');
   return [...seen.values()];
@@ -157,6 +132,7 @@ export async function collectLazyList({ read, advance, identify, wait = async ()
   const seen = new Map();
   let settledAtEnd = 0;
   for (let pass = 0; pass < maxPasses && settledAtEnd < 3; pass += 1) {
+    if (pass > 0) await wait();
     const rows = await read();
     const before = seen.size;
     for (const row of rows) {
@@ -164,8 +140,7 @@ export async function collectLazyList({ read, advance, identify, wait = async ()
       if (key) seen.set(key, row);
     }
     const advanced = await advance();
-    settledAtEnd = seen.size === before && !advanced ? settledAtEnd + 1 : 0;
-    await wait();
+    settledAtEnd = seen.size === before && reachedCollectionEnd(advanced) ? settledAtEnd + 1 : 0;
   }
   if (settledAtEnd < 3) throw incompleteCollectionError('list');
   return [...seen.values()];
@@ -247,31 +222,8 @@ async function readVisibleGames(page, seasonYear) {
   }, seasonYear);
 }
 
-async function scrollPageList(page) {
-  return page.evaluate(() => {
-    const normalize = (value) => String(value ?? '').normalize('NFKC').replace(/\s+/gu, ' ').trim();
-    const datePattern = /^\d{2}\/\d{2}\s+\S+\s+\d{2}:\d{2}$/u;
-    const leaves = [...document.querySelectorAll('*')]
-      .filter((node) => node.children.length === 0 && datePattern.test(normalize(node.textContent)));
-    const candidateCounts = new Map();
-    for (const leaf of leaves) {
-      let candidate = leaf.parentElement;
-      while (candidate && candidate !== document.body && candidate.scrollHeight <= candidate.clientHeight + 2) {
-        candidate = candidate.parentElement;
-      }
-      if (candidate && candidate !== document.body) {
-        candidateCounts.set(candidate, (candidateCounts.get(candidate) || 0) + 1);
-      }
-    }
-    const target = [...candidateCounts.entries()].sort((left, right) => (
-      right[1] - left[1]
-      || (right[0].scrollHeight - right[0].clientHeight) - (left[0].scrollHeight - left[0].clientHeight)
-    ))[0]?.[0];
-    if (!target) return false;
-    const before = target.scrollTop;
-    target.scrollTop = Math.min(target.scrollHeight, before + Math.max(300, Math.floor(target.clientHeight * 0.8)));
-    return target.scrollTop > before;
-  });
+export async function scrollPageList(page) {
+  return page.evaluate(scrollCollectionDom, { kind: 'games' });
 }
 
 async function collectGameTab(page, label, seasonYear) {
@@ -296,7 +248,7 @@ async function collectGameTab(page, label, seasonYear) {
       })),
     advance: () => scrollPageList(page),
     identify: (game) => [game.playedAt, game.groupCode, game.homeTeamName, game.awayTeamName].join('|'),
-    wait: () => page.waitForTimeout(120),
+    wait: () => page.waitForTimeout(500),
   });
 }
 
@@ -349,8 +301,8 @@ export async function collectGameDetails(page, games, { leagueId, seasonYear, pr
         if (matches.length > 1) throw detailError('GAME_DETAIL_AMBIGUOUS_CARD');
         if (matches.length === 1) { found = true; break; }
         const advanced = await scrollPageList(page);
-        settledAtEnd = advanced ? 0 : settledAtEnd + 1;
-        await page.waitForTimeout(120);
+        settledAtEnd = reachedCollectionEnd(advanced) ? settledAtEnd + 1 : 0;
+        await page.waitForTimeout(500);
       }
       if (!found) throw detailError('GAME_DETAIL_CARD_MISSING');
       stage = 'OPEN_BOXSCORE';
@@ -413,6 +365,10 @@ export async function collectUniquePlay({ browser, storageState, leagueId, seaso
     const completed = await collectGameTab(page, '게임결과', seasonYear);
     await progress?.({ stage: 'GAMES_COMPLETED', count: completed.length });
     const games = [...new Map([...scheduled, ...completed].map((game) => [[game.playedAt, game.groupCode, game.homeTeamName, game.awayTeamName].join('|'), game])).values()];
+    // Do not upload a partial season as mass deletion candidates. Check raw
+    // source group totals before the expensive detail pass; team aliases and
+    // exact per-team counts remain the existing review validator's concern.
+    assertCompleteGameCollection({ groups, games: completed });
     await page.evaluate(() => {
       window.scrollTo(0, 0);
       for (const node of document.querySelectorAll('*')) if (node.scrollTop) node.scrollTop = 0;
@@ -427,4 +383,20 @@ export async function collectUniquePlay({ browser, storageState, leagueId, seaso
   } finally {
     await context.close();
   }
+}
+
+export function assertCompleteGameCollection({ groups, games }) {
+  const shortages = [];
+  for (const groupCode of GROUP_CODES) {
+    const rows = groups[groupCode]?.standings || [];
+    const counts = rows.map((row) => /^\d+$/u.test(String(row.games ?? '').trim()) ? Number(row.games) : NaN);
+    if (rows.length !== 5 || counts.some((count) => !Number.isSafeInteger(count))) continue;
+    const expected = Math.ceil(counts.reduce((sum, count) => sum + count, 0) / 2);
+    const actual = new Set(games.filter((game) => game.groupCode === groupCode && game.status === 'COMPLETED')
+      .map((game) => [game.playedAt, game.groupCode, normalizeText(game.homeTeamName), normalizeText(game.awayTeamName)].join('|'))).size;
+    if (actual < expected) shortages.push({ groupCode, expected, actual });
+  }
+  if (shortages.length) throw Object.assign(new Error(
+    `종료 경기 수집이 불완전합니다 (${shortages.map(({ groupCode, expected, actual }) => `${groupCode}조 ${actual}/${expected}`).join(', ')}). 후보를 생성하지 않았습니다. 원천 순위표·목록 갱신 상태를 확인한 뒤 관리자가 다시 수집해 주세요.`,
+  ), { code: 'COLLECTION_INCOMPLETE' });
 }
