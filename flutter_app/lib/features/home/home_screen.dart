@@ -23,10 +23,13 @@ import '../../core/utils/kst_clock.dart';
 import '../../core/widgets/season_campaign_hero.dart';
 import '../../core/widgets/season_components.dart';
 import '../community/notice_detail_screen.dart';
+import '../intro/intro_screen.dart';
 import '../records/records_screen.dart';
 import '../schedule/schedule_screen.dart';
 import '../schedule/widgets/schedule_controls.dart';
 import '../teams/team_notice_detail_screen.dart';
+import '../teams/team_detail_screen.dart';
+import 'widgets/native_home_widgets.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -351,72 +354,45 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Image.asset(
-          'assets/images/aubl_clean.png',
-          height: 32,
-          width: 42,
-          fit: BoxFit.contain,
-          semanticLabel: 'AUBL',
-        ),
+    return NativeHomeLayout(
+      onRefresh: () => _loadAll(showLoading: false),
+      onIntro: () => Navigator.of(
+        context,
+      ).push(MaterialPageRoute<void>(builder: (_) => const IntroScreen())),
+      announcement:
+          _announcement != null &&
+              _announcement!.enabled &&
+              !_announcementHidden
+          ? _buildAnnouncement(_announcement!)
+          : null,
+      banner: NativeCampaignBanner(
+        topline: '46TH AUBL · 2026 연합회교 ${_campaign.facts.first.value}',
+        onDetails: _showCampaignDetails,
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final horizontal = constraints.maxWidth < 520 ? 12.0 : 24.0;
-          return Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1180),
-              child: RefreshIndicator(
-                onRefresh: () => _loadAll(showLoading: false),
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: EdgeInsets.fromLTRB(horizontal, 8, horizontal, 28),
-                  children: [
-                    if (_announcement != null &&
-                        _announcement!.enabled &&
-                        !_announcementHidden) ...[
-                      _buildAnnouncement(_announcement!),
-                      const SizedBox(height: 12),
-                    ],
-                    _buildHero(),
-                    const SizedBox(height: 14),
-                    if (_overview != null)
-                      DataFreshnessCard(
-                        freshness: _overview!.sourceFreshness,
-                        fromCache: _usingCachedSeasonData,
-                        cachedAt: _seasonCacheTime,
-                      )
-                    else if (_loading)
-                      const _HomeLoadingCard()
-                    else
-                      SeasonStatePanel(
-                        icon: Icons.cloud_off_outlined,
-                        title: '공식 데이터를 확인할 수 없습니다',
-                        message: _error ?? '잠시 후 아래로 당겨 다시 시도해 주세요.',
-                        action: SeasonActionButton(
-                          label: '다시 시도',
-                          onPressed: _loadAll,
-                          style: SeasonActionStyle.secondary,
-                        ),
-                      ),
-                    const SizedBox(height: 14),
-                    _buildMatches(),
-                    const SizedBox(height: 14),
-                    _buildGroups(),
-                    const SizedBox(height: 14),
-                    _buildLeaders(),
-                    const SizedBox(height: 14),
-                    _buildNotices(),
-                    const SizedBox(height: 14),
-                    _buildPartners(),
-                  ],
-                ),
+      freshness: _overview != null
+          ? NativeFreshnessInfo(
+              freshness: _overview!.sourceFreshness,
+              fromCache: _usingCachedSeasonData,
+              cachedAt: _seasonCacheTime,
+            )
+          : _loading
+          ? const _HomeLoadingCard()
+          : SeasonStatePanel(
+              icon: Icons.cloud_off_outlined,
+              title: '공식 데이터를 확인할 수 없습니다',
+              message: _error ?? '잠시 후 아래로 당겨 다시 시도해 주세요.',
+              action: SeasonActionButton(
+                label: '다시 시도',
+                onPressed: _loadAll,
+                style: SeasonActionStyle.secondary,
               ),
             ),
-          );
-        },
-      ),
+      teamNotices: _userTeamId != null ? _buildTeamNotices() : null,
+      matches: _buildMatches(),
+      groups: _buildGroups(),
+      leaders: _buildLeaders(),
+      notices: _buildNotices(),
+      partners: _buildPartners(),
     );
   }
 
@@ -451,7 +427,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'IMPORTANT NOTICE',
+                    '중요 공지',
                     style: TextStyle(
                       color: accent,
                       fontFamily: 'BarlowCondensed',
@@ -522,7 +498,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildHero() {
+  Widget _buildHero(VoidCallback beforeNavigation) {
     return SeasonCampaignHero(
       topline: _campaign.topline,
       lead: '우리의 청춘은 이번에도',
@@ -530,25 +506,57 @@ class _HomeScreenState extends State<HomeScreen> {
       description: _campaign.description,
       subcopy: _campaign.subcopy,
       primaryActionLabel: '경기 일정 · 결과',
-      onPrimaryAction: () => ShellController.of(context)?.switchTab(
-        AppDestination.games,
-        scheduleTabIndex: ScheduleHubTab.schedule.index,
-      ),
+      onPrimaryAction: () {
+        beforeNavigation();
+        ShellController.of(context)?.switchTab(
+          AppDestination.games,
+          scheduleTabIndex: ScheduleHubTab.schedule.index,
+        );
+      },
       secondaryActionLabel: '조별 순위 보기',
-      onSecondaryAction: () => ShellController.of(context)?.switchTab(
-        AppDestination.records,
-        recordsTabIndex: RecordsHubTab.standings.index,
-      ),
+      onSecondaryAction: () {
+        beforeNavigation();
+        ShellController.of(context)?.switchTab(
+          AppDestination.records,
+          recordsTabIndex: RecordsHubTab.standings.index,
+        );
+      },
       facts: _campaign.facts,
+    );
+  }
+
+  void _showCampaignDetails() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+          child: Column(
+            children: [
+              Align(
+                alignment: Alignment.centerRight,
+                child: IconButton(
+                  tooltip: '시즌 소개 닫기',
+                  onPressed: () => Navigator.of(sheetContext).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ),
+              _buildHero(() => Navigator.of(sheetContext).pop()),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
   Widget _buildMatches() {
     final overview = _overview;
-    return SeasonSectionPanel(
-      eyebrow: 'GAME BOARD',
-      title: '일정과 결과를 한눈에',
-      description: '공식 게시된 경기만 표시합니다.',
+    return NativeHomeSection(
+      title: '경기 일정 · 결과',
       action: SeasonActionButton(
         label: '전체 일정',
         icon: Icons.arrow_forward,
@@ -614,8 +622,24 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMatchList(SeasonOverview overview) {
+    final today = KstClock.today();
+    final tomorrow = today.add(const Duration(days: 1));
     final upcoming = overview.upcomingGames.take(4).toList();
-    final recent = overview.recentGames.take(4).toList();
+    final todayGames = upcoming.where((game) {
+      final date = game.gameDate ?? game.startTime;
+      return date != null && KstClock.isSameDay(date, today);
+    }).toList();
+    final tomorrowGames = upcoming.where((game) {
+      final date = game.gameDate ?? game.startTime;
+      return date != null && KstClock.isSameDay(date, tomorrow);
+    }).toList();
+    final sections = <(String, List<PublicGame>)>[
+      if (todayGames.isNotEmpty) ('오늘 일정', todayGames),
+      if (tomorrowGames.isNotEmpty) ('내일 일정', tomorrowGames),
+      if (todayGames.isEmpty && tomorrowGames.isEmpty)
+        ('가까운 예정 경기', upcoming.take(3).toList()),
+    ];
+    final recent = overview.recentGames.take(3).toList();
     if (upcoming.isEmpty && recent.isEmpty) {
       return const SeasonStatePanel(
         icon: Icons.event_available_outlined,
@@ -626,24 +650,24 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (upcoming.isNotEmpty) ...[
-          _MatchGroupLabel(label: '가까운 예정 경기', count: upcoming.length),
-          const SizedBox(height: 8),
-          for (var index = 0; index < upcoming.length; index++) ...[
-            PublicMatchCard(
-              game: upcoming[index],
-              onTap: () => _openGame(upcoming[index]),
-            ),
-            if (index != upcoming.length - 1) const SizedBox(height: 8),
+        for (final (label, games) in sections)
+          if (games.isNotEmpty) ...[
+            _MatchGroupLabel(label: label, count: games.length),
+            const SizedBox(height: 8),
+            for (var index = 0; index < games.length; index++) ...[
+              NativeHomeGameTile(
+                game: games[index],
+                onTap: () => _openGame(games[index]),
+              ),
+              if (index != games.length - 1) const SizedBox(height: 6),
+            ],
+            const SizedBox(height: 16),
           ],
-        ],
-        if (upcoming.isNotEmpty && recent.isNotEmpty)
-          const SizedBox(height: 20),
         if (recent.isNotEmpty) ...[
           _MatchGroupLabel(label: '최근 경기 결과', count: recent.length),
           const SizedBox(height: 8),
           for (var index = 0; index < recent.length; index++) ...[
-            PublicMatchCard(
+            NativeHomeGameTile(
               game: recent[index],
               onTap: () => _openGame(recent[index]),
             ),
@@ -712,7 +736,7 @@ class _HomeScreenState extends State<HomeScreen> {
             )
           else
             for (var index = 0; index < selectedGames.length; index++) ...[
-              PublicMatchCard(
+              NativeHomeGameTile(
                 game: selectedGames[index],
                 onTap: () => _openGame(selectedGames[index]),
               ),
@@ -743,10 +767,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final groups = _overview?.groups ?? const <GroupOverview>[];
     final selected = groups.where((group) => group.groupCode == _selectedGroup);
     final group = selected.isEmpty ? null : selected.first;
-    return SeasonSectionPanel(
-      eyebrow: 'GROUP STANDINGS',
-      title: 'A~H 조별 현황',
-      description: '진출 상태는 관리자가 확정한 공식 판정을 따릅니다.',
+    return NativeHomeSection(
+      title: '조별 현황',
       action: SeasonActionButton(
         label: '전체 순위',
         icon: Icons.arrow_forward,
@@ -832,10 +854,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildLeaders() {
     final batters = _overview?.batterLeaders ?? const <SeasonBatterLeader>[];
     final pitchers = _overview?.pitcherLeaders ?? const <SeasonPitcherLeader>[];
-    return SeasonSectionPanel(
-      eyebrow: 'SEASON LEADERS',
-      title: '시즌 기록 리더',
-      description: '검증이 완료된 공개 기록만 표시합니다.',
+    return NativeHomeSection(
+      title: '시즌 기록',
       action: SeasonActionButton(
         label: '전체 기록',
         icon: Icons.arrow_forward,
@@ -897,13 +917,50 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildTeamNotices() {
+    return NativeHomeSection(
+      title: '${_userTeamName ?? '내 팀'} 공지',
+      action: TextButton(
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => TeamDetailScreen(
+              teamId: _userTeamId!,
+              teamName: _userTeamName ?? _userTeamId!,
+            ),
+          ),
+        ),
+        child: const Text('팀 페이지'),
+      ),
+      child: _teamNotices.isEmpty
+          ? Text('새 팀 공지가 없습니다.', style: Theme.of(context).textTheme.bodySmall)
+          : Card(
+              child: Column(
+                children: [
+                  for (final notice in _teamNotices.take(2))
+                    _NoticeTile(
+                      label: '팀 공지',
+                      title: notice.title,
+                      pinned: notice.pinned,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => TeamNoticeDetailScreen(
+                            teamId: _userTeamId!,
+                            teamName: _userTeamName ?? _userTeamId!,
+                            notice: notice,
+                            canManage: false,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+    );
+  }
+
   Widget _buildNotices() {
-    return SeasonSectionPanel(
-      eyebrow: 'NOTICE & COMMUNITY',
-      title: '공지와 커뮤니티',
-      description: _userTeamName == null
-          ? '리그의 최신 소식을 확인하세요.'
-          : '$_userTeamName 소식과 리그 공지입니다.',
+    return NativeHomeSection(
+      title: '리그 공지 · 커뮤니티',
       action: SeasonActionButton(
         label: '전체 공지',
         icon: Icons.arrow_forward,
@@ -913,7 +970,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: Column(
         children: [
-          if (_leagueNotices.isEmpty && _teamNotices.isEmpty)
+          if (_leagueNotices.isEmpty)
             const SeasonStatePanel(
               icon: Icons.notifications_none_outlined,
               title: '새 공지가 없습니다',
@@ -923,24 +980,6 @@ class _HomeScreenState extends State<HomeScreen> {
             Card(
               child: Column(
                 children: [
-                  for (final notice in _teamNotices)
-                    _NoticeTile(
-                      label: '팀 공지',
-                      title: notice.title,
-                      pinned: notice.pinned,
-                      onTap: _userTeamId == null || _userTeamName == null
-                          ? null
-                          : () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => TeamNoticeDetailScreen(
-                                  teamId: _userTeamId!,
-                                  teamName: _userTeamName!,
-                                  notice: notice,
-                                  canManage: false,
-                                ),
-                              ),
-                            ),
-                    ),
                   for (final notice in _leagueNotices)
                     _NoticeTile(
                       label: notice.category,
@@ -967,74 +1006,24 @@ class _HomeScreenState extends State<HomeScreen> {
       ('메이저', '배트', _majorUrl),
       ('Instagram', '@aubl_1981', _instagramUrl),
     ];
-    return SeasonSectionPanel(
-      eyebrow: 'OFFICIAL PARTNERS',
+    return NativeHomeSection(
       title: '오피셜 파트너',
-      description: 'AUBL과 함께하는 공식 파트너와 채널입니다.',
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final columns = constraints.maxWidth >= 820
-              ? 4
-              : constraints.maxWidth >= 480
-              ? 2
-              : 1;
-          final textScale = MediaQuery.textScalerOf(context).scale(1);
-          return GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: partners.length,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: columns,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              mainAxisExtent: textScale >= 1.6 ? 148 : 108,
-            ),
-            itemBuilder: (context, index) {
-              final (name, role, url) = partners[index];
-              return Card(
-                child: InkWell(
-                  onTap: () => _openExternal(url),
-                  borderRadius: BorderRadius.circular(4),
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.titleSmall,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                role,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(color: context.aublColors.muted),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Icon(
-                          Icons.north_east,
-                          size: 18,
-                          color: context.aublColors.cobalt,
-                        ),
-                      ],
-                    ),
-                  ),
+      child: Card(
+        child: Column(
+          children: [
+            for (final (name, role, url) in partners)
+              ListTile(
+                minTileHeight: 56,
+                onTap: () => _openExternal(url),
+                title: Text(
+                  name,
+                  style: Theme.of(context).textTheme.titleSmall,
                 ),
-              );
-            },
-          );
-        },
+                subtitle: Text(role),
+                trailing: const Icon(Icons.north_east, size: 18),
+              ),
+          ],
+        ),
       ),
     );
   }

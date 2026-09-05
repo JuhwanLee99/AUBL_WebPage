@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../core/navigation/app_destination.dart';
-import '../core/navigation/app_destination_navigation.dart';
+import '../core/navigation/native_destination_bar.dart';
 import '../core/services/notification_service.dart';
 import '../features/feature_entries.dart';
 import 'embedded_webview_panel.dart';
@@ -142,16 +142,8 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         }
         setState(() => _currentDestination = destination);
       },
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final useRail = AppNavigationBreakpoints.useRail(
-            constraints.maxWidth,
-            height: constraints.maxHeight,
-          );
-          final useExpandedRail = AppNavigationBreakpoints.useExpandedRail(
-            constraints.maxWidth,
-            height: constraints.maxHeight,
-          );
+      child: Builder(
+        builder: (context) {
           final hideNavigation = hasOverlay && _overlayFullscreen;
           final content = Stack(
             children: [
@@ -197,21 +189,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
               }
             },
             child: Scaffold(
-              body: useRail && !hideNavigation
-                  ? Row(
-                      children: [
-                        FloatingDestinationRail(
-                          current: _currentDestination,
-                          expanded: useExpandedRail,
-                          onSelected: select,
-                        ),
-                        Expanded(child: content),
-                      ],
-                    )
-                  : content,
-              bottomNavigationBar: useRail || hideNavigation
+              body: content,
+              bottomNavigationBar: hideNavigation
                   ? null
-                  : FloatingDestinationBar(
+                  : NativeDestinationBar(
                       current: _currentDestination,
                       loggedIn: _loggedIn,
                       onSelected: select,
