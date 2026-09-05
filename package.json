@@ -14,6 +14,7 @@
     "test:home-hero": "node scripts/test-season-home-hero.mjs",
     "test:home-matches": "node scripts/test-season-home-matches.mjs",
     "test:home-freshness": "node scripts/test-home-data-freshness.mjs",
+    "test:login-layout": "node scripts/test-login-layout.mjs",
     "test:uniqueplay": "node --test services/uniqueplay-sync-worker/test/*.test.mjs && node --experimental-strip-types --test src/features/scoreboard/model/officialDetailRoute.test.mjs src/features/sync/gameRecordReview.test.mjs && node scripts/test-official-game-api.mjs && node scripts/test-official-record-quality-ui.mjs && node --experimental-strip-types scripts/test-game-correction-editor.mjs && node scripts/test-game-review-api.mjs && node scripts/test-game-review-export.mjs",
     "build": "vite build && node scripts/generate-og-pages.mjs",
     "lint": "eslint .",

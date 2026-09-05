@@ -293,11 +293,11 @@ export default function LoginPage() {
   }, [handleSocialConsentDecline, showSocialConsent]);
 
   return (
-    <div className="auth-shell">
+    <div className={`auth-shell${embedded ? ' auth-shell--embedded' : ''}`}>
       {/* 상단: 간결한 제목 + 설명 */}
       <div className="auth-hero">
         <p className="eyebrow">AUBL 계정</p>
-        <h1>로그인하고 경기 소식을 가장 빠르게 만나보세요</h1>
+        <h1><span>로그인하고 경기 소식을</span>{' '}<span>가장 빠르게 만나보세요</span></h1>
         <p className="lede">
           {embedded
             ? nativeGoogleEnabled
@@ -309,10 +309,11 @@ export default function LoginPage() {
 
       {/* 로그인 카드 */}
       <div className="auth-card">
-        <div className="auth-card__header">
+        <div className="auth-card__header" role="group" aria-label="계정 이용 방식">
           <button
             type="button"
             className={`auth-tab${mode === 'login' ? ' is-active' : ''}`}
+            aria-pressed={mode === 'login'}
             onClick={() => setMode('login')}
             disabled={submitting}
           >
@@ -321,6 +322,7 @@ export default function LoginPage() {
           <button
             type="button"
             className={`auth-tab${mode === 'register' ? ' is-active' : ''}`}
+            aria-pressed={mode === 'register'}
             onClick={() => setMode('register')}
             disabled={submitting}
           >
@@ -328,7 +330,7 @@ export default function LoginPage() {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="auth-form">
+        <form onSubmit={handleSubmit} className="auth-form" aria-label={mode === 'login' ? '이메일 로그인' : '이메일 회원가입'}>
           <label className="auth-label">
             이메일
             <input
@@ -398,7 +400,7 @@ export default function LoginPage() {
           )}
 
           {(message || error) && (
-            <div className="auth-alert">
+            <div className="auth-alert" role="alert">
               {message || error}
             </div>
           )}
@@ -605,7 +607,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* 하단: 상세 안내 (데스크톱에서는 hero 영역에, 모바일에서는 로그인 카드 아래) */}
+      {/* 데스크톱: 소개 아래 / 모바일: 로그인 폼 다음에 보조 안내 배치 */}
       <div className="auth-tips-bottom">
         <div className="auth-tips">
           <div>

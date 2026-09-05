@@ -219,6 +219,9 @@ export default function Layout() {
   const showSeasonDetailTheme =
     !hideChrome &&
     location.pathname !== '/' &&
+    // Login owns its complete season layout; the legacy bridge overrides its
+    // typography, controls and dark-mode contrast with higher specificity.
+    !/^\/login\/?$/.test(location.pathname) &&
     !isDrawPage &&
     !preservesScoreOperations;
 
