@@ -9,6 +9,10 @@ import {
   syncActionLabel,
   syncEntityLabel,
 } from '../model';
+import {
+  buildGameRecordReview,
+  type GameRecordTeamReview,
+} from '../gameRecordReview';
 import './UniquePlaySync.css';
 
 interface Props {
@@ -166,6 +170,159 @@ function ChangeList({ item }: { item: UniquePlaySyncDiffItem }) {
   );
 }
 
+function reviewValue(value: number | null) {
+  return value === null ? '—' : value.toLocaleString('ko-KR');
+}
+
+function InningTotal({ team }: { team: GameRecordTeamReview }) {
+  return (
+    <span className="game-record-review__value-stack">
+      <strong>{reviewValue(team.inningRuns)}</strong>
+      {team.unknownInningCount > 0 && <small>원천 빈칸 {team.unknownInningCount}이닝</small>}
+      {team.notPlayedInningCount > 0 && <small>미진행(X) {team.notPlayedInningCount}이닝</small>}
+    </span>
+  );
+}
+
+function GameRecordTeamSummary({ team }: { team: GameRecordTeamReview }) {
+  return (
+    <section className="game-record-review__team" aria-label={`${team.teamName} 상세 기록 합계`}>
+      <div className="game-record-review__team-heading">
+        <h4>{team.teamName}</h4>
+        <span>{team.inningCount}이닝 기록</span>
+      </div>
+      <div className="game-record-review__comparison-scroll" tabIndex={0} aria-label={`${team.teamName} 합계 비교, 가로로 스크롤할 수 있습니다`}>
+        <table className="game-record-review__comparison">
+          <caption className="sr-only">{team.teamName} 팀 기록, 개인 기록 합계, 이닝 합계 비교</caption>
+          <thead>
+            <tr>
+              <th scope="col">항목</th>
+              <th scope="col">팀 기록</th>
+              <th scope="col">개인 기록 합계</th>
+              <th scope="col">이닝 합계</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">R</th>
+              <td>{reviewValue(team.teamRuns)}</td>
+              <td>
+                <span className="game-record-review__value-stack">
+                  <strong>{reviewValue(team.batterRuns)}</strong>
+                  {team.batterRuns === null && <small>일부 값이 비어 합산 보류</small>}
+                </span>
+              </td>
+              <td><InningTotal team={team} /></td>
+            </tr>
+            <tr>
+              <th scope="row">H</th>
+              <td>{reviewValue(team.teamHits)}</td>
+              <td>
+                <span className="game-record-review__value-stack">
+                  <strong>{reviewValue(team.batterHits)}</strong>
+                  {team.batterHits === null && <small>일부 값이 비어 합산 보류</small>}
+                </span>
+              </td>
+              <td aria-label="이닝별 안타 합계는 수집하지 않음">—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      {team.mismatches.length > 0 ? (
+        <ul className="game-record-review__mismatches" aria-label={`${team.teamName} 불일치 항목`}>
+          {team.mismatches.map((mismatch, index) => (
+            <li key={`${mismatch.code}-${mismatch.metric ?? 'STRUCTURE'}-${index}`}>
+              <code>{mismatch.code}</code>
+              <span>{mismatch.message}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="game-record-review__match">비교 가능한 공개 합계에서 불일치가 발견되지 않았습니다.</p>
+      )}
+    </section>
+  );
+}
+
+function GameRecordReviewPanel({ item }: { item: UniquePlaySyncDiffItem }) {
+  const review = buildGameRecordReview(item.changes);
+  const [expanded, setExpanded] = useState(review.structureUnavailable || review.mismatchCount > 0);
+  const noComparison = !review.comparisonAvailable;
+  const notPublished = !noComparison && review.status === 'NOT_PUBLISHED' && !review.structureUnavailable;
+  const statusText = noComparison
+    ? '비교할 합계 변경 없음'
+    : notPublished
+      ? '원천 상세 미게시'
+      : review.structureUnavailable
+        ? '공개 상세 구조 확인 필요'
+        : review.mismatchCount > 0
+          ? `불일치 ${review.mismatchCount}건`
+          : '확인된 합계 이상 없음';
+  const statusTone = noComparison || notPublished
+    ? 'neutral'
+    : review.structureUnavailable || review.mismatchCount > 0
+      ? 'danger'
+      : 'success';
+
+  return (
+    <details
+      className="game-record-review"
+      open={expanded}
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+    >
+      <summary>
+        <span className="game-record-review__summary-title">경기 상세 검수 요약</span>
+        <span
+          className="game-record-review__status"
+          data-tone={statusTone}
+        >
+          {statusText}
+        </span>
+        <span className="game-record-review__disclosure" aria-hidden="true">펼치기</span>
+      </summary>
+      <div className="game-record-review__body">
+        <div className="game-record-review__header">
+          <div>
+            <strong>UniquePlay 경기 ID</strong>
+            <span>{review.providerGameId ?? '확인 불가'}</span>
+          </div>
+          {review.providerUrl && (
+            <a href={review.providerUrl} target="_blank" rel="noreferrer">
+              UniquePlay 박스스코어 열기
+              <span aria-hidden="true">↗</span>
+            </a>
+          )}
+        </div>
+        {review.structureUnavailable && (
+          <p role="alert" className="game-record-review__structure-warning">
+            허용된 공개 필드에서 양 팀 상세 구조를 확인할 수 없습니다. 원본 박스스코어와 수집 상태를 확인해 주세요.
+          </p>
+        )}
+        {notPublished && (
+          <p className="game-record-review__not-published">
+            UniquePlay에 선수별 경기 상세가 게시되지 않아 합계 검사를 생략했습니다.
+          </p>
+        )}
+        {noComparison && (
+          <p className="game-record-review__not-published">
+            이 변경 항목에는 새 팀 합계가 포함되지 않아 합계 비교를 생략했습니다.
+          </p>
+        )}
+        {review.teams.length > 0 && (
+          <div className="game-record-review__teams">
+            {review.teams.map((team, index) => (
+              <GameRecordTeamSummary key={`${item.itemId || item.externalId}-team-${index}`} team={team} />
+            ))}
+          </div>
+        )}
+        <p className="game-record-review__footnote">
+          팀 R/H, 타자별 R/H 합계와 이닝별 R 합계만 표시합니다. 개인정보 및 허용되지 않은 원본 필드는 표시하지 않습니다.
+        </p>
+      </div>
+    </details>
+  );
+}
+
 export default function UniquePlayDiffTable({ items, resolvingItemId, onResolve }: Props) {
   if (items.length === 0) {
     return (
@@ -215,6 +372,13 @@ export default function UniquePlayDiffTable({ items, resolvingItemId, onResolve 
                   </td>
                   <td><ChangeList item={item} /></td>
                 </tr>
+                {item.entityType === 'GAME_RECORD' && (
+                  <tr className="unique-play-diff__game-record-row">
+                    <td colSpan={4}>
+                      <GameRecordReviewPanel item={item} />
+                    </td>
+                  </tr>
+                )}
                 {needsResolution && (
                   <tr className="unique-play-diff__resolution-row">
                     <td colSpan={4}>

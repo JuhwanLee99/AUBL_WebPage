@@ -335,6 +335,285 @@
   padding: 0 12px 14px !important;
 }
 
+.unique-play-diff__game-record-row > td {
+  padding: 0 12px 14px !important;
+  background: color-mix(in srgb, var(--season-surface-muted) 55%, transparent) !important;
+}
+
+.game-record-review {
+  overflow: hidden;
+  border: 1px solid var(--season-line-strong);
+  border-radius: 4px;
+  background: var(--season-surface);
+}
+
+.game-record-review > summary {
+  display: flex;
+  min-height: 44px;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  color: var(--season-ink);
+  cursor: pointer;
+  list-style: none;
+}
+
+.game-record-review > summary::-webkit-details-marker {
+  display: none;
+}
+
+.game-record-review > summary:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--season-blue-700) 46%, transparent);
+  outline-offset: -3px;
+}
+
+.game-record-review__summary-title {
+  font-weight: 850;
+}
+
+.game-record-review__status {
+  padding: 3px 7px;
+  border: 1px solid var(--season-line-strong);
+  border-radius: 2px;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+.game-record-review__status[data-tone='danger'] {
+  border-color: color-mix(in srgb, var(--season-danger) 42%, var(--season-line));
+  background: var(--sync-negative-soft);
+  color: var(--season-danger);
+}
+
+.game-record-review__status[data-tone='success'] {
+  border-color: color-mix(in srgb, var(--season-success) 38%, var(--season-line));
+  background: color-mix(in srgb, var(--season-success) 9%, var(--season-surface));
+  color: var(--season-success);
+}
+
+.game-record-review__status[data-tone='neutral'] {
+  background: var(--season-surface-muted);
+  color: var(--season-muted);
+}
+
+.game-record-review__disclosure {
+  margin-left: auto;
+  color: var(--season-muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.game-record-review[open] .game-record-review__disclosure {
+  font-size: 0;
+}
+
+.game-record-review[open] .game-record-review__disclosure::after {
+  content: '접기';
+  font-size: 12px;
+}
+
+.game-record-review__body {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border-top: 1px solid var(--season-line);
+  background: var(--season-surface-muted);
+}
+
+.game-record-review__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.game-record-review__header > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: baseline;
+}
+
+.game-record-review__header strong {
+  color: var(--season-ink);
+  font-size: 12px;
+}
+
+.game-record-review__header > div span {
+  color: var(--season-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.game-record-review__header a {
+  display: inline-flex;
+  min-height: 44px;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 11px;
+  border: 1px solid var(--season-line-strong);
+  border-radius: 2px;
+  background: var(--season-surface);
+  color: var(--season-blue-700) !important;
+  font-size: 12px;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.game-record-review__header a:hover {
+  border-color: var(--season-blue-700);
+}
+
+.game-record-review__teams {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.game-record-review__team {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--season-line);
+  border-radius: 4px;
+  background: var(--season-surface);
+}
+
+.game-record-review__team-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+
+.game-record-review__team-heading h4 {
+  margin: 0;
+  color: var(--season-ink);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.game-record-review__team-heading span {
+  color: var(--season-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.game-record-review__comparison-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.game-record-review__comparison {
+  width: 100%;
+  min-width: 410px;
+  border-collapse: collapse;
+  color: var(--season-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.game-record-review__comparison :where(th, td) {
+  padding: 7px 8px !important;
+  border: 1px solid var(--season-line) !important;
+  background: var(--season-surface) !important;
+  color: var(--season-ink) !important;
+  font-size: 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.game-record-review__comparison thead th {
+  background: var(--season-surface-muted) !important;
+  color: var(--season-muted) !important;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.game-record-review__comparison tbody th {
+  width: 34px;
+  color: var(--season-navy-900) !important;
+  font-weight: 900;
+}
+
+.game-record-review__value-stack {
+  display: grid;
+  gap: 2px;
+}
+
+.game-record-review__value-stack strong {
+  color: var(--season-ink);
+}
+
+.game-record-review__value-stack small {
+  color: var(--season-muted);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.game-record-review__mismatches {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.game-record-review__mismatches li {
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  padding: 7px 8px;
+  border-left: 3px solid var(--season-danger);
+  background: var(--sync-negative-soft);
+  color: var(--season-danger);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.game-record-review__mismatches code {
+  color: inherit;
+  font: inherit;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.game-record-review__match,
+.game-record-review__structure-warning,
+.game-record-review__not-published,
+.game-record-review__footnote {
+  margin: 9px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.game-record-review__match {
+  color: var(--season-success);
+  font-weight: 750;
+}
+
+.game-record-review__structure-warning {
+  padding: 9px 10px;
+  border-left: 3px solid var(--season-danger);
+  background: var(--sync-negative-soft);
+  color: var(--season-danger);
+  font-weight: 750;
+}
+
+.game-record-review__not-published {
+  padding: 9px 10px;
+  border-left: 3px solid var(--season-line-strong);
+  background: var(--season-surface);
+  color: var(--season-muted);
+}
+
+.game-record-review__footnote {
+  color: var(--season-muted);
+}
+
 .sync-resolution {
   margin: 0;
   padding: 14px;
@@ -474,6 +753,20 @@
 
   .sync-resolution__fields .sync-button {
     width: 100%;
+  }
+
+  .game-record-review__header,
+  .game-record-review__team-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .game-record-review__header a {
+    justify-content: center;
+  }
+
+  .game-record-review__teams {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

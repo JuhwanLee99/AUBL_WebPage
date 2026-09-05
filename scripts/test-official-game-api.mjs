@@ -129,6 +129,22 @@ try {
     respond=async()=>json({runId:'run-fixture',status:'FAILED',error_code:'game_detail_schema'});
     assert.equal((await client.getUniquePlaySyncRun('run-fixture')).errorCode,'GAME_DETAIL_SCHEMA');
   });
+  await test('sync validation retains bounded candidate paths without raw diagnostics', async () => {
+    respond=async()=>json({runId:'run-fixture',status:'VALIDATION_FAILED',validation:{errors:[
+      {code:'DETAIL_BATTER_TOTAL',message:'합계 불일치',path:'$.gameDetails[24]'},
+      {message:'팀 확인',field:'homeTeamName',path:'$.games[2]'},
+    ]}});
+    const result=await client.getUniquePlaySyncRun('run-fixture');
+    assert.deepEqual(result.validation.issues.map(issue=>issue.field),['$.gameDetails[24]','homeTeamName']);
+  });
+  await test('sync validation drops unsafe field and path values', async () => {
+    for(const path of ['user@example.com', '$.gameDetails[0];secret', '$.gameDetails[1234567]', '$.'+'a'.repeat(161), {secret:'value'}]) {
+      respond=async()=>json({runId:'run-fixture',status:'VALIDATION_FAILED',validation:{errors:[
+        {message:'검증 오류',path,field:'user@example.com'},
+      ]}});
+      assert.equal((await client.getUniquePlaySyncRun('run-fixture')).validation.issues[0].field,null);
+    }
+  });
 } finally {
   await vite.close();
   await deleteApp(app);

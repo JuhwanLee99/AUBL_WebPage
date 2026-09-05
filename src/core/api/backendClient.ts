@@ -2269,6 +2269,12 @@ function normalizeValidationIssue(value: unknown, index: number, fallbackSeverit
   const severity = severityRaw === 'ERROR' || severityRaw === 'WARNING' || severityRaw === 'INFO'
     ? severityRaw
     : fallbackSeverity ?? 'INFO';
+  // The server reports candidate paths; never expose arbitrary diagnostic payloads.
+  const path = readSyncString(row, 'path');
+  const safePath = path && /^\$\.[A-Za-z][A-Za-z0-9]*(?:\[\d{1,6}\]|\.[A-Za-z][A-Za-z0-9]*){0,8}$/.test(path)
+    && path.length <= 160 ? path : null;
+  const field = readSyncString(row, 'field', 'fieldName');
+  const safeField = field && /^[A-Za-z][A-Za-z0-9_.]{0,79}$/.test(field) ? field : null;
   return {
     id: readSyncString(row, 'id', 'issueId') ?? `${severity}-${index}`,
     severity,
@@ -2276,7 +2282,7 @@ function normalizeValidationIssue(value: unknown, index: number, fallbackSeverit
     message: readSyncString(row, 'message', 'detail', 'reason') ?? '세부 설명이 없는 검증 항목입니다.',
     entityType: normalizeEntityType(row.entityType ?? row.entity),
     itemId: readSyncString(row, 'itemId', 'diffItemId'),
-    field: readSyncString(row, 'field', 'fieldName'),
+    field: safeField ?? safePath,
   };
 }
 

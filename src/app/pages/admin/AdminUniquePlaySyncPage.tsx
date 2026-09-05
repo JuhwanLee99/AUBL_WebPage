@@ -1104,6 +1104,7 @@ export default function AdminUniquePlaySyncPage() {
                 {run.validation.issues.map((issue) => (
                   <li key={issue.id} style={{ color: issue.severity === 'ERROR' ? 'var(--season-danger)' : issue.severity === 'WARNING' ? 'var(--season-warning)' : 'var(--season-muted)' }}>
                     <strong>{issue.severity}</strong>{issue.code ? ` · ${issue.code}` : ''}: {issue.message}
+                    {issue.field && <span style={{ display: 'block', fontSize: '12px', overflowWrap: 'anywhere' }}>검증 위치: {issue.field}</span>}
                   </li>
                 ))}
               </ul>

@@ -10,7 +10,7 @@
     "emulator:import": "firebase emulators:start --only firestore --import ./firestore-local",
     "test:allstar:load": "firebase emulators:exec --only firestore \"PYTHONPATH=functions functions/venv/bin/python scripts/allstar_vote_emulator_load.py\"",
     "test:allstar:rules": "firebase emulators:exec --only firestore --project demo-aubl-allstar-rules \"node scripts/allstar_firestore_rules_smoke.mjs\"",
-    "test:uniqueplay": "node --test services/uniqueplay-sync-worker/test/*.test.mjs && node --experimental-strip-types --test src/features/scoreboard/model/officialDetailRoute.test.mjs && node scripts/test-official-game-api.mjs",
+    "test:uniqueplay": "node --test services/uniqueplay-sync-worker/test/*.test.mjs && node --experimental-strip-types --test src/features/scoreboard/model/officialDetailRoute.test.mjs src/features/sync/gameRecordReview.test.mjs && node scripts/test-official-game-api.mjs",
     "build": "vite build && node scripts/generate-og-pages.mjs",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.app.json --pretty false",
