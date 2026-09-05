@@ -42,7 +42,10 @@ extension _RecordsScreenSections on RecordsScreenState {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final compact = constraints.maxWidth < 720;
+          final compact =
+              constraints.maxWidth < 720 ||
+              MediaQuery.sizeOf(context).height < 600 ||
+              MediaQuery.textScalerOf(context).scale(1) > 1.4;
           final horizontal = compact ? 12.0 : 20.0;
           if (compact) {
             return Padding(
@@ -297,6 +300,7 @@ extension _RecordsScreenSections on RecordsScreenState {
               child: TextField(
                 key: const ValueKey<String>('records-search-field'),
                 controller: _searchController,
+                textInputAction: TextInputAction.search,
                 onSubmitted: (_) => _applySearchFilter(),
                 decoration: const InputDecoration(
                   labelText: '팀·선수 검색',

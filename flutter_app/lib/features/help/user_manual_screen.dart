@@ -393,6 +393,7 @@ class _UserManualScreenState extends State<UserManualScreen>
 
   @override
   Widget build(BuildContext context) {
+    final useScrollableTabs = MediaQuery.textScalerOf(context).scale(1) >= 1.3;
     return Scaffold(
       body: CustomScrollView(
         slivers: [
@@ -406,7 +407,8 @@ class _UserManualScreenState extends State<UserManualScreen>
               tabBar: TabBar(
                 controller: _tabCtrl,
                 onTap: (_) => setState(() {}),
-                isScrollable: false,
+                isScrollable: useScrollableTabs,
+                tabAlignment: useScrollableTabs ? TabAlignment.start : null,
                 labelColor: context.aublColors.cobalt,
                 unselectedLabelColor: context.aublColors.muted,
                 indicatorColor: context.aublColors.cobalt,
@@ -423,6 +425,7 @@ class _UserManualScreenState extends State<UserManualScreen>
                         Flexible(
                           child: Text(
                             _roleLabels[i],
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               fontSize: 13,
@@ -778,7 +781,8 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
   }
 
   @override
-  bool shouldRebuild(covariant _TabBarDelegate oldDelegate) => false;
+  bool shouldRebuild(covariant _TabBarDelegate oldDelegate) =>
+      oldDelegate.tabBar != tabBar;
 }
 
 class _ManualContent extends StatelessWidget {

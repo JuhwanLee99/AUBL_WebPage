@@ -111,7 +111,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
     if (seasonId == null) return;
     try {
       final teams = await _api.getSeasonTeams(seasonId);
-      if (!mounted) return;
+      if (!mounted || seasonId != _searchSeasonId) return;
       setState(() {
         _seasonTeams = teams;
         if (_selectedTeamName != 'ALL' &&
@@ -120,7 +120,7 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
         }
       });
     } catch (err) {
-      if (!mounted) return;
+      if (!mounted || seasonId != _searchSeasonId) return;
       setState(() {
         _seasonTeams = [];
         _selectedTeamName = 'ALL';
@@ -142,6 +142,17 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
 
   void _schedulePlayerSearch() {
     _searchDebounceTimer?.cancel();
+    // Invalidate immediately, including while the new input is debouncing.
+    _searchRequestSeq++;
+    if (!mounted) return;
+    if (_searchInput.trim().isEmpty) {
+      setState(() {
+        _searchCandidates = [];
+        _searchIndexLoading = false;
+        _searchIndexError = null;
+      });
+      return;
+    }
     _searchDebounceTimer = Timer(
       const Duration(milliseconds: 300),
       _performPlayerSearch,
@@ -149,8 +160,10 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
   }
 
   Future<void> _performPlayerSearch() async {
+    if (!mounted) return;
     final seasonId = _searchSeasonId;
     final keyword = _searchInput.trim();
+    final seq = ++_searchRequestSeq;
     if (seasonId == null) return;
 
     if (keyword.isEmpty) {
@@ -163,7 +176,6 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
       return;
     }
 
-    final seq = ++_searchRequestSeq;
     setState(() {
       _searchIndexLoading = true;
       _searchIndexError = null;
@@ -603,9 +615,12 @@ class _PlayerDetailScreenState extends State<PlayerDetailScreen> {
                           .toList(),
                       onChanged: (value) {
                         if (value == null || value == _searchSeasonId) return;
+                        _searchDebounceTimer?.cancel();
+                        _searchRequestSeq++;
                         setState(() {
                           _searchSeasonId = value;
                           _searchCandidates = [];
+                          _searchIndexLoading = false;
                           _selectedTeamName = 'ALL';
                         });
                         _loadSeasonTeams().then((_) => _schedulePlayerSearch());

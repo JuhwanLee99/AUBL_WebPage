@@ -61,6 +61,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loading = true;
   bool _calendarLoading = false;
   int _calendarRequestSerial = 0;
+  String? _calendarError;
   bool _usingCachedSeasonData = false;
   DateTime? _seasonCacheTime;
   MatchViewMode _viewMode = MatchViewMode.list;
@@ -207,7 +208,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadUserTeam() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      await NotificationService.instance.updateTeamSubscriptions(null);
+      unawaited(_updateTeamNotifications(null));
       if (!mounted) return;
       setState(() {
         _userTeamId = null;
@@ -230,7 +231,7 @@ class _HomeScreenState extends State<HomeScreen> {
         final team = await _firestore.getTeam(teamId);
         teamName = team?.name ?? teamName ?? teamId;
         final notices = await _firestore.watchTeamNotices(teamId).first;
-        await NotificationService.instance.updateTeamSubscriptions(teamId);
+        unawaited(_updateTeamNotifications(teamId));
         if (!mounted) return;
         setState(() {
           _userTeamId = teamId;
@@ -243,6 +244,14 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
     } catch (_) {}
+  }
+
+  Future<void> _updateTeamNotifications(String? teamId) async {
+    try {
+      await NotificationService.instance.updateTeamSubscriptions(teamId);
+    } catch (_) {
+      // Push availability must not block public season and team content.
+    }
   }
 
   void _applyPreferredGroup() {
@@ -264,7 +273,10 @@ class _HomeScreenState extends State<HomeScreen> {
     if (overview == null) return;
     final requestSerial = ++_calendarRequestSerial;
     final requestedMonth = _monthStart(_visibleMonth);
-    setState(() => _calendarLoading = true);
+    setState(() {
+      _calendarLoading = true;
+      _calendarError = null;
+    });
     final first = requestedMonth;
     final last = DateTime(first.year, first.month + 1, 0);
     try {
@@ -275,10 +287,16 @@ class _HomeScreenState extends State<HomeScreen> {
         dateTo: last,
       );
       if (!mounted || requestSerial != _calendarRequestSerial) return;
-      setState(() => _monthGames = result.data);
+      setState(() {
+        _monthGames = result.data;
+        _calendarError = null;
+      });
     } catch (_) {
       if (!mounted || requestSerial != _calendarRequestSerial) return;
-      setState(() => _monthGames = const []);
+      setState(() {
+        _monthGames = const [];
+        _calendarError = '선택한 달의 경기를 불러오지 못했습니다.';
+      });
     } finally {
       if (mounted && requestSerial == _calendarRequestSerial) {
         setState(() => _calendarLoading = false);
@@ -578,9 +596,7 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
-          if (_viewMode == MatchViewMode.calendar)
-            _buildCalendar()
-          else if (overview == null && _loading)
+          if (overview == null && _loading)
             const _HomeLoadingCard()
           else if (overview == null)
             const SeasonStatePanel(
@@ -588,6 +604,8 @@ class _HomeScreenState extends State<HomeScreen> {
               title: '경기 정보를 표시할 수 없습니다',
               message: '공식 데이터 연결을 확인하고 다시 시도해 주세요.',
             )
+          else if (_viewMode == MatchViewMode.calendar)
+            _buildCalendar()
           else
             _buildMatchList(overview),
         ],
@@ -657,35 +675,50 @@ class _HomeScreenState extends State<HomeScreen> {
           const LinearProgressIndicator(),
         ],
         const SizedBox(height: 12),
-        ScheduleMonthGrid(
-          month: _visibleMonth,
-          selectedDate: _selectedDate,
-          eventCountForDate: (date) => _gamesOn(date).length,
-          onDateSelected: (date) => setState(() => _selectedDate = date),
-        ),
-        const SizedBox(height: 12),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            DateFormat('M월 d일 EEEE', 'ko').format(_selectedDate),
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-        ),
-        const SizedBox(height: 8),
-        if (selectedGames.isEmpty)
-          const SeasonStatePanel(
-            icon: Icons.event_outlined,
-            title: '이 날짜에는 경기가 없습니다',
-            message: '다른 날짜를 선택해 주세요.',
-          )
-        else
-          for (var index = 0; index < selectedGames.length; index++) ...[
-            PublicMatchCard(
-              game: selectedGames[index],
-              onTap: () => _openGame(selectedGames[index]),
+        if (_calendarError != null)
+          SeasonStatePanel(
+            icon: Icons.cloud_off_outlined,
+            title: '달력을 확인할 수 없습니다',
+            message: _calendarError!,
+            action: SeasonActionButton(
+              label: '다시 시도',
+              onPressed: _loadMonthGames,
+              style: SeasonActionStyle.secondary,
             ),
-            if (index != selectedGames.length - 1) const SizedBox(height: 8),
-          ],
+          )
+        else ...[
+          ScheduleMonthGrid(
+            month: _visibleMonth,
+            selectedDate: _selectedDate,
+            eventCountForDate: (date) => _gamesOn(date).length,
+            onDateSelected: (date) => setState(() => _selectedDate = date),
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              DateFormat('M월 d일 EEEE', 'ko').format(_selectedDate),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (_calendarLoading && selectedGames.isEmpty)
+            const _HomeLoadingCard()
+          else if (selectedGames.isEmpty)
+            const SeasonStatePanel(
+              icon: Icons.event_outlined,
+              title: '이 날짜에는 경기가 없습니다',
+              message: '다른 날짜를 선택해 주세요.',
+            )
+          else
+            for (var index = 0; index < selectedGames.length; index++) ...[
+              PublicMatchCard(
+                game: selectedGames[index],
+                onTap: () => _openGame(selectedGames[index]),
+              ),
+              if (index != selectedGames.length - 1) const SizedBox(height: 8),
+            ],
+        ],
       ],
     );
   }
@@ -773,19 +806,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Padding(
                     padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-                    child: Row(
-                      children: [
-                        Text(
-                          '${group.groupCode}조',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const Spacer(),
-                        Text(
+                    child: ScheduleCardHeader(
+                      title: '${group.groupCode}조',
+                      detail:
                           '${group.completedGameCount}경기 완료 · ${group.teamCount}팀',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: context.aublColors.muted),
-                        ),
-                      ],
                     ),
                   ),
                   for (
@@ -1229,14 +1253,25 @@ class _NoticeTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.3;
+    final badge = SeasonStatusBadge(
+      label: label,
+      tone: pinned ? SeasonBadgeTone.warning : SeasonBadgeTone.muted,
+    );
     return ListTile(
       minTileHeight: 56,
       onTap: onTap,
-      leading: SeasonStatusBadge(
-        label: label,
-        tone: pinned ? SeasonBadgeTone.warning : SeasonBadgeTone.muted,
-      ),
-      title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
+      leading: largeText ? null : badge,
+      title: largeText
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                badge,
+                const SizedBox(height: 7),
+                Text(title, maxLines: 3, overflow: TextOverflow.ellipsis),
+              ],
+            )
+          : Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
       trailing: const Icon(Icons.chevron_right),
     );
   }

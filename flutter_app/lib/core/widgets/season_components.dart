@@ -435,6 +435,9 @@ class DataFreshnessCard extends StatelessWidget {
         ? cachedAt
         : freshness.publishedAt ?? freshness.checkedAt;
     final status = freshness.status?.toUpperCase() ?? 'UNKNOWN';
+    final provider = freshness.provider?.toUpperCase() == 'UNIQUE_PLAY'
+        ? '유니크플레이'
+        : freshness.provider ?? '공식 기록';
     final tone = status == 'CURRENT'
         ? SeasonBadgeTone.success
         : status == 'STALE'
@@ -464,9 +467,7 @@ class DataFreshnessCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                fromCache
-                    ? '${freshness.provider ?? '공식 기록'} · 오프라인 저장본'
-                    : '${freshness.provider ?? '공식 기록'} · ${freshness.syncMode == 'MANUAL' ? '관리자 수동 게시' : '게시 데이터'}',
+                fromCache ? '$provider · 저장된 기록' : '$provider · 공식 기록',
                 style: Theme.of(context).textTheme.labelLarge,
               ),
               const SizedBox(height: 2),
@@ -482,7 +483,7 @@ class DataFreshnessCard extends StatelessWidget {
                   freshness.publishedRevision!.trim().isNotEmpty) ...[
                 const SizedBox(height: 3),
                 Text(
-                  'REV ${freshness.publishedRevision}',
+                  '게시 버전 ${freshness.publishedRevision}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -592,6 +593,8 @@ class PublicMatchCard extends StatelessWidget {
                   final dateLabel = Text(
                     date == null
                         ? '시간 미정'
+                        : game.startTime == null
+                        ? '${DateFormat('M.d(E)', 'ko').format(date)} · 시간 미정'
                         : DateFormat('M.d(E) HH:mm', 'ko').format(date),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: colors.muted,
@@ -639,25 +642,29 @@ class PublicMatchCard extends StatelessWidget {
                     game.awayScore != null &&
                     game.awayScore! > game.homeScore!,
               ),
-              if (!compact && game.venue != null) ...[
+              if ((!compact && game.venue != null) || onTap != null) ...[
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    Icon(
-                      Icons.location_on_outlined,
-                      size: 16,
-                      color: colors.muted,
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        game.venue!,
-                        style: Theme.of(
-                          context,
-                        ).textTheme.bodySmall?.copyWith(color: colors.muted),
+                    if (!compact && game.venue != null) ...[
+                      Icon(
+                        Icons.location_on_outlined,
+                        size: 16,
+                        color: colors.muted,
                       ),
+                      const SizedBox(width: 4),
+                    ],
+                    Expanded(
+                      child: !compact && game.venue != null
+                          ? Text(
+                              game.venue!,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: colors.muted),
+                            )
+                          : const SizedBox.shrink(),
                     ),
-                    if (onTap != null)
+                    if (onTap != null) ...[
+                      const SizedBox(width: 12),
                       Text(
                         '경기 상세',
                         style: TextStyle(
@@ -666,6 +673,7 @@ class PublicMatchCard extends StatelessWidget {
                           fontSize: 12,
                         ),
                       ),
+                    ],
                   ],
                 ),
               ],
@@ -718,8 +726,7 @@ class _MatchTeamRow extends StatelessWidget {
                 children: [
                   Text(
                     name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    softWrap: true,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: emphasized
                           ? FontWeight.w900

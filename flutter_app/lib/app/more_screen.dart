@@ -59,12 +59,20 @@ class _MoreScreenState extends State<MoreScreen> {
     });
 
     if (user == null) {
-      unawaited(NotificationService.instance.updateUserInquiryTopic(null));
+      unawaited(_updateInquiryNotifications(null));
       return;
     }
 
-    unawaited(NotificationService.instance.updateUserInquiryTopic(user.uid));
+    unawaited(_updateInquiryNotifications(user.uid));
     unawaited(_refreshRoleFlags(user));
+  }
+
+  Future<void> _updateInquiryNotifications(String? uid) async {
+    try {
+      await NotificationService.instance.updateUserInquiryTopic(uid);
+    } catch (_) {
+      // Authentication and menu rendering remain available without push.
+    }
   }
 
   Future<void> _refreshRoleFlags(User user) async {
@@ -146,9 +154,10 @@ class _MoreScreenState extends State<MoreScreen> {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (sheetContext) => SafeArea(
         top: false,
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -207,6 +216,8 @@ class _MoreScreenState extends State<MoreScreen> {
         var temp = _matchPref;
         var tempAll = _allNotificationsOn;
         var tempInquiry = _inquiryNotifOn;
+        var tempCommunity = _communityNoticeOn;
+        var tempTeam = _teamNoticeOn;
         return StatefulBuilder(
           builder: (context, setSheetState) {
             final bottomInset = MediaQuery.of(context).viewInsets.bottom;
@@ -236,11 +247,9 @@ class _MoreScreenState extends State<MoreScreen> {
                       value: tempAll,
                       onChanged: (value) async {
                         setSheetState(() => tempAll = value);
+                        setState(() => _allNotificationsOn = value);
                         await NotificationService.instance
                             .setAllNotificationsEnabled(value);
-                        if (mounted) {
-                          setState(() => _allNotificationsOn = value);
-                        }
                       },
                       activeThumbColor: colors.cobalt,
                       title: Text('전체 알림', style: TextStyle(color: colors.ink)),
@@ -250,15 +259,14 @@ class _MoreScreenState extends State<MoreScreen> {
                       ),
                     ),
                     SwitchListTile(
-                      value: _communityNoticeOn,
+                      value: tempCommunity,
                       onChanged: !tempAll
                           ? null
                           : (value) async {
+                              setSheetState(() => tempCommunity = value);
+                              setState(() => _communityNoticeOn = value);
                               await NotificationService.instance
                                   .setCommunityNoticeEnabled(value);
-                              if (mounted) {
-                                setState(() => _communityNoticeOn = value);
-                              }
                             },
                       activeThumbColor: colors.cobalt,
                       title: Text(
@@ -271,15 +279,14 @@ class _MoreScreenState extends State<MoreScreen> {
                       ),
                     ),
                     SwitchListTile(
-                      value: _teamNoticeOn,
+                      value: tempTeam,
                       onChanged: !tempAll
                           ? null
                           : (value) async {
+                              setSheetState(() => tempTeam = value);
+                              setState(() => _teamNoticeOn = value);
                               await NotificationService.instance
                                   .setTeamNoticeEnabled(value);
-                              if (mounted) {
-                                setState(() => _teamNoticeOn = value);
-                              }
                             },
                       activeThumbColor: colors.cobalt,
                       title: Text('홈팀 공지', style: TextStyle(color: colors.ink)),
@@ -294,11 +301,9 @@ class _MoreScreenState extends State<MoreScreen> {
                           ? null
                           : (value) async {
                               setSheetState(() => tempInquiry = value);
+                              setState(() => _inquiryNotifOn = value);
                               await NotificationService.instance
                                   .setInquiryNotifEnabled(value);
-                              if (mounted) {
-                                setState(() => _inquiryNotifOn = value);
-                              }
                             },
                       activeThumbColor: colors.cobalt,
                       title: Text(

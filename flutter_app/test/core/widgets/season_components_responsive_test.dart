@@ -2,6 +2,7 @@ import 'package:aubl_flutter_app/core/models/public_season_models.dart';
 import 'package:aubl_flutter_app/core/theme/app_theme.dart';
 import 'package:aubl_flutter_app/core/widgets/season_components.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
@@ -106,6 +107,50 @@ void main() {
     expect(find.bySemanticsLabel(RegExp('PLAY BALL')), findsWidgets);
     semantics.dispose();
   });
+
+  testWidgets(
+    'long teams and a match without a venue remain readable and actionable at 200%',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(360, 800);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      var opened = false;
+      final game = PublicGame.fromJson({
+        ..._game.toJson(),
+        'venue': null,
+        'startTime': null,
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark,
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(360, 800),
+              textScaler: TextScaler.linear(2),
+            ),
+            child: Scaffold(
+              body: SingleChildScrollView(
+                padding: const EdgeInsets.all(12),
+                child: PublicMatchCard(game: game, onTap: () => opened = true),
+              ),
+            ),
+          ),
+        ),
+      );
+      for (final team in [game.homeTeamName, game.awayTeamName]) {
+        final paragraph = tester.renderObject<RenderParagraph>(find.text(team));
+        expect(paragraph.didExceedMaxLines, isFalse);
+      }
+      expect(find.textContaining('시간 미정'), findsOneWidget);
+      expect(find.textContaining('00:00'), findsNothing);
+      expect(find.text('경기 상세'), findsOneWidget);
+      await tester.ensureVisible(find.text('경기 상세'));
+      await tester.tap(find.text('경기 상세'));
+      expect(opened, isTrue);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('each shared component fits 390px at 1.3x in isolation', (
     tester,

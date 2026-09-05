@@ -1,6 +1,7 @@
 import 'package:aubl_flutter_app/core/theme/app_theme.dart';
 import 'package:aubl_flutter_app/features/schedule/widgets/schedule_controls.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -69,6 +70,53 @@ void main() {
       }
       expect(find.text('으뜸권'), findsOneWidget);
       expect(find.text('버금권'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('supports keyboard selection and one concise semantic label', (
+      tester,
+    ) async {
+      String? selected;
+      final semantics = tester.ensureSemantics();
+      await _pumpSized(
+        tester,
+        width: 360,
+        height: 520,
+        child: ScheduleGroupSelector(
+          value: 'B',
+          onChanged: (value) => selected = value,
+        ),
+      );
+
+      expect(find.bySemanticsLabel('A조 경기와 순위 보기'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      expect(selected, 'A');
+      expect(tester.takeException(), isNull);
+      semantics.dispose();
+    });
+  });
+
+  group('ScheduleCardHeader', () {
+    testWidgets('stacks long summary text at 360px and 200%', (tester) async {
+      await _pumpSized(
+        tester,
+        width: 360,
+        height: 220,
+        textScale: 2,
+        child: const SizedBox(
+          width: 280,
+          child: ScheduleCardHeader(title: 'H조', detail: '123경기 완료 · 5팀'),
+        ),
+      );
+
+      expect(
+        tester.getTopLeft(find.text('123경기 완료 · 5팀')).dy,
+        greaterThan(tester.getTopLeft(find.text('H조')).dy),
+      );
       expect(tester.takeException(), isNull);
     });
   });
@@ -152,6 +200,54 @@ void main() {
       );
       expect(find.text('2경기'), findsNothing);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('keeps 44dp date targets in the compact in-panel width', (
+      tester,
+    ) async {
+      await _pumpSized(
+        tester,
+        width: 360,
+        height: 760,
+        textScale: 2,
+        child: SizedBox(
+          width: 308,
+          child: ScheduleMonthGrid(
+            month: DateTime(2026, 9),
+            selectedDate: DateTime(2026, 9, 1),
+            eventCountForDate: (_) => 0,
+            onDateSelected: (_) {},
+          ),
+        ),
+      );
+
+      final target = find.byKey(const ValueKey('schedule-date-1'));
+      expect(tester.getSize(target).width, greaterThanOrEqualTo(44));
+      expect(tester.getSize(target).height, greaterThanOrEqualTo(44));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('exposes one actionable date semantic', (tester) async {
+      DateTime? selected;
+      final semantics = tester.ensureSemantics();
+      await _pumpSized(
+        tester,
+        width: 360,
+        height: 620,
+        child: ScheduleMonthGrid(
+          month: DateTime(2026, 9),
+          selectedDate: DateTime(2026, 9, 1),
+          eventCountForDate: (date) => date.day == 3 ? 2 : 0,
+          onDateSelected: (date) => selected = date,
+        ),
+      );
+
+      final dateSemantic = find.bySemanticsLabel('3일, 경기 2개');
+      expect(dateSemantic, findsOneWidget);
+      await tester.tap(dateSemantic);
+      expect(selected, DateTime(2026, 9, 3));
+      expect(tester.takeException(), isNull);
+      semantics.dispose();
     });
   });
 }

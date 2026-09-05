@@ -169,6 +169,42 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
     );
   }
 
+  Widget _commentMetadata({required String author, required int createdAt}) {
+    final colors = context.aublColors;
+    final timestamp = timeago.format(
+      DateTime.fromMillisecondsSinceEpoch(createdAt),
+      locale: 'ko',
+    );
+    final authorText = Text(
+      author,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: colors.ink,
+        fontSize: 13,
+        fontWeight: FontWeight.w500,
+      ),
+    );
+    final timestampText = Text(
+      timestamp,
+      style: TextStyle(color: colors.muted, fontSize: 11),
+    );
+
+    if (MediaQuery.textScalerOf(context).scale(1) >= 1.3) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [authorText, const SizedBox(height: 2), timestampText],
+      );
+    }
+    return Row(
+      children: [
+        Expanded(child: authorText),
+        const SizedBox(width: 8),
+        timestampText,
+      ],
+    );
+  }
+
   Future<void> _deletePost() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -455,33 +491,20 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
                                           CrossAxisAlignment.start,
                                       children: [
                                         Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
-                                            Text(
-                                              c.author,
-                                              style: TextStyle(
-                                                color: context.aublColors.ink,
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w500,
+                                            Expanded(
+                                              child: _commentMetadata(
+                                                author: c.author,
+                                                createdAt: c.createdAt,
                                               ),
                                             ),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              timeago.format(
-                                                DateTime.fromMillisecondsSinceEpoch(
-                                                  c.createdAt,
-                                                ),
-                                                locale: 'ko',
-                                              ),
-                                              style: TextStyle(
-                                                color: context.aublColors.muted,
-                                                fontSize: 11,
-                                              ),
-                                            ),
-                                            if (showMenu) ...[
-                                              const Spacer(),
+                                            if (showMenu)
                                               PopupMenuButton<
                                                 _InquiryModerationAction
                                               >(
+                                                tooltip: '댓글 메뉴',
                                                 padding: EdgeInsets.zero,
                                                 icon: E911EmergencyIcon(
                                                   size: 18,
@@ -553,7 +576,6 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
                                                   return items;
                                                 },
                                               ),
-                                            ],
                                           ],
                                         ),
                                         const SizedBox(height: 4),
@@ -673,88 +695,105 @@ class _InquiryDetailScreenState extends State<InquiryDetailScreen> {
   Widget _buildStatusDropdown() {
     final current = _post.status;
     final color = _statusColor(current);
-    return GestureDetector(
-      onTap: () async {
-        final selected = await showModalBottomSheet<String>(
-          context: context,
-          backgroundColor: context.aublColors.surface,
-          builder: (ctx) => Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  '처리 상태 변경',
-                  style: TextStyle(
-                    color: context.aublColors.ink,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                  ),
+    return Semantics(
+      button: true,
+      label: '처리 상태 $current, 변경',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () async {
+          final selected = await showModalBottomSheet<String>(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: context.aublColors.surface,
+            builder: (ctx) => SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        '처리 상태 변경',
+                        style: TextStyle(
+                          color: context.aublColors.ink,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                    ...InquiryPost.statuses.map(
+                      (s) => ListTile(
+                        title: Text(
+                          s,
+                          style: TextStyle(color: _statusColor(s)),
+                        ),
+                        trailing: s == current
+                            ? Icon(Icons.check, color: context.aublColors.ink)
+                            : null,
+                        onTap: () => Navigator.pop(ctx, s),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                 ),
               ),
-              ...InquiryPost.statuses.map(
-                (s) => ListTile(
-                  title: Text(s, style: TextStyle(color: _statusColor(s))),
-                  trailing: s == current
-                      ? Icon(Icons.check, color: context.aublColors.ink)
-                      : null,
-                  onTap: () => Navigator.pop(ctx, s),
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-        if (selected == null || selected == current || !mounted) return;
-        try {
-          await _fs.updateInquiry(_post.id, {
-            'status': selected,
-            'updatedAt': DateTime.now().millisecondsSinceEpoch,
-          });
-          setState(
-            () => _post = InquiryPost(
-              id: _post.id,
-              title: _post.title,
-              content: _post.content,
-              author: _post.author,
-              uid: _post.uid,
-              platform: _post.platform,
-              category: _post.category,
-              isPrivate: _post.isPrivate,
-              status: selected,
-              createdAt: _post.createdAt,
-              updatedAt: DateTime.now().millisecondsSinceEpoch,
             ),
           );
-        } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text('상태 변경 실패: $e')));
-          }
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(3),
-          border: Border.all(color: color.withValues(alpha: 0.5)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              current,
-              style: TextStyle(
-                color: color,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
+          if (selected == null || selected == current || !mounted) return;
+          try {
+            await _fs.updateInquiry(_post.id, {
+              'status': selected,
+              'updatedAt': DateTime.now().millisecondsSinceEpoch,
+            });
+            if (!mounted) return;
+            setState(
+              () => _post = InquiryPost(
+                id: _post.id,
+                title: _post.title,
+                content: _post.content,
+                author: _post.author,
+                uid: _post.uid,
+                platform: _post.platform,
+                category: _post.category,
+                isPrivate: _post.isPrivate,
+                status: selected,
+                createdAt: _post.createdAt,
+                updatedAt: DateTime.now().millisecondsSinceEpoch,
               ),
-            ),
-            const SizedBox(width: 3),
-            Icon(Icons.arrow_drop_down, color: color, size: 16),
-          ],
+            );
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text('상태 변경 실패: $e')));
+            }
+          }
+        },
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(3),
+            border: Border.all(color: color.withValues(alpha: 0.5)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                current,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 3),
+              Icon(Icons.arrow_drop_down, color: color, size: 16),
+            ],
+          ),
         ),
       ),
     );

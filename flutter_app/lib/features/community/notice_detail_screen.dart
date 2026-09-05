@@ -190,6 +190,42 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
     );
   }
 
+  Widget _commentMetadata({required String author, required int createdAt}) {
+    final colors = context.aublColors;
+    final timestamp = timeago.format(
+      DateTime.fromMillisecondsSinceEpoch(createdAt),
+      locale: 'ko',
+    );
+    final authorText = Text(
+      author,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: colors.ink,
+        fontSize: 13,
+        fontWeight: FontWeight.w500,
+      ),
+    );
+    final timestampText = Text(
+      timestamp,
+      style: TextStyle(color: colors.muted, fontSize: 11),
+    );
+
+    if (MediaQuery.textScalerOf(context).scale(1) >= 1.3) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [authorText, const SizedBox(height: 2), timestampText],
+      );
+    }
+    return Row(
+      children: [
+        Expanded(child: authorText),
+        const SizedBox(width: 8),
+        timestampText,
+      ],
+    );
+  }
+
   Future<void> _showEditNoticeDialog() async {
     final titleCtrl = TextEditingController(text: _notice.title);
     String contentDelta = _notice.content;
@@ -569,34 +605,20 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
                                             CrossAxisAlignment.start,
                                         children: [
                                           Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
-                                              Text(
-                                                c.author,
-                                                style: TextStyle(
-                                                  color: context.aublColors.ink,
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w500,
+                                              Expanded(
+                                                child: _commentMetadata(
+                                                  author: c.author,
+                                                  createdAt: c.createdAt,
                                                 ),
                                               ),
-                                              const SizedBox(width: 8),
-                                              Text(
-                                                timeago.format(
-                                                  DateTime.fromMillisecondsSinceEpoch(
-                                                    c.createdAt,
-                                                  ),
-                                                  locale: 'ko',
-                                                ),
-                                                style: TextStyle(
-                                                  color:
-                                                      context.aublColors.muted,
-                                                  fontSize: 11,
-                                                ),
-                                              ),
-                                              if (showMenu) ...[
-                                                const Spacer(),
+                                              if (showMenu)
                                                 PopupMenuButton<
                                                   _NoticeModerationAction
                                                 >(
+                                                  tooltip: '댓글 메뉴',
                                                   padding: EdgeInsets.zero,
                                                   icon: E911EmergencyIcon(
                                                     size: 18,
@@ -669,7 +691,6 @@ class _NoticeDetailScreenState extends State<NoticeDetailScreen> {
                                                     return items;
                                                   },
                                                 ),
-                                              ],
                                             ],
                                           ),
                                           const SizedBox(height: 4),

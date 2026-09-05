@@ -188,4 +188,43 @@ void main() {
       isFalse,
     );
   });
+
+  testWidgets(
+    'compact rail keeps destinations reachable with a tablet keyboard at 200%',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(768, 600);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      AppDestination? selected;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark,
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(768, 600),
+              padding: EdgeInsets.only(top: 24, bottom: 24),
+              viewInsets: EdgeInsets.only(bottom: 300),
+              textScaler: TextScaler.linear(2),
+            ),
+            child: Scaffold(
+              body: Row(
+                children: [
+                  FloatingDestinationRail(
+                    current: AppDestination.home,
+                    onSelected: (value) => selected = value,
+                  ),
+                  const Expanded(child: SizedBox()),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(find.text('더보기'));
+      await tester.tap(find.text('더보기'));
+      expect(selected, AppDestination.more);
+    },
+  );
 }

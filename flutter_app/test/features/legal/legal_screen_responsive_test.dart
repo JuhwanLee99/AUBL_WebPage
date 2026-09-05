@@ -10,13 +10,25 @@ void main() {
     required Widget screen,
     required Size size,
     required ThemeData theme,
+    double textScale = 1,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(MaterialApp(theme: theme, home: screen));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: theme,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
+        home: screen,
+      ),
+    );
     await tester.pump();
   }
 
@@ -26,6 +38,7 @@ void main() {
       screen: const TermsScreen(),
       size: const Size(360, 800),
       theme: AppTheme.dark,
+      textScale: 2,
     );
 
     expect(find.text('이용약관'), findsWidgets);

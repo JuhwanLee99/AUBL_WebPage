@@ -137,6 +137,7 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
     if (user == null) return;
 
     final content = _commentDelta;
+    final parentId = _replyToId;
     setState(() {
       _commentDelta = '';
       _editorKey++;
@@ -151,8 +152,39 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
         author: user.email?.split('@').first ?? '익명',
         content: content,
         createdAt: DateTime.now().millisecondsSinceEpoch,
-        parentId: _replyToId,
+        parentId: parentId,
       ),
+    );
+  }
+
+  Widget _noticeMetadata() {
+    final colors = context.aublColors;
+    final author = Text(
+      widget.notice.createdByName ?? '',
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(color: colors.muted, fontSize: 13),
+    );
+    final timestamp = Text(
+      timeago.format(
+        DateTime.fromMillisecondsSinceEpoch(widget.notice.createdAt),
+        locale: 'ko',
+      ),
+      style: TextStyle(color: colors.muted, fontSize: 12),
+    );
+
+    if (MediaQuery.textScalerOf(context).scale(1) >= 1.3) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [author, const SizedBox(height: 2), timestamp],
+      );
+    }
+    return Row(
+      children: [
+        Expanded(child: author),
+        const SizedBox(width: 8),
+        timestamp,
+      ],
     );
   }
 
@@ -194,30 +226,7 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Text(
-                              widget.notice.createdByName ?? '',
-                              style: TextStyle(
-                                color: context.aublColors.muted,
-                                fontSize: 13,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              timeago.format(
-                                DateTime.fromMillisecondsSinceEpoch(
-                                  widget.notice.createdAt,
-                                ),
-                                locale: 'ko',
-                              ),
-                              style: TextStyle(
-                                color: context.aublColors.muted,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
+                        _noticeMetadata(),
                         const Divider(height: 24),
                         RichTextViewer(
                           content: widget.notice.content,
@@ -409,16 +418,16 @@ class _TeamNoticeDetailScreenState extends State<TeamNoticeDetailScreen> {
                                           ),
                                         ),
                                         const Spacer(),
-                                        GestureDetector(
-                                          onTap: () =>
+                                        TextButton(
+                                          onPressed: () =>
                                               setState(() => _replyToId = null),
-                                          child: Text(
-                                            '취소',
-                                            style: TextStyle(
-                                              color: context.aublColors.muted,
-                                              fontSize: 12,
+                                          style: TextButton.styleFrom(
+                                            minimumSize: const Size(44, 44),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
                                             ),
                                           ),
+                                          child: const Text('취소'),
                                         ),
                                       ],
                                     ),
@@ -478,6 +487,47 @@ class _CommentTile extends StatelessWidget {
   )?
   onAction;
 
+  Widget _metadata(
+    BuildContext context, {
+    required String author,
+    required int createdAt,
+    double authorSize = 13,
+    double timestampSize = 11,
+  }) {
+    final colors = context.aublColors;
+    final authorText = Text(
+      author,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: colors.ink,
+        fontSize: authorSize,
+        fontWeight: FontWeight.w500,
+      ),
+    );
+    final timestampText = Text(
+      timeago.format(
+        DateTime.fromMillisecondsSinceEpoch(createdAt),
+        locale: 'ko',
+      ),
+      style: TextStyle(color: colors.muted, fontSize: timestampSize),
+    );
+
+    if (MediaQuery.textScalerOf(context).scale(1) >= 1.3) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [authorText, const SizedBox(height: 2), timestampText],
+      );
+    }
+    return Row(
+      children: [
+        Expanded(child: authorText),
+        const SizedBox(width: 8),
+        timestampText,
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isLiked = comment.likedBy.contains(currentUid);
@@ -493,26 +543,18 @@ class _CommentTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                comment.author,
-                style: TextStyle(
-                  color: context.aublColors.ink,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
+              Expanded(
+                child: _metadata(
+                  context,
+                  author: comment.author,
+                  createdAt: comment.createdAt,
                 ),
               ),
-              const SizedBox(width: 8),
-              Text(
-                timeago.format(
-                  DateTime.fromMillisecondsSinceEpoch(comment.createdAt),
-                  locale: 'ko',
-                ),
-                style: TextStyle(color: context.aublColors.muted, fontSize: 11),
-              ),
-              if (showMenu) ...[
-                const Spacer(),
+              if (showMenu)
                 PopupMenuButton<_TeamNoticeModerationAction>(
+                  tooltip: '댓글 메뉴',
                   padding: EdgeInsets.zero,
                   icon: E911EmergencyIcon(
                     size: 18,
@@ -548,7 +590,6 @@ class _CommentTile extends StatelessWidget {
                     return items;
                   },
                 ),
-              ],
             ],
           ),
           const SizedBox(height: 4),
@@ -558,42 +599,35 @@ class _CommentTile extends StatelessWidget {
             color: context.aublColors.ink,
           ),
           const SizedBox(height: 4),
-          Row(
+          Wrap(
+            spacing: 4,
+            runSpacing: 4,
             children: [
-              GestureDetector(
-                onTap: onLike,
-                child: Row(
-                  children: [
-                    Icon(
-                      isLiked ? Icons.favorite : Icons.favorite_border,
-                      size: 14,
-                      color: isLiked
-                          ? context.aublColors.danger
-                          : context.aublColors.muted,
-                    ),
-                    if (comment.likeCount > 0) ...[
-                      const SizedBox(width: 2),
-                      Text(
-                        '${comment.likeCount}',
-                        style: TextStyle(
-                          color: context.aublColors.muted,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ],
+              TextButton.icon(
+                onPressed: onLike,
+                style: TextButton.styleFrom(
+                  foregroundColor: isLiked
+                      ? context.aublColors.danger
+                      : context.aublColors.muted,
+                  minimumSize: const Size(44, 44),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                icon: Icon(
+                  isLiked ? Icons.favorite : Icons.favorite_border,
+                  size: 16,
+                ),
+                label: Text(
+                  comment.likeCount > 0 ? '좋아요 ${comment.likeCount}' : '좋아요',
                 ),
               ),
-              const SizedBox(width: 16),
-              GestureDetector(
-                onTap: onReply,
-                child: Text(
-                  '답글',
-                  style: TextStyle(
-                    color: context.aublColors.muted,
-                    fontSize: 11,
-                  ),
+              TextButton(
+                onPressed: onReply,
+                style: TextButton.styleFrom(
+                  foregroundColor: context.aublColors.muted,
+                  minimumSize: const Size(44, 44),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
                 ),
+                child: const Text('답글'),
               ),
             ],
           ),
@@ -610,34 +644,23 @@ class _CommentTile extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  r.author,
-                                  style: TextStyle(
-                                    color: context.aublColors.ink,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
+                                Expanded(
+                                  child: _metadata(
+                                    context,
+                                    author: r.author,
+                                    createdAt: r.createdAt,
+                                    authorSize: 12,
+                                    timestampSize: 10,
                                   ),
                                 ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  timeago.format(
-                                    DateTime.fromMillisecondsSinceEpoch(
-                                      r.createdAt,
-                                    ),
-                                    locale: 'ko',
-                                  ),
-                                  style: TextStyle(
-                                    color: context.aublColors.muted,
-                                    fontSize: 10,
-                                  ),
-                                ),
-                                const Spacer(),
                                 if ((r.uid == currentUid || canManage) ||
                                     (currentUid.isNotEmpty &&
                                         r.uid.isNotEmpty &&
                                         r.uid != currentUid))
                                   PopupMenuButton<_TeamNoticeModerationAction>(
+                                    tooltip: '답글 메뉴',
                                     padding: EdgeInsets.zero,
                                     icon: E911EmergencyIcon(
                                       size: 16,

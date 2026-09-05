@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:aubl_flutter_app/core/services/backend_api_service.dart';
 import 'package:aubl_flutter_app/core/theme/app_theme.dart';
+import 'package:aubl_flutter_app/features/records/player_detail_screen.dart';
 import 'package:aubl_flutter_app/features/records/records_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -189,7 +192,136 @@ void main() {
       expect(find.text('기록 검색과 필터'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets('keeps records reachable in landscape with enlarged text', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(844, 390));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(2)),
+            child: child!,
+          ),
+          home: RecordsScreen(
+            initialTab: RecordsHubTab.batters,
+            apiService: fakeApi,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('검색·필터'), findsOneWidget);
+      await tester.tap(find.text('검색·필터'));
+      await tester.pumpAndSettle();
+      expect(find.text('기록 검색과 필터'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('keeps enlarged filters usable with the keyboard visible', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(360, 640));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final keyboardInset = ValueNotifier<double>(0);
+      addTearDown(keyboardInset.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark,
+          builder: (context, child) => ValueListenableBuilder<double>(
+            valueListenable: keyboardInset,
+            builder: (context, bottom, _) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: const TextScaler.linear(2),
+                viewInsets: EdgeInsets.only(bottom: bottom),
+              ),
+              child: child!,
+            ),
+          ),
+          home: RecordsScreen(apiService: fakeApi),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.text('검색·필터'));
+      await tester.pumpAndSettle();
+      final searchField = find.byKey(
+        const ValueKey<String>('records-search-field'),
+      );
+      await tester.ensureVisible(searchField);
+      await tester.enterText(searchField, '중앙');
+      keyboardInset.value = 300;
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final doneButton = find.widgetWithText(FilledButton, '완료');
+      await tester.ensureVisible(doneButton);
+      await tester.tap(doneButton);
+      keyboardInset.value = 0;
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('does not restore stale player results after clearing search', (
+      tester,
+    ) async {
+      final deferredApi = _DeferredSearchApiService();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: PlayerDetailScreen(apiService: deferredApi),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final nameField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == '선수 이름 검색',
+      );
+      await tester.enterText(nameField, '테스트');
+      await tester.pump(const Duration(milliseconds: 301));
+      expect(deferredApi.searchCalls, 1);
+      await tester.enterText(nameField, '');
+      await tester.pump(const Duration(milliseconds: 301));
+      deferredApi.pendingSearch.complete(const [
+        PlayerSearchResult(
+          playerId: 11,
+          playerName: '테스트 타자',
+          teamId: 1,
+          teamName: '테스트팀',
+          jerseyNumber: '11',
+          seasonId: 2024,
+        ),
+      ]);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('테스트 타자'), findsNothing);
+      expect(find.text('선수 목록 없음'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
   });
+}
+
+class _DeferredSearchApiService extends _FakeBackendApiService {
+  final pendingSearch = Completer<List<PlayerSearchResult>>();
+  int searchCalls = 0;
+
+  @override
+  Future<List<SeasonTeam>> getSeasonTeams(int seasonId) async => const [];
+
+  @override
+  Future<List<PlayerSearchResult>> searchPlayers({
+    required int seasonId,
+    required String q,
+    int? teamId,
+    int? limit,
+  }) {
+    searchCalls++;
+    return pendingSearch.future;
+  }
 }
 
 class _FakeBackendApiService extends BackendApiService {

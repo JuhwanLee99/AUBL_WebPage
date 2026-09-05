@@ -49,6 +49,7 @@ class ScheduleScreenState extends State<ScheduleScreen>
   int _monthRequestSerial = 0;
   int _groupRequestSerial = 0;
   String? _error;
+  String? _groupError;
   bool _usingCachedSeasonData = false;
   DateTime? _seasonCacheTime;
 
@@ -184,7 +185,10 @@ class ScheduleScreenState extends State<ScheduleScreen>
     if (seasonId == null) return;
     final requestSerial = ++_groupRequestSerial;
     final requestedFilter = _groupFilter;
-    setState(() => _groupLoading = true);
+    setState(() {
+      _groupLoading = true;
+      _groupError = null;
+    });
     try {
       final isGroup = RegExp(r'^[A-H]$').hasMatch(requestedFilter);
       final games = await _seasonRepository.loadGames(
@@ -194,10 +198,16 @@ class ScheduleScreenState extends State<ScheduleScreen>
         qualification: isGroup ? null : requestedFilter,
       );
       if (!mounted || requestSerial != _groupRequestSerial) return;
-      setState(() => _groupGames = games.data);
+      setState(() {
+        _groupGames = games.data;
+        _groupError = null;
+      });
     } catch (_) {
       if (!mounted || requestSerial != _groupRequestSerial) return;
-      setState(() => _groupGames = const []);
+      setState(() {
+        _groupGames = const [];
+        _groupError = '조별 경기를 불러오지 못했습니다.';
+      });
     } finally {
       if (mounted && requestSerial == _groupRequestSerial) {
         setState(() => _groupLoading = false);
@@ -323,7 +333,7 @@ class ScheduleScreenState extends State<ScheduleScreen>
         SeasonSectionPanel(
           eyebrow: 'OFFICIAL GAMES',
           title: _viewMode == MatchViewMode.calendar ? '달력 보기' : '목록 보기',
-          description: '${games.length}경기 · 활성 UniquePlay revision 기준',
+          description: '${games.length}경기 · 현재 공개된 공식 데이터 기준',
           action: _ViewModeSelector(
             value: _viewMode,
             onChanged: (value) => setState(() => _viewMode = value),
@@ -431,6 +441,7 @@ class ScheduleScreenState extends State<ScheduleScreen>
               setState(() {
                 _groupFilter = value;
                 _groupGames = const [];
+                _groupError = null;
               });
               _loadGroupGames();
             },
@@ -471,12 +482,23 @@ class ScheduleScreenState extends State<ScheduleScreen>
         SeasonSectionPanel(
           eyebrow: 'OFFICIAL GAMES',
           title: '해당 경기',
-          description: '활성 UniquePlay revision의 경기만 표시합니다.',
+          description: '현재 공개된 공식 경기만 표시합니다.',
           child: _groupLoading
               ? const Center(
                   child: Padding(
                     padding: EdgeInsets.all(24),
                     child: CircularProgressIndicator(),
+                  ),
+                )
+              : _groupError != null
+              ? SeasonStatePanel(
+                  icon: Icons.cloud_off_outlined,
+                  title: '조별 경기를 확인할 수 없습니다',
+                  message: _groupError!,
+                  action: SeasonActionButton(
+                    label: '다시 시도',
+                    onPressed: _loadGroupGames,
+                    style: SeasonActionStyle.secondary,
                   ),
                 )
               : _PublicGameList(
@@ -831,7 +853,7 @@ class _GroupStandingCard extends StatelessWidget {
           Container(height: 4, color: colors.cobalt),
           Padding(
             padding: const EdgeInsets.all(14),
-            child: _StandingCardHeader(
+            child: ScheduleCardHeader(
               title: '${group.groupCode}조',
               detail: '${group.completedGameCount}경기 완료',
             ),
@@ -867,10 +889,7 @@ class _QualificationTeamsCard extends StatelessWidget {
           Container(height: 4, color: colors.cobalt),
           Padding(
             padding: const EdgeInsets.all(14),
-            child: _StandingCardHeader(
-              title: title,
-              detail: '${teams.length}팀',
-            ),
+            child: ScheduleCardHeader(title: title, detail: '${teams.length}팀'),
           ),
           for (var index = 0; index < teams.length; index++) ...[
             Divider(height: 1, color: colors.line),
@@ -878,47 +897,6 @@ class _QualificationTeamsCard extends StatelessWidget {
           ],
         ],
       ),
-    );
-  }
-}
-
-class _StandingCardHeader extends StatelessWidget {
-  const _StandingCardHeader({required this.title, required this.detail});
-
-  final String title;
-  final String detail;
-
-  @override
-  Widget build(BuildContext context) {
-    final textScale = MediaQuery.textScalerOf(context).scale(1);
-    if (textScale >= 1.3) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(
-            detail,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: context.aublColors.muted),
-          ),
-        ],
-      );
-    }
-    return Row(
-      children: [
-        Expanded(
-          child: Text(title, style: Theme.of(context).textTheme.titleMedium),
-        ),
-        const SizedBox(width: 12),
-        Text(
-          detail,
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(color: context.aublColors.muted),
-        ),
-      ],
     );
   }
 }

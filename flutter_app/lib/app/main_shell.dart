@@ -78,6 +78,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     String title, {
     bool fullscreen = false,
   }) {
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _overlayPath = path;
       _overlayTitle = title;
@@ -131,6 +132,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       closeEmbeddedWebView: _closeEmbeddedWebView,
       refreshNotifier: _refreshNotifier,
       switchTab: (destination, {recordsTabIndex, scheduleTabIndex}) {
+        FocusManager.instance.primaryFocus?.unfocus();
         if (hasOverlay) _closeEmbeddedWebView();
         if (recordsTabIndex != null) {
           _recordsKey.currentState?.switchToTabIndex(recordsTabIndex);
@@ -178,6 +180,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
             ],
           );
           void select(AppDestination destination) {
+            FocusManager.instance.primaryFocus?.unfocus();
             if (hasOverlay) _closeEmbeddedWebView();
             setState(() => _currentDestination = destination);
           }

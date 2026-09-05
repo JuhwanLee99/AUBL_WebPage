@@ -157,6 +157,7 @@ Future<AublTableData?> showAublTableEditorDialog({
           );
 
           return AlertDialog(
+            scrollable: true,
             backgroundColor: colors.surface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(4),

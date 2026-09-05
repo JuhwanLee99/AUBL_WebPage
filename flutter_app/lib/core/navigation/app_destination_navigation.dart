@@ -87,6 +87,7 @@ class FloatingDestinationRail extends StatelessWidget {
             data: railTheme,
             child: NavigationRail(
               extended: expanded,
+              scrollable: true,
               selectedIndex: current.index,
               labelType: expanded ? null : NavigationRailLabelType.all,
               groupAlignment: -0.75,
