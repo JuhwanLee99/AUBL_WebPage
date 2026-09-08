@@ -5,13 +5,17 @@ import {
   ReCaptchaEnterpriseProvider,
   type AppCheck,
 } from 'firebase/app-check';
-import { getAuth } from 'firebase/auth';
+import { connectAuthEmulator, getAuth } from 'firebase/auth';
+import { connectFunctionsEmulator, getFunctions } from 'firebase/functions';
 import {
   connectFirestoreEmulator,
   getFirestore,
   initializeFirestore,
   memoryLocalCache,
 } from 'firebase/firestore';
+import { resolveScoringEnvironment } from './scoringEnvironment';
+
+export const scoringEnvironment = resolveScoringEnvironment(import.meta.env);
 
 const firebaseConfig: FirebaseOptions = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -24,6 +28,9 @@ const firebaseConfig: FirebaseOptions = {
 };
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+if (scoringEnvironment.mode === 'local-emulator' && app.options.projectId !== scoringEnvironment.projectId) {
+  throw new Error('firebase-app-project-mismatch');
+}
 
 const appCheckSiteKey = import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY?.trim();
 
@@ -32,6 +39,7 @@ let appCheckInstance: AppCheck | null = null;
 // Initialize only when an All-Star callable is actually used. This avoids an
 // attestation request for visitors who only browse unrelated AUBL pages.
 export function ensureFirebaseAppCheck(): AppCheck | null {
+  if (scoringEnvironment.mode !== 'production') return null;
   if (!appCheckSiteKey) return null;
   if (appCheckInstance) return appCheckInstance;
   appCheckInstance = initializeAppCheck(app, {
@@ -41,29 +49,36 @@ export function ensureFirebaseAppCheck(): AppCheck | null {
   return appCheckInstance;
 }
 
-export const auth = getAuth(app);
+type Services = { auth: ReturnType<typeof getAuth>; firestore: ReturnType<typeof getFirestore>; functions: ReturnType<typeof getFunctions> };
+type Connections = WeakMap<object, { signature: string; services: Services }>;
+const runtime = globalThis as typeof globalThis & { __aublLocalFirebaseConnections?: Connections };
 
-const useFsEmulator = import.meta.env.VITE_USE_FIRESTORE_EMULATOR === 'true';
-
-// 에뮬레이터 모드: 메모리 캐시 사용 (IndexedDB 프로덕션 캐시와의 충돌 방지)
-// initializeFirestore는 앱당 한 번만 호출 가능하므로 HMR 재실행 시 getFirestore로 폴백
-export const firestore = useFsEmulator
-  ? (() => {
-      try {
-        return initializeFirestore(app, { localCache: memoryLocalCache() });
-      } catch {
-        return getFirestore(app);
-      }
-    })()
-  : getFirestore(app);
-
-if (useFsEmulator) {
-  const host = import.meta.env.VITE_FIRESTORE_EMULATOR_HOST ?? '127.0.0.1';
-  const port = Number(import.meta.env.VITE_FIRESTORE_EMULATOR_PORT ?? 8080);
-  try {
-    connectFirestoreEmulator(firestore, host, port);
-    console.info(`[firestore] using emulator at ${host}:${port}`);
-  } catch {
-    // 이미 연결된 경우 (HMR 재실행) 무시
+function initializeServices(): Services {
+  if (scoringEnvironment.mode === 'production') {
+    return { auth: getAuth(app), firestore: getFirestore(app), functions: getFunctions(app, 'asia-northeast3') };
   }
+  const connections = runtime.__aublLocalFirebaseConnections ??= new WeakMap();
+  const signature = JSON.stringify(scoringEnvironment);
+  const previous = connections.get(app);
+  if (previous) {
+    if (previous.signature !== signature) throw new Error('emulator-config-changed-reload-required');
+    return previous.services;
+  }
+  const localAuth = getAuth(app);
+  const localFirestore = initializeFirestore(app, { localCache: memoryLocalCache() });
+  const localFunctions = getFunctions(app, 'asia-northeast3');
+  const config = scoringEnvironment;
+  // Connect before exporting usable services. Unexpected initialization errors are fatal.
+  connectAuthEmulator(localAuth, `http://${config.auth.host}:${config.auth.port}`);
+  connectFirestoreEmulator(localFirestore, config.firestore.host, config.firestore.port);
+  connectFunctionsEmulator(localFunctions, config.functions.host, config.functions.port);
+  connectFunctionsEmulator(getFunctions(app), config.functions.host, config.functions.port);
+  const services = { auth: localAuth, firestore: localFirestore, functions: localFunctions };
+  connections.set(app, { signature, services });
+  return services;
 }
+
+const services = initializeServices();
+export const auth = services.auth;
+export const firestore = services.firestore;
+export const functions = services.functions;

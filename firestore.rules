@@ -40,6 +40,17 @@ service cloud.firestore {
       ]);
   }
 
+  // Server-owned publication is the privacy boundary, not a client UI flag.
+  function liveRecordArchived(matchId) {
+    return exists(/databases/(default)/documents/recordSources/$(matchId));
+  }
+  function canReadLiveRecord(matchId) {
+    return isAdmin() || !liveRecordArchived(matchId);
+  }
+  function canWriteLiveRecord(matchId) {
+    return !liveRecordArchived(matchId) && (isAdmin() || isScorer());
+  }
+
   function isCoachOfTeam(teamId) {
     return request.auth != null
       && coachRoleDoc().data.role == 'coach'
@@ -143,8 +154,50 @@ service cloud.firestore {
     // 경기 일정
     match /matches/{matchId} {
       allow read: if true;
-      allow create, delete: if isAdmin();
-      allow update: if isAdmin() || isScorerMatchUpdate();
+      allow create: if isAdmin() && !liveRecordArchived(matchId)
+        && !request.resource.data.keys().hasAny(['recordAuthority', 'officialRecordRevision']);
+      allow delete: if isAdmin() && !liveRecordArchived(matchId);
+      allow update: if !liveRecordArchived(matchId)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['recordAuthority', 'officialRecordRevision'])
+        && (isAdmin() || isScorerMatchUpdate());
+    }
+
+    // Reserved and closed until server-approved scopes and the scoped writer are connected.
+    // A test label or client-side manifest never grants access.
+    match /scoringTestRuns/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /recordSources/{matchId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /recordSourceJobs/{matchId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /recordArchives/{matchId} {
+      allow read: if isAdmin();
+      allow write: if false;
+      match /officialRevisions/{revisionId} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+      match /issues/{issueId} {
+        allow read: if isAdmin();
+        allow create: if isAdmin() && liveRecordArchived(matchId)
+          && request.resource.data.keys().hasOnly(['matchId', 'revision', 'payloadHash', 'category', 'status', 'note', 'evidence', 'actorUid', 'createdAt'])
+          && request.resource.data.matchId == matchId
+          && request.resource.data.actorUid == request.auth.uid
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.revision == get(/databases/$(database)/documents/recordSources/$(matchId)).data.revision
+          && request.resource.data.payloadHash == get(/databases/$(database)/documents/recordSources/$(matchId)).data.payloadHash
+          && request.resource.data.category in ['MODAL', 'ENGINE', 'PARSER', 'AGGREGATION', 'MAPPING', 'SOURCE', 'UNKNOWN']
+          && request.resource.data.status in ['OPEN', 'INVESTIGATING', 'FIXED', 'WONT_FIX']
+          && request.resource.data.note is string && request.resource.data.note.size() > 0 && request.resource.data.note.size() <= 4000
+          && request.resource.data.evidence is string && request.resource.data.evidence.size() <= 2000;
+        allow update, delete: if false;
+      }
     }
 
     // [수정됨] 공지사항 및 댓글 규칙
@@ -229,17 +282,64 @@ service cloud.firestore {
     }
 
     // 실시간 경기 상태 (스코어보드/문자중계)
+    // Opt-in v2 streams are private until a spectator-safe projection is deployed.
+    // No production match is migrated by this rule or by the client adapter.
+    match /scoringAtomicMatches/{streamId} {
+      function owner() {
+        return !liveRecordArchived(resource.data.matchId) && request.auth != null && (isAdmin() || isScorer())
+          && resource.data.ownerUid == request.auth.uid && resource.data.paused == false;
+      }
+      function validCommit() {
+        let after = request.resource.data;
+        let receipt = getAfter(/databases/$(database)/documents/scoringAtomicMatches/$(streamId)/commits/$(after.commitId)).data;
+        return owner()
+          && after.diff(resource.data).affectedKeys().hasOnly(['revision', 'commitId', 'payload', 'hash', 'updatedAt'])
+          && after.revision == resource.data.revision + 1
+          && after.commitId is string && after.commitId.matches('^[A-Za-z0-9_-]{1,100}$')
+          && after.payload is string && after.payload.size() <= 700000
+          && after.hash is string && after.hash.size() == 64
+          && after.updatedAt == request.time
+          && receipt.id == after.commitId && receipt.actorUid == request.auth.uid
+          && receipt.lockEpoch == resource.data.lockEpoch && receipt.expectedRevision == resource.data.revision
+          && receipt.revision == after.revision && receipt.hash == after.hash;
+      }
+      allow read: if isAdmin() || (!liveRecordArchived(resource.data.matchId) && request.auth != null && isScorer() && resource.data.ownerUid == request.auth.uid);
+      allow create: if isAdmin() && request.resource.data.version == 2 && request.resource.data.revision == 0
+        && request.resource.data.ownerUid is string && request.resource.data.matchId is string
+        && !liveRecordArchived(request.resource.data.matchId)
+        && request.resource.data.lockEpoch == 0 && request.resource.data.paused == false;
+      allow update: if validCommit() || (isAdmin() && !liveRecordArchived(resource.data.matchId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerUid', 'paused', 'lockEpoch'])
+        && request.resource.data.lockEpoch == resource.data.lockEpoch + 1);
+      allow delete: if false;
+      match /commits/{commitId} {
+        function head() { return get(/databases/$(database)/documents/scoringAtomicMatches/$(streamId)).data; }
+        allow read: if isAdmin() || (!liveRecordArchived(head().matchId) && request.auth != null && isScorer() && head().ownerUid == request.auth.uid);
+        allow create: if !liveRecordArchived(head().matchId) && request.auth != null && (isAdmin() || isScorer())
+          && head().ownerUid == request.auth.uid && head().paused == false
+          && request.resource.data.keys().hasOnly(['id', 'actorUid', 'lockEpoch', 'expectedRevision', 'revision', 'hash'])
+          && request.resource.data.id == commitId && request.resource.data.actorUid == request.auth.uid
+          && request.resource.data.lockEpoch == head().lockEpoch
+          && request.resource.data.expectedRevision == head().revision
+          && request.resource.data.revision == head().revision + 1
+          && getAfter(/databases/$(database)/documents/scoringAtomicMatches/$(streamId)).data.commitId == commitId
+          && getAfter(/databases/$(database)/documents/scoringAtomicMatches/$(streamId)).data.revision == request.resource.data.revision
+          && getAfter(/databases/$(database)/documents/scoringAtomicMatches/$(streamId)).data.hash == request.resource.data.hash;
+        allow update, delete: if false;
+      }
+    }
+
     match /matchStates/{matchId} {
-      allow read: if true;
-      allow write: if isAdmin() || isScorer();
+      allow read: if canReadLiveRecord(matchId);
+      allow write: if canWriteLiveRecord(matchId);
 
       match /feed/{entryId} {
-        allow read: if true;
-        allow write: if isAdmin() || isScorer();
+        allow read: if canReadLiveRecord(matchId);
+        allow write: if canWriteLiveRecord(matchId);
       }
       match /events/{entryId} {
-        allow read: if true;
-        allow write: if isAdmin() || isScorer();
+        allow read: if canReadLiveRecord(matchId);
+        allow write: if canWriteLiveRecord(matchId);
       }
 
       match /presence/{visitorId} {

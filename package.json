@@ -19,8 +19,18 @@
     "build": "vite build && node scripts/generate-og-pages.mjs",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.app.json --pretty false",
+    "test:scoring": "node --experimental-strip-types --test scripts/test-scoring-replay.mjs scripts/test-runner-matrix.mjs scripts/test-hit-play.mjs scripts/test-earned-runs.mjs scripts/test-scoring-safety.mjs scripts/test-modal-scoring-contract.mjs scripts/test-composite-play.mjs scripts/test-scoring-hardening.mjs scripts/test-atomic-scoring.mjs scripts/test-scoring-idempotency.mjs scripts/test-composite-kbo-audit.mjs scripts/test-scoring-integrity.mjs scripts/test-composite-special-stats.mjs scripts/test-defensive-fielding.mjs scripts/test-archive-scoring-review.mjs",
+    "test:scoring:e2e": "node scripts/test-scoring-e2e.mjs",
+    "test:scoring:firestore": "firebase emulators:exec --config firebase.scoring-test.json --only firestore --project demo-aubl-scoring \"node --experimental-strip-types --test scripts/test-scoring-firestore.mjs\"",
     "preview": "vite preview",
-    "check:ci": "npm run lint && npm run typecheck && npm run build"
+    "check:ci": "npm run lint && npm run typecheck && npm run build",
+    "test:record-sources": "node --experimental-strip-types --test scripts/test-record-source-policy.mjs scripts/test-record-source-live-access.mjs && functions/venv/bin/python scripts/test-record-source-backend.py",
+    "test:record-sources:emulator": "firebase emulators:exec --config firebase.scoring-test.json --only firestore --project demo-aubl-scoring \"node scripts/test-record-source-emulator.mjs\"",
+    "test:record-sources:store": "firebase emulators:exec --config firebase.scoring-test.json --only firestore --project demo-aubl-scoring \"node scripts/test-record-source-store-e2e.mjs\"",
+    "test:scoring:readiness": "node --experimental-strip-types scripts/test-modal-readiness.mjs",
+    "test:scoring:fielding-e2e": "node --experimental-strip-types scripts/test-defensive-fielding-e2e.mjs",
+    "test:scoring:boundaries": "node --experimental-strip-types --test scripts/test-scoring-boundaries.mjs scripts/test-scoring-environment-bootstrap.mjs",
+    "test:scoring:boundary-firestore": "firebase emulators:exec --config firebase.scoring-test.json --only firestore --project demo-aubl-scoring \"node --experimental-strip-types --test scripts/test-scoring-boundary-firestore.mjs\""
   },
   "dependencies": {
     "dompurify": "^3.3.1",

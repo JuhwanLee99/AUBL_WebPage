@@ -1,13 +1,15 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'node:path'
+import { LOCAL_SCORING_CSP, resolveScoringEnvironment } from './src/core/firebase/scoringEnvironment'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const scoringEnvironment = resolveScoringEnvironment(env)
   const apiUrl = (env.VITE_BACKEND_API_URL || '').trim()
   const isDefaultApiOrigin = /^https?:\/\/api\.aubl\.club\/?$/.test(apiUrl)
-  const proxyTarget =
+  const proxyTarget = scoringEnvironment.mode === 'local-emulator' ? scoringEnvironment.apiOrigin :
     env.VITE_BACKEND_PROXY_TARGET ||
     env.VITE_BACKEND_TEST_URL ||
     (apiUrl && !isDefaultApiOrigin ? apiUrl : '') ||
@@ -40,6 +42,10 @@ export default defineConfig(({ mode }) => {
       }),
     ],
     server: {
+      ...(scoringEnvironment.mode === 'local-emulator' ? {
+        host: '127.0.0.1',
+        headers: { 'Content-Security-Policy': LOCAL_SCORING_CSP },
+      } : {}),
       proxy: {
         '/api': {
           target: proxyTarget,
