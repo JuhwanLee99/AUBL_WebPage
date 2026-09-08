@@ -1,9 +1,10 @@
+import RecordSourceGate from '@shared/components/RecordSourceGate';
 import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ScoreboardFrame from '../components/ScoreboardFrame';
 import { useDemoStore } from '@shared/state/demoStore';
 
-export default function ScoreboardPage() {
+function ScoreboardPageContent() {
   const { state, actions } = useDemoStore();
   const { selectMatch } = actions;
   const { matchId } = useParams<{ matchId?: string }>();
@@ -38,4 +39,9 @@ export default function ScoreboardPage() {
       }}
     />
   );
+}
+
+export default function ScoreboardPage() {
+  const { state } = useDemoStore(); const { matchId } = useParams<{ matchId?: string }>();
+  return <RecordSourceGate matchId={matchId ?? state.activeMatchId}><ScoreboardPageContent key={matchId ?? state.activeMatchId} /></RecordSourceGate>;
 }

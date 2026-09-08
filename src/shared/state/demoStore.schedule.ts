@@ -24,6 +24,8 @@ export function normalizeMatches(matches: unknown): MatchSchedule[] {
     const match = entry as Partial<MatchSchedule>;
     return {
       id: typeof match.id === 'string' ? match.id : createFallbackMatchId(),
+      recordAuthority: match.recordAuthority === 'UNIQUE_PLAY' ? 'UNIQUE_PLAY' : undefined,
+      officialRecordRevision: typeof match.officialRecordRevision === 'string' ? match.officialRecordRevision : undefined,
       seasonId: typeof match.seasonId === 'number' && Number.isFinite(match.seasonId) ? Math.trunc(match.seasonId) : undefined,
       homeTeamId: typeof match.homeTeamId === 'string' ? match.homeTeamId : undefined,
       awayTeamId: typeof match.awayTeamId === 'string' ? match.awayTeamId : undefined,
@@ -40,11 +42,11 @@ export function normalizeMatches(matches: unknown): MatchSchedule[] {
       homeScore: typeof match.homeScore === 'number' ? match.homeScore : null,
       awayScore: typeof match.awayScore === 'number' ? match.awayScore : null,
       lineupPublic: typeof match.lineupPublic === 'boolean' ? match.lineupPublic : false,
-      lineups: normalizeLineups(match.lineups),
-      benches: normalizeBenches(match.benches),
-      notes: typeof match.notes === 'string' ? match.notes : undefined,
-      postGame: normalizePostGame(match.postGame),
-      manualEntryDraft: normalizePostGame(match.manualEntryDraft),
+      lineups: match.recordAuthority === 'UNIQUE_PLAY' ? undefined : normalizeLineups(match.lineups),
+      benches: match.recordAuthority === 'UNIQUE_PLAY' ? undefined : normalizeBenches(match.benches),
+      notes: match.recordAuthority !== 'UNIQUE_PLAY' && typeof match.notes === 'string' ? match.notes : undefined,
+      postGame: match.recordAuthority === 'UNIQUE_PLAY' ? undefined : normalizePostGame(match.postGame),
+      manualEntryDraft: match.recordAuthority === 'UNIQUE_PLAY' ? undefined : normalizePostGame(match.manualEntryDraft),
       deleted: match.deleted === true,
       deletedAt: typeof match.deletedAt === 'number' ? match.deletedAt : undefined,
       purgeAt: typeof match.purgeAt === 'number' ? match.purgeAt : undefined,
@@ -63,6 +65,8 @@ export function projectSpectatorMatch(match: MatchSchedule): MatchSchedule {
   const lineupVisible = Boolean(match.lineupPublic) || match.status === 'inProgress' || match.status === 'completed';
   return {
     id: match.id,
+    recordAuthority: match.recordAuthority,
+    officialRecordRevision: match.officialRecordRevision,
     seasonId: match.seasonId,
     homeTeamId: match.homeTeamId,
     awayTeamId: match.awayTeamId,
@@ -99,6 +103,9 @@ export function mergeMatches(base: MatchSchedule[], incoming: MatchSchedule[]) {
   base.forEach((match) => map.set(match.id, match));
   incoming.forEach((match) => {
     const existing = map.get(match.id);
+    // A pre-cutover query can finish after the official snapshot. Never downgrade
+    // an established boundary or restore its private fields from that stale result.
+    if (existing?.recordAuthority === 'UNIQUE_PLAY' && match.recordAuthority !== 'UNIQUE_PLAY') return;
     map.set(match.id, existing ? { ...existing, ...match } : match);
   });
   return Array.from(map.values());

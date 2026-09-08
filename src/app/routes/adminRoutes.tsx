@@ -13,6 +13,7 @@ import AdminPowerRankingPage from '../pages/admin/AdminPowerRankingPage';
 import AdminModerationPage from '../pages/admin/AdminModerationPage';
 import AdminAllStarVotingPage from '../pages/admin/AdminAllStarVotingPage';
 import AdminUniquePlaySyncPage from '../pages/admin/AdminUniquePlaySyncPage';
+import AdminRecordComparisonPage from '../pages/admin/AdminRecordComparisonPage';
 import { RequireAdmin } from '@shared/auth/RequireAdmin';
 import { RequireScorerOrAdmin } from '@shared/auth/RequireScorerOrAdmin';
 import { useAdmin } from '@shared/auth/useAdmin';
@@ -84,6 +85,7 @@ export const adminRoutes: RouteObject[] = [
         ),
       },
       { path: 'games', element: <AdminGamesPage /> },
+      { path: 'record-comparison', element: <RequireAdmin><AdminRecordComparisonPage /></RequireAdmin> },
       { path: 'games/:matchId', element: <AdminGameEditPage /> },
       {
         path: 'power-ranking',

@@ -6,6 +6,8 @@ import type {
   PostGameBatterLine,
   PostGameRecord,
 } from './demoStore';
+import { scoringTeamTotals, createScoringEventLookup, classifyRecordedPlateAppearance } from '../lib/scoringEventFacts.ts';
+import { applyCompositeProjection, normalizeCompositePlay } from '../lib/compositePlayEngine.ts';
 import { buildLineScoreFromFeed, formatUniqueName } from './demoStore.helpers';
 import { getBattingOrder } from './demoStore.lineup';
 
@@ -82,11 +84,18 @@ type BatterStat = {
   triples: number;
   hr: number;
   bb: number;
+  ibb?: number;
+  tb?: number;
   hbp: number;
   so: number;
   sac: number;
   fc: number;
   ci: number;
+  sh?: number;
+  sf?: number;
+  sb?: number;
+  cs?: number;
+  gdp?: number;
   rbi: number;
   r: number;
 };
@@ -167,28 +176,14 @@ export function calculateGameStats(record: GameRecord): BatterStatsBySide {
     return match ? match[1].trim() : null;
   };
 
+  const scoringEvents = createScoringEventLookup(record.events);
   record.feed.forEach((entry) => {
     const side: Side = entry.half === 'top' ? 'away' : 'home';
     const rawName = entry.batter?.trim();
     if (!rawName) return;
     const name = resolveName(rawName, side);
 
-    const normalized = entry.result.replace(/\s+/g, '');
-    let kind = '';
-
-    if (normalized.includes('홈런')) kind = 'hr';
-    else if (normalized.includes('3루타')) kind = 'triple';
-    else if (normalized.includes('2루타')) kind = 'double';
-    else if (normalized.includes('1루타')) kind = 'single';
-    else if (normalized.includes('고의') || normalized.toUpperCase().includes('IB')) kind = 'bb';
-    else if (normalized.includes('볼넷')) kind = 'bb';
-    else if (normalized.includes('몸에맞는공')) kind = 'hbp';
-    else if (normalized.includes('타격방해')) kind = 'ci';
-    else if (normalized.includes('야수선택') || normalized.toUpperCase().includes('F.C')) kind = 'fc';
-    else if (normalized.includes('희생플라이') || normalized.includes('희생번트')) kind = 'sac';
-    else if (normalized.includes('낫아웃')) kind = 'so_reach';
-    else if (normalized.includes('삼진')) kind = 'so';
-    else if (normalized.includes('아웃') && !normalized.includes('도루')) kind = 'out';
+    const kind = classifyRecordedPlateAppearance(entry.result, scoringEvents.get(entry));
 
     if (!kind) return;
 
@@ -241,6 +236,7 @@ export function calculateGameStats(record: GameRecord): BatterStatsBySide {
         stat.ab += 1;
         stat.so += 1;
         break;
+      case 'error':
       case 'out':
         stat.pa += 1;
         stat.ab += 1;
@@ -254,8 +250,13 @@ export function calculateGameStats(record: GameRecord): BatterStatsBySide {
     }
   });
 
-  record.events.forEach((event) => {
+  Array.from(scoringEvents.values()).forEach((event) => {
     const side: Side = event.half === 'top' ? 'away' : 'home';
+    if (event.compositePlay || event.type === 'composite') {
+      const composite = !event.manualResolve?.required && normalizeCompositePlay(event.compositePlay);
+      if (composite) applyCompositeProjection(composite, { batter: id => ensureStat(side, resolveName(id, side)) });
+      return;
+    }
     if (event.rbi && event.rbi > 0 && event.batter) {
       const batterName = resolveName(event.batter.trim(), side);
       const stat = ensureStat(side, batterName);
@@ -283,35 +284,7 @@ export function buildGameRecord(state: GameRecordSource): GameRecord {
 
   const chronologicalFeed = state.feed;
 
-  const liveHits = chronologicalFeed.reduce(
-    (acc, entry) => {
-      const offense: Side = entry.half === 'top' ? 'away' : 'home';
-      const text = entry.result.replace(/\s+/g, '');
-      if (
-        text.includes('1루타') ||
-        text.includes('2루타') ||
-        text.includes('3루타') ||
-        text.includes('홈런')
-      ) {
-        acc[offense] += 1;
-      }
-      return acc;
-    },
-    { home: 0, away: 0 },
-  );
-
-  const liveErrors = chronologicalFeed.reduce(
-    (acc, entry) => {
-      const text = entry.result.replace(/\s+/g, '');
-      const hasError = text.includes('실책') || /\bE[1-9]\b/i.test(text);
-      if (hasError) {
-        const side: Side = entry.half === 'top' ? 'home' : 'away';
-        acc[side] += 1;
-      }
-      return acc;
-    },
-    { home: 0, away: 0 },
-  );
+  const { hits: liveHits, errors: liveErrors } = scoringTeamTotals(state.events, chronologicalFeed);
 
   const baseLineScore =
     state.lineScore && (state.lineScore.home.length || state.lineScore.away.length)
@@ -468,10 +441,18 @@ export function buildPostGameRecord(
         triples: stat?.triples ?? 0,
         hr: stat?.hr ?? 0,
         bb: stat?.bb ?? 0,
+        ibb: stat?.ibb,
+        tb: stat?.tb,
         hbp: stat?.hbp ?? 0,
         so: stat?.so ?? 0,
         sac: stat?.sac ?? 0,
         fc: stat?.fc ?? 0,
+        ci: stat?.ci ?? 0,
+        sh: stat?.sh,
+        sf: stat?.sf,
+        sb: stat?.sb,
+        cs: stat?.cs,
+        gdp: stat?.gdp,
         avg,
       });
     };

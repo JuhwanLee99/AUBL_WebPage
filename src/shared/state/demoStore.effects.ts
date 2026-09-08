@@ -1,4 +1,6 @@
 import { auth, firestore } from '../firebase/client';
+import { hasOfficialAuthority } from '../lib/recordSourcePolicy';
+import { captureLiveRecordAccess, type LiveRecordAccess } from './demoStore.liveAccess';
 import {
   collection,
   deleteField,
@@ -138,8 +140,10 @@ export function subscribeActiveMatchState(params: {
 
   const matchId = activeMatchId;
   const stateDoc = doc(firestore, 'matchStates', matchId);
+  let cancelled = false;
 
   const hydrateCoreState = (core: Omit<SharedGameState, 'feed' | 'events'>) => {
+    if (cancelled || stateRef.current.activeMatchId !== matchId) return;
     skipFirestoreWriteRef.current = true;
     dispatch({
       type: 'hydrate',
@@ -184,7 +188,7 @@ export function subscribeActiveMatchState(params: {
       // ignore initial fetch errors; realtime listener below will retry on updates
     });
 
-  return onSnapshot(
+  const unsubscribe = onSnapshot(
     stateDoc,
     (snap) => {
       if (!snap.exists()) return;
@@ -203,6 +207,7 @@ export function subscribeActiveMatchState(params: {
       // ignore snapshot errors
     },
   );
+  return () => { cancelled = true; unsubscribe(); };
 }
 
 export function subscribeFeedAndEvents(params: {
@@ -228,6 +233,7 @@ export function subscribeFeedAndEvents(params: {
   if (!activeMatchId) return () => {};
 
   const matchId = activeMatchId;
+  let cancelled = false;
   const isScorer = stateRef.current.scorerUid === (auth.currentUser?.uid ?? null);
   if (isScorer && scorerMode) return () => {};
 
@@ -263,7 +269,7 @@ export function subscribeFeedAndEvents(params: {
         if (legacy.feedEntries.length > feedEntries.length) feedEntries = legacy.feedEntries;
         if (legacy.eventEntries.length > eventEntries.length) eventEntries = legacy.eventEntries;
       }
-      if (stateRef.current.activeMatchId !== matchId) return;
+      if (cancelled || stateRef.current.activeMatchId !== matchId) return;
       skipFirestoreWriteRef.current = true;
       lastFeedLengthRef.current = feedEntries.length;
       lastEventsLengthRef.current = eventEntries.length;
@@ -276,7 +282,7 @@ export function subscribeFeedAndEvents(params: {
       }
       try {
         const legacy = await loadLegacyFeedAndEvents(fallback);
-        if (stateRef.current.activeMatchId !== matchId) return;
+        if (cancelled || stateRef.current.activeMatchId !== matchId) return;
         skipFirestoreWriteRef.current = true;
         lastFeedLengthRef.current = legacy.feedEntries.length;
         lastEventsLengthRef.current = legacy.eventEntries.length;
@@ -289,14 +295,14 @@ export function subscribeFeedAndEvents(params: {
   };
   void prime();
 
-  if (completed) return () => {};
+  if (completed) return () => { cancelled = true; };
 
   const unsubFeed = onSnapshot(
     feedQuery,
     (snap) => {
       const fallback = { inning: stateRef.current.inning, half: stateRef.current.half };
       const feedEntries = normalizeFeed(snap.docs.map((docSnap) => docSnap.data()), fallback);
-      if (stateRef.current.activeMatchId !== matchId) return;
+      if (cancelled || stateRef.current.activeMatchId !== matchId) return;
       skipFirestoreWriteRef.current = true;
       lastFeedLengthRef.current = feedEntries.length;
       dispatch({ type: 'setFeed', feed: feedEntries });
@@ -311,7 +317,7 @@ export function subscribeFeedAndEvents(params: {
     (snap) => {
       const fallback = { inning: stateRef.current.inning, half: stateRef.current.half };
       const eventEntries = normalizeEvents(snap.docs.map((docSnap) => docSnap.data()), fallback);
-      if (stateRef.current.activeMatchId !== matchId) return;
+      if (cancelled || stateRef.current.activeMatchId !== matchId) return;
       skipFirestoreWriteRef.current = true;
       lastEventsLengthRef.current = eventEntries.length;
       dispatch({ type: 'setEvents', events: eventEntries });
@@ -322,6 +328,7 @@ export function subscribeFeedAndEvents(params: {
   );
 
   return () => {
+    cancelled = true;
     unsubFeed();
     unsubEvents();
   };
@@ -330,23 +337,32 @@ export function subscribeFeedAndEvents(params: {
 export function syncScorerLock(params: {
   scorerMode: boolean;
   activeMatchId: string | null;
+  getLiveRecordAccess: () => LiveRecordAccess;
   stateRef: RefLike<DemoState>;
   skipFirestoreWriteRef: RefLike<boolean>;
   dispatch: DemoDispatch;
   initialState: DemoState;
 }) {
-  const { scorerMode, activeMatchId, stateRef, skipFirestoreWriteRef, dispatch, initialState } = params;
+  const { scorerMode, activeMatchId, getLiveRecordAccess, stateRef, skipFirestoreWriteRef, dispatch, initialState } = params;
   if (!scorerMode) return;
   const matchId = activeMatchId;
   const user = auth.currentUser;
   if (!matchId || !user) return;
+  let cancelled = false;
+  const hasAccess = captureLiveRecordAccess(getLiveRecordAccess, matchId);
+  const canApply = () => !cancelled && hasAccess() && stateRef.current.activeMatchId === matchId
+    && auth.currentUser?.uid === user.uid
+    && !hasOfficialAuthority(stateRef.current.matches.find(match => match.id === matchId));
   const run = async () => {
+    if (!canApply()) return;
     const stateDoc = doc(firestore, 'matchStates', matchId);
     const now = Date.now();
     const roleLabel = await resolveUserRole(user, ADMIN_EMAILS);
+    if (!canApply()) return;
     // runTransaction은 BatchGetDocuments REST 요청을 사용하는데 한글 document ID에서
     // Firebase SDK가 잘못 처리하므로 getDoc + 조건부 setDoc으로 대체
     const snap = await getDoc(stateDoc);
+    if (!canApply()) return;
     const data = snap.exists()
       ? (snap.data() as SharedGameState & {
           scorerUid?: string | null;
@@ -373,7 +389,7 @@ export function syncScorerLock(params: {
       },
       { merge: true },
     );
-    if (stateRef.current.activeMatchId !== matchId) return;
+    if (!canApply()) return;
     skipFirestoreWriteRef.current = true;
     dispatch({
       type: 'hydrate',
@@ -391,6 +407,7 @@ export function syncScorerLock(params: {
   void run().catch(() => {
     // ignore lock acquisition errors
   });
+  return () => { cancelled = true; };
 }
 
 export function syncScorerLockHeartbeat(params: {
@@ -603,6 +620,7 @@ export function syncGameStateWrite(params: {
       const liveState = stateRef.current;
       const liveMatchId = liveState.activeMatchId;
       if (!liveMatchId || liveMatchId !== matchId) return;
+      if (liveState.scorerPaused || hasOfficialAuthority(liveState.matches.find(match => match.id === liveMatchId))) return;
       const snapshot = snapshotState(liveState);
       const { matches: _matches, feed: _feed, events: _events, onlineViewerCount: _onlineViewerCount, ...core } = snapshot;
       const key = JSON.stringify({ matchId: liveMatchId, core });
@@ -702,6 +720,7 @@ export function syncGameStateWrite(params: {
     };
 
     const scheduleRetry = () => {
+      if (hasOfficialAuthority(stateRef.current.matches.find(match => match.id === matchId))) return;
       if (writeTimerRef.current) return;
       writeTimerRef.current = setTimeout(() => {
         writeTimerRef.current = null;
@@ -769,6 +788,7 @@ export function syncScheduleMatchesWrite(params: {
       lineup.filter((slot) => slot.name && slot.name.trim() !== '');
 
     matches.forEach((match) => {
+      if (hasOfficialAuthority(match)) return;
       const preserveEmptySlots = (match.recordMode ?? 'official') === 'practice';
       const cleanedMatch = {
         ...match,
@@ -802,7 +822,7 @@ export function syncLiveScorePatch(params: {
   const matchId = activeMatchId;
   if (!matchId) return;
   const activeMatch = matches.find((match) => match.id === matchId);
-  if (!activeMatch || activeMatch.status !== 'inProgress') return;
+  if (!activeMatch || activeMatch.status !== 'inProgress' || hasOfficialAuthority(activeMatch)) return;
   const scoreKey = `${matchId}:${homeScore}:${awayScore}`;
   if (scoreKey === lastLiveScoreSyncKeyRef.current) return;
   lastLiveScoreSyncKeyRef.current = scoreKey;

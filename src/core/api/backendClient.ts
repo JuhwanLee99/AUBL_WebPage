@@ -2106,25 +2106,35 @@ export async function getOfficialPlayerGameLogs(
 // ── Firestore Import (admin) ──
 
 export async function triggerMatchImport(matchId: string): Promise<FirestoreImportResult | null> {
-  const raw = await fetchApi<unknown>(`/api/import/firestore/matches/${matchId}`, { method: 'POST' });
-  if (!raw || typeof raw !== 'object') return null;
-  const row = raw as Record<string, unknown>;
-  return {
-    gamesProcessed: toFiniteNumber(row.gamesProcessed) ?? 0,
-    batterLogsInserted: toFiniteNumber(row.batterLogsInserted) ?? 0,
-    pitcherLogsInserted: toFiniteNumber(row.pitcherLogsInserted) ?? 0,
-  };
+  void (matchId);
+  throw new Error('자체 기록의 공식 DB 임포트는 중단되었습니다. 유니크플레이 동기화와 관리자 기록 비교를 이용하세요.');
+  // Legacy import retained for reference only.
+  // 
+  //   const raw = await fetchApi<unknown>(`/api/import/firestore/matches/${matchId}`, { method: 'POST' });
+  //   if (!raw || typeof raw !== 'object') return null;
+  //   const row = raw as Record<string, unknown>;
+  //   return {
+  //     gamesProcessed: toFiniteNumber(row.gamesProcessed) ?? 0,
+  //     batterLogsInserted: toFiniteNumber(row.batterLogsInserted) ?? 0,
+  //     pitcherLogsInserted: toFiniteNumber(row.pitcherLogsInserted) ?? 0,
+  //   };
+  // 
 }
 
 export async function triggerBulkImport(): Promise<FirestoreImportResult | null> {
-  const raw = await fetchApi<unknown>('/api/import/firestore/matches', { method: 'POST' });
-  if (!raw || typeof raw !== 'object') return null;
-  const row = raw as Record<string, unknown>;
-  return {
-    gamesProcessed: toFiniteNumber(row.gamesProcessed) ?? 0,
-    batterLogsInserted: toFiniteNumber(row.batterLogsInserted) ?? 0,
-    pitcherLogsInserted: toFiniteNumber(row.pitcherLogsInserted) ?? 0,
-  };
+
+  throw new Error('자체 기록의 공식 DB 임포트는 중단되었습니다. 유니크플레이 동기화와 관리자 기록 비교를 이용하세요.');
+  // Legacy import retained for reference only.
+  // 
+  //   const raw = await fetchApi<unknown>('/api/import/firestore/matches', { method: 'POST' });
+  //   if (!raw || typeof raw !== 'object') return null;
+  //   const row = raw as Record<string, unknown>;
+  //   return {
+  //     gamesProcessed: toFiniteNumber(row.gamesProcessed) ?? 0,
+  //     batterLogsInserted: toFiniteNumber(row.batterLogsInserted) ?? 0,
+  //     pitcherLogsInserted: toFiniteNumber(row.pitcherLogsInserted) ?? 0,
+  //   };
+  // 
 }
 
 // ── UniquePlay manual sync (admin) ──

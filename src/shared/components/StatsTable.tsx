@@ -1,5 +1,7 @@
 import type { BatterStatLine, PitcherStatLine } from '../types/scoreStats';
 import './StatsTable.css';
+import { earnedRunsView } from '../lib/earnedRuns';
+import { batterRateView } from '../lib/batterRates';
 
 type StatsTableDensity = 'compact' | 'regular';
 
@@ -62,7 +64,6 @@ const stylesByDensity: Record<StatsTableDensity, StyleSet> = {
 };
 
 const formatFloat = (val: number) => (Number.isFinite(val) ? val.toFixed(3).replace(/^0/, '') : '-');
-const formatEra = (val: number) => (Number.isFinite(val) ? val.toFixed(2) : '-');
 
 export default function StatsTable({ title, stats, variant, density = 'regular', displayRows, subtitle }: StatsTableProps) {
   const isBatter = variant === 'batter';
@@ -76,18 +77,26 @@ export default function StatsTable({ title, stats, variant, density = 'regular',
         { key: 'h', label: '안타' },
         { key: 'r', label: '득점' },
         { key: 'rbi', label: '타점' },
-        { key: 'singles', label: '1루타' },
+        { key: 'tb', label: '루타' },
+    { key: 'singles', label: '1루타' },
         { key: 'doubles', label: '2루타' },
         { key: 'triples', label: '3루타' },
         { key: 'hr', label: '홈런' },
         { key: 'bb', label: '볼넷' },
+    { key: 'ibb', label: '고의4구' },
         { key: 'ci', label: '타격방해' },
         { key: 'fc', label: '야수선택' },
         { key: 'hbp', label: '사구' },
         { key: 'so', label: '삼진' },
-        { key: 'sac', label: density === 'regular' ? '희생플라이' : '희생' },
+        { key: 'sac', label: '희생 합계' },
+        { key: 'sh', label: '희생번트' },
+        { key: 'sf', label: '희생플라이' },
+        { key: 'sb', label: '도루' },
+        { key: 'cs', label: '도루실패' },
+        { key: 'gdp', label: '병살타' },
         { key: 'avg', label: '타율' },
         { key: 'obp', label: '출루율' },
+        { key: 'obpStatus', label: '출루율 상태' },
       ]
     : [
         { key: 'appearanceLabel', label: '등판', width: '60px' },
@@ -98,27 +107,35 @@ export default function StatsTable({ title, stats, variant, density = 'regular',
         { key: 'h', label: '피안타' },
         { key: 'hr', label: '피홈런' },
         { key: 'bb', label: '볼넷' },
+    { key: 'ibb', label: '고의4구' },
         { key: 'hbp', label: '사구' },
         { key: 'so', label: '탈삼진' },
         { key: 'r', label: '실점' },
         { key: 'er', label: '자책' },
         { key: 'era', label: 'ERA' },
+        { key: 'earnedRunsLabel', label: '자책 확인' },
       ];
 
   const rows = displayRows ?? (isBatter
     ? (stats as BatterStatLine[]).map((stat) => {
         const avg = stat.ab > 0 ? stat.h / stat.ab : 0;
-        const obpDen = stat.ab + stat.bb + stat.hbp + stat.sac + stat.ci;
-        const obp = obpDen > 0 ? (stat.h + stat.bb + stat.hbp + stat.ci) / obpDen : 0;
-        return { ...stat, avg: stat.ab > 0 ? formatFloat(avg) : '-', obp: obpDen > 0 ? formatFloat(obp) : '-' };
+        const rates = batterRateView(stat);
+        return {
+          ...stat,
+          avg: stat.ab > 0 ? formatFloat(avg) : '-',
+          sh: rates.sh ?? '-',
+          sf: rates.sf ?? '-',
+          obp: rates.obp !== null ? formatFloat(rates.obp) : '-',
+          obpStatus: rates.status,
+        };
       })
     : (stats as PitcherStatLine[]).map((stat) => {
         const ip = `${Math.floor(stat.outs / 3)}.${stat.outs % 3}`;
-        const era = stat.outs > 0 ? formatEra((stat.er * 27) / stat.outs) : '-';
+        const earned = earnedRunsView(stat.er, stat.outs, stat.earnedRunsStatus);
         return {
           ...stat,
           outsIp: ip,
-          era,
+          era: earned.era,
           pitchCombo: `${stat.pitches} (${stat.strikes}/${stat.balls})`,
           appearanceLabel:
             stat.appearanceLabel ?? (stat.appearanceOrder === 0 ? '선발' : stat.appearanceOrder ? `계투(${stat.appearanceOrder})` : '-'),
@@ -240,6 +257,11 @@ export default function StatsTable({ title, stats, variant, density = 'regular',
                       (() => {
                         if (isBatter && col.key === 'order') {
                           return (row as BatterStatLine).order ?? '-';
+                        }
+                        if (!isBatter && ['er', 'era', 'earnedRunsLabel'].includes(col.key)) {
+                          const pitcher = row as PitcherStatLine;
+                          const earned = earnedRunsView(pitcher.er, pitcher.outs, pitcher.earnedRunsStatus);
+                          return col.key === 'earnedRunsLabel' ? earned.label : earned[col.key as 'er' | 'era'];
                         }
                         if (!isBatter && col.key === 'outs') {
                           return (row as PitcherStatLine & { outsIp?: string }).outsIp ?? (row as PitcherStatLine).outs;

@@ -1,0 +1,22 @@
+.record-comparison { display: grid; gap: 20px; color: var(--season-ink, #182b44); }
+.record-comparison header, .record-comparison section { padding: 20px; border: 1px solid var(--season-line, #cad3dc); border-radius: 4px; background: var(--season-surface, #fff); min-width: 0; }
+.record-comparison h2, .record-comparison h3 { margin-top: 0; }
+.record-comparison label { display: block; margin: 12px 0; }
+.record-comparison select, .record-comparison textarea { display: block; width: 100%; box-sizing: border-box; padding: 10px; color: inherit; background: var(--season-surface, #fff); border: 1px solid var(--season-line, #cad3dc); border-radius: 4px; }
+.record-comparison textarea { min-height: 90px; }
+.record-comparison button { min-height: 44px; padding: 10px 16px; border: 1px solid var(--season-line, #cad3dc); border-radius: 4px; background: var(--season-navy-900, #132e50); color: white; cursor: pointer; }
+.record-comparison button:disabled { opacity: .5; cursor: not-allowed; }
+.record-comparison__actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.record-comparison__table { overflow-x: auto; margin: 16px 0; }
+.record-comparison table { width: 100%; border-collapse: collapse; min-width: 640px; }
+.record-comparison th, .record-comparison td { padding: 10px; text-align: left; border-bottom: 1px solid var(--season-line, #cad3dc); }
+.record-comparison small { display: block; font-weight: normal; overflow-wrap: anywhere; }
+.record-comparison tr[data-status="mismatch"] { background: #fff2dc; color: #563b16; }
+.record-comparison details { margin: 14px 0; }
+.record-comparison summary { cursor: pointer; font-weight: 700; }
+.record-comparison [data-testid="archive-scoring-review"] li { margin-block: 16px; overflow-wrap: anywhere; }
+.record-comparison [data-testid="archive-issue-draft"] { border-left: 4px solid var(--season-navy-900, #132e50); }
+.record-comparison [data-testid="archive-issue-draft"] button { margin: 4px 8px 4px 0; }
+.record-comparison pre { overflow: auto; max-height: 480px; padding: 12px; background: #f2f5f8; color: #182b44; font-size: 12px; }
+.record-comparison__originals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 760px) { .record-comparison__originals { grid-template-columns: 1fr; } .record-comparison header, .record-comparison section { padding: 14px; } }

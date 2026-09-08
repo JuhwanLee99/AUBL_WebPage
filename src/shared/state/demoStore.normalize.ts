@@ -10,6 +10,11 @@ import type {
   PostGameTotals,
 } from './demoStore';
 
+import { normalizeScoringTransition } from '../lib/scoringReplay.ts';
+import { normalizeEarnedRunsStatus } from '../lib/earnedRuns.ts';
+import { normalizeRunnerPlay } from '../lib/runnerPlayEngine.ts';
+import { normalizeCompositePlay } from '../lib/compositePlayEngine.ts';
+
 type Half = 'top' | 'bottom';
 
 export function normalizeFeed(feed: unknown, fallback: { inning: number; half: Half }): PlayLog[] {
@@ -79,6 +84,9 @@ export function normalizeEvents(events: unknown, fallback: { inning: number; hal
     }
     if (entry && typeof entry === 'object') {
       const e = entry as Partial<PlayEvent>;
+      const stateTransition = normalizeScoringTransition(e.stateTransition);
+      const runnerPlay = normalizeRunnerPlay(e.runnerPlay);
+      const compositePlay = normalizeCompositePlay(e.compositePlay);
       const half = e.half === 'top' || e.half === 'bottom' ? e.half : fallback.half;
       const battedBall =
         e.battedBall && typeof e.battedBall === 'object'
@@ -104,6 +112,106 @@ export function normalizeEvents(events: unknown, fallback: { inning: number; hal
           e.earnedRunsBy && typeof e.earnedRunsBy === 'object'
             ? (e.earnedRunsBy as Record<string, number>)
             : undefined,
+        source:
+          e.source && typeof e.source === 'object' && typeof (e.source as { kind?: unknown }).kind === 'string'
+            ? {
+                kind: ((e.source as { kind?: unknown }).kind as 'live' | 'text_feed_rebuild' | 'manual'),
+                provider: typeof (e.source as { provider?: unknown }).provider === 'string'
+                  ? ((e.source as { provider?: unknown }).provider as string)
+                  : undefined,
+              }
+            : undefined,
+        confidence: typeof e.confidence === 'number' ? e.confidence : undefined,
+        ambiguity: Array.isArray(e.ambiguity)
+          ? e.ambiguity.filter((value): value is string => typeof value === 'string')
+          : undefined,
+        evidence: Array.isArray(e.evidence)
+          ? e.evidence.filter((value): value is string => typeof value === 'string')
+          : undefined,
+        stateTransition,
+        runnerPlay,
+        compositePlay,
+        // Preserve the captured roster, including invalid evidence. Attribution
+        // validates it against the canonical play; never rebuild from today's lineup.
+        ...(e.defensiveSnapshot === undefined ? {} : { defensiveSnapshot: structuredClone(e.defensiveSnapshot) }),
+        rebuildOrigin: e.rebuildOrigin && typeof e.rebuildOrigin.eventId === 'string' &&
+          Number.isSafeInteger(e.rebuildOrigin.fragmentIndex) && e.rebuildOrigin.fragmentIndex >= 0 &&
+          Number.isSafeInteger(e.rebuildOrigin.fragmentCount) && e.rebuildOrigin.fragmentCount > e.rebuildOrigin.fragmentIndex
+          ? { ...e.rebuildOrigin } : undefined,
+        manualResolve:
+          (e.stateTransition !== undefined && !stateTransition) || (e.runnerPlay !== undefined && !runnerPlay) ||
+          (e.compositePlay !== undefined && !compositePlay) || (e.type === 'composite' && !compositePlay)
+            ? { required: true, reasons: ['저장된 상태 전이 정보가 손상되었습니다.'] }
+            : e.manualResolve && typeof e.manualResolve === 'object'
+            ? {
+                required: (e.manualResolve as { required?: unknown }).required === true,
+                reasons: Array.isArray((e.manualResolve as { reasons?: unknown }).reasons)
+                    ? ((e.manualResolve as { reasons?: unknown[] }).reasons ?? []).filter(
+                        (reason): reason is string => typeof reason === 'string',
+                      )
+                    : undefined,
+              }
+            : undefined,
+        corrections: Array.isArray(e.corrections)
+          ? e.corrections.filter((value): value is string => typeof value === 'string')
+          : undefined,
+        outcome: typeof e.outcome === 'string' ? e.outcome : undefined,
+        penalty:
+          e.penalty && typeof e.penalty === 'object'
+            ? {
+                kind: typeof (e.penalty as { kind?: unknown }).kind === 'string'
+                  ? String((e.penalty as { kind?: unknown }).kind)
+                  : '',
+                official:
+                  typeof (e.penalty as { official?: unknown }).official === 'boolean'
+                    ? ((e.penalty as { official?: unknown }).official as boolean)
+                    : undefined,
+              }
+            : undefined,
+        substitution:
+          e.substitution && typeof e.substitution === 'object'
+            ? {
+                side: ((e.substitution as { side?: unknown }).side === 'home' || (e.substitution as { side?: unknown }).side === 'away')
+                  ? ((e.substitution as { side?: unknown }).side as 'home' | 'away')
+                  : 'home',
+                action: ((e.substitution as { action?: unknown }).action === 'replace_defense' ||
+                (e.substitution as { action?: unknown }).action === 'pinch_hit' ||
+                (e.substitution as { action?: unknown }).action === 'pinch_runner' ||
+                (e.substitution as { action?: unknown }).action === 'position_change' ||
+                (e.substitution as { action?: unknown }).action === 'substitution' ||
+                (e.substitution as { action?: unknown }).action === 'unknown')
+                  ? ((e.substitution as { action?: unknown }).action as
+                      | 'replace_defense'
+                      | 'pinch_hit'
+                      | 'pinch_runner'
+                      | 'position_change'
+                      | 'substitution'
+                      | 'unknown')
+                  : 'unknown',
+                actor: typeof (e.substitution as { actor?: unknown }).actor === 'string'
+                  ? ((e.substitution as { actor?: unknown }).actor as string)
+                  : undefined,
+                atPitch:
+                  typeof (e.substitution as { atPitch?: unknown }).atPitch === 'number'
+                    ? ((e.substitution as { atPitch?: unknown }).atPitch as number)
+                    : undefined,
+                atInning:
+                  typeof (e.substitution as { atInning?: unknown }).atInning === 'number'
+                    ? ((e.substitution as { atInning?: unknown }).atInning as number)
+                    : undefined,
+                atHalf:
+                  (e.substitution as { atHalf?: unknown }).atHalf === 'top' ||
+                  (e.substitution as { atHalf?: unknown }).atHalf === 'bottom'
+                    ? ((e.substitution as { atHalf?: unknown }).atHalf as 'top' | 'bottom')
+                    : undefined,
+              }
+            : undefined,
+        officialAdjust:
+          e.officialAdjust === true
+            ? true
+            : e.officialAdjust === false
+              ? false
+              : undefined,
         createdAt: typeof e.createdAt === 'number' ? e.createdAt : undefined,
         eventId: typeof e.eventId === 'string' ? e.eventId : undefined,
       };
@@ -233,6 +341,7 @@ function normalizePitcherLine(entry: unknown): PostGamePitcherLine | null {
     if (val !== undefined) (out as Record<string, unknown>)[key] = val;
   });
   if (typeof p.result === 'string' && p.result.trim()) out.result = p.result.trim();
+  out.earnedRunsStatus = normalizeEarnedRunsStatus(p.earnedRunsStatus, p.er);
   return out as PostGamePitcherLine;
 }
 
@@ -278,6 +387,11 @@ function normalizeBatterLine(entry: unknown): PostGameBatterLine | null {
     'rbi',
     'r',
     'sb',
+    'ci',
+    'sh',
+    'sf',
+    'cs',
+    'gdp',
     'avg',
     'seasonAvg',
   ].forEach((k) => {

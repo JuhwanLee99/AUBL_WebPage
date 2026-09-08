@@ -10,6 +10,7 @@ const tabs = [
   { path: '/admin/roles', label: '계정 권한', requiresAdmin: true },
   { path: '/admin/games', label: '경기 기록 수정', requiresGameEditor: true },
   { path: '/admin/unique-play-sync', label: 'UniquePlay 동기화', requiresAdmin: true },
+  { path: '/admin/record-comparison', label: '공식·자체 기록 비교', requiresAdmin: true },
   { path: '/admin/moderation', label: '신고/차단 관리', requiresAdmin: true },
   { path: '/admin/allstar-voting', label: '올스타 투표 관리', requiresAdmin: true },
   { path: '/admin/power-ranking', label: '파워랭킹 재계산', requiresAdmin: true },

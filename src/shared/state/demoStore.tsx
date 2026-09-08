@@ -1,3 +1,4 @@
+import { attachCompositeDefensiveSnapshots, type DefensiveSnapshot } from '../lib/defensiveFielding.ts';
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState, useCallback } from 'react';
 import { getIdTokenResult, onIdTokenChanged } from 'firebase/auth';
 import {
@@ -9,7 +10,20 @@ import {
   getDocs,
 } from 'firebase/firestore';
 import { auth, firestore } from '../firebase/client';
+import { useRecordSource } from './useRecordSource';
+import { hasOfficialAuthority } from '../lib/recordSourcePolicy';
+import { clearLiveRecordState, redactLiveScheduleRecord, type LiveRecordAccess } from './demoStore.liveAccess';
 import type { LeagueDivision } from '../types';
+import { attachScoringTransition, scoringStateIssues } from '../lib/scoringReplay.ts';
+import type { ScoringTransition, ScoringRejection } from '../lib/scoringReplay.ts';
+import { resolveRunnerPlay, runnerMovementSummary } from '../lib/runnerPlayEngine.ts';
+import type { RunnerPlayInput, RunnerPlayRecord } from '../lib/runnerPlayEngine.ts';
+import { sacrificeInputIssue, droppedThirdStrikeInputIssue, multipleOutInputIssue, legacyThirdOutIssue, miscPlayKind, miscPlayInputIssue } from '../lib/scoringInputSafety.ts';
+import { resolveHitPlay } from '../lib/hitPlayAdapter.ts';
+import { captureCompositeContext, resolveCompositePlay } from '../lib/compositePlayEngine.ts';
+import { formatCompositeFeed } from '../lib/compositePlayDisplay.ts';
+import type { CompositeContext, CompositeInput, CompositeRecord } from '../lib/compositePlayEngine.ts';
+import type { HitRunnerReview } from '../lib/hitPlayAdapter.ts';
 import {
   ADMIN_EMAILS,
   FEED_LIMIT,
@@ -63,6 +77,8 @@ import { normalizeState, shouldTrackHistory, snapshotState } from './demoStore.s
 export { canPitcherBat };
 export { buildGameRecord };
 
+import type { EarnedRunsStatus } from '../lib/earnedRuns.ts';
+
 export type Half = 'top' | 'bottom';
 
 export type Bases = (string | null)[];
@@ -108,15 +124,22 @@ export type PostGameBatterLine = {
   seasonAvg?: number;
   // ▼▼▼ 추가된 필드 ▼▼▼
   pa?: number;      // 타석
+  tb?: number;
   singles?: number; // 1루타
   doubles?: number; // 2루타
   triples?: number; // 3루타
   hr?: number;      // 홈런
-  bb?: number;      // 볼넷
+  bb?: number;
+  ibb?: number;      // 볼넷
   hbp?: number;     // 사구
   so?: number;      // 삼진
   sac?: number;     // 희생타
   fc?: number;      // 야수선택
+  ci?: number;      // 타격방해
+  sh?: number;      // 희생번트 (미확정이면 생략)
+  sf?: number;      // 희생플라이 (미확정이면 생략)
+  cs?: number;      // 도루실패
+  gdp?: number;     // 병살타
   // ▲▲▲ 추가된 필드 ▲▲▲
 };
 
@@ -130,10 +153,12 @@ export type PostGamePitcherLine = {
   h?: number;
   hr?: number;
   bb?: number;
+  ibb?: number;
   hbp?: number;
   so?: number;
   r?: number;
   er?: number;
+  earnedRunsStatus?: EarnedRunsStatus;
   pitches?: number;
   wp?: number;
   bk?: number;
@@ -157,6 +182,8 @@ export type MatchScoreInputMode = 'live' | 'manual';
 
 export interface MatchSchedule {
   id: string;
+  recordAuthority?: 'UNIQUE_PLAY';
+  officialRecordRevision?: string;
   seasonId?: number;
   homeTeamId?: string;
   awayTeamId?: string;
@@ -234,6 +261,11 @@ export interface PlayLog {
 }
 
 export interface PlayEvent {
+  defensiveSnapshot?: DefensiveSnapshot;
+  compositePlay?: CompositeRecord;
+  runnerPlay?: RunnerPlayRecord;
+  stateTransition?: ScoringTransition;
+  rebuildOrigin?: { eventId: string; fragmentIndex: number; fragmentCount: number };
   inning: number;
   half: Half;
   order: number;
@@ -248,11 +280,44 @@ export interface PlayEvent {
   rbi?: number;
   dpRoute?: number[];
   earnedRunsBy?: Record<string, number>;
+  source?: {
+    kind: 'live' | 'text_feed_rebuild' | 'manual';
+    provider?: string;
+  };
+  confidence?: number;
+  ambiguity?: string[];
+  evidence?: string[];
+  manualResolve?: {
+    required: boolean;
+    reasons?: string[];
+  };
+  corrections?: string[];
+  outcome?: string;
+  penalty?: {
+    kind: string;
+    official?: boolean;
+  };
+  substitution?: {
+    side: 'home' | 'away';
+    action:
+      | 'replace_defense'
+      | 'pinch_hit'
+      | 'pinch_runner'
+      | 'position_change'
+      | 'substitution'
+      | 'unknown';
+    actor?: string;
+    atPitch?: number;
+    atInning?: number;
+    atHalf?: Half;
+  };
+  officialAdjust?: boolean;
   createdAt?: number;
   eventId?: string;
 }
 
 export interface DemoSnapshot {
+  scoringRejections?: ScoringRejection[];
   inning: number;
   half: Half;
   balls: number;
@@ -344,11 +409,13 @@ type Action =
   | { type: 'strikeOut'; strikeType?: 'swinging' | 'looking' }
   | { type: 'droppedThirdStrike'; variant?: 'strikeout' | 'reach' | 'tag_out' | 'force_out'; strikeType?: 'swinging' | 'looking'; runnerOuts?: string[] }
   | { type: 'advanceRunners'; selections: RunnerAdvanceSelections; message: string; preserveLastPlay?: boolean }
+  | { type: 'recordRunnerPlay'; input: RunnerPlayInput }
+  | { type: 'recordCompositePlay'; input: CompositeInput }
   | { type: 'out'; battedBall?: BattedBallDetails | null }
   | { type: 'outWithMessage'; note: string; battedBall?: BattedBallDetails | null }
   | { type: 'doublePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[]; route?: number[]; runnerAdvancements?: Record<number, number> }
   | { type: 'triplePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[]; route?: number[]; runnerAdvancements?: Record<number, number> }
-  | { type: 'hit'; bases: 1 | 2 | 3 | 4; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null }
+  | { type: 'hit'; bases: 1 | 2 | 3 | 4; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null; review?: HitRunnerReview }
   | { type: 'fielderChoice'; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null; context?: string }
   | { type: 'walk' }
   | { type: 'intentionalWalk' }
@@ -502,16 +569,131 @@ function isLockedByOther(state: DemoState): boolean {
   return owner !== current;
 }
 
-function reducer(state: DemoState, action: Action): DemoState {
+const SCORING_ENGINE_FEATURE_KEY = 'aubl-scoring-engine-v1';
+
+function isScoringEngineEnabled(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    const value = window.localStorage.getItem(SCORING_ENGINE_FEATURE_KEY);
+    if (value === null) return true;
+    return !['0', 'false', 'off', 'disabled'].includes(value.trim().toLowerCase());
+  } catch {
+    return true;
+  }
+}
+
+type ScoringEventMeta = {
+  eventTypeHint?: string;
+  source?: PlayEvent['source'];
+  confidence?: number;
+  ambiguity?: string[];
+  evidence?: string[];
+  manualResolve?: PlayEvent['manualResolve'];
+  corrections?: string[];
+  outcome?: string;
+  penalty?: PlayEvent['penalty'];
+  substitution?: PlayEvent['substitution'];
+  officialAdjust?: boolean;
+};
+
+type StateInvariantResult = { ok: true } | { ok: false; reason: string };
+
+function validateStateInvariant(state: DemoState): StateInvariantResult {
+  const issues = scoringStateIssues(state);
+  if (issues.length) return { ok: false, reason: issues.join(' / ') };
+  if (!Number.isSafeInteger(state.pitchCount) || state.pitchCount < 0) return { ok: false, reason: 'invalid pitch count' };
+  return { ok: true };
+}
+
+function withRejectedTransition(state: DemoState, reason: string, meta: ScoringEventMeta): DemoState {
+  const message = `기록 반려(규칙 검증 실패): ${reason}`;
+  return {
+    ...state,
+    scoringRejections: [...(state.scoringRejections ?? []), {
+      id: `rejected-${Date.now()}-${state.scoringRejections?.length ?? 0}`,
+      matchId: state.activeMatchId, createdAt: Date.now(), eventType: meta.eventTypeHint ?? 'play', reason,
+    }],
+    lastPlay: message,
+    feed: pushFeed(state.feed, createLogEntryForBaserunning(state, message, state.pitchCount)),
+    events: state.events,
+    // 이전 상태 유지로 되돌림
+  };
+}
+
+function attachScoringEventMeta(nextState: DemoState, previousState: DemoState, meta: ScoringEventMeta): DemoState {
+  const defaultMeta: ScoringEventMeta = {
+    source: { kind: 'live', provider: 'reducer' },
+    confidence: 1,
+    ...meta,
+  };
+  const events = attachScoringTransition(previousState.events, nextState.events, previousState, nextState, (event) => ({
+          ...event,
+          source: { ...event.source, ...defaultMeta.source, kind: defaultMeta.source?.kind ?? event.source?.kind ?? 'live' },
+          confidence: defaultMeta.confidence,
+          ambiguity: defaultMeta.ambiguity ?? event.ambiguity ?? [],
+          evidence: defaultMeta.evidence ?? event.evidence ?? [],
+          manualResolve: defaultMeta.manualResolve ?? event.manualResolve,
+          corrections: defaultMeta.corrections ?? event.corrections,
+          outcome: defaultMeta.outcome ?? event.outcome,
+          penalty: defaultMeta.penalty ?? event.penalty,
+          substitution: defaultMeta.substitution ?? event.substitution,
+          officialAdjust: defaultMeta.officialAdjust ?? event.officialAdjust,
+        }));
+  return { ...nextState, events };
+}
+
+function applyScoringEvent(
+  state: DemoState,
+  applyTransition: () => DemoState,
+  meta: ScoringEventMeta,
+): DemoState {
+  const nextState = applyTransition();
+  // Preserve identity for idempotent retries so metadata cannot create an undo entry.
+  if (nextState === state) return state;
+  const invariant = validateStateInvariant(nextState);
+  if (!isScoringEngineEnabled()) return nextState;
+  if (!invariant.ok) {
+    return withRejectedTransition(state, invariant.reason, meta);
+  }
+  return attachScoringEventMeta(nextState, state, meta);
+}
+
+function reducerWithoutDefensiveSnapshots(state: DemoState, action: Action): DemoState {
   if (action.type === 'hydrate') {
     return normalizeState(initialState, action.state);
+  }
+  // History and composite actions must not bypass the current scorer's lock.
+  // Expired ownership is not permission to mutate a match without reclaiming it.
+  if (action.type === 'undo' || action.type === 'redo' || action.type === 'recordCompositePlay') {
+    const uid = auth.currentUser?.uid;
+    const ownerMismatch = Boolean(state.activeMatchId && (!uid || state.scorerUid !== uid));
+    if (state.scorerPaused || isLockedByOther(state) || ownerMismatch) {
+      if (action.type === 'recordCompositePlay') {
+        return withRejectedTransition(state, '기록 권한 또는 일시정지 상태가 변경되었습니다. 기록 권한을 다시 확보한 뒤 입력 내용을 확인하세요.', {
+          eventTypeHint: 'composite', source: { kind: 'live', provider: 'composite-modal-v1' },
+        });
+      }
+      return state;
+    }
+  }
+  if (action.type === 'recordCompositePlay' && (!state.gameStarted || state.gameOver || !state.activeMatchId)) {
+    return withRejectedTransition(state, '진행 중인 경기가 아닙니다. 복합 플레이를 적용하지 않았습니다.', {
+      eventTypeHint: 'composite', source: { kind: 'live', provider: 'composite-modal-v1' },
+    });
   }
   if (action.type === 'undo') {
     if (!state.history.length) return state;
     const previous = state.history[state.history.length - 1];
+    if (previous.activeMatchId !== state.activeMatchId) return state;
     const current = snapshotState(state);
     return {
       ...previous,
+      scorerUid: state.scorerUid,
+      scorerName: state.scorerName,
+      scorerEmail: state.scorerEmail,
+      scorerRole: state.scorerRole,
+      scorerLockedAt: state.scorerLockedAt,
+      scorerPaused: state.scorerPaused,
       history: state.history.slice(0, -1),
       futureHistory: [...state.futureHistory, current],
     };
@@ -519,9 +701,16 @@ function reducer(state: DemoState, action: Action): DemoState {
   if (action.type === 'redo') {
     if (!state.futureHistory.length) return state;
     const next = state.futureHistory[state.futureHistory.length - 1];
+    if (next.activeMatchId !== state.activeMatchId) return state;
     const current = snapshotState(state);
     return {
       ...next,
+      scorerUid: state.scorerUid,
+      scorerName: state.scorerName,
+      scorerEmail: state.scorerEmail,
+      scorerRole: state.scorerRole,
+      scorerLockedAt: state.scorerLockedAt,
+      scorerPaused: state.scorerPaused,
       history: [...state.history, current],
       futureHistory: state.futureHistory.slice(0, -1),
     };
@@ -599,7 +788,7 @@ function reducer(state: DemoState, action: Action): DemoState {
       };
     case 'ball':
       if (state.balls >= 3) {
-        nextState = applyWalk(state, '볼넷', state.pitchCount + 1);
+        nextState = applyScoringEvent(state, () => applyWalk(state, '볼넷', state.pitchCount + 1), { eventTypeHint: 'walk' });
       } else {
         const pitchCount = state.pitchCount + 1;
         nextState = {
@@ -620,7 +809,11 @@ function reducer(state: DemoState, action: Action): DemoState {
             : '스트라이크';
       if (state.strikes >= 2) {
         const strikeOutLabel = action.strikeType === 'looking' ? '삼진(루킹)' : '삼진';
-        nextState = applyOut(state, strikeOutLabel, { pitchNumber: state.pitchCount + 1, strikeType: action.strikeType });
+        nextState = applyScoringEvent(
+          state,
+          () => applyOut(state, strikeOutLabel, { pitchNumber: state.pitchCount + 1, strikeType: action.strikeType }),
+          { eventTypeHint: 'out' },
+        );
       } else {
         const pitchCount = state.pitchCount + 1;
         nextState = {
@@ -639,7 +832,11 @@ function reducer(state: DemoState, action: Action): DemoState {
 
       // 2스트라이크 + 번트 파울 = 쓰리번트 아웃
       if (state.strikes >= 2 && isBuntFoul) {
-        nextState = applyOut(state, '쓰리번트 아웃', { pitchNumber: state.pitchCount + 1 });
+        nextState = applyScoringEvent(
+          state,
+          () => applyOut(state, '쓰리번트 아웃', { pitchNumber: state.pitchCount + 1 }),
+          { eventTypeHint: 'out' },
+        );
       } else if (state.strikes >= 2) {
         // 2스트라이크에서 일반 파울: 스트라이크 카운트 유지
         const pitchCount = state.pitchCount + 1;
@@ -664,77 +861,165 @@ function reducer(state: DemoState, action: Action): DemoState {
     }
     case 'strikeOut': {
       const strikeLabel = action.strikeType === 'looking' ? '삼진(루킹)' : '삼진';
-      nextState = applyOut(state, strikeLabel, { pitchNumber: state.pitchCount + 1, strikeType: action.strikeType });
+      nextState = applyScoringEvent(
+        state,
+        () => applyOut(state, strikeLabel, { pitchNumber: state.pitchCount + 1, strikeType: action.strikeType }),
+        { eventTypeHint: 'out' },
+      );
       break;
     }
     case 'droppedThirdStrike': {
-      if (action.variant === 'strikeout') {
-        const strikeLabel = action.strikeType === 'looking' ? '삼진(루킹)' : '삼진';
-        nextState = applyOut(state, strikeLabel, { pitchNumber: state.pitchCount + 1, strikeType: action.strikeType });
-      } else if (action.variant === 'tag_out') {
-        const tagLabel = action.strikeType === 'looking' ? '삼진 낫아웃 실패(포수 태그/루킹)' : '삼진 낫아웃 실패(포수 태그)';
-        nextState = applyOut(state, tagLabel, { pitchNumber: state.pitchCount + 1, strikeType: action.strikeType });
-      } else if (action.variant === 'force_out') {
-        const forceLabel = action.strikeType === 'looking' ? '삼진 낫아웃 실패(1루 포스/루킹)' : '삼진 낫아웃 실패(1루 포스)';
-        nextState = applyOut(state, forceLabel, { pitchNumber: state.pitchCount + 1, strikeType: action.strikeType });
-      } else {
-        nextState = applyDroppedThirdStrike(state, action.strikeType);
-      }
-      if (action.runnerOuts && action.runnerOuts.length) {
-        nextState = applyRunnerOutsByName(nextState, action.runnerOuts);
-      }
+      nextState = applyScoringEvent(
+        state,
+        () => {
+          const baseState =
+            action.variant === 'strikeout'
+              ? applyOut(state, action.strikeType === 'looking' ? '삼진(루킹)' : '삼진', {
+                  pitchNumber: state.pitchCount + 1,
+                  strikeType: action.strikeType,
+                })
+              : action.variant === 'tag_out'
+                ? applyOut(state, action.strikeType === 'looking' ? '삼진 낫아웃 실패(포수 태그/루킹)' : '삼진 낫아웃 실패(포수 태그)', {
+                    pitchNumber: state.pitchCount + 1,
+                    strikeType: action.strikeType,
+                  })
+                : action.variant === 'force_out'
+                  ? applyOut(
+                      state,
+                      action.strikeType === 'looking' ? '삼진 낫아웃 실패(1루 포스/루킹)' : '삼진 낫아웃 실패(1루 포스)',
+                      { pitchNumber: state.pitchCount + 1, strikeType: action.strikeType },
+                    )
+                  : applyDroppedThirdStrike(state, action.strikeType);
+          if (action.variant === 'strikeout' || action.variant === 'tag_out' || action.variant === 'force_out') {
+            return action.runnerOuts && action.runnerOuts.length
+              ? applyRunnerOutsByName(baseState, action.runnerOuts)
+              : baseState;
+          }
+          if (!action.runnerOuts || action.runnerOuts.length === 0) return baseState;
+          return applyRunnerOutsByName(baseState, action.runnerOuts);
+        },
+        { eventTypeHint: 'out', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     }
     case 'out':
-      nextState = applyOut(state, '아웃', { pitchNumber: state.pitchCount + 1, battedBall: action.battedBall });
+      nextState = applyScoringEvent(
+        state,
+        () => applyOut(state, '아웃', { pitchNumber: state.pitchCount + 1, battedBall: action.battedBall }),
+        { eventTypeHint: 'out', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'outWithMessage':
-      nextState = applyOut(state, action.note, { pitchNumber: state.pitchCount + 1, battedBall: action.battedBall });
+      nextState = applyScoringEvent(
+        state,
+        () => applyOut(state, action.note, { pitchNumber: state.pitchCount + 1, battedBall: action.battedBall }),
+        { eventTypeHint: 'out', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'doublePlay':
-      nextState = applyDoublePlay(state, 2, '병살타', action.battedBall, action.selectedRunners, action.route, action.runnerAdvancements);
+      nextState = applyScoringEvent(
+        state,
+        () => applyDoublePlay(state, 2, '병살타', action.battedBall, action.selectedRunners, action.route, action.runnerAdvancements),
+        { eventTypeHint: 'out', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'triplePlay':
-      nextState = applyDoublePlay(state, 3, '삼중살', action.battedBall, action.selectedRunners, action.route, action.runnerAdvancements);
+      nextState = applyScoringEvent(
+        state,
+        () => applyDoublePlay(state, 3, '삼중살', action.battedBall, action.selectedRunners, action.route, action.runnerAdvancements),
+        { eventTypeHint: 'out', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'hit':
-      nextState = applyHitWithAdvances(state, action.bases, state.pitchCount + 1, action.advances, action.battedBall);
+      nextState = applyScoringEvent(
+        state,
+        () => applyHitWithAdvances(state, action.bases, state.pitchCount + 1, action.advances, action.battedBall, action.review),
+        { eventTypeHint: 'hit', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'fielderChoice':
-      nextState = applyFielderChoice(state, state.pitchCount + 1, action.advances, action.battedBall, action.context);
+      nextState = applyScoringEvent(
+        state,
+        () => applyFielderChoice(state, state.pitchCount + 1, action.advances, action.battedBall, action.context),
+        { eventTypeHint: 'fc', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'walk':
-      nextState = applyWalk(state, '볼넷', state.pitchCount + 1);
+      nextState = applyScoringEvent(
+        state,
+        () => applyWalk(state, '볼넷', state.pitchCount + 1),
+        { eventTypeHint: 'walk', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'intentionalWalk':
-      nextState = applyWalk(state, '고의4구', state.pitchCount + 1);
+      nextState = applyScoringEvent(
+        state,
+        () => applyWalk(state, '고의4구', state.pitchCount + 1),
+        { eventTypeHint: 'walk', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'catcherInterference':
-      nextState = applyWalk(state, '타격방해', state.pitchCount + 1);
+      nextState = applyScoringEvent(
+        state,
+        () => applyWalk(state, '타격방해', state.pitchCount + 1),
+        { eventTypeHint: 'ci', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'hbp':
-      nextState = applyWalk(state, '몸에 맞는 공', state.pitchCount + 1);
+      nextState = applyScoringEvent(
+        state,
+        () => applyWalk(state, '몸에 맞는 공', state.pitchCount + 1),
+        { eventTypeHint: 'hbp', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'sac':
-      nextState = applySacrifice(state, state.pitchCount + 1, action.battedBall, action.sacType ?? 'fly');
+      nextState = applyScoringEvent(
+        state,
+        () => applySacrifice(state, state.pitchCount + 1, action.battedBall, action.sacType ?? 'fly'),
+        { eventTypeHint: 'sac', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'error':
-      nextState = applyError(state, action.details);
+      nextState = applyScoringEvent(
+        state,
+        () => applyError(state, action.details),
+        { eventTypeHint: 'error', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'stealSuccess':
-      nextState = applySteal(state, true);
+      nextState = applyScoringEvent(
+        state,
+        () => applySteal(state, true),
+        { eventTypeHint: 'steal', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'stealFail':
-      nextState = applySteal(state, false);
+      nextState = applyScoringEvent(
+        state,
+        () => applySteal(state, false),
+        { eventTypeHint: 'steal_fail', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'runnerRundownOut':
-      nextState = applyRunnerOut(state, action.base, '런다운 아웃');
+      nextState = applyScoringEvent(
+        state,
+        () => applyRunnerOut(state, action.base, '런다운 아웃'),
+        { eventTypeHint: 'runner_out', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'runnerInterference':
-      nextState = applyRunnerOut(state, action.base, '주자 수비방해');
+      nextState = applyScoringEvent(
+        state,
+        () => applyRunnerOut(state, action.base, '주자 수비방해'),
+        { eventTypeHint: 'runner_out', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'runnerObstruction':
-      nextState = applyRunnerObstruction(state, action.base, action.outcome);
+      nextState = applyScoringEvent(
+        state,
+        () => applyRunnerObstruction(state, action.base, action.outcome),
+        { eventTypeHint: 'runner', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'resetCount':
       nextState = {
@@ -842,37 +1127,86 @@ function reducer(state: DemoState, action: Action): DemoState {
       nextState = changeHalf(state, '이닝 전환');
       break;
     case 'setPlay':
-      {
-        const playEvent = createPlayEventForBaserunning(
-          state,
-          { type: 'setPlay', runners: getRunnerNames(state.bases), notes: action.message },
-          0,
-        );
-        nextState = {
-          ...state,
-          lastPlay: action.message,
-          feed: pushPlayFeed(state, createLogEntry(state, action.message, 0, playEvent.eventId)),
-          events: pushEvent(state.events, playEvent),
-        };
-      }
+      nextState = applyScoringEvent(
+        state,
+        () => {
+          const playEvent = createPlayEventForBaserunning(
+            state,
+            { type: 'setPlay', runners: getRunnerNames(state.bases), notes: action.message },
+            0,
+          );
+          return {
+            ...state,
+            lastPlay: action.message,
+            feed: pushPlayFeed(state, createLogEntry(state, action.message, 0, playEvent.eventId)),
+            events: pushEvent(state.events, playEvent),
+          };
+        },
+        { eventTypeHint: 'setPlay', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'runnerStealSuccess':
-      nextState = applyRunnerAdvance(state, action.base, 1, '도루 성공');
+      nextState = applyScoringEvent(
+        state,
+        () => applyRunnerAdvance(state, action.base, 1, '도루 성공'),
+        { eventTypeHint: 'steal', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'runnerCaught':
-      nextState = applyRunnerOut(state, action.base, '도루자 아웃');
+      nextState = applyScoringEvent(
+        state,
+        () => applyRunnerOut(state, action.base, '도루자 아웃'),
+        { eventTypeHint: 'runner_out', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'runnerPickoff':
-      nextState = applyRunnerOut(state, action.base, '견제사');
+      nextState = applyScoringEvent(
+        state,
+        () => applyRunnerOut(state, action.base, '견제사'),
+        { eventTypeHint: 'runner_out', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'runnerOut':
-      nextState = applyRunnerOut(state, action.base, '주루사');
+      nextState = applyScoringEvent(
+        state,
+        () => applyRunnerOut(state, action.base, '주루사'),
+        { eventTypeHint: 'runner_out', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'multipleRunnersOut':
-      nextState = applyMultipleRunnersOut(state, action.bases, action.label);
+      nextState = applyScoringEvent(
+        state,
+        () => applyMultipleRunnersOut(state, action.bases, action.label),
+        { eventTypeHint: 'runner_out', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
+    case 'recordCompositePlay': {
+      if (state.gameOver || state.scorerPaused || !state.activeMatchId) return state;
+      nextState = applyScoringEvent(state, () => applyCompositeScoringPlay(state, action.input), {
+        eventTypeHint: 'composite', source: { kind: 'live', provider: 'composite-modal-v1' },
+      });
+      break;
+    }
+    case 'recordRunnerPlay': {
+      if (action.input.batterHit) return state;
+      if (state.gameOver || state.scorerPaused || !state.activeMatchId) return state;
+      if (state.events.some((event) => event.runnerPlay?.input.id === action.input.id)) return state;
+      const resolved = resolveRunnerPlay(state, action.input);
+      if (!resolved.ok) {
+        nextState = withRejectedTransition(state, resolved.issues.join(' / '), { eventTypeHint: 'runner_matrix' });
+      } else {
+        nextState = applyScoringEvent(state, () => applyRunnerMatrixPlay(state, resolved), {
+          eventTypeHint: 'runner_matrix', source: { kind: 'live', provider: 'runner-matrix-v1' },
+        });
+      }
+      break;
+    }
     case 'advanceRunners':
-      nextState = applyRunnerAdvancements(state, action.selections, action.message, action.preserveLastPlay);
+      nextState = applyScoringEvent(
+        state,
+        () => applyRunnerAdvancements(state, action.selections, action.message, action.preserveLastPlay),
+        { eventTypeHint: 'runner', source: { kind: 'live', provider: 'reducer' } },
+      );
       break;
     case 'setTeamName':
       nextState = { ...state, teamNames: { ...state.teamNames, [action.side]: action.name } };
@@ -1108,6 +1442,15 @@ function reducer(state: DemoState, action: Action): DemoState {
   if (!shouldTrackHistory(action.type)) return nextState;
   return { ...nextState, history: [...state.history, snapshot], futureHistory: [] };
 }
+
+function reducer(...args: Parameters<typeof reducerWithoutDefensiveSnapshots>): ReturnType<typeof reducerWithoutDefensiveSnapshots> {
+  const [state, action] = args;
+  const next = reducerWithoutDefensiveSnapshots(...args);
+  return action.type === 'recordCompositePlay'
+    ? attachCompositeDefensiveSnapshots(state, next, action.input.id)
+    : next;
+}
+
 
 // [수정] 로컬 업데이트 시 시간순(과거->최신) 유지를 위해 배열 뒤에 추가 (append)
 function pushFeed(feed: PlayLog[], entry: PlayLog) {
@@ -1461,110 +1804,38 @@ function applyHitWithAdvances(
   pitchNumber: number,
   advances?: RunnerAdvanceSelections,
   battedBall?: BattedBallDetails | null,
+  review?: HitRunnerReview,
 ): DemoState {
   const { batterName, batterIndex } = nextBatter(state);
-  const result = basesToAdvance === 4 ? '홈런' : `${basesToAdvance}루타`;
-  const message = `${result} · ${batterName}`;
-  const bases = [null, null, null] as Bases;
-  let runs = 0;
-  let outs = state.outs;
-  const runnerMoves: { feedText: string; lastPlay: string; runnerSummary: string }[] = [];
-
-  for (let i = 2; i >= 0; i -= 1) {
-    const runner = state.bases[i];
-    if (!runner) continue;
-    const outcome = advances?.[i as 0 | 1 | 2];
-    const resolved = resolveAdvanceOutcome(outcome, i, basesToAdvance);
-    if (resolved.type === 'out') {
-      outs += 1;
-      runnerMoves.push(
-        formatRunnerMove({ runner, from: i, to: i, outcome: 'out', outsCount: outs }),
-      );
-      continue;
-    }
-    if (resolved.type === 'score') {
-      runs += 1;
-      runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score' }));
-      continue;
-    }
-    if (resolved.type === 'hold') {
-      const placed = placeRunnerOnBases(bases, runner, resolved.targetBaseIndex);
-      if (placed.scored) {
-        runs += 1;
-        runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score' }));
-      } else {
-        runnerMoves.push(formatRunnerMove({ runner, from: i, to: placed.dest, outcome: 'hold' }));
-      }
-      continue;
-    }
-    const placed = placeRunnerOnBases(bases, runner, resolved.targetBaseIndex);
-    if (placed.scored) {
-      runs += 1;
-      runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score' }));
-    } else {
-      runnerMoves.push(formatRunnerMove({ runner, from: i, to: placed.dest, outcome: 'advance' }));
-    }
-  }
-
-  if (basesToAdvance >= 4) {
-    runs += 1;
-  } else {
-    const batterDest = basesToAdvance - 1;
-    const placed = placeRunnerOnBases(bases, batterName, batterDest);
-    if (placed.scored) {
-      runs += 1;
-    }
-  }
-
-  const side = hittingSide(state);
-  const score =
-    side === 'home'
-      ? { ...state.score, home: state.score.home + runs }
-      : { ...state.score, away: state.score.away + runs };
-  const lineScore = addRunsToLineScore(state.lineScore, side, state.inning, runs);
-  // 안타의 경우 득점 수가 곧 타점(RBI)
-  const rbi = runs;
-  const eventEntry = createPlayEvent(
-    state,
-    {
-      type: 'hit',
-      runners: runnerMoves.map((move) => move.runnerSummary),
-      battedBall: battedBall ?? null,
-      notes: message,
-      rbi,
-    },
-    pitchNumber,
-  );
-  
-  let feed = state.feed;
-  runnerMoves.forEach((move) => {
-    feed = pushFeed(feed, createLogEntryForBaserunning(state, move.feedText, pitchNumber, eventEntry.eventId));
-  });
-  // 타구 방향 정보 추가
-  const zoneNote = battedBall?.zone && battedBall.zone !== '선택 안 함' ? ` · ${battedBall.zone}` : '';
-  const resultLog = runs ? `${result}${zoneNote} · ${runs}득점` : `${result}${zoneNote}`;
-  feed = pushPlayFeed(state, createLogEntry(state, resultLog, pitchNumber, eventEntry.eventId), feed);
-
-  const nextState = {
-    ...state,
-    bases,
-    score,
-    lineScore,
-    balls: 0,
-    strikes: 0,
-    pitchCount: 0,
-    batterIndex,
-    outs,
-    lastPlay: message,
-    feed,
-    events: pushEvent(state.events, eventEntry),
+  const defense = state.half === 'top' ? 'home' : 'away';
+  const pitcher = state.lineups[defense].find((slot) => slot.pos.toUpperCase() === 'P');
+  const pitcherId = pitcher?.name.trim() ? formatUniqueName(pitcher.name, pitcher.number) : null;
+  const resolved = resolveHitPlay(state, { id: generateEventId(state, pitchNumber), batterId: batterName,
+    pitcherId, bases: basesToAdvance, advances, review });
+  if (!resolved.ok) return withRejectedTransition(state, resolved.issues.join(' / '), { eventTypeHint: 'hit' });
+  const { record, after, responsibility } = resolved;
+  const result = basesToAdvance === 4 ? '홈런' : String(basesToAdvance) + '루타';
+  const message = result + ' · ' + batterName;
+  const eventEntry: PlayEvent = {
+    ...createPlayEvent(state, { type: 'hit', runners: record.movements.map(runnerMovementSummary),
+      battedBall: battedBall ?? null, notes: message, rbi: record.input.rbi }, pitchNumber),
+    runnerPlay: record,
   };
-
-  if (outs >= 3) {
-    return changeHalf(nextState, `${result} · 3아웃 · 이닝 종료`, pitchNumber, state);
+  const zoneNote = battedBall?.zone && battedBall.zone !== '선택 안 함' ? ' · ' + battedBall.zone : '';
+  const resultLog = result + zoneNote + (record.runs ? ' · ' + record.runs + '득점' : '');
+  // The batter result follows runner detail rows for compatibility with legacy batting-stat reconstruction.
+  let feed = state.feed;
+  for (const move of [...record.movements].sort((a, b) => a.sequence - b.sequence)) {
+    feed = pushFeed(feed, createLogEntryForBaserunning(state, runnerMovementSummary(move), pitchNumber, eventEntry.eventId));
   }
-
-  return nextState;
+  feed = pushPlayFeed(state, createLogEntry(state, resultLog, pitchNumber, eventEntry.eventId), feed);
+  const nextState: DemoState = {
+    ...state, bases: after.bases, score: after.score, runnerResponsiblePitcher: responsibility,
+    lineScore: addRunsToLineScore(state.lineScore, hittingSide(state), state.inning, record.runs),
+    balls: 0, strikes: 0, pitchCount: 0, batterIndex, outs: state.outs + record.outsAdded,
+    lastPlay: message, feed, events: pushEvent(state.events, eventEntry),
+  };
+  return record.endedHalf ? changeHalf(nextState, message + ' · 이닝 종료', pitchNumber, state) : nextState;
 }
 
 function applyFielderChoice(
@@ -1621,6 +1892,8 @@ function applyFielderChoice(
   const placedBatter = placeRunnerOnBases(bases, batterName, 0);
   if (placedBatter.scored) runs += 1;
 
+  const issue = legacyThirdOutIssue(outs, runs);
+  if (issue) return withRejectedTransition(state, issue, { eventTypeHint: 'fc' });
   const side = hittingSide(state);
   const score =
     side === 'home'
@@ -1718,6 +1991,8 @@ function applyWalk(state: DemoState, message: string, pitchNumber: number): Demo
 }
 
 function applyDroppedThirdStrike(state: DemoState, strikeType?: 'swinging' | 'looking'): DemoState {
+  const issue = droppedThirdStrikeInputIssue(state);
+  if (issue) return withRejectedTransition(state, issue, { eventTypeHint: 'dropped_third_strike' });
   const pitchNumber = Math.max(1, state.pitchCount + 1);
   const { batterName, batterIndex } = nextBatter(state);
   const forcedScoreRunner = state.bases[0] && state.bases[1] && state.bases[2] ? state.bases[2] : null;
@@ -1767,6 +2042,8 @@ function applySacrifice(
   battedBall?: BattedBallDetails | null,
   sacType: 'fly' | 'bunt' = 'fly',
 ): DemoState {
+  const issue = sacrificeInputIssue(state, sacType);
+  if (issue) return withRejectedTransition(state, issue, { eventTypeHint: 'sac' });
   if (sacType === 'bunt') {
     const bases = [null, null, null] as Bases;
     let runs = 0;
@@ -1845,7 +2122,14 @@ function applySacrifice(
 }
 
 function applyError(state: DemoState, details: ErrorDetails): DemoState {
-  const pitchNumber = Math.max(1, state.pitchCount + 1);
+  const inputIssue = miscPlayInputIssue(state, details);
+  if (inputIssue) return withRejectedTransition(state, inputIssue, { eventTypeHint: 'error' });
+  const kind = miscPlayKind(details.errorType);
+  const actionLabel = kind === 'wp' ? '폭투' : kind === 'pb' ? '포일' : kind === 'balk' ? '보크' : '실책';
+  const outcome = kind === 'error'
+    ? details.advanceResults.batter === 'hold' ? 'plate_pending' : details.advanceResults.batter === 'out' ? 'plate_out' : 'plate_error'
+    : details.pitchResult === 'ball' && state.balls >= 3 ? 'plate_walk' : 'plate_pending';
+  const pitchNumber = kind === 'balk' ? state.pitchCount : Math.max(1, state.pitchCount + 1);
   const isBatterHold = details.advanceResults.batter === 'hold';
   const { batter } = currentBatterInfo(state);
   const nextBatterResult = nextBatter(state);
@@ -1864,28 +2148,28 @@ function applyError(state: DemoState, details: ErrorDetails): DemoState {
     const resolved = resolveAdvanceOutcome(outcome, i, 1);
     if (resolved.type === 'out') {
       outs += 1;
-      runnerMoves.push(formatRunnerMove({ runner, from: i, to: i, outcome: 'out', outsCount: outs, message: `실책(${details.errorType})` }));
+      runnerMoves.push(formatRunnerMove({ runner, from: i, to: i, outcome: 'out', outsCount: outs, message: `${actionLabel}(${details.errorType})` }));
       continue;
     }
     if (resolved.type === 'score') {
       runs += 1;
-      runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score', message: `실책(${details.errorType})` }));
+      runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score', message: `${actionLabel}(${details.errorType})` }));
       continue;
     }
     if (resolved.type === 'hold') {
       const placed = placeRunnerOnBases(bases, runner, resolved.targetBaseIndex);
       if (placed.scored) {
         runs += 1;
-        runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score', message: `실책(${details.errorType})` }));
+        runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score', message: `${actionLabel}(${details.errorType})` }));
       }
       continue;
     }
     const placed = placeRunnerOnBases(bases, runner, resolved.targetBaseIndex);
     if (placed.scored) {
       runs += 1;
-      runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score', message: `실책(${details.errorType})` }));
+      runnerMoves.push(formatRunnerMove({ runner, from: i, to: 3, outcome: 'score', message: `${actionLabel}(${details.errorType})` }));
     } else {
-      runnerMoves.push(formatRunnerMove({ runner, from: i, to: placed.dest, outcome: 'advance', message: `실책(${details.errorType})` }));
+      runnerMoves.push(formatRunnerMove({ runner, from: i, to: placed.dest, outcome: 'advance', message: `${actionLabel}(${details.errorType})` }));
     }
   }
 
@@ -2061,6 +2345,8 @@ function applyError(state: DemoState, details: ErrorDetails): DemoState {
     }
   }
 
+  const scoringIssue = legacyThirdOutIssue(outs, runs);
+  if (scoringIssue) return withRejectedTransition(state, scoringIssue, { eventTypeHint: kind });
   const side = hittingSide(state);
   const score =
     side === 'home'
@@ -2089,7 +2375,7 @@ function applyError(state: DemoState, details: ErrorDetails): DemoState {
     })
     .join(' / ');
   const summary = [
-    '실책',
+    actionLabel,
     details.errorType,
     details.fielderPos,
     battedBallSummary,
@@ -2098,7 +2384,8 @@ function applyError(state: DemoState, details: ErrorDetails): DemoState {
   ]
     .filter((part) => part && part.trim().length > 0)
     .join(' · ');
-  const resultTags: string[] = [summary];
+  const pitchLabel = outcome === 'plate_walk' ? '볼넷' : kind === 'wp' || kind === 'pb' ? (details.pitchResult === 'ball' ? '볼' : '스트라이크') : '';
+  const resultTags: string[] = [pitchLabel, summary].filter(Boolean);
   if (batterResult === 'out') {
     resultTags.push('타자 아웃');
   }
@@ -2122,17 +2409,18 @@ function applyError(state: DemoState, details: ErrorDetails): DemoState {
     nextPitchCount = state.pitchCount + 1;
   }
 
-  const eventEntry = createPlayEvent(
+  const eventEntry: PlayEvent = { ...createPlayEvent(
     state,
     {
-      type: 'error',
+      type: kind,
       runners: runnerMoves.map((move) => move.runnerSummary),
       error: normalizedDetails,
+      rbi: outcome === 'plate_walk' && state.bases.every(Boolean) ? 1 : undefined,
       notes: summary,
       battedBall: details.battedBall ?? null,
     },
     pitchNumber,
-  );
+  ), outcome };
 
   let feed = state.feed;
   runnerMoves.forEach((move) => {
@@ -2502,6 +2790,75 @@ function applyRunnerOutsByName(state: DemoState, runnerNames: string[], label?: 
   return applyMultipleRunnersOut(state, basesToRemove, defaultLabel);
 }
 
+export function compositeContextForState(state: DemoState): CompositeContext {
+  const defense = state.half === 'top' ? 'home' : 'away';
+  const pitcher = state.lineups[defense].find(slot => slot.pos.toUpperCase() === 'P');
+  return captureCompositeContext({ ...state, batterId: currentBatterInfo(state).batter,
+    pitcherId: pitcher ? formatUniqueName(pitcher.name, pitcher.number) : '',
+    revision: JSON.stringify(state.events.map(event => event.eventId ?? [event.inning, event.half, event.order, event.pitch])),
+    rosterKey: JSON.stringify(state.lineups) });
+}
+
+function applyCompositeScoringPlay(state: DemoState, input: CompositeInput): DemoState {
+  const duplicate = state.events.find(event => event.eventId === input.id);
+  if (duplicate) return JSON.stringify(duplicate.compositePlay?.input) === JSON.stringify(input) ? state
+    : withRejectedTransition(state, '같은 사건 ID에 다른 입력이 있습니다.', { eventTypeHint: 'composite' });
+  const result = resolveCompositePlay(compositeContextForState(state), input);
+  if (!result.ok) return withRejectedTransition(state, result.issues.join(' / '), { eventTypeHint: 'composite' });
+  const record = result.record, after = record.after;
+  const pitch = state.pitchCount + Number(!['none', 'automatic_ball', 'automatic_strike'].includes(input.pitch));
+  const notes = formatCompositeFeed(record).join(' | ');
+  const event: PlayEvent = { ...createPlayEvent(state, { type: 'composite', notes, runners: [] }, pitch),
+    eventId: input.id, compositePlay: record, evidence: [input.note, input.ruling.note, input.ruling.rule].filter(Boolean),
+    outcome: record.plateCompleted ? `plate_${input.plate}` : 'plate_pending' };
+  const next: DemoState = { ...state, bases: after.bases, score: after.score,
+    runnerResponsiblePitcher: after.runnerResponsiblePitcher, balls: after.balls, strikes: after.strikes,
+    pitchCount: after.pitchCount, outs: state.outs + record.outsAdded,
+    batterIndex: record.plateCompleted ? nextBatter(state).batterIndex : state.batterIndex,
+    lineScore: addRunsToLineScore(state.lineScore, hittingSide(state), state.inning, record.runs),
+    events: pushEvent(state.events, event), feed: pushPlayFeed(state, createLogEntry(state, notes, pitch, input.id)), lastPlay: notes };
+  return record.endedHalf ? changeHalf(next, notes, pitch, state) : next;
+}
+
+function applyRunnerMatrixPlay(
+  state: DemoState,
+  resolved: Extract<ReturnType<typeof resolveRunnerPlay>, { ok: true }>,
+): DemoState {
+  const { record, after, responsibility } = resolved;
+  const batterOut = Boolean(record.input.batterOut);
+  const pitch = batterOut ? state.pitchCount + 1 : state.pitchCount;
+  const message = batterOut ? '타자 아웃' : '주루 복합 기록';
+  const movements = [...record.movements].sort((a, b) => a.sequence - b.sequence);
+  const summaries = movements.map(runnerMovementSummary);
+  const event: PlayEvent = {
+    ...(batterOut ? createPlayEvent(state, { type: 'out', notes: message, runners: summaries, rbi: record.input.rbi }, pitch)
+      : createPlayEventForBaserunning(state, { type: 'runner', notes: message, runners: summaries }, pitch)),
+    runnerPlay: record,
+  };
+  const feedRows: { sequence: number; entry: PlayLog }[] = [];
+  if (record.input.batterOut) feedRows.push({ sequence: record.input.batterOut.sequence, entry: createLogEntry(state, message, pitch, event.eventId) });
+  for (const move of movements) {
+    if (move.to === move.from) continue;
+    feedRows.push({ sequence: move.sequence, entry: createLogEntryForBaserunning(state, runnerMovementSummary(move), pitch, event.eventId) });
+  }
+  let feed = state.feed;
+  for (const row of feedRows.sort((a, b) => a.sequence - b.sequence)) {
+    feed = row.entry.batter ? pushPlayFeed(state, row.entry, feed) : pushFeed(feed, row.entry);
+  }
+  const lastPlay = `${message} · ${record.runs}점 · 아웃 ${record.outsAdded}개`;
+  const nextState: DemoState = {
+    ...state, bases: after.bases, score: after.score,
+    runnerResponsiblePitcher: responsibility,
+    outs: state.outs + record.outsAdded,
+    balls: batterOut ? 0 : state.balls, strikes: batterOut ? 0 : state.strikes,
+    pitchCount: batterOut ? 0 : state.pitchCount,
+    batterIndex: batterOut ? nextBatter(state).batterIndex : state.batterIndex,
+    lineScore: addRunsToLineScore(state.lineScore, hittingSide(state), state.inning, record.runs),
+    events: pushEvent(state.events, event), feed, lastPlay,
+  };
+  return record.endedHalf ? changeHalf(nextState, lastPlay, pitch, state) : nextState;
+}
+
 function applyRunnerAdvancements(
   state: DemoState,
   selections: RunnerAdvanceSelections,
@@ -2601,6 +2958,8 @@ function applyRunnerAdvancements(
 
   if (!runnerMoves.length) return state;
 
+  const issue = legacyThirdOutIssue(outs, runs);
+  if (issue) return withRejectedTransition(state, issue, { eventTypeHint: 'runner' });
   const side = hittingSide(state);
   const score =
     side === 'home'
@@ -2649,6 +3008,8 @@ function applyDoublePlay(
   route?: number[],
   runnerAdvancements?: Record<number, number>,
 ): DemoState {
+  const issue = multipleOutInputIssue(state, outsToAdd, selectedRunners);
+  if (issue) return withRejectedTransition(state, issue, { eventTypeHint: 'out' });
   const bases = [...state.bases] as Bases;
   const current = currentBatterInfo(state);
   const batterName = current.batter;
@@ -2704,6 +3065,8 @@ function applyDoublePlay(
     }
   }
 
+  const scoringIssue = legacyThirdOutIssue(outs, runsScored);
+  if (scoringIssue) return withRejectedTransition(state, scoringIssue, { eventTypeHint: 'out' });
   const runnerDesc = runnersOut
     .filter((r) => r.base >= 0)
     .map((r) => `${r.name} ${baseLabel(r.base)}`)
@@ -3107,10 +3470,12 @@ interface DemoStoreValue {
     strikeOut: (strikeType?: 'swinging' | 'looking') => void;
     droppedThirdStrike: (variant?: 'strikeout' | 'reach' | 'tag_out' | 'force_out', strikeType?: 'swinging' | 'looking', runnerOuts?: string[]) => void;
     advanceRunners: (selections: RunnerAdvanceSelections, message: string, preserveLastPlay?: boolean) => void;
+    recordRunnerPlay: (input: RunnerPlayInput) => void;
+    recordCompositePlay: (input: CompositeInput) => void;
     addOut: (battedBall?: BattedBallDetails | null) => void;
-    hitSingle: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) => void;
-    hitDouble: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) => void;
-    hitTriple: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) => void;
+    hitSingle: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null, review?: HitRunnerReview) => void;
+    hitDouble: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null, review?: HitRunnerReview) => void;
+    hitTriple: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null, review?: HitRunnerReview) => void;
     homeRun: (battedBall?: BattedBallDetails | null) => void;
     fielderChoice: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null, context?: string) => void;
     walk: () => void;
@@ -3196,6 +3561,22 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   const [isScorer, setIsScorer] = useState(false);
   const canRecordGame = isAdmin || isScorer;
   const [scorerMode, setScorerMode] = useState(false);
+  const recordSource = useRecordSource(state.activeMatchId);
+  const liveRecordAccessible = recordSource.status === 'live'
+    && !hasOfficialAuthority(state.matches.find(match => match.id === state.activeMatchId));
+  const liveRecordAccessRef = useRef<LiveRecordAccess>({ matchId: state.activeMatchId, allowed: liveRecordAccessible });
+  if (liveRecordAccessRef.current.matchId !== state.activeMatchId || liveRecordAccessRef.current.allowed !== liveRecordAccessible) {
+    liveRecordAccessRef.current = { matchId: state.activeMatchId, allowed: liveRecordAccessible };
+  }
+  const getLiveRecordAccess = useCallback(() => liveRecordAccessRef.current, []);
+  // Block the context value during render, not one effect later. Internal normalization
+  // may restore schedule lineups while the source and schedule snapshots arrive separately.
+  const publicState = useMemo(() => {
+    if (liveRecordAccessible || !state.activeMatchId) return state;
+    const cleared = clearLiveRecordState(initialState, state);
+    return { ...cleared, matches: cleared.matches.map(match =>
+      match.id === state.activeMatchId || hasOfficialAuthority(match) ? redactLiveScheduleRecord(match) : match) };
+  }, [state, liveRecordAccessible]);
   const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const presenceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const visitorIdRef = useRef<string | null>(null);
@@ -3254,6 +3635,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   const pushMatchUpdate = useCallback((matchId: string, overrides: Partial<MatchSchedule> = {}) => {
     const current = stateRef.current.matches.find((m) => m.id === matchId);
     if (!current) return Promise.resolve();
+    if (hasOfficialAuthority(current)) return Promise.reject(new Error('공식 전환된 자체 기록은 수정할 수 없습니다. 관리자 비교 화면을 이용하세요.'));
     matchesReadyRef.current = true;
 
     // [수정] 기본적으로는 빈 슬롯 필터링, 연습경기는 추가 타자 슬롯 유지를 위해 보존
@@ -3279,6 +3661,9 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const purgeMatchFromFirestore = useCallback(async (matchId: string) => {
+    if (hasOfficialAuthority(stateRef.current.matches.find(match => match.id === matchId))) {
+      throw new Error('공식 전환된 경기의 검수 원본은 삭제할 수 없습니다.');
+    }
     const [feedSnap, eventsSnap, presenceSnap] = await Promise.all([
       getDocs(collection(firestore, 'matchStates', matchId, 'feed')),
       getDocs(collection(firestore, 'matchStates', matchId, 'events')),
@@ -3397,7 +3782,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
 
   // Admin: if active match lineups exist in schedule but local game state is empty, resync once.
   useEffect(() => {
-    if (!canRecordGame) return;
+    if (!canRecordGame || !liveRecordAccessible) return;
     const matchId = state.activeMatchId;
     if (!matchId) return;
     if (state.gameStarted || state.gameOver) return;
@@ -3410,7 +3795,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     if (!matchHasPlayers || stateHasPlayers) return;
     skipFirestoreWriteRef.current = true;
     dispatch({ type: 'selectMatch', matchId, followCurrent: state.followCurrent });
-  }, [canRecordGame, state.activeMatchId, state.gameStarted, state.gameOver, state.matches, state.lineups, state.followCurrent]);
+  }, [canRecordGame, liveRecordAccessible, state.activeMatchId, state.gameStarted, state.gameOver, state.matches, state.lineups, state.followCurrent]);
 
   // Listen to current active match pointer so spectators know which match to watch.
   useEffect(() => {
@@ -3423,6 +3808,20 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
 
   // Live subscribe to the active match state.
   useEffect(() => {
+    if (liveRecordAccessible || !state.activeMatchId) return;
+    if (writeTimerRef.current) {
+      clearTimeout(writeTimerRef.current);
+      writeTimerRef.current = null;
+    }
+    const current = stateRef.current;
+    const cleared = clearLiveRecordState(initialState, current);
+    stateRef.current = cleared;
+    skipFirestoreWriteRef.current = true;
+    dispatch({ type: 'hydrate', state: cleared });
+  }, [liveRecordAccessible, state.activeMatchId]);
+
+  useEffect(() => {
+    if (!liveRecordAccessible) return;
     return subscribeActiveMatchState({
       activeMatchId: state.activeMatchId,
       canRecordGame,
@@ -3432,10 +3831,11 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       dispatch,
       initialState,
     });
-  }, [state.activeMatchId, canRecordGame, scorerMode]);
+  }, [state.activeMatchId, canRecordGame, scorerMode, liveRecordAccessible]);
 
   // Subscribe to feed/events subcollections (최근 N개만).
   useEffect(() => {
+    if (!liveRecordAccessible) return;
     return subscribeFeedAndEvents({
       activeMatchId: state.activeMatchId,
       scorerMode,
@@ -3446,22 +3846,25 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       lastEventsLengthRef,
       dispatch,
     });
-  }, [state.activeMatchId, state.scorerUid, spectatorFeedLimit, scorerMode]);
+  }, [state.activeMatchId, state.scorerUid, spectatorFeedLimit, scorerMode, liveRecordAccessible]);
 
   // Attempt to acquire scorer lock for the active match.
   useEffect(() => {
-    syncScorerLock({
+    if (!liveRecordAccessible) return;
+    return syncScorerLock({
       scorerMode,
       activeMatchId: state.activeMatchId,
+      getLiveRecordAccess,
       stateRef,
       skipFirestoreWriteRef,
       dispatch,
       initialState,
     });
-  }, [state.activeMatchId, scorerMode]);
+  }, [state.activeMatchId, scorerMode, liveRecordAccessible, getLiveRecordAccess]);
 
   // Heartbeat to keep scorer lock fresh; expires automatically when stopped.
   useEffect(() => {
+    if (!liveRecordAccessible) return;
     return syncScorerLockHeartbeat({
       scorerMode,
       activeMatchId: state.activeMatchId,
@@ -3469,7 +3872,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       scorerLockedAt: state.scorerLockedAt,
       heartbeatTimerRef,
     });
-  }, [state.activeMatchId, state.scorerUid, state.scorerLockedAt, scorerMode]);
+  }, [state.activeMatchId, state.scorerUid, state.scorerLockedAt, scorerMode, liveRecordAccessible]);
 
   // 동접자 집계: onSnapshot fan-out 대신 count 쿼리 폴링 사용
   useEffect(() => {
@@ -3490,6 +3893,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
 
   // Push game state to Firestore when admin updates locally.
   useEffect(() => {
+    if (!liveRecordAccessible) return;
     return syncGameStateWrite({
       state,
       scorerMode,
@@ -3501,7 +3905,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       lastEventsLengthRef,
       writeTimerRef,
     });
-  }, [state, canRecordGame, scorerMode]);
+  }, [state, canRecordGame, scorerMode, liveRecordAccessible]);
 
   // Sync schedule changes to Firestore (admin routes only; spectators skip via flag/auth).
   useEffect(() => {
@@ -3563,6 +3967,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   const scheduleActions = useScheduleActions({
     dispatch,
     getState,
+    getLiveRecordAccess,
     canRecordGame,
     canControlCurrentPointer: isAdmin,
     markMatchesReady,
@@ -3606,7 +4011,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
     return () => unsub();
   }, [actions]);
 
-  const value = useMemo(() => ({ state, actions }), [state, actions]);
+  const value = useMemo(() => ({ state: publicState, actions }), [publicState, actions]);
 
   return <DemoStoreContext.Provider value={value}>{children}</DemoStoreContext.Provider>;
 }

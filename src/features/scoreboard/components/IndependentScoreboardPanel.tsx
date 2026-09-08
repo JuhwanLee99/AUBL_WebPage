@@ -1,3 +1,4 @@
+import RecordSourceGate from '@shared/components/RecordSourceGate';
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { doc, onSnapshot, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
@@ -26,7 +27,7 @@ interface GameState {
 
 const FEED_LIMIT = 50;
 
-export default function IndependentScoreboardPanel({
+function IndependentScoreboardPanelContent({
   matchId,
   style,
 }: {
@@ -334,4 +335,8 @@ export default function IndependentScoreboardPanel({
       )}
     </div>
   );
+}
+
+export default function IndependentScoreboardPanel(props: { matchId: string; style?: CSSProperties }) {
+  return <RecordSourceGate matchId={props.matchId}><IndependentScoreboardPanelContent key={props.matchId} {...props} /></RecordSourceGate>;
 }

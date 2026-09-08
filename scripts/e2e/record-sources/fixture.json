@@ -1,0 +1,33 @@
+{
+  "sourceGameId": "LOCAL_OFFICIAL_GAME",
+  "backendGameId": 1,
+  "seasonId": 99,
+  "provider": "UNIQUE_PLAY",
+  "syncRevision": "LOCAL_REVISION_1",
+  "capturedAt": "2026-09-08T00:00:00Z",
+  "publishedAt": "2026-09-08T01:00:00Z",
+  "status": "AVAILABLE",
+  "quality": "CLEAN",
+  "issues": [],
+  "resolutionSource": "SOURCE",
+  "resolvedAt": null,
+  "game": {
+    "status": "COMPLETED", "playedAt": "2026-09-07T00:00:00Z", "groupCode": "TEST", "venue": "LOCAL TEST ONLY",
+    "homeTeamName": "LOCAL HOME", "awayTeamName": "LOCAL AWAY", "homeScore": 1, "awayScore": 3
+  },
+  "detail": {
+    "schemaVersion": 1, "sourceGameId": "LOCAL_OFFICIAL_GAME", "providerGameId": "LOCAL_TEST_PROVIDER", "status": "AVAILABLE",
+    "teams": [
+      {
+        "teamName": "LOCAL AWAY", "innings": [{"inning": 1, "runs": 1, "notPlayed": false}, {"inning": 2, "runs": 2, "notPlayed": false}],
+        "totals": {"runs": 3, "hits": 2, "errors": 1, "walks": 0},
+        "batters": [{"rowKey": "b1", "playerName": "Alice", "jerseyNumber": "7", "battingOrder": 1, "position": "SS", "stats": {"atBats": 3, "hits": 1, "rbi": 1, "stolenBases": 0, "runs": 1, "battingAverage": 0.333, "seasonBattingAverage": null}, "plateAppearances": [{"inning": 1, "result": "LOCAL SINGLE"}]}],
+        "pitchers": [{"rowKey": "p1", "playerName": "Ann", "jerseyNumber": "12", "decision": "W", "stats": {"outs": 6, "inningsPitched": "2", "hitsAllowed": 1, "runsAllowed": 1, "earnedRuns": 0, "walksAndHitByPitch": 0, "strikeouts": 2, "era": 0}}]
+      },
+      {
+        "teamName": "LOCAL HOME", "innings": [{"inning": 1, "runs": 0, "notPlayed": false}, {"inning": 2, "runs": 1, "notPlayed": false}],
+        "totals": {"runs": 1, "hits": 1, "errors": 0, "walks": 0}, "batters": [], "pitchers": []
+      }
+    ]
+  }
+}

@@ -3,6 +3,7 @@ import { ensureCompleteLineups, hasActualPlayers, isDemoLineups, isPracticeMatch
 import { normalizeEvents, normalizeFeed, normalizeRunArray } from './demoStore.normalize';
 import { normalizeMatches } from './demoStore.schedule';
 import type { DemoSnapshot, DemoState, PlayerSlot } from './demoStore';
+import { normalizeScoringRejections } from '../lib/scoringReplay.ts';
 
 export function normalizeState(base: DemoState, incoming: DemoState): DemoState {
   const merged = { ...base, ...incoming } as DemoState;
@@ -53,6 +54,7 @@ export function normalizeState(base: DemoState, incoming: DemoState): DemoState 
           pitchCount: typeof snap.pitchCount === 'number' ? snap.pitchCount : 0,
           feed: normalizedHistoryFeed,
           events: normalizedHistoryEvents,
+          scoringRejections: normalizeScoringRejections(snap.scoringRejections),
           gameOver: Boolean((snap as DemoSnapshot).gameOver),
           endedAt: typeof (snap as DemoSnapshot).endedAt === 'string' ? (snap as DemoSnapshot).endedAt : null,
           gameStarted: normalizedGameStarted,
@@ -74,6 +76,7 @@ export function normalizeState(base: DemoState, incoming: DemoState): DemoState 
     pitchCount: merged.pitchCount ?? 0,
     feed,
     events,
+    scoringRejections: normalizeScoringRejections(merged.scoringRejections),
     matches,
     lineScore,
     history,

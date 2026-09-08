@@ -110,6 +110,8 @@ const BATTER_COLUMNS: Array<{ key: keyof PostGameBatterLine; label: string; widt
   { key: 'sb', label: 'SB', width: '48px' },
 ];
 
+import { normalizeEarnedRunsStatus } from '@shared/lib/earnedRuns';
+
 const PITCHER_COLUMNS: Array<{ key: keyof PostGamePitcherLine; label: string; width?: string }> = [
   { key: 'name', label: '이름', width: '95px' },
   { key: 'slot', label: '교체구분', width: '96px' },
@@ -122,6 +124,7 @@ const PITCHER_COLUMNS: Array<{ key: keyof PostGamePitcherLine; label: string; wi
   { key: 'so', label: 'SO', width: '48px' },
   { key: 'r', label: 'R', width: '48px' },
   { key: 'er', label: 'ER', width: '48px' },
+  { key: 'earnedRunsStatus', label: '자책 확인', width: '100px' },
 ];
 
 const toNumber = (value: string) => {
@@ -327,11 +330,18 @@ export default function ManualRecordEntryPanel({
     setDraft((current) => {
       const rows = [...(current.pitchers?.[side] ?? [])];
       const row = { ...(rows[index] ?? defaultPitcher()) };
-      if (field === 'name' || field === 'result' || field === 'slot') {
+      if (field === 'earnedRunsStatus') {
+        row.earnedRunsStatus = normalizeEarnedRunsStatus(raw, row.er);
+      } else if (field === 'name' || field === 'result' || field === 'slot') {
         (row as Record<string, unknown>)[field] = raw;
       } else {
         (row as Record<string, unknown>)[field] = toNumber(raw);
       }
+      if (field === 'er') {
+        row.er = raw.trim() === '' ? undefined : toNumber(raw);
+        row.earnedRunsStatus = 'unconfirmed';
+      }
+      if (field === 'er' || field === 'ip') delete row.era;
       rows[index] = row;
       return {
         ...current,
@@ -669,7 +679,19 @@ export default function ManualRecordEntryPanel({
                   <tr key={`${side}-pitcher-${rowIndex}`}>
                     {PITCHER_COLUMNS.map((col) => (
                       <td key={`${side}-pitcher-${rowIndex}-${col.key}`} style={tdStyle}>
-                        {col.key === 'slot' ? (
+                        {col.key === 'earnedRunsStatus' ? (
+                          <select
+                            aria-label={`${row.name || '투수'} 자책 확인 상태`}
+                            value={normalizeEarnedRunsStatus(row.earnedRunsStatus, row.er)}
+                            onChange={(event) => updatePitcher(side, rowIndex, 'earnedRunsStatus', event.target.value)}
+                            disabled={disabled}
+                            style={inputStyle}
+                          >
+                            <option value="unconfirmed">미확정</option>
+                            <option value="estimated">추정</option>
+                            <option value="confirmed">기록원 확인</option>
+                          </select>
+                        ) : col.key === 'slot' ? (
                           <select
                             value={row.slot ?? ''}
                             onChange={(event) => updatePitcher(side, rowIndex, 'slot', event.target.value)}

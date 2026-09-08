@@ -23,6 +23,7 @@ from allstar_voting import get_event_config as get_allstar_vote_event_impl
 from allstar_voting import get_vote_results as get_allstar_vote_results_impl
 from allstar_voting import google_subject_from_token
 from allstar_voting import submit_ballot as submit_allstar_ballot_impl
+from record_sources import promote_from_request, promote_record_source, promotion_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,34 @@ ALLSTAR_ENFORCE_APP_CHECK_PUBLIC = os.environ.get(
 
 set_global_options(max_instances=10)
 initialize_app()
+
+
+@https_fn.on_call(region="asia-northeast3", timeout_sec=60)
+def promote_uniqueplay_record_source(req: https_fn.CallableRequest[object]) -> dict[str, object]:
+    return promote_from_request(req)
+
+
+@firestore_fn.on_document_written(document="matches/{matchId}", region="asia-northeast3", timeout_sec=60)
+def sync_record_source(event):
+    # Deploy closed. Existing matches are explicitly reconciled in the admin screen.
+    if not promotion_enabled() or os.environ.get("RECORD_SOURCE_AUTO_PROMOTE", "false").lower() != "true":
+        return
+    before = event.data.before.to_dict() if event.data and event.data.before else {}
+    after = event.data.after.to_dict() if event.data and event.data.after else {}
+    before, after = before or {}, after or {}
+    keys = ("sourceProvider", "sourceGameId", "seasonId", "syncRevision", "sourceActive", "status")
+    if (not after or after.get("sourceProvider") != "UNIQUE_PLAY" or after.get("status") != "completed"
+            or not after.get("syncRevision") or all(before.get(key) == after.get(key) for key in keys)):
+        return
+    match_id = event.params["matchId"]
+    db = admin_firestore.client()
+    job = db.collection("recordSourceJobs").document(match_id)
+    try:
+        result = promote_record_source(db, match_id, after["syncRevision"], "sync-trigger")
+        job.set({"status": "COMPLETE", "revision": result["revision"], "updatedAt": admin_firestore.SERVER_TIMESTAMP})
+    except Exception:
+        logger.exception("record source promotion requires review: %s", match_id)
+        job.set({"status": "REVIEW_REQUIRED", "revision": after["syncRevision"], "updatedAt": admin_firestore.SERVER_TIMESTAMP})
 
 
 def _normalize_whitespace(text: str) -> str:
@@ -458,28 +487,18 @@ def notify_community_urgent(event: firestore_fn.Event[firestore_fn.DocumentSnaps
 
 @firestore_fn.on_document_updated(document="matches/{matchId}", region="asia-northeast3")
 def import_completed_match(event: firestore_fn.Event[firestore_fn.Change[firestore_fn.DocumentSnapshot]]) -> None:
-    """When a match status changes to completed, import its data to MariaDB via backend API."""
-    before = event.data.before.to_dict() if event.data and event.data.before else {}
-    after = event.data.after.to_dict() if event.data and event.data.after else {}
-    if not after:
-        return
-    old_status = (before.get("status") or "").lower()
-    new_status = (after.get("status") or "").lower()
-    if old_status == new_status:
-        return
-    if new_status not in _COMPLETED_STATUSES:
-        return
-    match_id = event.params.get("matchId")
-    if not match_id:
-        return
-    url = f"{BACKEND_API_URL}/api/import/firestore/matches/{match_id}"
-    try:
-        req = urllib.request.Request(url, method="POST", data=b"")
-        req.add_header("Content-Type", "application/json")
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            logger.info("import_completed_match: %s -> %s (HTTP %s)", match_id, new_status, resp.status)
-    except Exception:
-        logger.exception("import_completed_match failed for %s", match_id)
+    """Retain the deployed endpoint, but never promote provisional AUBL stats to official stats."""
+    # Legacy implementation intentionally retained for reference, not execution:
+    # before = event.data.before.to_dict() if event.data and event.data.before else {}
+    # after = event.data.after.to_dict() if event.data and event.data.after else {}
+    # if after and before.get("status") != after.get("status") and after.get("status") in _COMPLETED_STATUSES:
+    #     match_id = event.params.get("matchId")
+    #     url = f"{BACKEND_API_URL}/api/import/firestore/matches/{match_id}"
+    #     req = urllib.request.Request(url, method="POST", data=b"")
+    #     req.add_header("Content-Type", "application/json")
+    #     with urllib.request.urlopen(req, timeout=30) as resp:
+    #         logger.info("import_completed_match: %s (HTTP %s)", match_id, resp.status)
+    return
 
 
 @firestore_fn.on_document_updated(document="inquiries/{inquiryId}", region="asia-northeast3")

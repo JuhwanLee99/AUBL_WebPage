@@ -1,0 +1,18 @@
+.scoring-integrity {
+  margin: 12px 0;
+  padding: 14px 16px;
+  border: 1px solid #a56a26;
+  border-left: 4px solid #e4a94b;
+  border-radius: 10px;
+  background: linear-gradient(110deg, #30251a, #171e2c);
+  color: #f5e5c8;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.scoring-integrity p { margin: 8px 0; font-size: 13px; line-height: 1.6; }
+.scoring-integrity summary { cursor: pointer; padding: 6px 0; font-weight: 700; }
+.scoring-integrity ol { padding-left: 22px; }
+.scoring-integrity li { margin: 12px 0; }
+.scoring-integrity pre { max-height: 280px; overflow: auto; white-space: pre-wrap; font-size: 11px; background: #111827; padding: 10px; }
+.scoring-integrity button { padding: 8px 12px; color: inherit; background: transparent; border: 1px solid #a56a26; border-radius: 6px; cursor: pointer; }
+@media (max-width: 600px) { .scoring-integrity { padding: 10px 12px; } }

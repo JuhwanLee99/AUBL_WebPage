@@ -6,10 +6,27 @@ import { CsvRecordPreview, NowPlayingCard, LiveFeed, PostGameSummary, type Batte
 import { useDemoStore, buildGameRecord } from '@shared/state/demoStore';
 import type { PlayEvent, ErrorDetails, RunnerAdvanceOutcome, BattedBallDetails, PlayerSlot, PostGamePitcherLine, PostGameRecord } from '@shared/state/demoStore';
 import StatsTable from '@shared/components/StatsTable';
+import ScoringIntegrityNotice from '@shared/components/ScoringIntegrityNotice';
+import { classifyRecordedPlateAppearance, createScoringEventLookup, recordedMiscPitch } from '@shared/lib/scoringEventFacts';
+import { earnedRunsView, normalizeEarnedRunsStatus, serializeEarnedRuns } from '@shared/lib/earnedRuns';
+import { batterRateView } from '@shared/lib/batterRates';
 import RemovedPlayersPanel from '@shared/components/RemovedPlayersPanel';
 import { GameTimerDisplay } from '@shared/components/GameTimerDisplay';
 import type { BatterStatLine, PitcherStatLine } from '@shared/types/scoreStats';
 import type { MatchSchedule } from '@shared/state/demoStore';
+import {
+  mergeRebuiltEventsForReplay,
+  classifyKboResultCode,
+  rebuildEventsFromFeedWithAlternatives,
+  selectRebuildEvents,
+  rebuildReviewRows,
+  scoringReplayAuditRows,
+  REJECT_REBUILD_SELECTION,
+} from '@shared/lib/playFeedParser';
+import { replayScoringEvents } from '@shared/lib/scoringReplay';
+import { runnerPlayAuditRows } from '@shared/lib/runnerPlayEngine';
+import { createStructuredRunnerIndex } from '@shared/lib/structuredRunnerStats';
+import { applyCompositeProjection, normalizeCompositePlay, compositePlayAuditRows } from '@shared/lib/compositePlayEngine';
 import { useAdmin } from '@shared/auth/useAdmin';
 import { getOfficialGameDetails, type OfficialGameDetailsResponse } from '@core/api/backendClient';
 import { OfficialGameDetailView, OfficialGameDetailLoading, OfficialGameDetailMessage } from '../components/OfficialGameDetailView';
@@ -19,9 +36,9 @@ import {
   hasMatchingAublLiveRecord,
   isUniquePlayProvider,
   resolveOfficialRequestSource,
-  shouldKeepFirestoreLive,
 } from '../model/officialDetailRoute';
 import './ScoreboardTextPage.css';
+import { useRecordSource } from '@shared/state/useRecordSource';
 
 type Half = 'top' | 'bottom';
 
@@ -77,11 +94,16 @@ function buildManualPlayerStats(record: PostGameRecord | null | undefined): {
         triples: toFinite(row.triples, 0),
         hr: toFinite(row.hr, 0),
         bb: toFinite(row.bb, 0),
-        ci: 0,
+        ci: toFinite(row.ci, 0),
         fc: toFinite(row.fc, 0),
         hbp: toFinite(row.hbp, 0),
         so: toFinite(row.so, 0),
         sac: toFinite(row.sac, 0),
+        sh: row.sh,
+        sf: row.sf,
+        sb: row.sb,
+        cs: row.cs,
+        gdp: row.gdp,
         r: toFinite(row.r, 0),
         rbi: toFinite(row.rbi, 0),
       }));
@@ -108,6 +130,11 @@ function buildManualPlayerStats(record: PostGameRecord | null | undefined): {
           so: toFinite(row.so, 0),
           r: toFinite(row.r, 0),
           er: toFinite(row.er, 0),
+          earnedRunsStatus: normalizeEarnedRunsStatus(row.earnedRunsStatus, row.er),
+          wp: row.wp,
+          bk: row.bk,
+          sh: row.sh,
+          sf: row.sf,
           appearanceOrder,
           appearanceLabel: slot || (idx === 0 ? '선발' : `계투(${idx})`),
         };
@@ -136,7 +163,7 @@ function toPostGamePitcherLineFromLive(row: PitcherStatLine): PostGamePitcherLin
   const hbp = toFinite(row.hbp, 0);
   const bf = toFinite(row.bf, 0);
   const ab = Math.max(0, bf - bb - hbp);
-  const er = toFinite(row.er, 0);
+  const earned = serializeEarnedRuns(row.er, outs, row.earnedRunsStatus);
   return {
     name: row.name,
     slot: row.appearanceLabel ?? row.status ?? '',
@@ -149,9 +176,12 @@ function toPostGamePitcherLineFromLive(row: PitcherStatLine): PostGamePitcherLin
     hbp,
     so: toFinite(row.so, 0),
     r: toFinite(row.r, 0),
-    er,
+    ...earned,
     pitches: toFinite(row.pitches, 0),
-    era: outs > 0 ? Number(((er * 27) / outs).toFixed(2)) : 0,
+    wp: row.wp,
+    bk: row.bk,
+    sh: row.sh,
+    sf: row.sf,
   };
 }
 
@@ -215,6 +245,22 @@ export default function ScoreboardTextPage() {
   const [showReplay, setShowReplay] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [feedExpanded, setFeedExpanded] = useState(false);
+  const [rebuildReview, setRebuildReview] = useState<{
+    scope: string; selections: Record<string, string>; drafts: Record<string, string>;
+  }>({ scope: '', selections: {}, drafts: {} });
+  const rebuildScope = useMemo(() => JSON.stringify([state.activeMatchId, state.feed]), [state.activeMatchId, state.feed]);
+  const rebuildSelections = useMemo(() => rebuildReview.scope === rebuildScope ? rebuildReview.selections : {}, [rebuildReview, rebuildScope]);
+  const rebuildDrafts = rebuildReview.scope === rebuildScope ? rebuildReview.drafts : {};
+  const changeRebuildReview = (groupId: string, selection: string | null, draft = false) => {
+    setRebuildReview((previous) => {
+      const current = previous.scope === rebuildScope ? previous : { scope: rebuildScope, selections: {}, drafts: {} };
+      const key = draft ? 'drafts' : 'selections';
+      const values: Record<string, string> = { ...current[key] };
+      if (selection === null) delete values[groupId];
+      else values[groupId] = selection;
+      return { ...current, [key]: values };
+    });
+  };
   const [officialDetailResource, setOfficialDetailResource] = useState<{
     requestKey: string;
     state: 'ready' | 'not-found' | 'error';
@@ -230,6 +276,7 @@ export default function ScoreboardTextPage() {
     [matchId, state.matches],
   );
   const routeProviderIsUniquePlay = isUniquePlayProvider(routeMatch?.sourceProvider);
+  const recordSource = useRecordSource(routeMatch?.id);
   const officialSourceGameId = resolveOfficialRequestSource(matchId, routeMatch);
   const officialRequestKey = officialSourceGameId
     ? `${officialSourceGameId}\u0000${routeMatch?.seasonId ?? ''}\u0000${officialDetailAttempt}`
@@ -238,7 +285,8 @@ export default function ScoreboardTextPage() {
   const officialDetailState = !matchId
     ? 'idle'
     : currentOfficialResource?.state ?? 'loading';
-  const officialDetail = currentOfficialResource?.payload ?? null;
+  const officialDetail = recordSource.status === 'official'
+    ? recordSource.source.official : currentOfficialResource?.payload ?? null;
   const officialDetailError = currentOfficialResource?.error ?? null;
 
   // URL에서 matchId가 있으면 해당 경기 자동 선택
@@ -334,14 +382,32 @@ export default function ScoreboardTextPage() {
     gameStarted: state.gameStarted,
     eventCount: state.events.length,
   });
-  const useFirestoreLiveForOfficial = shouldKeepFirestoreLive(
-    routeMatch?.status,
-    officialDetail?.status,
-    officialDetail?.game.status,
-    hasAublLiveRecord,
-  );
+  const useFirestoreLiveForOfficial = Boolean(routeMatch && recordSource.status === 'live' && hasAublLiveRecord);
   const feed = useMemo(() => state.feed, [state.feed]);
-  const events = useMemo(() => state.events, [state.events]);
+  const textReplayBuildResult = useMemo(
+    () =>
+      state.gameOver
+        ? rebuildEventsFromFeedWithAlternatives(state.feed, {
+            source: { kind: 'text_feed_rebuild', provider: 'shared-text-feed-parser' },
+            fallback: { inning: 1, half: 'top' },
+          })
+        : null,
+    [state.feed, state.gameOver],
+  );
+  const replayResolvedEvents = useMemo(() => {
+    if (!textReplayBuildResult) {
+      return state.events;
+    }
+    const selected = selectRebuildEvents(textReplayBuildResult.groups, rebuildSelections);
+    return mergeRebuiltEventsForReplay({
+      existingEvents: state.events,
+      rebuiltEvents: selected,
+    });
+  }, [textReplayBuildResult, rebuildSelections, state.events]);
+  const events = useMemo(() => (state.gameOver ? replayResolvedEvents : state.events), [replayResolvedEvents, state.events, state.gameOver]);
+  const hasReplayPendingReview = Boolean(textReplayBuildResult?.groups.some((group) =>
+    group.requiresManualResolve && !rebuildSelections[group.groupId]));
+  const replayStateAudit = useMemo(() => replayScoringEvents(replayResolvedEvents), [replayResolvedEvents]);
   const hittingSide = state.half === 'top' ? 'away' : 'home';
   const defenseSide = hittingSide === 'home' ? 'away' : 'home';
   
@@ -468,24 +534,30 @@ export default function ScoreboardTextPage() {
   }, [state.gameOver, state.score.away, state.score.home, state.teamNames.away, state.teamNames.home]);
 
   const csvPreviewContent = useMemo(
-    () => (state.gameOver ? buildCsvRecord(recordPayload) : null),
-    [recordPayload, state.gameOver],
+    () => (state.gameOver ? buildCsvRecord(recordPayload, { rebuildSelections }) : null),
+    [recordPayload, rebuildSelections, state.gameOver],
   );
 
   // [추가] CSV 다운로드 핸들러
   const handleDownloadCsv = () => {
     if (!state.gameOver) return;
-    const csvContent = buildCsvRecord(recordPayload);
+    const csvContent = buildCsvRecord(recordPayload, { rebuildSelections });
     const filename = buildDownloadName('scorecard', state.endedAt);
     downloadCsv(csvContent, filename);
   };
 
+  if (routeMatch && recordSource.status === 'blocked') {
+    return <OfficialGameDetailMessage title="기록 공개 상태 확인 필요" description="공개 상태 확인에 실패하여 자체 기록을 표시하지 않습니다. 다시 접속해 주세요." onRetry={() => window.location.reload()} />;
+  }
+
   if (
-    routeSelectionPending
+    (routeMatch && recordSource.status === 'loading')
+    || routeSelectionPending
     || (
       officialDetailState === 'loading'
+      && recordSource.status !== 'official'
       && (routeMatchMissing || routeIsOfficial)
-      && !(routeMatch?.status === 'inProgress' && hasAublLiveRecord)
+      && !useFirestoreLiveForOfficial
     )
   ) {
     return <OfficialGameDetailLoading />;
@@ -505,7 +577,7 @@ export default function ScoreboardTextPage() {
     );
   }
 
-  if ((routeIsOfficial || routeMatchMissing) && officialDetailState === 'error') {
+  if (!useFirestoreLiveForOfficial && (routeIsOfficial || routeMatchMissing) && officialDetailState === 'error') {
     return (
       <OfficialGameDetailMessage
         title="공식 상세 기록을 불러오지 못했습니다"
@@ -515,7 +587,7 @@ export default function ScoreboardTextPage() {
     );
   }
 
-  if ((routeIsOfficial || routeMatchMissing) && officialDetailState === 'not-found') {
+  if (!useFirestoreLiveForOfficial && (routeIsOfficial || routeMatchMissing) && officialDetailState === 'not-found') {
     return (
       <OfficialGameDetailMessage
         title="현재 게시된 공식 상세 기록이 없습니다"
@@ -544,6 +616,8 @@ export default function ScoreboardTextPage() {
 
   return (
     <div className="scoreboard-text-page">
+      <ScoringIntegrityNotice events={state.events} allowDetails={isAdmin} />
+      <p role="status">AUBL 실시간 참고 기록입니다. 유니크플레이 공식 기록 전환 후에는 관리자 검수용으로만 보관됩니다.</p>
       <div className="main-content-grid">
         <div className={`scoreboard-section ${isMobile ? 'mobile-layout' : ''}`}>
           <div style={{ position: 'relative' }}>
@@ -724,10 +798,142 @@ export default function ScoreboardTextPage() {
                         minHeight: 0,
                         height: '100%',
                         maxHeight: '100%',
-                        overflowY: 'auto',
-                        alignSelf: 'stretch',
-                      }}
-                    >
+                          overflowY: 'auto',
+                          alignSelf: 'stretch',
+                        }}
+                      >
+                      {textReplayBuildResult && textReplayBuildResult.groups.length > 0 ? (
+                        <div
+                          style={{
+                            marginBottom: '10px',
+                            border: '1px solid rgba(148,163,184,0.25)',
+                            borderRadius: '10px',
+                            padding: '10px',
+                            display: 'grid',
+                            gap: '8px',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '12px' }}>문자중계 재해석</span>
+                            <span style={{ color: hasReplayPendingReview ? '#f59e0b' : '#94a3b8', fontSize: '11px', fontWeight: 800 }}>
+                              {hasReplayPendingReview ? '수동확인 필요 항목 있음' : '자동 반영'}
+                            </span>
+                          </div>
+                          <div style={{ color: '#94a3b8', fontSize: '11px', lineHeight: 1.5 }}>
+                            상태 적용 {replayStateAudit.entries.filter((entry) => entry.status === 'applied').length}건 ·
+                            검증 보류 {replayStateAudit.entries.filter((entry) => entry.status === 'pending').length}건 ·
+                            반려 {replayStateAudit.entries.filter((entry) => entry.status === 'rejected').length}건
+                            <div>확정·제외는 이 화면의 재해석과 CSV에 적용됩니다. 저장된 경기 기록과 선수 집계는 별도 보정이 필요합니다.</div>
+                          </div>
+                          {textReplayBuildResult.groups
+                            .filter(
+                              (group) =>
+                                group.options.length > 1 ||
+                                group.isLowConfidence ||
+                                group.requiresManualResolve ||
+                                (group.rebuildIssues?.length ?? 0) > 0 || Boolean(rebuildSelections[group.groupId]),
+                            )
+                            .map((group) => {
+                              const decision = rebuildSelections[group.groupId];
+                              const selected = rebuildDrafts[group.groupId] ?? (decision !== REJECT_REBUILD_SELECTION ? decision : undefined) ?? group.selectedEventId;
+                              const selectedOption =
+                                group.options.find((option) => option.eventId === selected) ?? group.options[0];
+                              const option = selectedOption?.event;
+                              if (!option) return null;
+                              const original = state.events.find((event) => event.eventId === option.rebuildOrigin?.eventId && event.inning === option.inning && event.half === option.half);
+                              const decisionLabel = decision === REJECT_REBUILD_SELECTION ? '제외' : decision ? '수동 확정' : group.requiresManualResolve ? '확정 대기' : '자동 후보';
+                              const groupIssues = group.rebuildIssues ?? [];
+                              const reasonText =
+                                selectedOption?.reasons?.length
+                                  ? selectedOption.reasons.join(', ')
+                                  : option.manualResolve?.reasons?.join(', ') || '파서 추론';
+                              const evidenceText =
+                                selectedOption?.evidence?.length
+                                  ? selectedOption.evidence.join(' · ')
+                                  : option.evidence?.length
+                                    ? option.evidence.join(' · ')
+                                    : '근거 없음';
+                              return (
+                                <div key={group.groupId} style={{ display: 'grid', gap: '6px' }}>
+                                  <label style={{ color: '#cbd5e1', fontWeight: 700, fontSize: '12px' }}>
+                                    {`${group.sourceText} → `}
+                                  </label>
+                                  <div style={{ color: '#94a3b8', fontSize: '11px' }}>
+                                    기존 기록: {original ? `${original.type} · ${original.notes ?? ''}` : '대응 기록 없음'}
+                                  </div>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px', alignItems: 'center' }}>
+                                      <select
+                                        value={selected}
+                                        aria-label={`${group.sourceText} 판독 후보`}
+                                        disabled={!isAdmin}
+                                        onChange={(event) => changeRebuildReview(group.groupId, event.target.value, true)}
+                                      style={{
+                                        width: '100%',
+                                        borderRadius: '8px',
+                                        border: '1px solid rgba(148,163,184,0.4)',
+                                        background: '#0f172a',
+                                        color: '#f8fafc',
+                                        padding: '6px 8px',
+                                      }}
+                                    >
+                                      {group.options.map((candidate) => (
+                                        <option
+                                          key={candidate.eventId}
+                                          value={candidate.eventId}
+                                          title={[...(candidate.reasons ?? []), ...(candidate.evidence ?? [])]
+                                            .filter(Boolean)
+                                            .join(' / ')}
+                                        >
+                                          {`${candidate.event.type} (${(candidate.confidence * 100).toFixed(
+                                            0,
+                                          )}%)${candidate.reasons?.length ? ` · ${candidate.reasons[0]}` : ''}`}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <span style={{ color: option.manualResolve?.required ? '#fb923c' : '#94a3b8', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                                      {decisionLabel}: {decision && decision !== REJECT_REBUILD_SELECTION ? group.options.find((candidate) => candidate.eventId === decision)?.event.type : option.type}
+                                    </span>
+                                  </div>
+                                  {isAdmin ? (
+                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                      <button type="button" onClick={() => changeRebuildReview(group.groupId, selected)}>후보 확정</button>
+                                      <button type="button" onClick={() => changeRebuildReview(group.groupId, REJECT_REBUILD_SELECTION)}>재해석 제외</button>
+                                      <button type="button" disabled={!decision} onClick={() => changeRebuildReview(group.groupId, null)}>확정 되돌리기</button>
+                                    </div>
+                                  ) : null}
+                                  <div style={{ color: '#cbd5e1', fontSize: '11px', lineHeight: 1.4 }}>
+                                    <div>판정 사유: {reasonText}</div>
+                                    <div style={{ color: '#94a3b8' }}>근거: {evidenceText}</div>
+                                    {groupIssues.length ? (
+                                      <div style={{ color: '#fca5a5' }}>검증 이슈: {groupIssues.join(' · ')}</div>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          {replayStateAudit.entries.some((entry) => entry.status === 'rejected') ? (
+                            <details style={{ color: '#fca5a5', fontSize: '11px' }}>
+                              <summary>상태 반려 내역</summary>
+                              {replayStateAudit.entries.filter((entry) => entry.status === 'rejected').map((entry, index) => (
+                                <div key={`${entry.eventId}-${index}`}>{entry.eventId}: {entry.reasons.join(' · ')}</div>
+                              ))}
+                            </details>
+                          ) : null}
+                          {(state.scoringRejections ?? []).filter((entry) => entry.matchId === state.activeMatchId).length ? (
+                            <details style={{ color: '#fca5a5', fontSize: '11px' }}>
+                              <summary>입력 시 반려된 기록</summary>
+                              {(state.scoringRejections ?? []).filter((entry) => entry.matchId === state.activeMatchId).map((entry) => (
+                                <div key={entry.id}>{entry.eventType}: {entry.reason}</div>
+                              ))}
+                            </details>
+                          ) : null}
+                          {hasReplayPendingReview ? (
+                            <p style={{ margin: 0, color: '#f59e0b', fontSize: '11px', fontWeight: 700 }}>
+                              미확정 재해석은 상세 기록에 반영되지 않으며 CSV 감사 내역에 보류로 남습니다. 복합 사건은 모든 조각을 확정해야 반영됩니다.
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : null}
                       <LiveFeed sections={sections} collapsedMap={collapsedMap} gameOverInfo={gameOverInfo} isMobile={isMobile} />
                     </div>
                   ) : null}
@@ -1429,25 +1635,10 @@ function getDefenseAssignments(lineup: { name: string; pos: string }[]) {
 }
 
 // [수정] ci(타격방해), fc(야수선택) 판별 로직 추가
-function classifyResult(result: string) {
-  const normalized = result.replace(/\s+/g, '');
-  if (normalized.includes('홈런')) return 'hr' as const;
-  if (normalized.includes('3루타')) return 'triple' as const;
-  if (normalized.includes('2루타')) return 'double' as const;
-  if (normalized.includes('1루타')) return 'single' as const;
-  if (normalized.includes('고의') || normalized.toUpperCase().includes('IB')) return 'bb' as const; // 고의4구 추가
-  if (normalized.includes('볼넷')) return 'bb' as const;
-  if (normalized.includes('몸에맞는공')) return 'hbp' as const;
-  if (normalized.includes('타격방해')) return 'ci' as const; // [추가]
-  if (normalized.includes('야수선택') || normalized.toUpperCase().includes('F.C')) return 'fc' as const; // [추가]
-  if (normalized.includes('실책') || /E[1-9]/i.test(normalized)) return 'error' as const;
-  if (normalized.includes('희생플라이')) return 'sac' as const;
-  if (normalized.includes('희생번트')) return 'sac' as const; // [추가] 희생번트도 sac으로 분류
-  if (normalized.includes('낫아웃')) return 'so_reach' as const;
-  if (normalized.includes('삼진')) return 'so' as const;
-  if (normalized.includes('아웃') && !normalized.includes('도루')) return 'out' as const;
-  return null;
-}
+// Legacy wrapper retained for comparison; callers use the shared classifier directly.
+// function classifyResult(result: string) {
+//   return classifyRecordedPlateAppearance(result);
+// }
 
 function classifyPitch(result: string) {
   const normalized = result.replace(/\s+/g, '');
@@ -1577,6 +1768,45 @@ function formatEventDetails(event?: PlayEvent): EventDetail[] {
 
   if (event.notes?.trim()) {
     details.push({ label: '비고', value: event.notes.trim() });
+  }
+
+  if (event.source?.kind === 'text_feed_rebuild') {
+    details.push({ label: '재해석', value: '텍스트 기반' });
+    details.push({ label: '파서 신뢰도', value: typeof event.confidence === 'number' ? event.confidence.toFixed(2) : 'N/A' });
+  }
+  if (Array.isArray(event.evidence) && event.evidence.length) {
+    details.push({ label: '근거', value: event.evidence.join(' · ') });
+  }
+  if (Array.isArray(event.corrections) && event.corrections.length) {
+    details.push({ label: '근거 문구', value: event.corrections.join(' | ') });
+  }
+  if (event.penalty && typeof event.penalty === 'object') {
+    const kind = (event.penalty as { kind?: string; official?: boolean }).kind ?? '미상';
+    const official = (event.penalty as { official?: boolean }).official ? '공식' : '비공식';
+    details.push({ label: '패널티', value: `${kind}(${official})` });
+  }
+  if (event.substitution && typeof event.substitution === 'object') {
+    const detail = event.substitution as {
+      side?: 'home' | 'away';
+      action?: string;
+      actor?: string;
+      atHalf?: 'top' | 'bottom';
+    };
+    const side = detail.side ? (detail.side === 'home' ? '홈' : '원정') : '미상';
+    const action = detail.action ?? 'substitution';
+    const actor = detail.actor ? ` / ${detail.actor}` : '';
+    const timing = detail.atHalf ? ` / ${detail.atHalf === 'top' ? '초' : '말'}` : '';
+    details.push({ label: '교체', value: `${side}/${action}${actor}${timing}` });
+  }
+  if (event.officialAdjust === true) {
+    details.push({ label: '공식보정', value: '적용' });
+  }
+  if (event.manualResolve?.required) {
+    const reasons = event.manualResolve.reasons?.join(', ') ?? '수동 확인 필요';
+    details.push({ label: '검증 상태', value: reasons });
+  }
+  if (event.outcome === 'manual_review') {
+    details.push({ label: '자동 검토', value: '수동 점검 권장' });
   }
 
   return details;
@@ -1827,6 +2057,7 @@ function ensurePitcherStat(name: string, pos?: string): PitcherStatExt {
     so: 0,
     r: 0,
     er: 0,
+    earnedRunsStatus: 'estimated',
   };
 }
 
@@ -1981,7 +2212,11 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
   const chronological = record.feed;
   const currentPitcher: Record<'home' | 'away', string | null> = { home: null, away: null };
   const bases: (string | null)[] = [null, null, null];
-  const runnerResponsibility = new Map<string, string>();
+  const runnerResponsibility = new Map<string, string | null>();
+  const structuredRunnerIndex = createStructuredRunnerIndex(record.events);
+  const scoringEvents = createScoringEventLookup(record.events);
+  const seededStructuredEvents = new Set<string>();
+  const appliedCompositeEvents = new Set<string>();
   let lastHalfKey: string | null = null;
   let currentHalfOuts = 0;
 
@@ -2053,7 +2288,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
   };
 
   const creditRunForRunner = (runnerName: string, defenseSide: 'home' | 'away', earned = true) => {
-    const responsible = runnerResponsibility.get(runnerName) ?? currentPitcher[defenseSide];
+    const responsible = runnerResponsibility.has(runnerName) ? runnerResponsibility.get(runnerName) : currentPitcher[defenseSide];
     creditRunForPitcher(responsible ?? null, defenseSide, earned);
     runnerResponsibility.delete(runnerName);
   };
@@ -2297,6 +2532,7 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
   // [수정] 투수 등판 순서 문제 해결을 위해 두 패스로 분리
   // 첫 번째 패스: 투수 관련 로그만 먼저 처리하여 등판 순서 확립
   chronological.forEach((entry) => {
+    if (scoringEvents.get(entry)?.compositePlay) return;
     const offenseSide: 'home' | 'away' = entry.half === 'top' ? 'away' : 'home';
     const defenseSide: 'home' | 'away' = offenseSide === 'home' ? 'away' : 'home';
     const result = entry.result.trim();
@@ -2338,6 +2574,29 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
 
     syncHalfState(entry.inning, entry.half);
 
+    const compositeEvent = scoringEvents.get(entry);
+    if (compositeEvent?.compositePlay || compositeEvent?.type === 'composite') {
+      const composite = !compositeEvent.manualResolve?.required && normalizeCompositePlay(compositeEvent.compositePlay);
+      if (composite && !appliedCompositeEvents.has(composite.input.id)) {
+        appliedCompositeEvents.add(composite.input.id);
+        applyCompositeProjection(composite, {
+          batter: id => addStat(offenseSide, resolveBatterName(id, offenseSide)),
+          pitcher: id => addPitch(defenseSide, resolvePitcherName(id, defenseSide)),
+        });
+        currentPitcher[defenseSide] = resolvePitcherName(composite.input.expected.pitcherId, defenseSide);
+        currentHalfOuts = composite.input.expected.outs + composite.outsAdded;
+        runnerResponsibility.clear();
+        composite.after.bases.forEach((runner, i) => {
+          bases[i] = runner ? resolveBatterName(runner, offenseSide) : null;
+          if (runner) {
+            const owner = composite.after.runnerResponsiblePitcher[i as 0 | 1 | 2];
+            runnerResponsibility.set(bases[i]!, owner ? resolvePitcherName(owner, defenseSide) : null);
+          }
+        });
+      }
+      return;
+    }
+
     // 투수 관련 로그에서 currentPitcher 업데이트 (등판 순서는 첫 번째 패스에서 이미 처리됨)
     if (result.includes('투수 교체')) {
       const incoming = result.split('→')[1];
@@ -2356,11 +2615,28 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
       markPitcher(inferred, cleaned);
     }
 
+    const structuredPlay = structuredRunnerIndex.get(entry);
+    const structuredKey = JSON.stringify([entry.inning, entry.half, entry.eventId]);
+    if (structuredPlay && !seededStructuredEvents.has(structuredKey)) {
+      seededStructuredEvents.add(structuredKey);
+      structuredPlay.input.expected.bases.forEach((runner, index) => {
+        if (!runner) return;
+        const owner = structuredPlay.input.expected.runnerResponsiblePitcher[index as 0 | 1 | 2];
+        runnerResponsibility.set(resolveBatterName(runner, offenseSide), owner ? resolvePitcherName(owner, defenseSide) : null);
+      });
+    }
     let name = entry.batter?.trim();
     if (!name) {
       const runnerMove = parseRunnerMove(result);
       if (runnerMove) {
-        const { runnerName, fromBase, toBase, scored, out, hold, isErrorPlay } = runnerMove;
+        const structured = structuredRunnerIndex.takeMovement(entry, runnerMove.runnerName);
+        if (structured?.duplicate) return;
+        const move = structured?.move;
+        const { runnerName, fromBase, toBase, scored, out, hold, isErrorPlay } = move ? {
+          ...runnerMove, runnerName: move.runnerId, fromBase: move.from,
+          toBase: move.to === 'out' ? null : move.to, scored: move.runCounted,
+          out: move.to === 'out', hold: move.to === move.from,
+        } : runnerMove;
         const resolvedRunner = resolveBatterName(runnerName, offenseSide);
         let currentIndex = -1;
         if (fromBase != null && bases[fromBase] === resolvedRunner) {
@@ -2371,7 +2647,11 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
 
         if (scored) {
           if (currentIndex >= 0) bases[currentIndex] = null;
-          creditRunForRunner(resolvedRunner, defenseSide, !isErrorPlay);
+          if (move) {
+            const owner = move.responsiblePitcherId;
+            creditRunForPitcher(owner ? resolvePitcherName(owner, defenseSide) : null, defenseSide, !isErrorPlay);
+            runnerResponsibility.delete(resolvedRunner);
+          } else creditRunForRunner(resolvedRunner, defenseSide, !isErrorPlay);
         } else if (out) {
           if (currentIndex >= 0) bases[currentIndex] = null;
           runnerResponsibility.delete(resolvedRunner);
@@ -2380,6 +2660,9 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
           if (pitcherName) {
             addPitch(defenseSide, pitcherName).outs += 1;
           }
+        } else if (toBase === 'home') {
+          if (currentIndex >= 0) bases[currentIndex] = null;
+          runnerResponsibility.delete(resolvedRunner);
         } else if (typeof toBase === 'number') {
           if (currentIndex >= 0) bases[currentIndex] = null;
           bases[toBase] = resolvedRunner;
@@ -2475,13 +2758,13 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
       }
     }
     const pitcherStat = pitcherName ? addPitch(pitchSide, pitcherName) : null;
-    const pitchInfo = classifyPitch(result);
+    const pitchInfo = recordedMiscPitch(scoringEvents.get(entry)) ?? classifyPitch(result);
     if (pitcherStat && pitchInfo.pitch) {
       pitcherStat.pitches += 1;
       if (pitchInfo.strike) pitcherStat.strikes += 1;
       if (pitchInfo.ball) pitcherStat.balls += 1;
     }
-    const kind = classifyResult(result);
+    const kind = classifyRecordedPlateAppearance(result, scoringEvents.get(entry));
     if (!kind) return;
     const stat = addStat(side, name);
     switch (kind) {
@@ -2607,7 +2890,8 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
     }
 
     if (kind === 'hr') {
-      creditRunForPitcher(pitcherName ?? null, pitchSide, true);
+      const owner = structuredPlay?.input.batterHit?.responsiblePitcherId;
+      creditRunForPitcher(structuredPlay?.input.batterHit ? (owner ? resolvePitcherName(owner, pitchSide) : null) : pitcherName ?? null, pitchSide, true);
       return;
     }
 
@@ -2626,12 +2910,15 @@ function buildPlayerStats(record: ReturnType<typeof buildGameRecord>, options?: 
       if (placed.scored) {
         creditRunForPitcher(pitcherName ?? null, pitchSide, true);
       } else {
-        assignRunnerResponsibility(name, pitchSide);
+        const hit = structuredPlay?.input.batterHit;
+        if (hit) runnerResponsibility.set(name, hit.responsiblePitcherId ? resolvePitcherName(hit.responsiblePitcherId, pitchSide) : null);
+        else assignRunnerResponsibility(name, pitchSide);
       }
     }
   });
 
   record.events.forEach((event) => {
+    if (event.compositePlay || event.type === 'composite') return;
     const offenseSide: 'home' | 'away' = event.half === 'top' ? 'away' : 'home';
     if (event.batter && typeof event.rbi === 'number' && event.rbi > 0) {
       const batterName = resolveBatterName(event.batter, offenseSide, event.order ?? null);
@@ -2973,6 +3260,7 @@ function PitchingTable({
     so?: number;
     r?: number;
     er?: number;
+    earnedRunsStatus?: PostGamePitcherLine['earnedRunsStatus'];
     pitches?: number;
   }[];
   color: string;
@@ -2999,7 +3287,7 @@ function PitchingTable({
           </div>
         ))}
         {pitchers.map((p) =>
-          [p.name, p.ip, p.bf, p.h, p.hr, p.bb, p.hbp, p.so, p.r, p.er, p.pitches].map((v, idx) => (
+          [p.name, p.ip, p.bf, p.h, p.hr, p.bb, p.hbp, p.so, p.r, earnedRunsView(p.er, 0, p.earnedRunsStatus).er, p.pitches].map((v, idx) => (
             <div
               key={`${p.name}-${idx}`}
               style={{
@@ -3160,38 +3448,7 @@ function stripBatterFromNote(note: string, batter?: string) {
   return removed || cleaned;
 }
 
-function classifyKboResult(event: PlayEvent) {
-  const normalized = (event.notes || event.type || '').replace(/\s+/g, '');
-  if (normalized.includes('홈런')) return 'HR';
-  if (normalized.includes('3루타')) return '3B';
-  if (normalized.includes('2루타')) return '2B';
-  if (normalized.includes('1루타')) return '1B';
-  if (event.type === 'fc' || normalized.includes('야수선택') || normalized.toUpperCase().includes('F.C')) return 'FC';
-  if (normalized.includes('타격방해')) return 'CI';
-  if (normalized.includes('고의') || normalized.toUpperCase().includes('IB')) return 'IB';
-  if (event.type === 'walk' || normalized.includes('볼넷') || normalized.includes('4구')) return 'B';
-  if (event.type === 'hbp' || normalized.includes('몸에맞는공')) return 'HP';
-  if (event.type === 'sac' || normalized.includes('희생')) return 'SAC';
-  if (event.type === 'error' || normalized.includes('실책')) return 'E';
-  if (normalized.includes('병살')) {
-    if (event.dpRoute && event.dpRoute.length > 0) {
-      return `GDP(${event.dpRoute.join('-')})`;
-    }
-    return 'GDP';
-  }
-  if (normalized.includes('삼진')) {
-    if (event.strikeType === 'looking' || normalized.includes('루킹')) {
-      return 'Kc';
-    }
-    return 'K';
-  }
-  if (event.type === 'steal') return 'SB';
-  if (event.type === 'steal_fail') return 'CS';
-  if (event.type === 'runner_out') return 'RUN OUT';
-  if (event.type === 'runner') return 'RUN';
-  if (normalized.includes('아웃') || event.type === 'out') return 'OUT';
-  return event.type.toUpperCase();
-}
+const classifyKboResult = (event: PlayEvent) => classifyKboResultCode(event);
 
 function formatScorebookCell(event: PlayEvent) {
   const result = classifyKboResult(event);
@@ -3210,7 +3467,10 @@ function formatScorebookCell(event: PlayEvent) {
 }
 
 // [핵심] CSV 빌더 함수
-function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
+function buildCsvRecord(
+  record: ReturnType<typeof buildGameRecord>,
+  options: { rebuildSelections?: Record<string, string> } = {},
+) {
   const lines: string[] = [];
   const add = (...cells: (string | number | boolean | null | undefined)[]) => {
     lines.push(cells.map((cell) => escapeCsvCell(cell)).join(','));
@@ -3445,14 +3705,14 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   const writeHitterStats = (side: 'home' | 'away', label: string) => {
     addBlank();
     add(`실시간 타자 기록 - ${label}`);
-    add('선수', '포지션', '타석', '타수', '안타', '1루타', '2루타', '3루타', '홈런', '볼넷', '타격방해', '야수선택', '사구', '삼진', '희생', '타율', '출루율');
+    add('선수', '포지션', '타석', '타수', '안타', '1루타', '2루타', '3루타', '홈런', '볼넷', '타격방해', '야수선택', '사구', '삼진', '희생', '타율', '출루율', '희생번트', '희생플라이', '도루', '도루실패', '병살타', '출루율 상태');
     stats.hitters[side].forEach((s) => {
-      const obpDen = s.ab + s.bb + s.hbp + s.sac + s.ci;
+      const rates = batterRateView(s);
       const avg = s.ab > 0 ? s.h / s.ab : 0;
-      const obp = obpDen > 0 ? (s.h + s.bb + s.hbp + s.ci) / obpDen : 0;
       add(
         s.name, s.pos, s.pa, s.ab, s.h, s.singles, s.doubles, s.triples, s.hr, s.bb, s.ci, s.fc, s.hbp, s.so, s.sac,
-        s.ab > 0 ? fmt3(avg) : '-', obpDen > 0 ? fmt3(obp) : '-',
+        s.ab > 0 ? fmt3(avg) : '-', rates.obp !== null ? fmt3(rates.obp) : '-',
+        rates.sh ?? '-', rates.sf ?? '-', s.sb ?? '-', s.cs ?? '-', s.gdp ?? '-', rates.status,
       );
     });
   };
@@ -3460,11 +3720,13 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
   const writePitcherStats = (side: 'home' | 'away', label: string) => {
     addBlank();
     add(`실시간 투수 기록 - ${label}`);
-    add('선수', '포지션', '타자상대', '투구수', '투구수(S/B)', '이닝', '피안타', '피홈런', '볼넷', '사구', '탈삼진');
+    add('선수', '포지션', '타자상대', '투구수', '투구수(S/B)', '이닝', '피안타', '피홈런', '볼넷', '사구', '탈삼진', '실점', '자책', 'ERA', '자책 확인 상태');
     stats.pitchers[side].forEach((s) => {
+      const earned = earnedRunsView(s.er, s.outs, s.earnedRunsStatus);
       const ip = `${Math.floor(s.outs / 3)}.${s.outs % 3}`;
       add(
         s.name, s.pos, s.bf, s.pitches, `${s.pitches} (${s.strikes}/${s.balls})`, ip, s.h, s.hr, s.bb, s.hbp, s.so,
+        s.r, earned.er, earned.era, earned.label,
       );
     });
   };
@@ -3494,65 +3756,6 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
     Array.isArray(event.dpRoute) ? event.dpRoute.join('-') : '',
   ].join('|');
 
-  const extractRunnerSummaryFromFeed = (text: string) => {
-    const match = text.match(/([123]루\s*주자.*)$/);
-    if (match) return match[1].trim();
-    return text.trim();
-  };
-
-  const inferEventTypeFromResult = (result: string) => {
-    const normalized = result.replace(/\s+/g, '');
-    if (normalized.includes('도루실패') || normalized.includes('도루실패')) return 'steal_fail';
-    if (normalized.includes('도루성공') || normalized.includes('도루성공') || normalized.includes('도루')) return 'steal';
-    if (normalized.includes('주자') && normalized.includes('아웃')) return 'runner_out';
-    if (normalized.includes('주자') && (normalized.includes('득점') || normalized.includes('진루') || normalized.includes('정지'))) return 'runner';
-    if (normalized.includes('타격방해')) return 'ci';
-    if (normalized.includes('희생')) return 'sac';
-    if (normalized.includes('몸에맞는공')) return 'hbp';
-    if (normalized.includes('볼넷') || normalized.includes('고의4구') || normalized.includes('4구')) return 'walk';
-    if (normalized.includes('야수선택') || normalized.toUpperCase().includes('F.C')) return 'fc';
-    if (normalized.includes('실책') || /E[1-9]/i.test(result)) return 'error';
-    if (normalized.includes('삼진') || normalized.includes('아웃')) return 'out';
-    return 'play';
-  };
-
-  const rebuildEventsFromFeed = (feed: ReturnType<typeof buildGameRecord>['feed']) => {
-    const buckets = new Map<string, ReturnType<typeof buildGameRecord>['feed']>();
-    feed.forEach((entry) => {
-      if (!entry.eventId) return;
-      const list = buckets.get(entry.eventId) ?? [];
-      list.push(entry);
-      buckets.set(entry.eventId, list);
-    });
-    const rebuilt: PlayEvent[] = [];
-    buckets.forEach((entries, eventId) => {
-      const sorted = [...entries].sort(sortChrono);
-      const primary = sorted.find((e) => (e.order && e.order > 0) || (e.batter && e.batter.trim())) ?? sorted[0];
-      if (!primary) return;
-      const notes = primary.result ?? '';
-      const type = inferEventTypeFromResult(notes);
-      const runners = sorted
-        .filter((e) => (!e.order || e.order === 0) && (!e.batter || !e.batter.trim()))
-        .map((e) => extractRunnerSummaryFromFeed(e.result ?? ''))
-        .filter(Boolean);
-      rebuilt.push({
-        inning: primary.inning,
-        half: primary.half,
-        order: primary.order ?? 0,
-        batter: primary.batter ?? '',
-        pitch: primary.pitch ?? 0,
-        type,
-        runners,
-        battedBall: null,
-        error: null,
-        notes,
-        createdAt: primary.createdAt,
-        eventId,
-      });
-    });
-    return rebuilt;
-  };
-
   const dedupeEvents = (items: PlayEvent[]) => {
     const seen = new Set<string>();
     return items.filter((event) => {
@@ -3562,23 +3765,36 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
       return true;
     });
   };
-  const batterFeedCount = record.feed.filter((entry) => entry.order > 0 && entry.batter && entry.batter.trim()).length;
-  const minExpectedEvents = batterFeedCount > 0 ? Math.max(1, Math.floor(batterFeedCount * 0.5)) : 0;
-  const needsRebuild = batterFeedCount > 0 && record.events.length < minExpectedEvents;
-  const rebuiltEvents = needsRebuild ? rebuildEventsFromFeed(record.feed) : [];
-  const mergedEvents = needsRebuild
-    ? (() => {
-        const merged = new Map<string, PlayEvent>();
-        rebuiltEvents.forEach((ev) => merged.set(eventKey(ev), ev));
-        record.events.forEach((ev) => merged.set(eventKey(ev), ev));
-        return Array.from(merged.values());
-      })()
-    : record.events;
+  const rebuiltResult = rebuildEventsFromFeedWithAlternatives(record.feed, {
+    source: { kind: 'text_feed_rebuild', provider: 'shared-text-feed-parser' },
+    fallback: { inning: 1, half: 'top' },
+  });
+  const selectedEvents = selectRebuildEvents(rebuiltResult.groups, options.rebuildSelections);
+  const mergedEvents = mergeRebuiltEventsForReplay({
+    existingEvents: record.events,
+    rebuiltEvents: selectedEvents,
+  });
   const eventsChrono = dedupeEvents([...mergedEvents].sort(sortChrono));
+  addBlank();
+  add('문자중계 재해석 감사');
+  add('사건 ID', '중계 문구', '후보 유형', '확정 상태', '신뢰도', '보류 사유');
+  rebuildReviewRows(rebuiltResult.groups, options.rebuildSelections).forEach((row) => add(...row));
+  addBlank();
+  add('상태 재생 감사');
+  add('사건 ID', '검증 상태', '검증 사유');
+  scoringReplayAuditRows(mergedEvents).forEach((row) => add(...row));
+  addBlank();
+  add('구조화 주루 기록');
+  add('사건 ID', '입력 ID', '주자', '출발 루', '결과', '발생 순서', '사유', '아웃 종류', '책임 투수', '홈 도달 판정', '타자 결과', '타점', '판정 메모');
+  runnerPlayAuditRows(mergedEvents).forEach((row) => add(...row));
+  compositePlayAuditRows(mergedEvents).forEach((row) => add(...row));
   addBlank();
   add('상세 플레이 이벤트');
   if (eventsChrono.length) {
-    add('이닝', '공/말', '타순', '타자', '구수', '유형', '주자 이동', '타구 유형/방향', '실책 요약', '실책 위치', '실책 유형', '실책 상황', '실책 결과', '비고');
+    add(
+      '이닝', '공/말', '타순', '타자', '구수', '유형', '주자 이동', '타구 유형/방향',
+      '실책 요약', '실책 위치', '실책 유형', '실책 상황', '실책 결과', '비고', '신뢰도', '판정상태',
+    );
     eventsChrono.forEach((event) => {
       add(
         event.inning, halfLabel(event.half), event.order || '-', event.batter || '-', event.pitch, event.type,
@@ -3590,6 +3806,8 @@ function buildCsvRecord(record: ReturnType<typeof buildGameRecord>) {
         formatErrorField(event.error, 'context'),
         formatErrorAdvanceResults(event.error),
         event.notes ?? '-',
+        typeof event.confidence === 'number' ? event.confidence.toFixed(2) : '-',
+        event.manualResolve?.required ? '수동확인 필요' : event.source?.kind === 'manual' ? '수동확정' : '원본/자동',
       );
     });
   } else {

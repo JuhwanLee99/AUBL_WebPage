@@ -1,3 +1,4 @@
+import RecordSourceGate from '@shared/components/RecordSourceGate';
 import { useEffect, useState, useCallback, type CSSProperties, type ChangeEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
@@ -527,7 +528,7 @@ function TotalsEditor({ home, away, onChange }: TotalsEditorProps) {
 
 // ─── 메인 페이지 ─────────────────────────────────────────────────────────────
 
-export default function AdminGameEditPage() {
+function AdminGameEditPageContent() {
   const { matchId } = useParams<{ matchId: string }>();
   const navigate = useNavigate();
   const { isAdmin } = useAdmin();
@@ -892,4 +893,9 @@ export default function AdminGameEditPage() {
       )}
     </div>
   );
+}
+
+export default function AdminGameEditPage() {
+  const { matchId } = useParams<{ matchId?: string }>();
+  return <RecordSourceGate matchId={matchId}><AdminGameEditPageContent key={matchId} /></RecordSourceGate>;
 }

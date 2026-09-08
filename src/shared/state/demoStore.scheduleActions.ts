@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { auth, firestore } from '../firebase/client';
 import {
   collection,
@@ -19,6 +19,8 @@ import { normalizeEvents, normalizeFeed } from './demoStore.normalize';
 import { mergeMatches, normalizeMatches, projectSpectatorMatch } from './demoStore.schedule';
 import { normalizeState } from './demoStore.state';
 import { applyLineupVisibility, mergeOwnerLineups } from './demoStore.visibility';
+import { captureLiveRecordAccess, type LiveRecordAccess } from './demoStore.liveAccess';
+import { hasOfficialAuthority } from '../lib/recordSourcePolicy';
 import type { DemoState, MatchSchedule, PlayEvent, PlayLog, PlayerSlot, SharedGameState } from './demoStore';
 
 type ScheduleAction =
@@ -60,6 +62,7 @@ export type ScheduleLoadResult = { status: 'ready' | 'cached' | 'error' };
 export function useScheduleActions(params: {
   dispatch: Dispatch;
   getState: () => DemoState;
+  getLiveRecordAccess: () => LiveRecordAccess;
   canRecordGame: boolean;
   canControlCurrentPointer: boolean;
   markMatchesReady: () => void;
@@ -75,6 +78,7 @@ export function useScheduleActions(params: {
   const {
     dispatch,
     getState,
+    getLiveRecordAccess,
     canRecordGame,
     canControlCurrentPointer,
     markMatchesReady,
@@ -87,6 +91,9 @@ export function useScheduleActions(params: {
     updateCurrentMatchPointer,
     initialState,
   } = params;
+
+  const selectionRequestRef = useRef(0);
+  useEffect(() => () => { selectionRequestRef.current += 1; }, []);
 
   return useMemo(() => ({
     addMatch: (match: MatchSchedule) => {
@@ -209,16 +216,24 @@ export function useScheduleActions(params: {
       }
     },
     selectMatch: (matchId: string | null) => {
+      const requestId = ++selectionRequestRef.current;
+      const hasAccess = captureLiveRecordAccess(getLiveRecordAccess, matchId);
+      const canApply = () => requestId === selectionRequestRef.current && hasAccess()
+        && getState().activeMatchId === matchId
+        && !hasOfficialAuthority(getState().matches.find(match => match.id === matchId));
       const followCurrent = canControlCurrentPointer;
       markSkipFirestoreWrite();
       dispatch({ type: 'selectMatch', matchId, followCurrent });
       if (canControlCurrentPointer) updateCurrentMatchPointer(matchId);
-      if (!matchId) return;
+      // New/unknown matches are loaded by the source-gated subscription effects.
+      // A same-match refresh may use this path only within its original live session.
+      if (!matchId || !canApply()) return;
       const matchIdLocal = matchId;
       void (async () => {
         try {
           const stateDoc = doc(firestore, 'matchStates', matchIdLocal);
           const snap = await getDoc(stateDoc);
+          if (!canApply()) return;
           if (snap.exists()) {
             const data = snap.data() as SharedGameState & { feed?: PlayLog[]; events?: PlayEvent[] };
             const current = getState();
@@ -235,6 +250,7 @@ export function useScheduleActions(params: {
               state: normalizeState(initialState, {
                 ...current,
                 ...core,
+                activeMatchId: matchIdLocal,
                 matches: current.matches,
               }),
             });
@@ -273,6 +289,7 @@ export function useScheduleActions(params: {
                   ),
             ),
           ]);
+          if (!canApply()) return;
           const feedEntries = normalizeFeed(feedSnap.docs.map((docSnap) => docSnap.data()), fallback);
           const eventEntries = normalizeEvents(eventsSnap.docs.map((docSnap) => docSnap.data()), fallback);
           markSkipFirestoreWrite();
@@ -313,6 +330,8 @@ export function useScheduleActions(params: {
       }
     },
     releaseLock: () => {
+      const current = getState();
+      if (!captureLiveRecordAccess(getLiveRecordAccess, current.activeMatchId)()) return;
       dispatch({ type: 'releaseLock' });
       const matchId = getState().activeMatchId;
       const user = auth.currentUser;
@@ -335,7 +354,8 @@ export function useScheduleActions(params: {
       const current = getState();
       const matchId = current.activeMatchId;
       const user = auth.currentUser;
-      if (!matchId || !user) return;
+      const hasAccess = captureLiveRecordAccess(getLiveRecordAccess, matchId);
+      if (!matchId || !user || !hasAccess()) return;
       const lockedAt = Date.now();
       const payload = {
         scorerUid: user.uid,
@@ -348,6 +368,7 @@ export function useScheduleActions(params: {
       void runTransaction(firestore, async (tx) => {
         const ref = doc(firestore, 'matchStates', matchId);
         const snap = await tx.get(ref);
+        if (!hasAccess() || getState().activeMatchId !== matchId) return;
         const data = snap.exists() ? (snap.data() as SharedGameState) : null;
         const owner = data?.scorerUid ?? null;
         const locked = data?.scorerLockedAt ?? 0;
@@ -371,6 +392,7 @@ export function useScheduleActions(params: {
   }), [
     dispatch,
     getState,
+    getLiveRecordAccess,
     canRecordGame,
     canControlCurrentPointer,
     markMatchesReady,

@@ -3,6 +3,9 @@ import { doc, setDoc } from 'firebase/firestore';
 import { firestore } from '../firebase/client';
 import { SPECTATOR_EXPANDED_FEED_LIMIT } from './demoStore.constants';
 import { buildPostGameRecord } from './demoStore.record';
+import type { RunnerPlayInput } from '../lib/runnerPlayEngine.ts';
+import type { CompositeInput } from '../lib/compositePlayEngine.ts';
+import type { HitRunnerReview } from '../lib/hitPlayAdapter.ts';
 import type {
   BattedBallDetails,
   DemoState,
@@ -27,7 +30,7 @@ type GameAction =
   | { type: 'outWithMessage'; note: string; battedBall?: BattedBallDetails | null }
   | { type: 'doublePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[]; route?: number[]; runnerAdvancements?: Record<number, number> }
   | { type: 'triplePlay'; battedBall?: BattedBallDetails | null; selectedRunners?: number[]; route?: number[]; runnerAdvancements?: Record<number, number> }
-  | { type: 'hit'; bases: 1 | 2 | 3 | 4; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null }
+  | { type: 'hit'; bases: 1 | 2 | 3 | 4; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null; review?: HitRunnerReview }
   | { type: 'fielderChoice'; advances?: RunnerAdvanceSelections; battedBall?: BattedBallDetails | null; context?: string }
   | { type: 'walk' }
   | { type: 'intentionalWalk' }
@@ -46,6 +49,8 @@ type GameAction =
   | { type: 'adjustScore'; side: Side; delta: number }
   | { type: 'nextHalf' }
   | { type: 'advanceRunners'; selections: RunnerAdvanceSelections; message: string; preserveLastPlay?: boolean }
+  | { type: 'recordRunnerPlay'; input: RunnerPlayInput }
+  | { type: 'recordCompositePlay'; input: CompositeInput }
   | { type: 'runnerStealSuccess'; base: 0 | 1 | 2 }
   | { type: 'runnerCaught'; base: 0 | 1 | 2 }
   | { type: 'runnerPickoff'; base: 0 | 1 | 2 }
@@ -152,12 +157,12 @@ export function useGameActions(params: {
     droppedThirdStrike: (variant?: 'strikeout' | 'reach' | 'tag_out' | 'force_out', strikeType?: 'swinging' | 'looking', runnerOuts?: string[]) =>
       dispatch({ type: 'droppedThirdStrike', variant, strikeType, runnerOuts }),
     addOut: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'out', battedBall }),
-    hitSingle: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) =>
-      dispatch({ type: 'hit', bases: 1, advances, battedBall }),
-    hitDouble: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) =>
-      dispatch({ type: 'hit', bases: 2, advances, battedBall }),
-    hitTriple: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null) =>
-      dispatch({ type: 'hit', bases: 3, advances, battedBall }),
+    hitSingle: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null, review?: HitRunnerReview) =>
+      dispatch({ type: 'hit', bases: 1, advances, battedBall, review }),
+    hitDouble: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null, review?: HitRunnerReview) =>
+      dispatch({ type: 'hit', bases: 2, advances, battedBall, review }),
+    hitTriple: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null, review?: HitRunnerReview) =>
+      dispatch({ type: 'hit', bases: 3, advances, battedBall, review }),
     homeRun: (battedBall?: BattedBallDetails | null) => dispatch({ type: 'hit', bases: 4, battedBall }),
     fielderChoice: (advances?: RunnerAdvanceSelections, battedBall?: BattedBallDetails | null, context?: string) =>
       dispatch({ type: 'fielderChoice', advances, battedBall, context }),
@@ -187,6 +192,8 @@ export function useGameActions(params: {
     },
     advanceRunners: (selections: RunnerAdvanceSelections, message: string, preserveLastPlay?: boolean) =>
       dispatch({ type: 'advanceRunners', selections, message, preserveLastPlay }),
+    recordRunnerPlay: (input: RunnerPlayInput) => dispatch({ type: 'recordRunnerPlay', input }),
+    recordCompositePlay: (input: CompositeInput) => dispatch({ type: 'recordCompositePlay', input }),
     runnerStealSuccess: (base: 0 | 1 | 2) => dispatch({ type: 'runnerStealSuccess', base }),
     runnerCaught: (base: 0 | 1 | 2) => dispatch({ type: 'runnerCaught', base }),
     runnerPickoff: (base: 0 | 1 | 2) => dispatch({ type: 'runnerPickoff', base }),

@@ -140,7 +140,7 @@ try {
     assert.equal(record.summary.totals.away.runs, 3);
     assert.equal(record.summary.totals.home.runs, 0);
   });
-  await test('existing live stats renderer keeps its default calculations when no official rows are supplied', async () => {
+  await test('existing live stats preserve pitch data and require explicit earned-run confirmation', async () => {
     const { default: StatsTable } = await vite.ssrLoadModule('/src/shared/components/StatsTable.tsx');
     const { NowPlayingCard } = await vite.ssrLoadModule('/src/features/scoreboard/components/LegacyTextComponents.tsx');
     const row = { name: '기존투수', bf: 7, pitches: 25, strikes: 15, balls: 10, outs: 5, h: 1, hr: 0, bb: 0, hbp: 0, so: 3, r: 1, er: 1, appearanceOrder: 0 };
@@ -148,7 +148,13 @@ try {
     assert.match(html, /실시간 자동 집계/);
     assert.match(html, /25 \(15\/10\)/);
     assert.match(html, /1\.2/);
-    assert.match(html, /5\.40/);
+    assert.match(html, /미확정/);
+    assert.doesNotMatch(html, /5\.40/);
+    const confirmed = renderToStaticMarkup(createElement(StatsTable, {
+      title: '확인된 투수', stats: [{ ...row, earnedRunsStatus: 'confirmed' }], variant: 'pitcher',
+    }));
+    assert.match(confirmed, /5\.40/);
+    assert.match(confirmed, /기록원 확인/);
     const now = renderToStaticMarkup(createElement(NowPlayingCard, { batter: '타자', pitcher: '투수', balls: 2, strikes: 1,
       batterToday: { pa: 2, ab: 2, hits: 1, hr: 0, doubles: 0, triples: 0, bb: 0, hbp: 0, so: 1, sac: 0 },
       pitcherToday: { bf: 7, outs: 5, hits: 1, hr: 0, bb: 0, hbp: 0, so: 3, pitches: 25, strikes: 15, balls: 10 } }));
