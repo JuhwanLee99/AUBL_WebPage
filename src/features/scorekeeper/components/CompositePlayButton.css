@@ -1,0 +1,19 @@
+.composite-dialog { width: min(1040px, calc(100vw - 24px)); }
+.composite-dialog .composite-editor { margin: 18px 0; border: 1px solid #334155; border-radius: 10px; padding: 14px; }
+.composite-dialog .composite-editor > legend { font-weight: 700; padding: 0 6px; }
+.composite-dialog input:not([type="checkbox"]) { width: 100%; min-width: 0; box-sizing: border-box; padding: 9px; border: 1px solid #475569; border-radius: 7px; background: #1e293b; color: #e2e8f0; font: inherit; }
+.composite-dialog input[type="checkbox"] { width: 17px; height: 17px; flex-shrink: 0; }
+.composite-dialog .runner-matrix-check { margin-top: 12px; }
+.composite-dialog .composite-error-row, .composite-dialog .composite-responsibility { display: grid; grid-template-columns: auto 1fr 1fr 2fr auto; gap: 10px; align-items: end; padding: 10px 0; }
+.composite-dialog .composite-responsibility { grid-template-columns: 1fr 1.5fr 2fr auto; }
+.composite-dialog .composite-add-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.composite-dialog .composite-warning { color: #fcd34d; border-left: 3px solid #d97706; padding-left: 10px; }
+.composite-dialog .runner-matrix-preview { overflow-wrap: anywhere; }
+.composite-dialog .runner-matrix-preview li { margin: 5px 0; line-height: 1.6; }
+.composite-dialog h3, .composite-dialog h4 { margin: 12px 0 6px; }
+.composite-notice { color: #94a3b8; font-size: 12px; }
+@media (max-width: 620px) {
+  .composite-dialog .composite-error-row, .composite-dialog .composite-responsibility { grid-template-columns: 1fr 1fr; }
+  .composite-dialog footer { flex-direction: column; align-items: stretch; }
+  .composite-dialog .composite-editor { padding: 10px; }
+}

@@ -1,0 +1,22 @@
+.runner-matrix-trigger { padding: 9px 12px; border: 1px solid #3b82f6; border-radius: 8px; color: #bfdbfe; background: #172b49; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.runner-matrix-trigger:disabled { opacity: .45; cursor: not-allowed; }
+.runner-matrix-dialog { width: min(760px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); box-sizing: border-box; padding: 22px; border: 1px solid #475569; border-radius: 14px; background: #0f172a; color: #e2e8f0; font: inherit; overflow: auto; }
+.runner-matrix-dialog::backdrop { background: rgb(2 6 23 / .8); }
+.runner-matrix-dialog header, .runner-matrix-dialog footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.runner-matrix-dialog h2 { margin: 0; font-size: 20px; }
+.runner-matrix-dialog p { margin: 8px 0; font-size: 12px; line-height: 1.6; }
+.runner-matrix-help, .runner-matrix-responsibility { color: #94a3b8; }
+.runner-matrix-row { min-width: 0; margin: 16px 0; padding: 12px; border: 1px solid #334155; border-radius: 10px; }
+.runner-matrix-row legend { padding: 0 6px; font-size: 14px; font-weight: 700; }
+.runner-matrix-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 12px; }
+.runner-matrix-dialog label { display: grid; gap: 6px; font-size: 12px; }
+.runner-matrix-dialog select, .runner-matrix-dialog textarea, .runner-matrix-dialog button { font: inherit; color: #e2e8f0; border: 1px solid #475569; border-radius: 7px; background: #1e293b; padding: 9px; }
+.runner-matrix-dialog select { width: 100%; min-width: 0; font-size: 13px; }
+.runner-matrix-dialog select:disabled { opacity: .45; }
+.runner-matrix-dialog textarea { min-height: 55px; resize: vertical; }
+.runner-matrix-dialog .runner-matrix-check { display: flex; align-items: center; gap: 8px; }
+.runner-matrix-preview { margin: 16px 0; padding: 12px; background: #172b49; border-radius: 8px; font-size: 14px; }
+.runner-matrix-dialog button { cursor: pointer; }
+.runner-matrix-dialog button:disabled { opacity: .45; cursor: not-allowed; }
+.runner-matrix-dialog .runner-matrix-submit { background: #1d4ed8; border-color: #3b82f6; font-weight: 700; }
+@media (max-width: 520px) { .runner-matrix-dialog { padding: 14px; } .runner-matrix-fields { grid-template-columns: 1fr 1fr; } .runner-matrix-dialog h2 { font-size: 17px; } }
