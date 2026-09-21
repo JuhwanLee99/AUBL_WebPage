@@ -7,6 +7,28 @@ export interface DetailRouteMatch {
   scoreInputMode?: 'live' | 'manual';
 }
 
+/** A validated, published backend response does not authorize any private live read. */
+export function canUsePublishedOfficialDetail(
+  match: DetailRouteMatch | null,
+  detail: {
+    provider: string;
+    sourceGameId: string;
+    seasonId: number;
+    syncRevision: string | null;
+    status: string;
+  } | null,
+  keepFirestoreLive: boolean,
+): boolean {
+  if (keepFirestoreLive || !match || !detail || !isUniquePlayProvider(match.sourceProvider)) return false;
+  const sourceId = match.sourceGameId?.trim() || match.id.trim();
+  return detail.provider === 'UNIQUE_PLAY'
+    && detail.sourceGameId === sourceId
+    && Boolean(detail.syncRevision?.trim())
+    && Number.isSafeInteger(detail.seasonId) && detail.seasonId > 0
+    && (match.seasonId == null || match.seasonId === detail.seasonId)
+    && ['AVAILABLE', 'NOT_PUBLISHED', 'NOT_COLLECTED', 'REVIEW_REQUIRED'].includes(detail.status);
+}
+
 export function findDetailRouteMatch<T extends DetailRouteMatch>(
   matches: readonly T[],
   routeId: string | undefined,

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   currentResourceForKey,
+  canUsePublishedOfficialDetail,
   findDetailRouteMatch,
   hasMatchingAublLiveRecord,
   isUniquePlayProvider,
@@ -15,6 +16,41 @@ const uniquePlayMatch = {
   sourceProvider: 'UNIQUE_PLAY',
   status: 'completed',
 };
+
+const publishedDetail = {
+  provider: 'UNIQUE_PLAY', sourceGameId: uniquePlayMatch.sourceGameId,
+  seasonId: 12, syncRevision: 'published-revision', status: 'AVAILABLE',
+};
+
+for (const status of ['AVAILABLE', 'NOT_PUBLISHED', 'NOT_COLLECTED', 'REVIEW_REQUIRED']) {
+  test(`published backend ${status} can render independently without opening live data`, () => {
+    assert.equal(canUsePublishedOfficialDetail(uniquePlayMatch, { ...publishedDetail, status }, false), true);
+  });
+}
+
+for (const [name, match, detail, keepLive] of [
+  ['missing schedule', null, publishedDetail, false],
+  ['missing response', uniquePlayMatch, null, false],
+  ['manual schedule', { id: uniquePlayMatch.id }, publishedDetail, false],
+  ['other schedule provider', { ...uniquePlayMatch, sourceProvider: 'OTHER' }, publishedDetail, false],
+  ['other response provider', uniquePlayMatch, { ...publishedDetail, provider: 'OTHER' }, false],
+  ['response from another route', uniquePlayMatch, { ...publishedDetail, sourceGameId: 'up-other' }, false],
+  ['missing published revision', uniquePlayMatch, { ...publishedDetail, syncRevision: ' ' }, false],
+  ['another season', { ...uniquePlayMatch, seasonId: 13 }, publishedDetail, false],
+  ['invalid season', uniquePlayMatch, { ...publishedDetail, seasonId: 0 }, false],
+  ['unsupported status', uniquePlayMatch, { ...publishedDetail, status: 'DRAFT' }, false],
+  ['live fallback requested', uniquePlayMatch, { ...publishedDetail, status: 'NOT_COLLECTED' }, true],
+]) {
+  test(`${name} cannot bypass the live publication guard`, () => {
+    assert.equal(canUsePublishedOfficialDetail(match, detail, keepLive), false);
+  });
+}
+
+test('an explicit source route without a separate source ID still requires exact identity', () => {
+  const match = { id: publishedDetail.sourceGameId, sourceProvider: 'UNIQUE_PLAY', seasonId: 12 };
+  assert.equal(canUsePublishedOfficialDetail(match, publishedDetail, false), true);
+  assert.equal(canUsePublishedOfficialDetail({ ...match, id: 'different' }, publishedDetail, false), false);
+});
 
 test('resolves a UniquePlay projection by either document ID or source ID', () => {
   assert.equal(findDetailRouteMatch([uniquePlayMatch], 'firestore-document-id'), uniquePlayMatch);

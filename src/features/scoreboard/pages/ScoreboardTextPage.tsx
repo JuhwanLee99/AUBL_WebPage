@@ -36,6 +36,7 @@ import {
   hasMatchingAublLiveRecord,
   isUniquePlayProvider,
   resolveOfficialRequestSource,
+  canUsePublishedOfficialDetail,
 } from '../model/officialDetailRoute';
 import './ScoreboardTextPage.css';
 import { useRecordSource } from '@shared/state/useRecordSource';
@@ -546,12 +547,15 @@ export default function ScoreboardTextPage() {
     downloadCsv(csvContent, filename);
   };
 
-  if (routeMatch && recordSource.status === 'blocked') {
+  if (routeMatch && recordSource.status === 'blocked'
+    && !(routeIsOfficial && officialDetailState === 'loading' && !useFirestoreLiveForOfficial)
+    && !canUsePublishedOfficialDetail(routeMatch, officialDetail, useFirestoreLiveForOfficial)) {
     return <OfficialGameDetailMessage title="기록 공개 상태 확인 필요" description="공개 상태 확인에 실패하여 자체 기록을 표시하지 않습니다. 다시 접속해 주세요." onRetry={() => window.location.reload()} />;
   }
 
   if (
-    (routeMatch && recordSource.status === 'loading')
+    (routeMatch && recordSource.status === 'loading'
+      && !canUsePublishedOfficialDetail(routeMatch, officialDetail, useFirestoreLiveForOfficial))
     || routeSelectionPending
     || (
       officialDetailState === 'loading'
