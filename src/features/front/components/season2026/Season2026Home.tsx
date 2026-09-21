@@ -13,6 +13,9 @@ import type {
   Season2026RecordPayload,
 } from './types';
 
+import { projectionStatus } from './projectionStatus';
+import QualificationOdds from './QualificationOddsPanel';
+
 const UNIQUE_PLAY_URL = 'https://unique-play.com/league/57';
 const INSTAGRAM_URL = 'https://www.instagram.com/aubl_1981/';
 const GOLDBALLPARK_URL = 'https://www.goldballpark.co.kr/';
@@ -795,9 +798,9 @@ function GroupStandings({
         id="group-title"
         eyebrow="GROUP STANDINGS"
         title="A–H조 현황"
-        description="1·2위는 현재 으뜸권, 3·4위는 현재 버금권입니다. 경계 순위가 동률이면 확정 대신 검토 중으로 표시합니다."
-        link="/records?tab=standings"
-        linkLabel="전체 순위"
+        description="팀당 8경기 예선. 현재 순위와 남은 경기 이후의 순위·진출 전망을 구분해 확인하세요."
+        link={`/standings/scenarios?group=${activeGroup}`}
+        linkLabel="순위 변동 상세"
       />
 
       <div className="s26-group-tabs" role="tablist" aria-label="조 선택">
@@ -852,6 +855,7 @@ function GroupStandings({
                     <th scope="col">무</th>
                     <th scope="col">승률</th>
                     <th scope="col">현재 구간</th>
+                    <th scope="col">순위·진출 전망</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -864,6 +868,14 @@ function GroupStandings({
                       <td>{row.ties}</td>
                       <td>{formatWinPct(row)}</td>
                       <td><span className={qualificationClass(row.qualification)}>{row.qualificationLabel}</span></td>
+                      <td>
+                        <Link className={`s26-projection-cell s26-projection-${projectionStatus(row).kind}`} to={`/standings/scenarios?group=${selected.group}&team=${row.teamId}`}>
+                          <strong>{projectionStatus(row).label}</strong>
+                          <small>{projectionStatus(row).detail}</small>
+                          <QualificationOdds row={row} compact />
+                          <span>상세 보기 →</span>
+                        </Link>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -873,7 +885,7 @@ function GroupStandings({
             <div className="s26-empty">표시할 조별 순위가 없습니다.</div>
           )}
           <p className="s26-group-note">
-            이 표시는 현재 기록을 기준으로 한 임시 구간입니다. 시즌 종료 후 운영진이 명시적으로 확정한 경우에만 '확정'으로 표시됩니다.
+            고정은 모든 계산 결과에서 유지되는 상태이며 운영진의 공식 확정과 구분됩니다. 계산 미완료·동률 판정이 필요한 경우는 상세페이지에서 확인하세요.
           </p>
         </div>
       ) : (

@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom';
 import type { RouteObject } from 'react-router-dom';
+import StandingsScenariosPage from '@features/front/pages/StandingsScenariosPage';
 import LandingPage from '@features/front/pages/LandingPage';
 import IntroPage from '@features/front/pages/IntroPage';
 import RulePage from '@features/front/pages/RulePage';
@@ -86,6 +87,10 @@ export const publicRoutes: RouteObject[] = [
   {
     path: 'standings',
     element: <Navigate to="/records?tab=standings" replace />,
+  },
+  {
+    path: 'standings/scenarios',
+    element: <StandingsScenariosPage />,
   },
   {
     path: 'standings/power-ranking',

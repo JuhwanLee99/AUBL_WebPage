@@ -265,6 +265,7 @@ export default function Layout() {
         children: [
           { path: '/records?tab=overview', label: '기록 개요' },
           { path: '/records?tab=standings', label: '팀 순위' },
+          { path: '/standings/scenarios', label: '예상 순위' },
           { path: '/records?tab=pitchers', label: '투수 기록' },
           { path: '/records?tab=batters', label: '타자 기록' },
           { path: '/records/player', label: '선수 상세' },
@@ -298,6 +299,7 @@ export default function Layout() {
       {
         title: '경기 · 기록',
         items: [
+          { path: '/standings/scenarios', label: '예상 순위' },
           { path: '/schedule/live', label: '실시간 경기' },
           { path: '/schedule/results', label: '경기 결과' },
           { path: '/schedule/practice', label: '연습경기' },

@@ -23,6 +23,22 @@ export type QualificationState =
 export type HomeDataPhase = 'loading' | 'ready' | 'partial' | 'unavailable';
 export type HomeSchedulePhase = 'loading' | ScheduleLoadResult['status'];
 
+export type PlayoffProjectionBucket = 'eutteum' | 'beogeum' | 'out';
+
+export interface HomeStandingProjection {
+  distribution?: import('./qualificationScenarios').QualificationDistribution;
+  possibleRanks?: number[];
+  expectedScenarios?: string;
+  evaluatedStates?: number;
+  rankCases?: import('./qualificationScenarios').RankCase[];
+  minPossibleRank: number;
+  maxPossibleRank: number;
+  possibleBuckets: PlayoffProjectionBucket[];
+  tieBreakNotes: string[];
+  scenarioCount: string;
+  exhausted: boolean;
+}
+
 export interface Season2026RecordPayload {
   phase: Exclude<HomeDataPhase, 'loading'>;
   seasonId: number | null;
@@ -46,9 +62,12 @@ export interface HomeStandingRow {
   qualification: QualificationState;
   qualificationLabel: string;
   tied: boolean;
+  projection?: HomeStandingProjection;
 }
 
 export interface HomeGroupView {
+  matchups?: import('./remainingMatchups').RemainingMatchup[];
+  scenarioWarnings?: string[];
   group: Season2026Group;
   rows: HomeStandingRow[];
   completedGames: number;

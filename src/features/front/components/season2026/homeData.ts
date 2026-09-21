@@ -12,10 +12,13 @@ import {
   SEASON_2026_GROUPS,
   type HomeGroupView,
   type HomeStandingRow,
+  type HomeStandingProjection,
   type QualificationState,
   type Season2026Group,
   type Season2026RecordPayload,
 } from './types';
+import { buildRemainingMatchups } from './remainingMatchups';
+import { analyzeGroupPlayoffScenarios, type TeamPlayoffProjection } from './qualificationScenarios';
 
 const TARGET_SEASON = 2026;
 const PART_CODE_TO_GROUP = new Map(
@@ -83,12 +86,15 @@ const standingsFromSchedule = (
   const byName = new Map(rows.map((row) => [toNameKey(row.teamName), row]));
 
   matches.forEach((match) => {
-    if (match.status !== 'completed' || (match.recordMode ?? 'official') !== 'official' || !is2026Match(match)) return;
+    if (match.deleted || match.sourceActive === false || match.status !== 'completed' || (match.recordMode ?? 'official') !== 'official' || !is2026Match(match)) return;
     const score = completedScore(match);
     if (!score) return;
     const home = byName.get(toNameKey(match.homeTeamName));
     const away = byName.get(toNameKey(match.awayTeamName));
-    if (!home || !away) return;
+    if (!home || !away || home === away) return;
+    const homeGroup = teamEntries.find(entry => toNameKey(entry.name) === toNameKey(home.teamName))?.group;
+    const awayGroup = teamEntries.find(entry => toNameKey(entry.name) === toNameKey(away.teamName))?.group;
+    if (!homeGroup || homeGroup !== awayGroup) return;
 
     if (score.home === score.away) {
       home.ties += 1;
@@ -110,7 +116,7 @@ const standingsFromSchedule = (
 };
 
 const recordKey = (row: TeamRecordStanding) =>
-  `${row.winPct.toFixed(6)}:${row.wins}:${row.losses}:${row.ties}`;
+  `${row.wins / (row.wins + row.losses || 1)}`;
 
 const explicitQualification = (row: TeamRecordStanding): QualificationState | null => {
   const state = row.qualificationState?.trim().toUpperCase();
@@ -127,6 +133,82 @@ const explicitQualification = (row: TeamRecordStanding): QualificationState | nu
   if (/EUTTEUM|으뜸/.test(marker)) return 'confirmed-eutteum';
   if (/BEOGEUM|버금/.test(marker)) return 'confirmed-beogeum';
   return null;
+};
+
+const makeProjection = (
+  source: TeamPlayoffProjection | null | undefined,
+): HomeStandingProjection | undefined => {
+  if (!source) return undefined;
+  if (source.minPossibleRank <= 0 || source.maxPossibleRank <= 0) return undefined;
+  const validMin = Math.max(1, source.minPossibleRank);
+  const validMax = Math.max(validMin, source.maxPossibleRank);
+  const buckets: HomeStandingProjection['possibleBuckets'] = source.possibleBuckets.length
+    ? source.possibleBuckets
+    : ['out'];
+
+  return {
+    distribution: source.distribution,
+    possibleRanks: source.possibleRanks,
+    expectedScenarios: source.expectedScenarios,
+    evaluatedStates: source.evaluatedStates,
+    rankCases: source.rankCases,
+    minPossibleRank: validMin,
+    maxPossibleRank: validMax,
+    possibleBuckets: buckets,
+    tieBreakNotes: source.tieBreakNotes,
+    scenarioCount: source.scenarioCount,
+    exhausted: source.exhausted,
+  };
+};
+
+const runStatsFromSchedule = (
+  rows: Pick<TeamRecordStanding, 'teamId' | 'teamName'>[],
+  matches: MatchSchedule[],
+) => {
+  const byName = new Map(rows.map((row) => [toNameKey(row.teamName), row.teamId]));
+  const runTotals = new Map(
+    rows.map((row) => [
+      row.teamId,
+      { runsFor: 0, runsAgainst: 0, hasCompletedScore: false },
+    ]),
+  );
+  const toInteger = (value?: number | null) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+    const normalized = Math.trunc(value);
+    return Number.isInteger(normalized) ? normalized : null;
+  };
+
+  for (const match of matches) {
+    if (match.deleted || match.status === 'canceled' || match.status !== 'completed') continue;
+
+    const homeTeamId = byName.get(toNameKey(match.homeTeamName));
+    const awayTeamId = byName.get(toNameKey(match.awayTeamName));
+    if (homeTeamId == null || awayTeamId == null) continue;
+
+    const homeScore = toInteger(match.homeScore ?? match.postGame?.totals.home.runs);
+    const awayScore = toInteger(match.awayScore ?? match.postGame?.totals.away.runs);
+    if (homeScore == null || awayScore == null) continue;
+
+    const home = runTotals.get(homeTeamId);
+    const away = runTotals.get(awayTeamId);
+    if (!home || !away) continue;
+
+    home.runsFor += homeScore;
+    home.runsAgainst += awayScore;
+    away.runsFor += awayScore;
+    away.runsAgainst += homeScore;
+    home.hasCompletedScore = true;
+    away.hasCompletedScore = true;
+  }
+
+  return new Map(
+    [...runTotals.entries()].map(([teamId, value]) => [
+      teamId,
+      value.hasCompletedScore
+        ? { runsFor: value.runsFor, runsAgainst: value.runsAgainst }
+        : {},
+    ]),
+  );
 };
 
 const labelForQualification = (state: QualificationState) => {
@@ -284,6 +366,7 @@ export function buildSeason2026Groups(
   apiStandings: TeamRecordStanding[],
   teamEntries: TeamContentEntry[],
   matches: MatchSchedule[],
+  options: { projectionReady?: boolean } = {},
 ): HomeGroupView[] {
   const configuredGroupByTeam = new Map(teamEntries.map((entry) => [toNameKey(entry.name), entry.group]));
   const scheduledStandings = standingsFromSchedule(teamEntries, matches);
@@ -297,7 +380,7 @@ export function buildSeason2026Groups(
   return SEASON_2026_GROUPS.map((group) => {
     const rowsForGroup = baseRows.filter((row) => {
       const configured = configuredGroupByTeam.get(toNameKey(row.teamName));
-      return resolveGroup(row) === group || configured === group;
+      return (resolveGroup(row) ?? configured) === group;
     });
     const existingNames = new Set(rowsForGroup.map((row) => toNameKey(row.teamName)));
     teamEntries
@@ -305,14 +388,45 @@ export function buildSeason2026Groups(
       .forEach((entry, index) => rowsForGroup.push(emptyStanding(entry.name, -(100 + index))));
 
     const rankedRows = rankRows(rowsForGroup);
-    const completedGames = Math.floor(
-      rankedRows.reduce((total, row) => total + row.wins + row.losses + row.ties, 0) / 2,
+    const schedule = buildRemainingMatchups(rankedRows, matches, group);
+    if (rankedRows.length !== 5) schedule.warnings.push('조별 예선은 5팀·팀당 8경기입니다. 팀 구성을 확인해 주세요.');
+    if (options.projectionReady === false) schedule.warnings.push('최신 순위·전체 경기 자료 조회가 완료되어야 계산할 수 있습니다.');
+    const scenarioMatches = schedule.fixtures;
+    const runStats = runStatsFromSchedule(rankedRows, scenarioMatches);
+    const scenarioResult = schedule.warnings.length ? { projections: [], totalScenarios: '0', exhausted: false, warnings: [] } : analyzeGroupPlayoffScenarios(
+      rankedRows.map((row) => ({
+        teamId: row.teamId,
+        teamName: row.teamName,
+        wins: row.wins,
+        losses: row.losses,
+        ties: row.ties,
+        ...runStats.get(row.teamId),
+      })),
+      scenarioMatches,
+      {
+        includeDrawsInProjection: true,
+        maxScenarios: 100_000,
+        fallbackRunDataToZero: false,
+      },
     );
-    const expectedGames = (rankedRows.length * Math.max(0, rankedRows.length - 1)) / 2;
+
+    const projectionByTeamId = new Map(
+      scenarioResult.projections.map((projection) => [projection.teamId, makeProjection(projection)]),
+    );
+
+    const projectionRows = rankedRows.map((row) => ({
+      ...row,
+      projection: projectionByTeamId.get(row.teamId),
+    }));
+
+    const completedGames = schedule.matchups.reduce((sum, pair) => sum + pair.completed, 0);
+    const expectedGames = rankedRows.length * Math.max(0, rankedRows.length - 1);
 
     return {
       group,
-      rows: rankedRows,
+      rows: projectionRows,
+      matchups: schedule.matchups,
+      scenarioWarnings: [...schedule.warnings, ...scenarioResult.warnings],
       completedGames,
       expectedGames,
       source,

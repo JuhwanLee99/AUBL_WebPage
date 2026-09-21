@@ -187,8 +187,8 @@ export default function LandingPage() {
         : 'loading';
 
   const groups = useMemo(
-    () => buildSeason2026Groups(recordPayload?.standings ?? [], content.teams.entries, state.matches),
-    [content.teams.entries, recordPayload?.standings, state.matches],
+    () => buildSeason2026Groups(recordPayload?.standings ?? [], content.teams.entries, state.matches, { projectionReady: schedulePhase === 'ready' && (recordPhase === 'ready' || recordPhase === 'partial') }),
+    [content.teams.entries, recordPayload?.standings, state.matches, schedulePhase, recordPhase],
   );
 
   return (
