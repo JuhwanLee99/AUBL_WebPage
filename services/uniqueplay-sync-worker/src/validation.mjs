@@ -32,7 +32,7 @@ function validatePlayerStats(player, kind, path, blockingErrors) {
   }
 }
 
-export function validateCandidate(candidate) {
+export function validateCandidate(candidate, { detailGames } = {}) {
   const blockingErrors = [];
   const warnings = [];
 
@@ -134,7 +134,7 @@ export function validateCandidate(candidate) {
     }
   }
 
-  const gameDetailValidation = validateGameDetailIntegrity(candidate);
+  const gameDetailValidation = validateGameDetailIntegrity(detailGames === undefined ? candidate : { ...candidate, games: detailGames });
   blockingErrors.push(...gameDetailValidation.blockingErrors);
   warnings.push(...gameDetailValidation.warnings);
 

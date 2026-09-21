@@ -137,7 +137,7 @@ test('three stalled attempts away from the end never count as completion', async
 
 test('incomplete table diagnostics include only safe stage and geometry, never arbitrary source values', async () => {
   await assert.rejects(collectUntilStable({
-    read: async () => ({ rows: [{ fixed: ['1', 'private@example.invalid'], values: ['1'] }] }),
+    read: async () => ({ rows: [{ fixed: ['1', 'private@example.invalid'], values: ['1', '1.00', '1', '0', '0', '3', '0.00'] }] }),
     advance: async () => ({ advanced: false, atEnd: false, top: 0, height: 720, total: 796, reason: 'PRIVATE SECRET' }),
     context: { groupCode: 'A', table: 'STANDINGS', email: 'private@example.invalid' }, maxPasses: 4,
   }), (error) => {

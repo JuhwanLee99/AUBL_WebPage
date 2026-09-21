@@ -9,6 +9,31 @@
 - immediately returns `202`; progress and the sanitized candidate are delivered to the configured backend callback.
 - only one execution per `runId` is accepted.
 
+### Incremental collection (adapter `2026.09.12.14`)
+
+New scoped requests include a backend-resolved collection boundary:
+
+```json
+{
+  "runId": "example-run",
+  "leagueId": "57",
+  "seasonYear": 2026,
+  "collectionScope": {
+    "version": 1,
+    "mode": "FROM_DATE",
+    "fromDate": "2026-09-11"
+  }
+}
+```
+
+- `mode` is `SINCE_LAST_SYNC` or `FROM_DATE`. The backend resolves and freezes `fromDate`; the worker does not look up the active official revision or choose a fallback date.
+- `fromDate` is an inclusive KST calendar date in the requested season. Invalid scopes fail rather than silently reverting to full collection. Omitting `collectionScope` retains the legacy full-collection contract only for callers deliberately using that contract.
+- Schedules, standings and season cumulative statistics are still collected in full. Only visits to completed-game detail pages are restricted to games on or after the boundary.
+- Scoped candidates contain the full collected game list but only the selected details. Worker validation checks detail coverage for that subset. The callback carries the same `collectionScope` so the backend can validate the contract and merge against the run's frozen base revision.
+- The backend, not the worker, preserves previously imported games and pre-boundary details and performs full merged-candidate validation before publication. Missing items in the new collection are not deletion instructions.
+- Corrections or delayed details for older games require an explicitly earlier `FROM_DATE`. Season cumulative statistics are independent source totals, not a sum of the partial detail payload.
+- The scope-capable backend must be deployed before enabling scoped requests. A worker-only update does not enable incremental synchronization end to end.
+
 Required environment:
 
 - `SYNC_SERVICE_TOKEN`

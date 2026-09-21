@@ -1,10 +1,14 @@
 import { deterministicGameId, normalizeText, sanitizeCandidate } from './normalization.mjs';
 import { validateCandidate } from './validation.mjs';
+import { validateCollectionScope, includesGameDate } from './collection-scope.mjs';
 import { readOpenGameBoxscore, resultListIsReady } from './boxscore-adapter.mjs';
 import { contextualizeDetailError, detailError } from './game-details.mjs';
 import { reachedCollectionEnd, scrollCollectionDom } from './collection-scroll.mjs';
+import { auditStandings } from './standings-audit.mjs';
+import { standingsConflictError } from './standings-diagnostics.mjs';
+import { contextualizeCollectionError, readReadyTable, withCollectionContext } from './collection-diagnostics.mjs';
 
-export const ADAPTER_VERSION = '2026.09.05.13';
+export const ADAPTER_VERSION = '2026.09.22.1';
 const GROUP_CODES = [...'ABCDEFGH'];
 const BATTER_HEADERS = ['타율', '팀게임', '선수게임', '타석', '타수', '총안타', '1루타', '2루타', '3루타', '홈런', '타점', '득점', '도루', '볼넷', '삼진', '출루율', '장타율', 'OPS'];
 const PITCHER_HEADERS = ['ERA', '팀게임', '선수게임', '이닝', '승', '패', '세이브', '홀드', '삼진', '피안타', '피홈런', '실점', '볼넷', '사구', '승률', 'WHIP'];
@@ -39,7 +43,9 @@ async function clickText(page, text) {
 async function ensureSeason(page, seasonYear) {
   const expected = `${seasonYear}시즌`;
   const season = page.getByText(expected, { exact: true }).first();
-  if (!(await season.isVisible().catch(() => false))) {
+  try {
+    await season.waitFor({ state: 'visible', timeout: 10_000 });
+  } catch {
     throw Object.assign(new Error(`Expected season label not found: ${expected}`), { code: 'SEASON_MISMATCH' });
   }
 }
@@ -56,7 +62,7 @@ async function ensureGameSeason(page, seasonYear) {
   }
 }
 
-async function readVisibleTable(page, anchor, expectedHeaders) {
+export async function readVisibleTable(page, anchor, expectedHeaders) {
   return page.evaluate(({ anchor, expectedHeaders }) => {
     const normalize = (value) => String(value || '').normalize('NFKC').replace(/\s+/g, ' ').replace(/[▲▼]/g, '').trim();
     const all = [...document.querySelectorAll('*')];
@@ -69,7 +75,7 @@ async function readVisibleTable(page, anchor, expectedHeaders) {
       const candidateRow = candidate.parentElement;
       const candidateHeaders = candidateRow ? [...candidateRow.children].map((node) => normalize(node.textContent)) : [];
       if (candidateHeaders.length > observedHeaders.length) observedHeaders = candidateHeaders;
-      if (expectedHeaders.every((header, index) => candidateHeaders[index] === header)) {
+      if (candidateHeaders.length === expectedHeaders.length && expectedHeaders.every((header, index) => candidateHeaders[index] === header)) {
         headerCell = candidate;
         headerRow = candidateRow;
         break;
@@ -88,8 +94,34 @@ async function readVisibleTable(page, anchor, expectedHeaders) {
         .map((cell) => normalize(cell.textContent))
         .filter(Boolean))
       .filter((cells) => cells.length >= 2 && /^\d+$/.test(cells[0]));
-    const valueRows = [...valuesRoot.children].slice(1).map((node) => [...node.children].map((cell) => normalize(cell.textContent)));
-    const rows = fixedRows.slice(0, valueRows.length).map((fixed, index) => ({ fixed, values: valueRows[index] }));
+    const valueNodes = [...valuesRoot.children].slice(1);
+    if (fixedRows.length !== valueNodes.length || (anchor === '게임수' && !fixedRows.length)) {
+      return { rows: [], reason: 'standings-row-count-mismatch', fixedRowCount: fixedRows.length, valueRowCount: valueNodes.length };
+    }
+    const valueRows = [];
+    for (const node of valueNodes) {
+      // Player rows have animation/pressable wrappers around the numeric row.
+      // Find exactly one full-width row; never concatenate a wrapper's text or
+      // silently truncate unmatched fixed/value rows into a successful import.
+      const candidates = [];
+      let level = [node];
+      for (let depth = 0; depth <= 4 && level.length; depth += 1) {
+        const next = [];
+        for (const element of level) {
+          if (element.children.length === expectedHeaders.length) {
+            const cells = [...element.children].map(cell => normalize(cell.textContent));
+            const numeric = value => /^(?:\d+(?:\.\d+)?|\.\d+)$/u.test(value);
+            if (cells.every(value => !value || value === '-' || value === '—' || numeric(value))
+                && cells.some(numeric)) candidates.push(cells);
+          }
+          next.push(...element.children);
+        }
+        level = next;
+      }
+      if (candidates.length !== 1) return { rows: [], reason: 'table-structure' };
+      valueRows.push(candidates[0]);
+    }
+    const rows = fixedRows.map((fixed, index) => ({ fixed, values: valueRows[index] }));
 
     return { rows, reason: null };
   }, { anchor, expectedHeaders });
@@ -99,10 +131,11 @@ async function scrollTable(page, anchor, expectedHeaders) {
   return page.evaluate(scrollCollectionDom, { kind: 'table', anchor, expectedHeaders });
 }
 
-async function collectVirtualTable(page, anchor, headers, context) {
+export async function collectVirtualTable(page, anchor, headers, context) {
   return collectUntilStable({
     context,
-    read: () => readVisibleTable(page, anchor, headers),
+    read: () => readReadyTable({ read: () => readVisibleTable(page, anchor, headers),
+      wait: () => page.waitForTimeout(250), context }),
     advance: () => scrollTable(page, anchor, headers),
     wait: () => page.waitForTimeout(500),
   });
@@ -110,6 +143,7 @@ async function collectVirtualTable(page, anchor, headers, context) {
 
 export async function collectUntilStable({ read, advance, wait = async () => {}, maxPasses = 100, context = {} }) {
   const seen = new Map();
+  const standingsTable = context.table === 'STANDINGS';
   let settledAtEnd = 0;
   let lastScroll;
   for (let pass = 0; pass < maxPasses && settledAtEnd < 3; pass += 1) {
@@ -117,15 +151,36 @@ export async function collectUntilStable({ read, advance, wait = async () => {},
     const snapshot = await read();
     if (snapshot.reason) throw new Error(`UniquePlay table changed (${snapshot.reason})`);
     const before = seen.size;
+    let contentChanged = false;
+    const sampleKeys = new Set();
+    if (standingsTable && !snapshot.rows.length) {
+      throw Object.assign(new Error('Empty standings snapshot'), { code: 'STANDINGS_TABLE_INCOMPLETE' });
+    }
     for (const row of snapshot.rows) {
-      const key = row.fixed.join('|');
-      if (key) seen.set(key, row);
+      if (standingsTable && (!Array.isArray(row.fixed) || row.fixed.length < 2
+        || !Array.isArray(row.values) || row.values.length !== STANDING_HEADERS.length)) {
+        throw Object.assign(new Error('Incomplete standings row'), { code: 'STANDINGS_TABLE_INCOMPLETE' });
+      }
+      // Rank is a mutable value, not team identity. Keep the legacy key for
+      // player tables: two same-name players must not be silently collapsed.
+      const key = standingsTable
+        ? String(row.fixed.at(-1) ?? '').normalize('NFKC').replace(/\s+/gu, ' ').trim()
+        : row.fixed.join('|');
+      if (standingsTable && (!key || sampleKeys.has(key))) {
+        throw Object.assign(new Error('Ambiguous standings team identity'), { code: 'STANDINGS_ROW_CONFLICT' });
+      }
+      sampleKeys.add(key);
+      if (key) {
+        if (standingsTable && JSON.stringify([seen.get(key)?.fixed, seen.get(key)?.values])
+          !== JSON.stringify([row.fixed, row.values])) contentChanged = true;
+        seen.set(key, standingsTable ? structuredClone(row) : row);
+      }
     }
     const advanced = await advance();
     lastScroll = advanced;
     // Repeated rows inside a virtualized viewport are not completion evidence.
     // Count stability only after the same scroll surface reports its actual end.
-    settledAtEnd = seen.size === before && reachedCollectionEnd(advanced) ? settledAtEnd + 1 : 0;
+    settledAtEnd = seen.size === before && !contentChanged && reachedCollectionEnd(advanced) ? settledAtEnd + 1 : 0;
   }
   if (settledAtEnd < 3) throw incompleteCollectionError('table', { context, rows: seen.size, scroll: lastScroll });
   return [...seen.values()];
@@ -168,7 +223,9 @@ function incompleteCollectionError(kind, { context = {}, rows, scroll } = {}) {
   );
 }
 
-function standingFromRow(row) {
+import { collectReadyStandings } from './standings-readiness.mjs';
+
+export function standingFromRow(row) {
   const [rank, ...rest] = row.fixed;
   const teamName = rest.at(-1) || '';
   return {
@@ -195,23 +252,47 @@ function playerFromRow(row, headers, statKeys = headers) {
 }
 
 async function collectGroup(page, groupCode, progress) {
-  await clickText(page, '팀순위');
-  const standings = (await collectVirtualTable(page, '게임수', STANDING_HEADERS, { groupCode, table: 'STANDINGS' })).map(standingFromRow);
-  await progress?.({ stage: 'STANDINGS', groupCode, count: standings.length });
+  let table = 'STANDINGS';
+  let stage = 'SELECT_TABLE';
+  try {
+    await clickText(page, '팀순위');
+    stage = 'READ_TABLE';
+    const standings = await collectReadyStandings({
+      read: () => collectVirtualTable(page, '게임수', STANDING_HEADERS, { groupCode, table }),
+      convert: standingFromRow,
+      groupCode,
+      wait: milliseconds => page.waitForTimeout(milliseconds),
+    });
+    stage = 'AUDIT_STANDINGS';
+    const standingsIssues = auditStandings(standings);
+    if (standingsIssues.length) throw standingsConflictError(groupCode, standings, standingsIssues);
+    stage = 'REPORT_PROGRESS';
+    await progress?.({ stage: table, groupCode, count: standings.length });
 
-  await clickText(page, '개인순위');
-  const result = { standings, batters: { IN: [], OUT: [] }, pitchers: { IN: [], OUT: [] } };
-  for (const regulation of ['IN', 'OUT']) {
-    await clickText(page, `규정 ${regulation}`);
-    await clickText(page, '타자순위');
-    result.batters[regulation] = (await collectVirtualTable(page, '타율', BATTER_HEADERS, { groupCode, table: `BATTER_${regulation}` })).map((row) => playerFromRow(row, BATTER_HEADERS));
-    await progress?.({ stage: `BATTER_${regulation}`, groupCode, count: result.batters[regulation].length });
+    table = 'BATTER_IN'; stage = 'SELECT_CATEGORY';
+    await clickText(page, '개인순위');
+    const result = { standings, batters: { IN: [], OUT: [] }, pitchers: { IN: [], OUT: [] } };
+    for (const regulation of ['IN', 'OUT']) {
+      table = `BATTER_${regulation}`; stage = 'SELECT_REGULATION';
+      await clickText(page, `규정 ${regulation}`);
+      stage = 'SELECT_TABLE';
+      await clickText(page, '타자순위');
+      stage = 'READ_TABLE';
+      result.batters[regulation] = (await collectVirtualTable(page, '타율', BATTER_HEADERS, { groupCode, table })).map((row) => playerFromRow(row, BATTER_HEADERS));
+      stage = 'REPORT_PROGRESS';
+      await progress?.({ stage: table, groupCode, count: result.batters[regulation].length });
 
-    await clickText(page, '투수순위');
-    result.pitchers[regulation] = (await collectVirtualTable(page, 'ERA', PITCHER_HEADERS, { groupCode, table: `PITCHER_${regulation}` })).map((row) => playerFromRow(row, PITCHER_HEADERS, PITCHER_STAT_KEYS));
-    await progress?.({ stage: `PITCHER_${regulation}`, groupCode, count: result.pitchers[regulation].length });
+      table = `PITCHER_${regulation}`; stage = 'SELECT_TABLE';
+      await clickText(page, '투수순위');
+      stage = 'READ_TABLE';
+      result.pitchers[regulation] = (await collectVirtualTable(page, 'ERA', PITCHER_HEADERS, { groupCode, table })).map((row) => playerFromRow(row, PITCHER_HEADERS, PITCHER_STAT_KEYS));
+      stage = 'REPORT_PROGRESS';
+      await progress?.({ stage: table, groupCode, count: result.pitchers[regulation].length });
+    }
+    return result;
+  } catch (error) {
+    throw contextualizeCollectionError(error, { groupCode, table, stage });
   }
-  return result;
 }
 
 async function readVisibleGames(page, seasonYear) {
@@ -347,24 +428,29 @@ export async function collectGameDetails(page, games, { leagueId, seasonYear, pr
   return details;
 }
 
-export async function collectUniquePlay({ browser, storageState, leagueId, seasonYear, progress }) {
+export async function collectUniquePlay({ browser, storageState, leagueId, seasonYear, progress, collectionScope }) {
+  validateCollectionScope(collectionScope, seasonYear);
+  const capturedAt = new Date().toISOString();
   const context = await browser.newContext({ storageState, locale: 'ko-KR', timezoneId: 'Asia/Seoul' });
   const page = await context.newPage();
   try {
-    await page.goto(`https://unique-play.com/league/${encodeURIComponent(leagueId)}`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-    await page.waitForTimeout(1_000);
-    if (!(await page.getByText('기록', { exact: true }).first().isVisible().catch(() => false))) {
-      throw Object.assign(new Error('UniquePlay session expired'), { code: 'REAUTH_REQUIRED' });
-    }
-
-    await clickText(page, '기록');
-    await ensureSeason(page, seasonYear);
+    await withCollectionContext(async () => {
+      await page.goto(`https://unique-play.com/league/${encodeURIComponent(leagueId)}`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+      await page.waitForTimeout(1_000);
+      if (!(await page.getByText('기록', { exact: true }).first().isVisible().catch(() => false))) {
+        throw Object.assign(new Error('UniquePlay session expired'), { code: 'REAUTH_REQUIRED' });
+      }
+      await clickText(page, '기록');
+      await ensureSeason(page, seasonYear);
+    }, { stage: 'OPEN_RECORDS' });
     const groups = {};
     let selectedGroupCode = 'A';
     for (const groupCode of GROUP_CODES) {
       if (groupCode !== selectedGroupCode) {
-        await clickText(page, `${selectedGroupCode}조`);
-        await clickText(page, `${groupCode}조`);
+        await withCollectionContext(async () => {
+          await clickText(page, `${selectedGroupCode}조`);
+          await clickText(page, `${groupCode}조`);
+        }, { groupCode, stage: 'SELECT_GROUP' });
         selectedGroupCode = groupCode;
       }
       groups[groupCode] = await collectGroup(page, groupCode, progress);
@@ -388,13 +474,14 @@ export async function collectUniquePlay({ browser, storageState, leagueId, seaso
       window.scrollTo(0, 0);
       for (const node of document.querySelectorAll('*')) if (node.scrollTop) node.scrollTop = 0;
     });
-    const gameDetails = await collectGameDetails(page, games, { leagueId, seasonYear, progress }).catch((error) => {
+    const detailGames = collectionScope ? games.filter((game) => includesGameDate(game.playedAt, collectionScope.fromDate)) : games;
+    const gameDetails = await collectGameDetails(page, detailGames, { leagueId, seasonYear, progress }).catch((error) => {
       throw contextualizeDetailError(error, { stage: 'COLLECTION' });
     });
 
-    const candidate = sanitizeCandidate({ groups, games, gameDetails }, { leagueId, seasonYear, adapterVersion: ADAPTER_VERSION });
-    const validation = validateCandidate(candidate);
-    return { candidate, validation };
+    const candidate = sanitizeCandidate({ groups, games, gameDetails }, { leagueId, seasonYear, adapterVersion: ADAPTER_VERSION, capturedAt });
+    const validation = validateCandidate(candidate, { detailGames: collectionScope ? detailGames.map((game) => ({ ...game, sourceGameId: game.sourceGameId || deterministicGameId({ ...game, leagueId, seasonYear }) })) : undefined });
+    return { candidate, validation, ...(collectionScope ? { collectionScope } : {}) };
   } finally {
     await context.close();
   }

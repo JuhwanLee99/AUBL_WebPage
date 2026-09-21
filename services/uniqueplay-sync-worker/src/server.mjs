@@ -3,97 +3,100 @@ import { createServer } from 'node:http';
 import { chromium } from 'playwright';
 import { ADAPTER_VERSION, collectUniquePlay } from './adapter.mjs';
 import { loadStorageState } from './session.mjs';
+import { DiskRunStore, DurableRuns } from './durable-runs.mjs';
 
 const port = Number(process.env.PORT || 8080);
 const expectedToken = process.env.SYNC_SERVICE_TOKEN || '';
 const callbackBase = (process.env.SYNC_BACKEND_CALLBACK_URL || '').replace(/\/$/, '');
-const activeRuns = new Set();
-
-function sendJson(response, status, payload) {
-  response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-  response.end(JSON.stringify(payload));
-}
-
-function isAuthorized(request) {
-  if (!expectedToken) return false;
-  const supplied = String(request.headers.authorization || '').replace(/^Bearer\s+/i, '');
+if (!expectedToken || !/^https?:\/\//.test(callbackBase)) throw new Error('Worker callback configuration is required');
+const runs = new DurableRuns({
+  store: new DiskRunStore(process.env.SYNC_STATE_DIR), callbackBase, token: expectedToken,
+  collect: async (payload, progress, signal) => {
+    let browser;
+    let closing;
+    const closeBrowser = () => {
+      if (browser && !closing) {
+        closing = browser.close();
+        // The finally block awaits the result; do not leave an unhandled rejection in an abort listener.
+        closing.catch(() => {});
+      }
+    };
+    signal.addEventListener('abort', closeBrowser, { once: true });
+    try {
+      signal.throwIfAborted();
+      const storageState = await loadStorageState();
+      signal.throwIfAborted();
+      browser = await chromium.launch({ headless: true });
+      signal.throwIfAborted();
+      return await collectUniquePlay({ browser, storageState, collectionScope: payload.collectionScope,
+        leagueId: payload.leagueId || process.env.UNIQUEPLAY_LEAGUE_ID || '57',
+        seasonYear: Number(payload.seasonYear || process.env.UNIQUEPLAY_SEASON_YEAR || 2026), progress });
+    } finally {
+      signal.removeEventListener('abort', closeBrowser);
+      try {
+        closeBrowser();
+        await closing;
+        if (browser?.isConnected()) throw new Error('Browser remains connected');
+      } catch {
+        throw Object.assign(new Error('BROWSER_STOP_NOT_CONFIRMED'), { code: 'BROWSER_STOP_NOT_CONFIRMED' });
+      }
+    }
+  },
+});
+await runs.initialize();
+function authorized(request) {
+  const actual = Buffer.from(String(request.headers.authorization || '').replace(/^Bearer\s+/i, ''));
   const expected = Buffer.from(expectedToken);
-  const actual = Buffer.from(supplied);
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
-
+function sendJson(response, status, data) {
+  response.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+  response.end(JSON.stringify(data));
+}
 async function readBody(request) {
-  const chunks = [];
-  let size = 0;
+  let size = 0; const chunks = [];
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > 64 * 1024) throw Object.assign(new Error('Request too large'), { status: 413 });
+    if (size > 65536) throw Object.assign(new Error('REQUEST_TOO_LARGE'), { status: 413 });
     chunks.push(chunk);
   }
-  return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+  try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); }
+  catch { throw Object.assign(new Error('INVALID_JSON'), { status: 400 }); }
 }
-
-async function callback(runId, path, payload) {
-  if (!callbackBase) throw new Error('SYNC_BACKEND_CALLBACK_URL is not configured');
-  const response = await fetch(`${callbackBase}/api/internal/sync/unique-play/runs/${encodeURIComponent(runId)}/${path}`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${expectedToken}`, 'content-type': 'application/json' },
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!response.ok) throw new Error(`Backend callback failed (${response.status})`);
-}
-
-async function executeRun(payload) {
-  const runId = String(payload.runId || '');
-  if (!runId || activeRuns.has(runId)) return;
-  activeRuns.add(runId);
-  let browser;
+createServer(async (request, response) => {
   try {
-    const storageState = await loadStorageState();
-    browser = await chromium.launch({ headless: true });
-    const result = await collectUniquePlay({
-      browser,
-      storageState,
-      leagueId: payload.leagueId || process.env.UNIQUEPLAY_LEAGUE_ID || '57',
-      seasonYear: Number(payload.seasonYear || process.env.UNIQUEPLAY_SEASON_YEAR || 2026),
-      progress: (event) => callback(runId, 'progress', event),
-    });
-    await callback(runId, 'candidate', result);
-  } catch (error) {
-    await callback(runId, 'failed', { code: error?.code || 'COLLECTION_FAILED', message: String(error?.message || 'Collection failed') }).catch(() => {});
-  } finally {
-    activeRuns.delete(runId);
-    await browser?.close();
-  }
-}
-
-const server = createServer(async (request, response) => {
-  try {
-    const url = new URL(request.url || '/', 'http://localhost');
-    if (request.method === 'GET' && url.pathname === '/health') return sendJson(response, 200, { ok: true, activeRuns: activeRuns.size, adapterVersion: ADAPTER_VERSION });
-    if (!isAuthorized(request)) return sendJson(response, 401, { error: 'unauthorized' });
+    const url = new URL(request.url, 'http://worker.local');
+    if (request.method === 'GET' && url.pathname === '/health') {
+      const health = runs.health();
+      return sendJson(response, health.ok ? 200 : 503, { ...health, adapterVersion: ADAPTER_VERSION });
+    }
+    if (!authorized(request)) return sendJson(response, 401, { error: 'Unauthorized' });
     if (request.method === 'GET' && url.pathname === '/session') {
       try {
         await loadStorageState();
-        return sendJson(response, 200, { status: 'READY', connected: true });
-      } catch (error) {
-        return sendJson(response, 200, { status: 'REAUTH_REQUIRED', connected: false, message: String(error?.message || 'Session unavailable') });
-      }
+        return sendJson(response, 200, { status: 'READY', connected: true, authenticated: true,
+          sessionValidation: 'STORAGE_ONLY', protocolVersion: 2, ...runs.health() });
+      } catch { return sendJson(response, 200, { status: 'REAUTH_REQUIRED', connected: false, authenticated: false }); }
     }
     if (request.method === 'POST' && url.pathname === '/collect') {
       const payload = await readBody(request);
-      if (!payload.runId) return sendJson(response, 400, { error: 'runId is required' });
-      if (activeRuns.has(String(payload.runId))) return sendJson(response, 409, { error: 'run already active' });
-      void executeRun(payload);
-      return sendJson(response, 202, { accepted: true, runId: String(payload.runId) });
+      return sendJson(response, 202, { accepted: true, ...await runs.submit(payload) });
     }
-    return sendJson(response, 404, { error: 'not found' });
+    const match = url.pathname.match(/^\/runs\/([0-9a-f-]+)(?:\/(retry|fence|cancel))?$/i);
+    if (match && request.method === 'GET' && !match[2]) return sendJson(response, 200, runs.status(match[1]));
+    if (match && request.method === 'POST' && match[2] === 'retry') return sendJson(response, 202, await runs.retry(match[1]));
+    if (match && request.method === 'POST' && match[2] === 'fence') {
+      const body = await readBody(request);
+      return sendJson(response, 200, await runs.fence(match[1], body.recoveryId));
+    }
+    if (match && request.method === 'POST' && match[2] === 'cancel') {
+      const body = await readBody(request);
+      return sendJson(response, 200, await runs.cancel(match[1], body.cancellationId));
+    }
+    return sendJson(response, 404, { error: 'Not found' });
   } catch (error) {
-    return sendJson(response, error?.status || 500, { error: String(error?.message || 'worker failure') });
+    const status = Number(error?.status) || 500;
+    return sendJson(response, status, { error: /^[A-Z][A-Z0-9_]+$/.test(error?.code || error?.message || '')
+      ? error.code || error.message : 'WORKER_REQUEST_FAILED' });
   }
-});
-
-server.listen(port, '0.0.0.0', () => {
-  process.stdout.write(`UniquePlay sync worker listening on ${port} (adapter ${ADAPTER_VERSION})\n`);
-});
+}).listen(port, '0.0.0.0', () => console.log(`UniquePlay sync worker listening on ${port} (adapter ${ADAPTER_VERSION}, durable protocol 2)`));

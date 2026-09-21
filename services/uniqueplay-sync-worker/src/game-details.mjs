@@ -38,6 +38,11 @@ export function contextualizeDetailError(error, context = {}) {
   return detailError(code, { ...safeDetailContext(context), ...safeDetailContext(error?.detailContext) });
 }
 
+export function safeGameDetailDiagnostic(error) {
+  if (!DETAIL_ERROR_CODES.has(error?.code) || error?.detailContext?.phase !== 'GAME_DETAILS') return null;
+  return { code: error.code, ...safeDetailContext(error.detailContext) };
+}
+
 function text(value, max = 100) {
   const result = String(value ?? '').normalize('NFKC').replace(/\s+/gu, ' ').trim();
   if (result.length > max) throw detailError();
@@ -170,6 +175,31 @@ function tableRows(table, headers, withInnings, allowForfeitEmpty = false) {
 
 export function parseTeamTables(snapshot, teamName, { allowForfeitEmpty = false } = {}) {
   const normalizedTeam = requiredText(teamName, 160);
+  // Provider game 57451: an unplayed forfeit renders a default nine-player
+  // roster, no inning columns, zero game stats, and only a pitcher total.
+  // Season averages are historical, not evidence that this game was played.
+  if (allowForfeitEmpty && snapshot.batter?.labels?.length === 10
+      && text(snapshot.batter.labels[9]) === '합계'
+      && snapshot.pitcher?.labels?.length === 1 && text(snapshot.pitcher.labels[0]) === '합계') {
+    const exactZeroTable = (table, headers, rows, seasonAverage = false) =>
+      Array.isArray(table.columns) && table.columns.length === headers.length
+      && table.columns.every((column, index) => text(column.header, 24) === headers[index]
+        && Array.isArray(column.values)
+        && column.values.length === rows
+        && column.values.every((value, rowIndex) => {
+          if (seasonAverage && index === 6 && rowIndex === rows - 1) return value === '';
+          const parsed = number(value, { integer: !(seasonAverage && index >= 5), max: seasonAverage && index >= 5 ? 1 : 999 });
+          return seasonAverage && index === 6 ? parsed !== null : parsed === 0;
+        }));
+    const rosterOnly = snapshot.batter.labels.slice(0, 9).every((label, index) => {
+      const identity = playerIdentity(label, 'batter');
+      return identity.battingOrder === index + 1 && identity.position === '미정';
+    });
+    if (rosterOnly && exactZeroTable(snapshot.batter, BATTER_DETAIL_HEADERS, 10, true)
+        && exactZeroTable(snapshot.pitcher, PITCHER_DETAIL_HEADERS, 1)) {
+      return { batters: [], pitchers: [] };
+    }
+  }
   const batters = tableRows(snapshot.batter, BATTER_DETAIL_HEADERS, true, allowForfeitEmpty).map((row) => {
     const identity = playerIdentity(row.label, 'batter');
     return {
