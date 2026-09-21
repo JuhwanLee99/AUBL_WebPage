@@ -16,6 +16,7 @@ import {
 import './UniquePlaySync.css';
 import { normalizeOfficialGameDetail } from '@core/api/backendClient';
 import OfficialGameAuditTables from './OfficialGameAuditTables';
+import { compareStandings, type ComparisonStanding } from '../standingsComparison';
 
 interface Props {
   items: UniquePlaySyncDiffItem[];
@@ -150,7 +151,47 @@ function ResolutionEditor({
   );
 }
 
+function StandingsChanges({ item }: { item: UniquePlaySyncDiffItem }) {
+  const change = item.changes.find(field => field.field === 'standings');
+  const comparison = compareStandings(change?.aublValue, change?.sourceValue);
+  const record = (row: ComparisonStanding | null) => row
+    ? `${row.wins ?? '미확인'}승 ${row.losses ?? '미확인'}패 ${row.draws ?? '미확인'}무` : '자료 없음';
+  return (
+    <section aria-label={`${item.displayName} 순위 비교`}>
+      {(!comparison.beforeAvailable || !comparison.sourceAvailable) && (
+        <p role="status" className="sync-message">
+          {!comparison.beforeAvailable ? '이전 순위 자료가 제공되지 않았습니다. ' : ''}
+          {!comparison.sourceAvailable ? '원천 순위 자료가 제공되지 않았습니다. ' : ''}
+          자료 누락은 변경 없음 또는 팀 삭제를 의미하지 않습니다.
+        </p>
+      )}
+      {comparison.ambiguous && <p role="alert" className="sync-message is-danger">팀 식별자가 중복되어 자동 비교를 보류했습니다. 원본과 매핑을 확인하세요.</p>}
+      {comparison.invalid && <p role="alert" className="sync-message is-danger">팀명·순위·승패무에 미확인 값이 있습니다. 0으로 간주하지 않습니다.</p>}
+      {comparison.entries.length > 0 && (
+        <div className="game-record-review__comparison-scroll" tabIndex={0} aria-label={`${item.displayName} 순위 비교, 가로로 스크롤할 수 있습니다`}>
+          <table className="game-record-review__comparison">
+            <caption className="sr-only">{item.displayName} 이전 공식 기록과 원천 순위 비교</caption>
+            <thead><tr><th scope="col">팀</th><th scope="col">이전 순위</th><th scope="col">원천 순위</th><th scope="col">이전 승패무</th><th scope="col">원천 승패무</th></tr></thead>
+            <tbody>{comparison.entries.map(entry => (
+              <tr key={entry.key}>
+                <th scope="row">
+                  {entry.source?.teamName || entry.before?.teamName || '팀 확인 필요'}
+                  {entry.before && entry.source && entry.before.teamName !== entry.source.teamName && <small> (이전 표기: {entry.before.teamName})</small>}
+                  {entry.ambiguous && <small> · 자동 연결 보류</small>}
+                </th>
+                <td>{entry.before?.rank ?? '미확인'}</td><td>{entry.source?.rank ?? '미확인'}</td>
+                <td>{record(entry.before)}</td><td>{record(entry.source)}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function ChangeList({ item }: { item: UniquePlaySyncDiffItem }) {
+  if (item.entityType === 'GROUP') return <StandingsChanges item={item} />;
   if (item.changes.length === 0) {
     return <span className="sync-muted">세부 필드 변경 없음</span>;
   }

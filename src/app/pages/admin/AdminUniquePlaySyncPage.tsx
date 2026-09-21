@@ -42,6 +42,7 @@ import {
 } from '@features/sync';
 import '@features/sync/components/UniquePlaySync.css';
 import UniquePlayGameReviewPanel from '@features/sync/components/UniquePlayGameReviewPanel';
+import UniquePlayCancellationPanel from '@features/sync/components/UniquePlayCancellationPanel';
 import type { UniquePlayGameRecordsReview } from '@core/contracts/uniquePlayGameReview';
 
 const RUN_STORAGE_KEY = 'aubl.uniquePlaySync.currentRunId';
@@ -162,6 +163,8 @@ function actionCount(summary: UniquePlaySyncSummary, action: UniquePlaySyncDiffA
 }
 
 function progressMessage(run: UniquePlaySyncRun): string {
+  if (run.status === 'CANCELED') return '관리자 요청으로 수집 중단 완료';
+  if (run.errorCode === 'CANCEL_REQUESTED') return '수집 중단 확인 중: 워커 종료 확인 전까지 활성 실행을 유지합니다.';
   const phase = run.progress.phase?.trim().toUpperCase() ?? '';
   const message = run.progress.message?.trim() ?? '';
   const detailPhase = `${phase} ${message}`.toUpperCase();
@@ -254,6 +257,8 @@ export default function AdminUniquePlaySyncPage() {
   const diffRequestSequenceRef = useRef(0);
   const qualificationRequestSequenceRef = useRef(0);
   const [seasonYear, setSeasonYear] = useState(currentYear);
+  const [syncMode, setSyncMode] = useState<'SINCE_LAST_SYNC' | 'FROM_DATE'>('SINCE_LAST_SYNC');
+  const [syncFromDate, setSyncFromDate] = useState('');
   const [session, setSession] = useState<UniquePlaySyncSession | null>(null);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [run, setRun] = useState<UniquePlaySyncRun | null>(null);
@@ -268,7 +273,7 @@ export default function AdminUniquePlaySyncPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(0);
   const [resolvingItemId, setResolvingItemId] = useState<string | null>(null);
-  const [busyAction, setBusyAction] = useState<'start' | 'validate' | 'publish' | 'activate' | 'qualification' | 'correction' | 'correction-draft' | null>(null);
+  const [busyAction, setBusyAction] = useState<'start' | 'validate' | 'publish' | 'activate' | 'qualification' | 'correction' | 'correction-draft' | 'cancel' | null>(null);
   const [publication, setPublication] = useState<UniquePlaySyncPublishResult | null>(null);
   const [activation, setActivation] = useState<UniquePlayRevisionActivationResult | null>(null);
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | null>(null);
@@ -400,12 +405,22 @@ export default function AdminUniquePlaySyncPage() {
   }, [refreshRun, run, runLoading, session?.activeRunId]);
 
   useEffect(() => {
-    if (!run || !isUniquePlayRunPolling(run.status) || pollingSuspended || runLoading) return;
+    if (!run || !isUniquePlayRunPolling(run.status) || pollingSuspended || runLoading || busyAction === 'cancel') return;
     const timer = window.setTimeout(() => {
       void refreshRun(run.runId, 'poll');
     }, 3_000);
     return () => window.clearTimeout(timer);
-  }, [pollingSuspended, refreshRun, run, runLoading]);
+  }, [busyAction, pollingSuspended, refreshRun, run, runLoading]);
+
+  const onCancellationBusy = useCallback((busy: boolean) => {
+    if (busy) runRequestSequenceRef.current += 1;
+    setBusyAction(busy ? 'cancel' : null);
+  }, []);
+  const onCancellationChanged = useCallback(async (runId: string) => {
+    if (currentRunIdRef.current !== runId) return;
+    await refreshRun(runId, 'manual');
+    await refreshSession();
+  }, [refreshRun, refreshSession]);
 
   const diffRunId = run?.runId ?? null;
   const diffAvailable = run ? isUniquePlayDiffAvailable(run.status) : false;
@@ -482,7 +497,10 @@ export default function AdminUniquePlaySyncPage() {
     }
     setBusyAction('start');
     try {
-      const nextRun = await startUniquePlaySyncRun({ seasonYear });
+      const nextRun = await startUniquePlaySyncRun({
+        seasonYear, syncMode,
+        ...(syncMode === 'FROM_DATE' ? { fromDate: syncFromDate } : {}),
+      });
       currentRunIdRef.current = nextRun.runId;
       runRequestSequenceRef.current += 1;
       diffRequestSequenceRef.current += 1;
@@ -956,16 +974,39 @@ export default function AdminUniquePlaySyncPage() {
         )}
       </section>
 
+      {run && ['QUEUED', 'RUNNING', 'CANCELED'].includes(run.status) && (
+        <UniquePlayCancellationPanel key={run.runId} run={run} disabled={busyAction !== null || runLoading}
+          onBusy={onCancellationBusy} onChanged={onCancellationChanged} />
+      )}
+
       <section style={cardStyle} aria-labelledby="unique-play-start-heading">
         <h3 id="unique-play-start-heading" style={sectionTitleStyle}>2. 수집 실행</h3>
         <p style={{ margin: '5px 0 15px', color: 'var(--season-muted)', fontSize: '13px', lineHeight: 1.6 }}>
-          시작 버튼은 경기·순위·선수 누적 기록과 경기별 상세 기록을 수집해 비교 스냅샷을 만듭니다. 게시나 활성화는 자동으로 수행하지 않습니다.
+          기존 경기 기록을 보존하고 기준일 이후의 경기 상세만 다시 수집합니다. 기준일은 한국 시간이며 당일을 포함합니다. 순위·선수 시즌 누적은 최신 전체 값으로 교체합니다. 게시·활성화는 별도 승인입니다.
         </p>
         <form onSubmit={(event) => { void handleStartRun(event); }} style={{ display: 'flex', alignItems: 'end', gap: '10px', flexWrap: 'wrap' }}>
           <label style={{ display: 'grid', gap: '5px', width: '180px', color: 'var(--season-ink)', fontSize: '12px', fontWeight: 800 }}>
             시즌 연도
             <input type="number" min={2000} max={2100} step={1} value={seasonYear} onChange={(event) => setSeasonYear(Number(event.target.value))} style={inputStyle} />
           </label>
+          <label style={{ display: 'grid', gap: '5px' }}>
+            수집 범위
+            <select value={syncMode} onChange={(event) => setSyncMode(event.target.value as 'SINCE_LAST_SYNC' | 'FROM_DATE')} style={inputStyle}>
+              <option value="SINCE_LAST_SYNC">마지막 공식 반영 이후 (기본)</option>
+              <option value="FROM_DATE">지정 날짜부터 다시 수집</option>
+            </select>
+          </label>
+          {syncMode === 'FROM_DATE' && (
+            <label style={{ display: 'grid', gap: '5px' }}>
+              시작 날짜 (당일 포함)
+              <input type="date" required min={`${seasonYear}-01-01`} max={`${seasonYear}-12-31`}
+                value={syncFromDate} onChange={(event) => setSyncFromDate(event.target.value)} style={inputStyle} />
+            </label>
+          )}
+          <p style={{ width: '100%', margin: 0, color: '#64748b', fontSize: '13px' }}>
+            기준은 마지막 활성 공식본의 수집 시작일입니다. 최초 수집은 시즌 전체이며, 지정일 수집은 기존 공식본이 필요합니다.
+            기준일 이전의 늦은 정정·미게시 상세는 해당 날짜를 지정하여 다시 수집하세요.
+          </p>
           <button
             type="submit"
             disabled={!sessionReady || isRunOpen(run) || busyAction !== null || runLoading}

@@ -167,6 +167,25 @@ export interface UniquePlaySyncDiffPage {
 
 export interface StartUniquePlaySyncRunRequest {
   seasonYear?: number;
+  syncMode?: 'SINCE_LAST_SYNC' | 'FROM_DATE';
+  fromDate?: string;
+}
+
+export interface UniquePlayCancellationIntent {
+  cancellationId: string;
+  note: string;
+}
+
+export interface CancelUniquePlaySyncRunRequest extends UniquePlayCancellationIntent {
+  expectedStatus: string;
+  expectedUpdatedAt: string;
+}
+
+export interface UniquePlayCancellationControl {
+  runId: string;
+  supported: boolean;
+  status: string;
+  pending: UniquePlayCancellationIntent | null;
 }
 
 export interface UniquePlaySyncDiffQuery {

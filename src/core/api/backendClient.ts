@@ -2573,9 +2573,9 @@ export async function getUniquePlaySyncSession(): Promise<UniquePlaySyncSession>
 export async function startUniquePlaySyncRun(
   request: StartUniquePlaySyncRunRequest = {},
 ): Promise<UniquePlaySyncRun> {
-  const raw = await fetchUniquePlaySyncApi(`${UNIQUE_PLAY_SYNC_BASE}/runs`, {
+  const raw = await fetchUniquePlaySyncApi(`${UNIQUE_PLAY_SYNC_BASE}/runs${request.syncMode ? "/scoped" : ""}`, {
     method: 'POST',
-    body: request.seasonYear == null ? undefined : JSON.stringify({ seasonYear: request.seasonYear }),
+    body: JSON.stringify(request),
   });
   return normalizeUniquePlaySyncRun(raw);
 }
@@ -2583,6 +2583,40 @@ export async function startUniquePlaySyncRun(
 export async function getUniquePlaySyncRun(runId: string): Promise<UniquePlaySyncRun> {
   const raw = await fetchUniquePlaySyncApi(`${UNIQUE_PLAY_SYNC_BASE}/runs/${encodeURIComponent(runId)}`);
   return normalizeUniquePlaySyncRun(raw);
+}
+
+export async function getUniquePlayCancellationControl(
+  runId: string,
+): Promise<import('@core/contracts/uniquePlaySync').UniquePlayCancellationControl> {
+  const raw = await fetchUniquePlaySyncApi(`${UNIQUE_PLAY_SYNC_BASE}/runs/${encodeURIComponent(runId)}/cancellation`);
+  const row = asSyncRecord(raw);
+  if (!row || row.runId !== runId || typeof row.supported !== 'boolean' || typeof row.status !== 'string') {
+    throw new Error('수집 중단 제어 응답이 요청한 실행과 일치하지 않습니다.');
+  }
+  let pending: import('@core/contracts/uniquePlaySync').UniquePlayCancellationIntent | null = null;
+  if (row.pending != null) {
+    const intent = asSyncRecord(row.pending);
+    if (!intent || typeof intent.cancellationId !== 'string' || typeof intent.note !== 'string'
+        || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(intent.cancellationId)
+        || intent.note.trim().length < 8 || intent.note.length > 500) {
+      throw new Error('서버에 보관된 중단 요청을 확인할 수 없습니다. 새 요청으로 덮어쓰지 않습니다.');
+    }
+    pending = { cancellationId: intent.cancellationId, note: intent.note };
+  }
+  return { runId, supported: row.supported, status: row.status, pending };
+}
+
+export async function cancelUniquePlaySyncRun(
+  runId: string,
+  request: import('@core/contracts/uniquePlaySync').CancelUniquePlaySyncRunRequest,
+): Promise<void> {
+  const raw = await fetchUniquePlaySyncApi(`${UNIQUE_PLAY_SYNC_BASE}/runs/${encodeURIComponent(runId)}/cancel`, {
+    method: 'POST', body: JSON.stringify(request),
+  });
+  const row = asSyncRecord(raw);
+  if (!row || row.runId !== runId || row.cancellationId !== request.cancellationId || row.status !== 'CANCELED') {
+    throw new Error('워커 중단 완료 응답을 확인하지 못했습니다. 같은 요청으로 다시 확인해 주세요.');
+  }
 }
 
 function correctionValue(value: unknown): GameCorrectionValue {
