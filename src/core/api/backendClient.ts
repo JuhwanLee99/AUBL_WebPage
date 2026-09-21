@@ -125,10 +125,10 @@ export interface BatterStat {
   hitByPitch: number;
   sacrificeHits: number;
   sacrificeFlies: number;
-  battingAverage: number;
-  onBasePct: number;
-  sluggingPct: number;
-  ops: number;
+  battingAverage: number | null;
+  onBasePct: number | null;
+  sluggingPct: number | null;
+  ops: number | null;
 }
 
 export interface PitcherStat {
@@ -148,9 +148,9 @@ export interface PitcherStat {
   walksAllowed: number;
   strikeouts: number;
   era: number;
-  whip: number;
-  kPer9: number;
-  bbPer9: number;
+  whip: number | null;
+  kPer9: number | null;
+  bbPer9: number | null;
 }
 
 export async function getPlayerStats(
@@ -198,10 +198,10 @@ export async function getPlayerStats(
       hitByPitch: toNumber(row.hitByPitch),
       sacrificeHits: toNumber(row.sacrificeHits),
       sacrificeFlies: toNumber(row.sacrificeFlies),
-      battingAverage: toNumber(row.battingAverage ?? row.avg),
-      onBasePct: toNumber(row.onBasePct ?? row.obp),
-      sluggingPct: toNumber(row.sluggingPct ?? row.slg),
-      ops: toNumber(row.ops),
+      battingAverage: toFiniteNumber(row.battingAverage ?? row.avg),
+      onBasePct: toFiniteNumber(row.onBasePct ?? row.obp),
+      sluggingPct: toFiniteNumber(row.sluggingPct ?? row.slg),
+      ops: toFiniteNumber(row.ops),
       seasonId: resolvedSeasonId,
     };
   };
@@ -228,9 +228,9 @@ export async function getPlayerStats(
       walksAllowed: toNumber(row.walksAllowed ?? row.walks),
       strikeouts: toNumber(row.strikeouts),
       era: toNumber(row.era),
-      whip: toNumber(row.whip),
-      kPer9: toNumber(row.kPer9),
-      bbPer9: toNumber(row.bbPer9),
+      whip: toFiniteNumber(row.whip),
+      kPer9: toFiniteNumber(row.kPer9),
+      bbPer9: toFiniteNumber(row.bbPer9),
       seasonId: resolvedSeasonId,
     };
   };

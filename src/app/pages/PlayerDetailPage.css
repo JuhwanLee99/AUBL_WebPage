@@ -1,3 +1,220 @@
+.season-content-page.player-detail-page {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px !important;
+  padding: clamp(12px, 2.5vw, 28px) !important;
+  color: var(--season-ink, #10264b) !important;
+  line-height: 1.5;
+}
+
+.player-detail-page,
+.player-detail-page * {
+  box-sizing: border-box;
+}
+
+.player-detail-page :where(section, article, header, div, label) {
+  min-width: 0;
+}
+
+/* Override legacy inline dimensions without changing the record/data flow. */
+.player-detail-page.player-detail-page :where(section, article, button, input, select, textarea) {
+  border-radius: 0 !important;
+}
+
+.player-detail-page > :where(section, div),
+.player-detail-page section > div,
+.player-detail-page article > div {
+  min-width: 0 !important;
+  max-width: 100%;
+}
+
+.player-detail-page.player-detail-page > section {
+  padding: clamp(14px, 2vw, 24px) !important;
+}
+
+.player-detail-page :where(h1, h2, h3, p, small, label) {
+  overflow-wrap: anywhere;
+}
+
+.player-detail-page :where(h1, h2, h3) {
+  line-height: 1.35;
+}
+
+.player-detail-page label {
+  min-width: 0 !important;
+  max-width: 100%;
+  color: var(--season-muted, #64748b) !important;
+}
+
+.player-detail-page.player-detail-page :where(input, select, textarea) {
+  width: 100%;
+  min-width: 0 !important;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 10px 12px !important;
+  border: 1px solid var(--season-line, #cbd5e1) !important;
+  background: var(--season-surface, #fff) !important;
+  color: var(--season-ink, #10264b) !important;
+  box-shadow: none !important;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.player-detail-page.player-detail-page button {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 10px 14px !important;
+  border: 1px solid var(--season-line, #cbd5e1) !important;
+  background: var(--season-surface, #fff) !important;
+  color: var(--season-ink, #10264b) !important;
+  box-shadow: none !important;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.player-detail-page.player-detail-page button:hover:not(:disabled) {
+  border-color: var(--season-blue-700, #1d4ed8) !important;
+  background: var(--season-surface-muted, #edf3fc) !important;
+}
+
+.player-detail-page.player-detail-page button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.player-detail-page.player-detail-page > button:first-child {
+  justify-self: start;
+  min-height: 36px;
+  padding: 4px 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  text-underline-offset: 4px;
+}
+
+.player-detail-page :where(button, input, select, textarea, a, [tabindex]):focus-visible {
+  outline: 2px solid var(--season-blue-700, #1d4ed8);
+  outline-offset: 3px;
+}
+
+/* Search controls share a baseline; long native select options cannot widen the page. */
+.player-detail-page > section:first-of-type > div:has(> label) {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  align-items: end !important;
+  gap: 12px !important;
+}
+
+.player-detail-page > section:first-of-type > div:has(> label) > button {
+  width: 100%;
+}
+
+.player-detail-page > div:has(> label) {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 260px));
+  align-items: end !important;
+  gap: 12px !important;
+}
+
+.player-detail-page > div:has(> h1) {
+  align-items: baseline !important;
+  gap: 8px 14px !important;
+  padding: 4px 0 16px;
+  border-bottom: 2px solid var(--season-navy-900, #10264b);
+}
+
+.player-detail-page > div:has(> h1) > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.player-detail-page > section:has(> .player-detail-info) {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)) !important;
+  gap: 16px !important;
+}
+
+.player-detail-info {
+  align-content: start;
+  overflow-wrap: anywhere;
+}
+
+.player-detail-page div:has(> .player-detail-stat) {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 100px), 1fr)) !important;
+  gap: 0 !important;
+  border-top: 1px solid var(--season-line, #cbd5e1);
+  border-left: 1px solid var(--season-line, #cbd5e1);
+}
+
+.player-detail-stat {
+  align-content: center;
+  min-height: 76px;
+  padding: 12px 8px;
+  border-right: 1px solid var(--season-line, #cbd5e1);
+  border-bottom: 1px solid var(--season-line, #cbd5e1);
+  background: var(--season-surface-muted, #f4f7fc);
+  overflow-wrap: anywhere;
+}
+
+.player-detail-page :where(.official-player-logs, .official-player-log-game) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.player-detail-page .official-player-logs__heading > div {
+  flex: 1 1 200px;
+}
+
+.player-detail-page .official-player-logs__heading > small {
+  flex: 0 1 420px;
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.player-detail-page .official-player-log-game > header > div {
+  flex: 1 1 240px;
+}
+
+.player-detail-page .official-player-log-game > header > a {
+  flex-shrink: 0;
+  border-radius: 0;
+}
+
+.player-detail-page :where(.official-player-logs__table-scroll, div[style*="overflow-x"]) {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.player-detail-page .official-player-logs__appearances span {
+  border-radius: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .season-content-page.player-detail-page {
+    gap: 16px !important;
+  }
+
+  .player-detail-page > section:first-of-type > div:has(> label),
+  .player-detail-page > div:has(> label) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .player-detail-page .official-player-logs__heading > small {
+    flex-basis: 100%;
+    text-align: left;
+  }
+}
+
 .official-player-logs {
   display: grid;
   gap: 14px;

@@ -761,10 +761,10 @@ export default function PlayerDetailPage() {
               </h2>
               <div style={recordGridStyle}>
                 {([
-                  ['AVG', selectedBatterStat.battingAverage.toFixed(3)],
-                  ['OBP', selectedBatterStat.onBasePct.toFixed(3)],
-                  ['SLG', selectedBatterStat.sluggingPct.toFixed(3)],
-                  ['OPS', selectedBatterStat.ops.toFixed(3)],
+                  ['AVG', officialLogValue(selectedBatterStat.battingAverage, 3)],
+                  ['OBP', officialLogValue(selectedBatterStat.onBasePct, 3)],
+                  ['SLG', officialLogValue(selectedBatterStat.sluggingPct, 3)],
+                  ['OPS', officialLogValue(selectedBatterStat.ops, 3)],
                   ['HR', selectedBatterStat.homeRuns],
                   ['RBI', selectedBatterStat.runsBattedIn],
                   ['H', selectedBatterStat.hits],
@@ -789,15 +789,15 @@ export default function PlayerDetailPage() {
                 {([
                   ['ERA', selectedPitcherStat.era.toFixed(2)],
                   ['IP', selectedPitcherStat.inningsPitched.toFixed(1)],
-                  ['WHIP', selectedPitcherStat.whip.toFixed(2)],
+                  ['WHIP', officialLogValue(selectedPitcherStat.whip, 2)],
                   ['K', selectedPitcherStat.strikeouts],
                   ['BB', selectedPitcherStat.walksAllowed],
                   ['W', selectedPitcherStat.wins],
                   ['L', selectedPitcherStat.losses],
                   ['SV', selectedPitcherStat.saves],
                   ['HLD', selectedPitcherStat.holds],
-                  ['K/9', selectedPitcherStat.kPer9.toFixed(2)],
-                  ['BB/9', selectedPitcherStat.bbPer9.toFixed(2)],
+                  ['K/9', officialLogValue(selectedPitcherStat.kPer9, 2)],
+                  ['BB/9', officialLogValue(selectedPitcherStat.bbPer9, 2)],
                   ['G', selectedPitcherStat.gamesPlayed],
                 ] as [string, string | number][]).map(([label, value]) => (
                   <StatItem key={label} label={label} value={value} />
@@ -1205,7 +1205,7 @@ const logEmptyStyle: React.CSSProperties = {
 
 function InfoItem({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ display: 'grid', gap: '4px' }}>
+    <div className="player-detail-info" style={{ display: 'grid', gap: '4px' }}>
       <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 800 }}>{label}</span>
       <span style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '16px' }}>{value || '-'}</span>
     </div>
@@ -1214,7 +1214,7 @@ function InfoItem({ label, value }: { label: string; value: string }) {
 
 function StatItem({ label, value }: { label: string; value: string | number }) {
   return (
-    <div style={{ display: 'grid', gap: '4px', textAlign: 'center' }}>
+    <div className="player-detail-stat" style={{ display: 'grid', gap: '4px', textAlign: 'center' }}>
       <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 800 }}>{label}</span>
       <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: '16px' }}>{value}</span>
     </div>
