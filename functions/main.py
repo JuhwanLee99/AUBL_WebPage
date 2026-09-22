@@ -24,6 +24,7 @@ from allstar_voting import get_vote_results as get_allstar_vote_results_impl
 from allstar_voting import google_subject_from_token
 from allstar_voting import submit_ballot as submit_allstar_ballot_impl
 from record_sources import promote_from_request, promote_record_source, promotion_enabled
+from scoring_test_rpc import scoring_test_writer_from_request
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,12 @@ ALLSTAR_ENFORCE_APP_CHECK_PUBLIC = os.environ.get(
 
 set_global_options(max_instances=10)
 initialize_app()
+
+
+@https_fn.on_call(region="asia-northeast3", timeout_sec=60)
+def scoring_test_writer(req: https_fn.CallableRequest[object]) -> dict[str, object]:
+    # Closed unless demo project + local Auth/Firestore emulators + explicit flags.
+    return scoring_test_writer_from_request(req)
 
 
 @https_fn.on_call(region="asia-northeast3", timeout_sec=60)

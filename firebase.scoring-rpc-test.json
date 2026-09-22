@@ -1,0 +1,13 @@
+{
+  "functions": [{ "source": "functions", "codebase": "scoring-rpc-test", "runtime": "python311" }],
+  "firestore": { "rules": "firestore.rules" },
+  "emulators": {
+    "auth": { "host": "127.0.0.1", "port": 9198 },
+    "functions": { "host": "127.0.0.1", "port": 5108 },
+    "firestore": { "host": "127.0.0.1", "port": 8188, "websocketPort": 9158 },
+    "hub": { "host": "127.0.0.1", "port": 4508 },
+    "logging": { "host": "127.0.0.1", "port": 4608 },
+    "ui": { "enabled": false },
+    "singleProjectMode": true
+  }
+}
