@@ -23,7 +23,7 @@ export function projectedNamesFromStandings(rows: TeamRecordStanding[]): Record<
   for (const group of 'ABCDEFGH') {
     const ranked = rows.filter(row => groupCode(row) === group).sort((a, b) =>
       (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER)
-      || b.winPct - a.winPct || b.wins - a.wins || a.losses - b.losses
+      || b.winPct - a.winPct || b.wins - a.wins || a.losses - b.losses || b.ties - a.ties
       || a.teamName.localeCompare(b.teamName, 'ko'));
     ranked.slice(0, 4).forEach((row, index) => { result[`${group}${index + 1}`] = row.teamName; });
   }
