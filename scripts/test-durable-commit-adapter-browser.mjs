@@ -126,6 +126,28 @@ try {
       const adapter = new DurableScoringCommitAdapter(scope, q, { commit: async () => { throw new Error('unexpected-send'); } });
       check(await adapter.flush() === false, 'empty queue sent request');
     });
+    for (const field of ['environment', 'projectId', 'uid', 'matchId', 'testRunId', 'writerSessionId', 'lockEpoch']) {
+      await test(`constructor_rejects_foreign_${field}`, async ({ q, scope }) => {
+        await q.enqueue('retained', 'original');
+        const wrong = { ...scope, [field]: field === 'lockEpoch' ? 2 : field === 'testRunId' ? 'TEST_RUN_FOREIGN' : 'foreign' };
+        let calls = 0;
+        await reject(() => new DurableScoringCommitAdapter(wrong, q, { commit: async () => { calls++; } }), 'queue-scope-mismatch');
+        const saved = await q.recover();
+        check(calls === 0 && !saved.metadata.pending && saved.metadata.acknowledgedSequence === 0, 'foreign adapter changed metadata');
+        check(saved.inputs.length === 1 && saved.inputs[0].snapshot === 'original', 'foreign adapter lost input');
+      });
+    }
+    await test('caller_scope_mutation_cannot_rebind_queue_or_adapter', async ({ q, scope, ack }) => {
+      const original = structuredClone(scope);
+      const adapter = new DurableScoringCommitAdapter(scope, q, { commit: async request => {
+        check(request.matchId === original.matchId && request.writerSessionId === original.writerSessionId, 'mutable scope leaked');
+        return { ...ack(request), uid: original.uid };
+      } });
+      scope.uid = 'mutated'; scope.matchId = 'mutated'; scope.writerSessionId = 'mutated';
+      await reject(() => q.assertScope(scope), 'queue-scope-mismatch'); q.assertScope(original);
+      await q.enqueue('one', 'snapshot'); await adapter.prepare(manifest, 'immutable_scope', 1); await adapter.flush();
+      check((await q.recover()).metadata.acknowledgedSequence === 1, 'valid original scope failed');
+    });
     return results;
   }, { manifest, probes, expected }));
   await context.close();

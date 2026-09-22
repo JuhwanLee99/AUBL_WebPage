@@ -64,6 +64,7 @@ export class DurableScoringCommitAdapter {
 
   constructor(scope: DurableScoringScope, queue: DurableScoringQueue, transport: PrivateCommitTransport) {
     ensure(typeof scope.testRunId === 'string' && scope.testRunId.startsWith('TEST_RUN_'), 'private-test-scope-required');
+    queue.assertScope(scope);
     this.scope = structuredClone(scope);
     this.queue = queue;
     this.transport = transport;
@@ -116,6 +117,7 @@ export class DurableScoringCommitAdapter {
     const frozen = recovered.metadata.pending;
     if (!frozen) return false;
     const request = await this.decode(frozen);
+    await this.queue.assertSendable(frozen);
     // An unknown network failure leaves the exact request and every input intact.
     const response = await this.transport.commit(structuredClone(request));
     ensure(typeof response === 'object' && response !== null, 'invalid-server-ack');
