@@ -1,6 +1,7 @@
 import { Navigate } from 'react-router-dom';
 import type { RouteObject } from 'react-router-dom';
 import StandingsScenariosPage from '@features/front/pages/StandingsScenariosPage';
+import TournamentPage from '@features/tournament/TournamentPage';
 import LandingPage from '@features/front/pages/LandingPage';
 import IntroPage from '@features/front/pages/IntroPage';
 import RulePage from '@features/front/pages/RulePage';
@@ -40,6 +41,7 @@ import { RequireAdmin } from '@shared/auth/RequireAdmin';
 import { RequirePlayerOrAbove } from '@shared/auth/RequirePlayerOrAbove';
 
 export const publicRoutes: RouteObject[] = [
+  { path: 'tournament', element: <TournamentPage /> },
   {
     index: true,
     element: <LandingPage />,

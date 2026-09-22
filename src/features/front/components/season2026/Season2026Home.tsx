@@ -15,6 +15,7 @@ import type {
 
 import { projectionStatus } from './projectionStatus';
 import QualificationOdds from './QualificationOddsPanel';
+import HomeCompetition from '@features/tournament/HomeCompetition';
 
 const UNIQUE_PLAY_URL = 'https://unique-play.com/league/57';
 const INSTAGRAM_URL = 'https://www.instagram.com/aubl_1981/';
@@ -1063,7 +1064,9 @@ export default function Season2026Home(props: Season2026HomeProps) {
         />
       </CampaignHero>
       <MatchBoard matches={props.matches} schedulePhase={props.schedulePhase} nowTs={props.nowTs} />
-      <GroupStandings groups={props.groups} recordPhase={props.recordPhase} preferredTeamName={props.myTeamName} />
+      <HomeCompetition>
+        <GroupStandings groups={props.groups} recordPhase={props.recordPhase} preferredTeamName={props.myTeamName} />
+      </HomeCompetition>
       <RecordLeaders recordPhase={props.recordPhase} recordPayload={props.recordPayload} />
       <CommunityBoard
         notices={props.notices}

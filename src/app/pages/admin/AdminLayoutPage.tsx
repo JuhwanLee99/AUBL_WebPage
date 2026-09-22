@@ -12,6 +12,7 @@ const tabs = [
   { path: '/admin/unique-play-sync', label: 'UniquePlay 동기화', requiresAdmin: true },
   { path: '/admin/record-comparison', label: '공식·자체 기록 비교', requiresAdmin: true },
   { path: '/admin/season2026-scenarios', label: '조별 시나리오 분석', requiresAdmin: true },
+  { path: '/admin/tournament', label: '토너먼트 관리', requiresAdmin: true },
   { path: '/admin/moderation', label: '신고/차단 관리', requiresAdmin: true },
   { path: '/admin/allstar-voting', label: '올스타 투표 관리', requiresAdmin: true },
   { path: '/admin/power-ranking', label: '파워랭킹 재계산', requiresAdmin: true },

@@ -126,6 +126,51 @@ service cloud.firestore {
   }
 
   match /databases/{database}/documents {
+    // Drafts never share the publicly readable config namespace.
+    match /tournamentDrafts/{seasonId} {
+      function validConfig(config) {
+        return config.keys().hasOnly(['schemaVersion', 'season', 'phase', 'homeDefault', 'note', 'divisions'])
+          && config.schemaVersion == 1 && config.season == 2026
+          && config.phase in ['preview', 'active', 'finished']
+          && config.homeDefault in ['groups', 'tournament']
+          && config.note is string && config.note.size() <= 1000
+          && config.divisions.keys().hasOnly(['eutteum', 'beogeum'])
+          && config.divisions.eutteum.seeds is list && config.divisions.eutteum.seeds.size() == 16
+          && config.divisions.eutteum.seeds.toSet() == ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'D1', 'D2', 'E1', 'E2', 'F1', 'F2', 'G1', 'G2', 'H1', 'H2'].toSet()
+          && config.divisions.beogeum.seeds is list && config.divisions.beogeum.seeds.size() == 16
+          && config.divisions.beogeum.seeds.toSet() == ['A3', 'A4', 'B3', 'B4', 'C3', 'C4', 'D3', 'D4', 'E3', 'E4', 'F3', 'F4', 'G3', 'G4', 'H3', 'H4'].toSet()
+          && config.divisions.eutteum.matches is list && config.divisions.eutteum.matches.size() == 15
+          && config.divisions.beogeum.matches is list && config.divisions.beogeum.matches.size() == 15
+          && config.divisions.eutteum.teamNames is map && config.divisions.eutteum.teamNames.size() <= 16
+          && config.divisions.beogeum.teamNames is map && config.divisions.beogeum.teamNames.size() <= 16;
+      }
+      function validDraft() {
+        return seasonId == 'season2026'
+          && request.resource.data.keys().hasOnly(['revision', 'config', 'updatedAt'])
+          && request.resource.data.revision is int
+          && request.resource.data.updatedAt == request.time
+          && validConfig(request.resource.data.config);
+      }
+      allow read: if isAdmin();
+      allow create: if isAdmin() && validDraft() && request.resource.data.revision == 1;
+      allow update: if isAdmin() && validDraft() && request.resource.data.revision == resource.data.revision + 1;
+      allow delete: if false;
+    }
+    match /tournamentPublic/{seasonId} {
+      function validPublication() {
+        let data = request.resource.data;
+        return seasonId == 'season2026' && data.revision is int && data.updatedAt == request.time
+          && ((data.enabled == false && data.keys().hasOnly(['revision', 'enabled', 'updatedAt']))
+            || (data.enabled == true && data.keys().hasOnly(['revision', 'enabled', 'config', 'updatedAt'])
+              && data.config == getAfter(/databases/$(database)/documents/tournamentDrafts/$(seasonId)).data.config));
+      }
+      // An unpublished document contains no draw or draft fields.
+      allow get: if seasonId == 'season2026';
+      allow list: if false;
+      allow create: if isAdmin() && validPublication() && request.resource.data.revision == 1;
+      allow update: if isAdmin() && validPublication() && request.resource.data.revision == resource.data.revision + 1;
+      allow delete: if false;
+    }
     // 앱 전반 설정 (현재 활성 경기 포인터)
     match /app/current {
       allow read: if true;
