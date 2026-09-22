@@ -5,6 +5,7 @@ import type { CompositeInput, CompositeStep } from '@shared/lib/compositePlayEng
 import { formatCompositeFeed } from '@shared/lib/compositePlayDisplay';
 import './RunnerMatrixButton.css';
 import './CompositePlayButton.css';
+import DurableScoringRecoveryPanel from './DurableScoringRecoveryPanel';
 
 const id = () => crypto.randomUUID();
 const positions = { batter: '타석', '0': '1루', '1': '2루', '2': '3루', home: '홈' };
@@ -12,18 +13,26 @@ const destination = { '0': '1루', '1': '2루', '2': '3루', home: '홈', out: '
 const options = (items: Record<string, string>) => Object.entries(items).map(([value, label]) => <option key={value} value={value}>{label}</option>);
 const parsePosition = (value: string) => /^[0-2]$/.test(value) ? Number(value) as 0 | 1 | 2 : value as 'batter' | 'home';
 
-export default function CompositePlayButton({ disabled = false }: { disabled?: boolean }) {
-  const { state, actions } = useDemoStore();
+export default function CompositePlayButton({ disabled = false, onDurableApply: explicitDurableApply }: {
+  disabled?: boolean;
+  /** Opt-in path: persist first, then compare-and-apply; never also dispatch the legacy action. */
+  onDurableApply?: (input: CompositeInput) => Promise<void>;
+}) {
+  const { state, actions, durable } = useDemoStore();
+  const onDurableApply = durable?.accept ?? explicitDurableApply;
   const dialog = useRef<HTMLDialogElement>(null);
   const [draft, setDraft] = useState<CompositeInput | null>(null);
   const [pending, setPending] = useState<{ id: string; rejections: number } | null>(null);
   const [notice, setNotice] = useState('');
+  const accepting = useRef(false);
+  const [persisting, setPersisting] = useState(false);
+  const [intakeError, setIntakeError] = useState('');
   const current = compositeContextForState(state);
   const saved = Boolean(pending && state.events.some(event => event.eventId === pending.id && event.compositePlay));
   const rejected = Boolean(pending && (state.scoringRejections ?? []).length > pending.rejections);
   const [timedOutId, setTimedOutId] = useState<string | null>(null);
   const applyTimedOut = Boolean(pending && timedOutId === pending.id);
-  const busy = Boolean(pending && !saved && !rejected && !applyTimedOut);
+  const busy = persisting || Boolean(pending && !saved && !rejected && !applyTimedOut);
   useEffect(() => {
     if (!pending || saved || rejected) return;
     const timer = window.setTimeout(() => setTimedOutId(pending.id), 8000);
@@ -39,7 +48,7 @@ export default function CompositePlayButton({ disabled = false }: { disabled?: b
     return () => window.removeEventListener('beforeunload', warnBeforeUnload);
   }, [draft, saved]);
   const preview = draft ? resolveCompositePlay(current, { ...draft, reviewed: true }) : null;
-  const blocked = disabled || busy;
+  const blocked = disabled || busy || Boolean(durable && durable.status !== 'ready');
   useEffect(() => { if (saved) dialog.current?.close(); }, [saved]);
 
   const fresh = (): CompositeInput => ({ id: id(), expected: current, plate: 'none', pitch: 'none', misc: 'none',
@@ -63,26 +72,52 @@ export default function CompositePlayButton({ disabled = false }: { disabled?: b
     update({ steps: [...draft.steps, { id: id(), runnerId, from, to, cause: 'advance', rbi: false, assists: [], advantageousAppeal: false }] });
   };
   const participants = draft ? [draft.expected.batterId, ...draft.expected.bases.filter((name): name is string => Boolean(name))] : [];
-  const submit = () => {
-    if (!draft || blocked || !draft.reviewed || !preview?.ok) return;
-    setPending({ id: draft.id, rejections: (state.scoringRejections ?? []).length });
-    setTimedOutId(null);
-    actions.recordCompositePlay(draft);
+  const submit = async () => {
+    if (!draft || blocked || accepting.current || !draft.reviewed || !preview?.ok) return;
+    accepting.current = true;
+    setIntakeError('');
+    try {
+      if (onDurableApply) {
+        setPersisting(true);
+        await onDurableApply(structuredClone(draft));
+      } else {
+        actions.recordCompositePlay(draft);
+      }
+      setPending({ id: draft.id, rejections: (state.scoringRejections ?? []).length });
+      setTimedOutId(null);
+    } catch (error) {
+      setPending(null);
+      setIntakeError(error instanceof Error ? error.message : 'durable-intake-failed');
+    } finally {
+      accepting.current = false;
+      setPersisting(false);
+    }
   };
   return <>
-    <button type="button" className="runner-matrix-trigger" disabled={disabled} onClick={open}>복합 플레이 기록</button>
+    {durable && <section aria-label="영속 기록 연결" className="runner-matrix-preview">
+      <p role="status">{durable.status === 'ready' ? durable.publication ? '기기 영속 기록 · 서버 전송 연결됨' : '기기 영속 기록 연결됨 · 서버 자동 전송은 아직 연결하지 않았습니다.' : durable.status === 'opening' ? '영속 기록 세션 연결 중' : '영속 기록 세션 차단됨'}</p>
+      {durable.publication && <div aria-label="서버 전송 상태">
+        <p role="status">{durable.publication.phase === 'sending' ? '서버 전송 중' : durable.publication.phase === 'failed' ? '서버 전송 확인 필요 · 기기 기록 보존' : durable.publication.phase === 'saved' ? '서버 ACK 확인' : '전송 대기'} · revision {durable.publication.revision} · 확정 입력 {durable.publication.acknowledgedSequence}</p>
+        {durable.publication.error && <p role="alert">{durable.publication.error}</p>}
+        <button type="button" disabled={durable.status !== 'ready' || durable.publication.phase === 'sending'} onClick={() => { void durable.retryPublication().catch(() => {}); }}>서버 저장 재시도</button>
+      </div>}
+      {durable.error && <p role="alert">{durable.error}</p>}
+      {durable.status === 'ready' && <DurableScoringRecoveryPanel controller={durable.recovery} />}
+    </section>}
+    <button type="button" className="runner-matrix-trigger" disabled={blocked} onClick={open}>복합 플레이 기록</button>
     {notice && <span role="status" className="composite-notice">{notice}</span>}
     <dialog ref={dialog} className="runner-matrix-dialog composite-dialog" aria-labelledby="composite-title"
       onKeyDown={event => event.stopPropagation()} onCancel={event => { if (busy) event.preventDefault(); }}
-      onClose={() => { if (saved) { setDraft(null); setNotice('복합 플레이를 현재 화면에 적용했습니다. 서버 저장 완료를 의미하지 않습니다. 취소는 실행 취소를 사용하세요.'); } setPending(null); }}>
-      <p role="status">적용은 현재 화면의 기록 반영입니다. 서버 저장 완료 여부는 별도 확인이 필요합니다. 닫은 초안은 이 화면에서만 유지되며 새로고침하면 사라집니다.</p>
+      onClose={() => { if (saved) { setDraft(null); setNotice(onDurableApply ? '복합 플레이를 기기에 저장하고 현재 화면에 적용했습니다. 서버 저장 완료를 의미하지 않습니다.' : '복합 플레이를 현재 화면에 적용했습니다. 서버 저장 완료를 의미하지 않습니다. 취소는 실행 취소를 사용하세요.'); } setPending(null); }}>
+      <p role="status">{onDurableApply ? '기기 내 영속 저장 후 화면에 적용합니다. 서버 저장 완료는 별도로 확인해야 합니다. 접수 전 초안은 새로고침하면 사라집니다.' : '적용은 현재 화면의 기록 반영입니다. 서버 저장 완료 여부는 별도 확인이 필요합니다. 닫은 초안은 이 화면에서만 유지되며 새로고침하면 사라집니다.'}</p>
+      {intakeError && <p role="alert">입력을 완료하지 못했습니다. 작성 내용은 유지됩니다. 기기에 저장된 입력이 있을 수 있으므로 자동으로 다시 적용하지 않습니다. 오류: {intakeError}</p>}
       {applyTimedOut && !saved && !rejected && <p role="alert">화면 적용 결과를 확인하지 못했습니다. 자동 재시도하지 않습니다. 모달을 닫고 중계와 기록 권한을 확인하세요. 재시도에는 같은 사건 ID를 사용합니다.</p>}
       <header><h2 id="composite-title">하나의 플레이, 여러 기록</h2><button type="button" disabled={busy} onClick={() => dialog.current?.close()}>닫기</button></header>
       <p>타격 판정과 실제 이동을 분리합니다. 행 순서는 실제 도달·아웃 순서입니다. 같은 주자에게 여러 행과 여러 실책을 연결할 수 있습니다.</p>
       <p className="composite-warning">현재 플레이 전용입니다. 이전 플레이의 사후 재심, 타순 위반, 투타 교체 책임의 자동 판정은 지원하지 않습니다. 기존 기록을 먼저 정정한 뒤 진행하세요.</p>
       {draft && <>
         <p>{draft.expected.inning}회 {draft.expected.half === 'top' ? '초' : '말'} · {draft.expected.outs}아웃 · {draft.expected.balls}B {draft.expected.strikes}S · 타자 {draft.expected.batterId} · 투수 {draft.expected.pitcherId || '미지정'}</p>
-        <button type="button" disabled={busy} onClick={() => { setDraft(fresh()); setPending(null); }}>작성 내용 비우고 현재 상황으로 시작</button>
+        <button type="button" disabled={busy} onClick={() => { setDraft(fresh()); setPending(null); setIntakeError(''); }}>작성 내용 비우고 현재 상황으로 시작</button>
         <fieldset disabled={blocked} className="composite-editor">
           <legend>1. 타격 / 투구 판정</legend>
           <div className="runner-matrix-fields">

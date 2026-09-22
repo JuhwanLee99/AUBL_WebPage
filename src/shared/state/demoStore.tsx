@@ -1,4 +1,5 @@
 import { attachCompositeDefensiveSnapshots, type DefensiveSnapshot } from '../lib/defensiveFielding.ts';
+import { useDurableScoringProvider, type DurableDemoStoreOptions, type DurableProviderControls } from './useDurableScoringProvider';
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState, useCallback } from 'react';
 import { getIdTokenResult, onIdTokenChanged } from 'firebase/auth';
 import {
@@ -56,6 +57,9 @@ import {
 import {
   autoPurgeExpiredMatches,
   syncGameStateWrite,
+  stopGameStateWrite,
+  stopScheduleMatchesWrite,
+  stopLiveScorePatch,
   syncLiveScorePatch,
   syncScheduleMatchesWrite,
   syncOnlineViewerCount,
@@ -3463,6 +3467,7 @@ function substitutePlayer(
 
 interface DemoStoreValue {
   state: DemoState;
+  durable?: DurableProviderControls;
   actions: {
     addBall: () => void;
     addStrike: (strikeType?: 'swinging' | 'looking') => void;
@@ -3545,7 +3550,36 @@ interface DemoStoreValue {
 
 const DemoStoreContext = createContext<DemoStoreValue | null>(null);
 
-export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
+const projectDurableComposite = (state: DemoState, input: CompositeInput) => reducer(state, { type: 'recordCompositePlay', input });
+
+function DurableDemoStoreProvider({ children, options }: { children: React.ReactNode; options: DurableDemoStoreOptions }) {
+  const { state, durable, denyLegacy } = useDurableScoringProvider(options, projectDurableComposite);
+  // Deny every old action before its body runs, including direct Firestore writes.
+  const actions = useMemo(() => new Proxy({} as DemoStoreValue['actions'], {
+    get: (_target, name) => {
+      if (name === 'loadFullSchedule') return async (): Promise<ScheduleLoadResult> => ({ status: 'cached' });
+      if (name === 'setScorerMode' || name === 'loadMoreFeed') return () => {};
+      return denyLegacy;
+    },
+  }), [denyLegacy]);
+  return <DemoStoreContext.Provider value={{ state, actions, durable }}>{children}</DemoStoreContext.Provider>;
+}
+
+export function DemoStoreProvider({ children, durableSession }: {
+  children: React.ReactNode; durableSession?: DurableDemoStoreOptions;
+}) {
+  const selected = useRef(Boolean(durableSession));
+  if (durableSession) selected.current = true;
+  if (selected.current) {
+    if (!durableSession) return <p role="alert">영속 기록 세션이 해제되었습니다. 기존 저장으로 자동 전환하지 않습니다.</p>;
+    const key = JSON.stringify([durableSession.scope.projectId, durableSession.scope.testRunId,
+      durableSession.scope.matchId, durableSession.scope.uid, durableSession.scope.writerSessionId, durableSession.scope.lockEpoch]);
+    return <DurableDemoStoreProvider key={key} options={durableSession}>{children}</DurableDemoStoreProvider>;
+  }
+  return <LegacyDemoStoreProvider>{children}</LegacyDemoStoreProvider>;
+}
+
+function LegacyDemoStoreProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const stateRef = useRef(state);
   const skipFirestoreWriteRef = useRef(false);
@@ -3892,12 +3926,18 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
   }, [state.activeMatchId]);
 
   // Push game state to Firestore when admin updates locally.
+  useEffect(() => () => {
+    stopGameStateWrite(writeTimerRef);
+    stopScheduleMatchesWrite(lastMatchesKeyRef);
+    stopLiveScorePatch(lastLiveScoreSyncKeyRef);
+  }, []);
+
   useEffect(() => {
-    if (!liveRecordAccessible) return;
     return syncGameStateWrite({
       state,
       scorerMode,
-      canRecordGame,
+      canRecordGame: canRecordGame && liveRecordAccessible,
+      getLiveRecordAccess,
       stateRef,
       skipFirestoreWriteRef,
       lastStateKeyRef,
@@ -3915,13 +3955,16 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       matchesReadyRef,
       skipMatchesWriteRef,
       lastMatchesKeyRef,
+      stateRef,
     });
   }, [state.matches, isAdmin]);
 
   // 진행 중인 경기 점수는 active match 1건만 patch 저장
   useEffect(() => {
     syncLiveScorePatch({
-      canRecordGame,
+      canRecordGame: canRecordGame && liveRecordAccessible,
+      stateRef,
+      getLiveRecordAccess,
       activeMatchId: state.activeMatchId,
       matches: state.matches,
       homeScore: state.score.home,
@@ -3929,7 +3972,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       lastLiveScoreSyncKeyRef,
       pushMatchUpdate,
     });
-  }, [canRecordGame, state.activeMatchId, state.matches, state.score.home, state.score.away, pushMatchUpdate]);
+  }, [canRecordGame, liveRecordAccessible, state.activeMatchId, state.matches, state.score.home, state.score.away, pushMatchUpdate]);
 
   // Auto purge expired trashed matches (deleted flag) from matches collection.
   useEffect(() => {

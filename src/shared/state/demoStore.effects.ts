@@ -32,9 +32,23 @@ import {
 import { resolveUserRole } from './demoStore.auth';
 import { WRITE_DEBOUNCE_MS } from './demoStore.constants';
 import { pruneUndefined } from './demoStore.helpers';
+import { scheduleScoringWrite, stopScoringWrite, scoringWriteRetryDelay, scoringWriteErrorCode } from '../lib/scoringWriteRetry';
 import type { DemoState, MatchSchedule, PlayEvent, PlayLog, SharedGameState } from './demoStore';
 
 type RefLike<T> = { current: T };
+type WriteTimerRef = RefLike<ReturnType<typeof setTimeout> | null>;
+type LegacyWriteSession = { matchId: string; uid: string; allowed(): boolean; failures: number; stopped: boolean };
+const legacyWriteSessions = new WeakMap<WriteTimerRef, LegacyWriteSession>();
+
+export function stopGameStateWrite(timer: WriteTimerRef): void {
+  const session = legacyWriteSessions.get(timer);
+  if (session) session.stopped = true;
+  legacyWriteSessions.delete(timer);
+  if (timer.current !== null) clearTimeout(timer.current);
+  timer.current = null;
+}
+export const stopScheduleMatchesWrite = stopScoringWrite;
+export const stopLiveScorePatch = stopScoringWrite;
 
 type DemoDispatchAction =
   | { type: 'setMatches'; matches: MatchSchedule[] }
@@ -584,6 +598,7 @@ export function syncGameStateWrite(params: {
   lastFeedLengthRef: RefLike<number>;
   lastEventsLengthRef: RefLike<number>;
   writeTimerRef: RefLike<ReturnType<typeof setTimeout> | null>;
+  getLiveRecordAccess?: () => LiveRecordAccess;
 }) {
   const {
     state,
@@ -596,12 +611,29 @@ export function syncGameStateWrite(params: {
     lastEventsLengthRef,
     writeTimerRef,
   } = params;
-  if (!scorerMode) return;
-  if (!canRecordGame) return;
+  if (!scorerMode || !canRecordGame) { stopGameStateWrite(writeTimerRef); return; }
   const matchId = state.activeMatchId;
   const currentUid = auth.currentUser?.uid ?? null;
-  if (!matchId || !currentUid) return;
-  if (state.scorerUid && state.scorerUid !== currentUid) return;
+  if (!matchId || !currentUid || state.scorerUid !== currentUid || state.scorerPaused
+    || hasOfficialAuthority(state.matches.find(match => match.id === matchId))) {
+    stopGameStateWrite(writeTimerRef); return;
+  }
+  let session = legacyWriteSessions.get(writeTimerRef);
+  if (session && (session.matchId !== matchId || session.uid !== currentUid || !session.allowed())) {
+    stopGameStateWrite(writeTimerRef); session = undefined;
+  }
+  if (!session) {
+    const access = params.getLiveRecordAccess ? captureLiveRecordAccess(params.getLiveRecordAccess, matchId) : () => true;
+    session = { matchId, uid: currentUid, failures: 0, stopped: false, allowed: () => access()
+      && auth.currentUser?.uid === currentUid && stateRef.current.activeMatchId === matchId
+      && stateRef.current.scorerUid === currentUid && !stateRef.current.scorerPaused
+      && !hasOfficialAuthority(stateRef.current.matches.find(match => match.id === matchId)) };
+    legacyWriteSessions.set(writeTimerRef, session);
+  }
+  const capturedSession = session;
+  const canWrite = () => legacyWriteSessions.get(writeTimerRef) === capturedSession
+    && !capturedSession.stopped && capturedSession.allowed();
+  if (!canWrite()) return;
   if (skipFirestoreWriteRef.current) {
     skipFirestoreWriteRef.current = false;
     // lastStateKeyRef는 초기화하지 않음 — 재초기화하면 Firestore에서 받은 상태를
@@ -617,6 +649,7 @@ export function syncGameStateWrite(params: {
   writeTimerRef.current = setTimeout(() => {
     writeTimerRef.current = null; // 타이머 ref 해제 — 다음 user action이 새 타이머를 세팅할 수 있게
     const run = async () => {
+      if (!canWrite()) return;
       const liveState = stateRef.current;
       const liveMatchId = liveState.activeMatchId;
       if (!liveMatchId || liveMatchId !== matchId) return;
@@ -635,10 +668,12 @@ export function syncGameStateWrite(params: {
           events: deleteField(),
         };
         await setDoc(doc(firestore, 'matchStates', liveMatchId), payload, { merge: true });
+        if (!canWrite()) return;
         lastStateKeyRef.current = key;
       }
 
       const latestState = stateRef.current;
+      if (!canWrite()) return;
       if (latestState.activeMatchId !== liveMatchId) return;
       const newFeedCount = latestState.feed.length - lastFeedLengthRef.current;
       const newEventCount = latestState.events.length - lastEventsLengthRef.current;
@@ -661,6 +696,7 @@ export function syncGameStateWrite(params: {
           limit(count),
         );
         const snap = await getDocs(q);
+        if (!canWrite()) return;
         if (snap.empty) return;
         const batch = writeBatch(firestore);
         snap.docs.forEach((docSnap) => {
@@ -671,9 +707,11 @@ export function syncGameStateWrite(params: {
 
       if (needsFeedDelete) {
         await deleteLatest('feed', Math.abs(newFeedCount));
+        if (!canWrite()) return;
       }
       if (needsEventDelete) {
         await deleteLatest('events', Math.abs(newEventCount));
+        if (!canWrite()) return;
       }
 
       if (needsFeedAdd || needsEventAdd) {
@@ -711,6 +749,7 @@ export function syncGameStateWrite(params: {
         }
 
         await batch.commit();
+        if (!canWrite()) return;
       }
 
       const finalState = stateRef.current;
@@ -719,22 +758,29 @@ export function syncGameStateWrite(params: {
       lastEventsLengthRef.current = finalState.events.length;
     };
 
-    const scheduleRetry = () => {
-      if (hasOfficialAuthority(stateRef.current.matches.find(match => match.id === matchId))) return;
+    const scheduleRetry = (error: unknown) => {
+      if (!canWrite()) return;
       if (writeTimerRef.current) return;
+      const delay = scoringWriteRetryDelay(error, ++capturedSession.failures);
+      if (delay === null) {
+        capturedSession.stopped = true;
+        console.error('[firestore] game state sync stopped', scoringWriteErrorCode(error));
+        return;
+      }
       writeTimerRef.current = setTimeout(() => {
         writeTimerRef.current = null;
-        void run().catch((retryError) => {
+        if (!canWrite()) return;
+        void run().then(() => { capturedSession.failures = 0; }).catch((retryError) => {
           console.error('[firestore] game state sync retry failed', retryError);
-          scheduleRetry();
+          scheduleRetry(retryError);
         });
-      }, WRITE_DEBOUNCE_MS);
+      }, delay);
     };
 
-    void run().catch((error) => {
+    void run().then(() => { capturedSession.failures = 0; }).catch((error) => {
       console.error('[firestore] game state sync failed', error);
       // 상태 변경이 없어도 저장 누락이 남지 않도록 백그라운드 재시도한다.
-      scheduleRetry();
+      scheduleRetry(error);
     });
   }, WRITE_DEBOUNCE_MS);
 }
@@ -745,12 +791,14 @@ export function syncScheduleMatchesWrite(params: {
   matchesReadyRef: RefLike<boolean>;
   skipMatchesWriteRef: RefLike<boolean>;
   lastMatchesKeyRef: RefLike<string>;
+  stateRef?: RefLike<DemoState>;
 }) {
   const { matches, isAdmin, matchesReadyRef, skipMatchesWriteRef, lastMatchesKeyRef } = params;
-  if (!isAdmin) return;
-  if (!matchesReadyRef.current) return;
+  const uid = auth.currentUser?.uid;
+  if (!isAdmin || !matchesReadyRef.current || !uid) { stopScoringWrite(lastMatchesKeyRef); return; }
   if (skipMatchesWriteRef.current) {
     skipMatchesWriteRef.current = false;
+    stopScoringWrite(lastMatchesKeyRef);
     return;
   }
 
@@ -779,15 +827,15 @@ export function syncScheduleMatchesWrite(params: {
       manualEntryDraft: match.manualEntryDraft ?? null,
     })),
   );
-  if (key === lastMatchesKeyRef.current) return;
-  lastMatchesKeyRef.current = key;
+  // Legacy pre-ACK marker removed: lastMatchesKeyRef.current = key;
+  const requestedMatches = structuredClone(matches);
 
   const syncMatches = async () => {
     const batch = writeBatch(firestore);
     const filterEmptySlots = (lineup: NonNullable<MatchSchedule['lineups']>['home']) =>
       lineup.filter((slot) => slot.name && slot.name.trim() !== '');
 
-    matches.forEach((match) => {
+    requestedMatches.forEach((match) => {
       if (hasOfficialAuthority(match)) return;
       const preserveEmptySlots = (match.recordMode ?? 'official') === 'practice';
       const cleanedMatch = {
@@ -805,7 +853,12 @@ export function syncScheduleMatchesWrite(params: {
     });
     await batch.commit();
   };
-  void syncMatches().catch(() => {});
+  const targets = requestedMatches.filter(match => !hasOfficialAuthority(match));
+  scheduleScoringWrite(lastMatchesKeyRef, { key, scope: uid, write: syncMatches,
+    allowed: () => auth.currentUser?.uid === uid && (!params.stateRef || targets.every(target => {
+      const current = params.stateRef!.current.matches.find(match => match.id === target.id);
+      return Boolean(current && !hasOfficialAuthority(current));
+    })) });
 }
 
 export function syncLiveScorePatch(params: {
@@ -816,17 +869,31 @@ export function syncLiveScorePatch(params: {
   awayScore: number;
   lastLiveScoreSyncKeyRef: RefLike<string>;
   pushMatchUpdate: (matchId: string, overrides?: Partial<MatchSchedule>) => Promise<unknown>;
+  stateRef?: RefLike<DemoState>;
+  getLiveRecordAccess?: () => LiveRecordAccess;
 }) {
   const { canRecordGame, activeMatchId, matches, homeScore, awayScore, lastLiveScoreSyncKeyRef, pushMatchUpdate } = params;
-  if (!canRecordGame) return;
+  const uid = auth.currentUser?.uid;
+  if (!canRecordGame || !uid) { stopScoringWrite(lastLiveScoreSyncKeyRef); return; }
   const matchId = activeMatchId;
-  if (!matchId) return;
+  if (!matchId) { stopScoringWrite(lastLiveScoreSyncKeyRef); return; }
   const activeMatch = matches.find((match) => match.id === matchId);
-  if (!activeMatch || activeMatch.status !== 'inProgress' || hasOfficialAuthority(activeMatch)) return;
+  if (!activeMatch || activeMatch.status !== 'inProgress' || hasOfficialAuthority(activeMatch)) {
+    stopScoringWrite(lastLiveScoreSyncKeyRef); return;
+  }
   const scoreKey = `${matchId}:${homeScore}:${awayScore}`;
-  if (scoreKey === lastLiveScoreSyncKeyRef.current) return;
-  lastLiveScoreSyncKeyRef.current = scoreKey;
-  void Promise.resolve(pushMatchUpdate(matchId, { homeScore, awayScore })).catch(() => {});
+  // Legacy pre-ACK marker removed: lastLiveScoreSyncKeyRef.current = scoreKey;
+  const access = params.getLiveRecordAccess ? captureLiveRecordAccess(params.getLiveRecordAccess, matchId) : () => true;
+  scheduleScoringWrite(lastLiveScoreSyncKeyRef, { key: scoreKey, scope: `${uid}:${matchId}`,
+    write: () => pushMatchUpdate(matchId, { homeScore, awayScore }),
+    allowed: () => {
+      if (auth.currentUser?.uid !== uid || !access()) return false;
+      if (!params.stateRef) return true;
+      const current = params.stateRef.current;
+      const match = current.matches.find(item => item.id === matchId);
+      return current.activeMatchId === matchId && !current.scorerPaused
+        && current.scorerUid === uid && match?.status === 'inProgress' && !hasOfficialAuthority(match);
+    } });
 }
 
 export function autoPurgeExpiredMatches(params: {
