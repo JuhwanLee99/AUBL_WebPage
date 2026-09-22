@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createTournament, validateTournament, entrants, entrantLabel, updateMatch, swapSeed, scheduleLabel, DIVISIONS, ROUNDS } from '../src/features/tournament/model.ts';
+import { applyLatestDraw, createTournament, validateTournament, entrants, entrantLabel, updateMatch, swapSeed, scheduleLabel, DIVISIONS, ROUNDS } from '../src/features/tournament/model.ts';
 
 const expected = {
-  eutteum: ['D2', 'G1', 'H2', 'F1', 'E2', 'H1', 'F2', 'B1', 'G2', 'E1', 'A2', 'C1', 'C2', 'D1', 'B2', 'A1'],
-  beogeum: ['D4', 'B3', 'E4', 'H3', 'C4', 'D3', 'G4', 'F3', 'F4', 'A3', 'A4', 'E3', 'B4', 'C3', 'H4', 'G3'],
+  eutteum: ['H2', 'C1', 'A2', 'E1', 'G2', 'B1', 'D2', 'F1', 'B2', 'G1', 'E2', 'H1', 'F2', 'A1', 'C2', 'D1'],
+  beogeum: ['E4', 'B3', 'A4', 'D3', 'F4', 'G3', 'H4', 'C3', 'C4', 'E3', 'G4', 'A3', 'B4', 'H3', 'D4', 'F3'],
 };
 function finish(division, id, side = 0) {
   const match = division.matches.find(item => item.id === id);
@@ -117,7 +117,22 @@ test('unknown final entrants are not guessed from standings', () => {
 });
 test('new drafts do not share arrays or mutable match data', () => {
   const a = createTournament(); a.divisions.eutteum.seeds[0] = 'changed'; a.divisions.beogeum.matches[0].scores[0] = 4;
-  const b = createTournament(); assert.equal(b.divisions.eutteum.seeds[0], 'D2'); assert.equal(b.divisions.beogeum.matches[0].scores[0], null);
+  const b = createTournament(); assert.equal(b.divisions.eutteum.seeds[0], 'H2'); assert.equal(b.divisions.beogeum.matches[0].scores[0], null);
+});
+test('latest confirmed draw and projected team labels', () => {
+  const config = createTournament();
+  assert.deepEqual(config.divisions.eutteum.seeds, ['H2', 'C1', 'A2', 'E1', 'G2', 'B1', 'D2', 'F1', 'B2', 'G1', 'E2', 'H1', 'F2', 'A1', 'C2', 'D1']);
+  assert.deepEqual(config.divisions.beogeum.seeds, ['E4', 'B3', 'A4', 'D3', 'F4', 'G3', 'H4', 'C3', 'C4', 'E3', 'G4', 'A3', 'B4', 'H3', 'D4', 'F3']);
+  assert.equal(entrantLabel(config.divisions.eutteum, 'H2', { H2: '현재 2위 팀' }), '현재 2위 팀');
+  config.divisions.eutteum.teamNames.H2 = '확정 팀';
+  assert.equal(entrantLabel(config.divisions.eutteum, 'H2', { H2: '현재 2위 팀' }), '확정 팀');
+});
+test('legacy untouched draft migrates but a started bracket does not', () => {
+  const legacy = createTournament();
+  legacy.divisions.eutteum.seeds = ['D2', 'G1', 'H2', 'F1', 'E2', 'H1', 'F2', 'B1', 'G2', 'E1', 'A2', 'C1', 'C2', 'D1', 'B2', 'A1'];
+  assert.equal(applyLatestDraw(legacy).divisions.eutteum.seeds[0], 'H2');
+  legacy.divisions.eutteum.matches[0].status = 'live';
+  assert.equal(applyLatestDraw(legacy).divisions.eutteum.seeds[0], 'D2');
 });
 test('KST schedule display and empty schedule', () => {
   assert.equal(scheduleLabel(''), '일정 미정'); assert.match(scheduleLabel('2026-10-10T14:00:00+09:00'), /14:00/);

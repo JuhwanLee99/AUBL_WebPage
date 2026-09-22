@@ -1064,7 +1064,7 @@ export default function Season2026Home(props: Season2026HomeProps) {
         />
       </CampaignHero>
       <MatchBoard matches={props.matches} schedulePhase={props.schedulePhase} nowTs={props.nowTs} />
-      <HomeCompetition>
+      <HomeCompetition groups={props.groups}>
         <GroupStandings groups={props.groups} recordPhase={props.recordPhase} preferredTeamName={props.myTeamName} />
       </HomeCompetition>
       <RecordLeaders recordPhase={props.recordPhase} recordPayload={props.recordPayload} />

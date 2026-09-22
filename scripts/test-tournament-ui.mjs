@@ -69,19 +69,19 @@ try {
   });
   await test('admin preview renders 15 matches and exact image seeds', async () => {
     assert.equal(await admin.locator('.t26-preview .t26-match').count(), 15);
-    assert.deepEqual(await admin.locator('.t26-preview .t26-match').nth(0).locator('.t26-seed').allTextContents(), ['D2', 'G1']);
+    assert.deepEqual(await admin.locator('.t26-preview .t26-match').nth(0).locator('.t26-seed').allTextContents(), ['H2', 'C1']);
     const toggle = admin.locator('.t26-preview').getByRole('group', { name: '토너먼트 선택' });
     await toggle.getByRole('button', { name: '버금 토너먼트' }).click();
-    assert.deepEqual(await admin.locator('.t26-preview .t26-match').nth(0).locator('.t26-seed').allTextContents(), ['D4', 'B3']);
+    assert.deepEqual(await admin.locator('.t26-preview .t26-match').nth(0).locator('.t26-seed').allTextContents(), ['E4', 'B3']);
     await toggle.getByRole('button', { name: '으뜸 토너먼트' }).click();
   });
   await test('draft save persists without public exposure', async () => {
-    await admin.getByLabel('D2 확정 팀명', { exact: true }).fill('검증대학교 야구동아리');
+    await admin.getByLabel('H2 확정 팀명', { exact: true }).fill('검증대학교 야구동아리');
     await admin.getByRole('button', { name: '비공개 초안 저장', exact: true }).click();
     await admin.getByRole('status').filter({ hasText: '비공개 초안을 저장했습니다.' }).waitFor();
     assert.equal(await publicPage.locator('.t26-bracket').count(), 0);
-    await admin.reload(); await admin.getByLabel('D2 확정 팀명', { exact: true }).waitFor();
-    assert.equal(await admin.getByLabel('D2 확정 팀명', { exact: true }).inputValue(), '검증대학교 야구동아리');
+    await admin.reload(); await admin.getByLabel('H2 확정 팀명', { exact: true }).waitFor();
+    assert.equal(await admin.getByLabel('H2 확정 팀명', { exact: true }).inputValue(), '검증대학교 야구동아리');
   });
   await test('start and publish update public page and default home tab', async () => {
     await admin.getByRole('combobox', { name: /^운영 단계/ }).selectOption('active');
@@ -98,20 +98,20 @@ try {
     assert.equal(await home.locator('.s26-groups').isVisible(), true); assert.equal(await home.locator('.t26-bracket').count(), 0);
     await home.getByRole('button', { name: '토너먼트 대진 · 일정', exact: true }).click();
     await home.getByRole('button', { name: '버금 토너먼트', exact: true }).click();
-    assert.deepEqual(await home.locator('.t26-match').first().locator('.t26-seed').allTextContents(), ['D4', 'B3']);
+    assert.deepEqual(await home.locator('.t26-match').first().locator('.t26-seed').allTextContents(), ['E4', 'B3']);
   });
   await test('match edit advances winner, preserves schedule and publishes result', async () => {
     const first = admin.locator('.t26-game-editor').first();
     await first.getByLabel('일시 (KST)', { exact: true }).fill('2026-10-10T14:00');
     await first.getByLabel('장소', { exact: true }).fill('로컬 검증 구장');
-    await first.getByLabel('D2 점수', { exact: true }).fill('3'); await first.getByLabel('G1 점수', { exact: true }).fill('1');
+    await first.getByLabel('H2 점수', { exact: true }).fill('3'); await first.getByLabel('C1 점수', { exact: true }).fill('1');
     await first.getByRole('combobox', { name: /^상태/ }).selectOption('completed');
-    assert.match(await admin.locator('.t26-game-editor').nth(8).innerText(), /D2/);
-    assert.equal(await admin.getByLabel('D2 확정 팀명', { exact: true }).isDisabled(), true);
+    assert.match(await admin.locator('.t26-game-editor').nth(8).innerText(), /H2/);
+    assert.equal(await admin.getByLabel('H2 확정 팀명', { exact: true }).isDisabled(), true);
     await admin.getByRole('button', { name: '현재 내용 공개 · 갱신', exact: true }).click();
     await admin.getByRole('status').filter({ hasText: '현재 내용을 공개했습니다.' }).waitFor();
     await publicPage.getByRole('cell', { name: '로컬 검증 구장', exact: true }).waitFor();
-    assert.equal(await publicPage.locator('.t26-team.is-winner').first().locator('.t26-seed').innerText(), 'D2');
+    assert.equal(await publicPage.locator('.t26-team.is-winner').first().locator('.t26-seed').innerText(), 'H2');
   });
   for (const width of [390, 1440]) await test(`public/admin/home layout contained at ${width}px`, async () => {
     for (const [name, page] of [['public', publicPage], ['admin', admin], ['home', home]]) {

@@ -31,9 +31,15 @@ export interface TournamentConfig {
 }
 
 // Ordered top-to-bottom on the left, then top-to-bottom on the right.
-const initialSeeds: Record<Division, string[]> = {
+const previousSeeds: Record<Division, string[]> = {
   eutteum: ['D2', 'G1', 'H2', 'F1', 'E2', 'H1', 'F2', 'B1', 'G2', 'E1', 'A2', 'C1', 'C2', 'D1', 'B2', 'A1'],
   beogeum: ['D4', 'B3', 'E4', 'H3', 'C4', 'D3', 'G4', 'F3', 'F4', 'A3', 'A4', 'E3', 'B4', 'C3', 'H4', 'G3'],
+};
+
+// Confirmed 2026 round-of-16 draw. Ordered left top-to-bottom, then right.
+const initialSeeds: Record<Division, string[]> = {
+  eutteum: ['H2', 'C1', 'A2', 'E1', 'G2', 'B1', 'D2', 'F1', 'B2', 'G1', 'E2', 'H1', 'F2', 'A1', 'C2', 'D1'],
+  beogeum: ['E4', 'B3', 'A4', 'D3', 'F4', 'G3', 'H4', 'C3', 'C4', 'E3', 'G4', 'A3', 'B4', 'H3', 'D4', 'F3'],
 };
 
 export function allowedSeeds(division: Division): string[] {
@@ -53,6 +59,18 @@ export function createTournament(): TournamentConfig {
     divisions: { eutteum: makeDivision('eutteum'), beogeum: makeDivision('beogeum') } };
 }
 
+export function applyLatestDraw(config: TournamentConfig): TournamentConfig {
+  const next = structuredClone(config);
+  for (const divisionKey of DIVISIONS) {
+    const division = next.divisions[divisionKey];
+    const isPreviousDraw = division.seeds.every((seed, index) => seed === previousSeeds[divisionKey][index]);
+    const hasStarted = division.matches.some(match => match.status === 'live' || match.status === 'completed'
+      || match.scores.some(score => score !== null) || Boolean(match.winner));
+    if (isPreviousDraw && !hasStarted) division.seeds = [...initialSeeds[divisionKey]];
+  }
+  return next;
+}
+
 export function entrants(division: TournamentDivision, match: TournamentMatch): [string | null, string | null] {
   if (match.round === 'r16') return [division.seeds[match.index * 2] ?? null, division.seeds[match.index * 2 + 1] ?? null];
   const previousRound = ROUNDS[ROUNDS.indexOf(match.round) - 1];
@@ -60,8 +78,8 @@ export function entrants(division: TournamentDivision, match: TournamentMatch): 
     && previous.index === match.index * 2 + side && previous.status === 'completed')?.winner || null) as [string | null, string | null];
 }
 
-export function entrantLabel(division: TournamentDivision, seed: string | null): string {
-  return seed ? division.teamNames[seed] || `${seed[0]}조 ${seed[1]}위` : '이전 경기 승자';
+export function entrantLabel(division: TournamentDivision, seed: string | null, projectedTeamNames: Record<string, string> = {}): string {
+  return seed ? division.teamNames[seed] || projectedTeamNames[seed] || `${seed[0]}조 ${seed[1]}위` : '이전 경기 승자';
 }
 
 // Only identity/result-dependent descendants are reset; dates and venues survive.

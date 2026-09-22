@@ -4,8 +4,10 @@ import TournamentBoard, { matchStatusLabel } from '@features/tournament/Tourname
 import { DIVISIONS, ROUNDS, allowedSeeds, divisionLabel, entrants, entrantLabel, roundLabel, swapSeed, updateMatch,
   type Division, type TournamentConfig, type TournamentMatch } from '@features/tournament/model';
 import { loadTournamentAdmin, persistTournament, type TournamentVersions } from '@features/tournament/store';
+import { useTournamentProjectedNames } from '@features/tournament/standings';
 
 export default function AdminTournamentPage() {
+  const projectedNames = useTournamentProjectedNames();
   const [config, setConfig] = useState<TournamentConfig | null>(null);
   const [versions, setVersions] = useState<TournamentVersions>({ draft: 0, published: 0 });
   const [enabled, setEnabled] = useState(false);
@@ -105,7 +107,7 @@ export default function AdminTournamentPage() {
           if (hasResults && !window.confirm('대진 변경으로 이 토너먼트의 모든 입력 점수·승자를 초기화합니다. 일정·장소는 유지됩니다. 계속할까요?')) return;
           changeDivision(swapSeed(division, index, event.target.value));
         }}>{allowedSeeds(divisionKey).map(option => <option value={option} key={option}>{option} · {option[0]}조 {option[1]}위</option>)}</select>
-        <input aria-label={`${seed} 확정 팀명`} placeholder="확정 팀명 (선택)" maxLength={100} value={division.teamNames[seed] || ''} disabled={hasResults}
+        <input aria-label={`${seed} 확정 팀명`} placeholder={projectedNames[seed] ? `현재 예상: ${projectedNames[seed]}` : '확정 팀명 (선택)'} maxLength={100} value={division.teamNames[seed] || ''} disabled={hasResults}
           onChange={event => changeDivision({ ...division, teamNames: { ...division.teamNames, [seed]: event.target.value } })} />
       </label>)}</div>
       <p className="t26-help">팀명은 최종 진출 팀이 확정된 뒤 입력하세요. 결과 입력 후 팀명은 잠기며, 변경하려면 결과를 먼저 비워야 합니다.</p>
@@ -131,6 +133,6 @@ export default function AdminTournamentPage() {
         })}
       </section>)}
     </fieldset>
-    <section className="t26-preview"><h3>현재 편집 내용 미리보기 (공개본과 다를 수 있음)</h3><TournamentBoard config={config} /></section>
+    <section className="t26-preview"><h3>현재 편집 내용 미리보기 (공개본과 다를 수 있음)</h3><TournamentBoard config={config} projectedNames={projectedNames} /></section>
   </div>;
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { doc, getDocFromServer, onSnapshot, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { firestore } from '@shared/firebase/client';
-import { createTournament, validateTournament, type TournamentConfig } from './model';
+import { applyLatestDraw, createTournament, validateTournament, type TournamentConfig } from './model';
 
 const draftRef = () => doc(firestore, 'tournamentDrafts', 'season2026');
 const publicRef = () => doc(firestore, 'tournamentPublic', 'season2026');
@@ -15,7 +15,7 @@ function revision(data: { revision?: unknown } | undefined): number {
 export async function loadTournamentAdmin() {
   const draft = await getDocFromServer(draftRef());
   const published = await getDocFromServer(publicRef());
-  const config: unknown = draft.exists() ? draft.data().config : createTournament();
+  const config: unknown = applyLatestDraw(draft.exists() ? draft.data().config as TournamentConfig : createTournament());
   validateTournament(config);
   return { config, enabled: published.data()?.enabled === true,
     versions: { draft: revision(draft.data()), published: revision(published.data()) } };
@@ -53,8 +53,9 @@ export function usePublicTournament() {
     try {
       const data = snapshot.data();
       if (!data || data.enabled !== true) { setState({ config: null, loading: false, error: null }); return; }
-      validateTournament(data.config);
-      setState({ config: data.config, loading: false, error: null });
+      const config = applyLatestDraw(data.config);
+      validateTournament(config);
+      setState({ config, loading: false, error: null });
     } catch {
       setState({ config: null, loading: false, error: '공개 대진표를 확인할 수 없습니다.' });
     }
